@@ -2,6 +2,8 @@ use serde::Serialize;
 use tauri::Manager; // Import Manager trait
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use tauri::tray::TrayIconBuilder;
+use tauri::menu::{Menu, MenuItem};
 
 mod sidecar;
 mod system;
@@ -392,6 +394,13 @@ async fn search_files(query: String) -> Result<Vec<SearchFileResult>, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        // When a second instance is launched, show the main window of the first
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }))
     .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_dialog::init())
     .invoke_handler(tauri::generate_handler![
@@ -433,6 +442,42 @@ pub fn run() {
               }
           });
       }
+
+      // System tray icon — lets users show/hide the window and quit cleanly
+      let show_item = MenuItem::with_id(app, "show", "Show CoolDesk", true, None::<&str>)?;
+      let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+      let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
+      TrayIconBuilder::new()
+          .icon(app.default_window_icon().unwrap().clone())
+          .menu(&tray_menu)
+          .tooltip("CoolDesk")
+          .on_menu_event(|app, event| match event.id.as_ref() {
+              "show" => {
+                  if let Some(window) = app.get_webview_window("main") {
+                      let _ = window.show();
+                      let _ = window.set_focus();
+                  }
+              }
+              "quit" => {
+                  app.exit(0);
+              }
+              _ => {}
+          })
+          .on_tray_icon_event(|tray: &tauri::tray::TrayIcon, event: tauri::tray::TrayIconEvent| {
+              if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, button_state: tauri::tray::MouseButtonState::Up, .. } = event {
+                  let app = tray.app_handle();
+                  if let Some(window) = app.get_webview_window("main") {
+                      if window.is_visible().unwrap_or(false) {
+                          let _ = window.hide();
+                      } else {
+                          let _ = window.show();
+                          let _ = window.set_focus();
+                      }
+                  }
+              }
+          })
+          .build(app)?;
 
       // Register Global Shortcut
       let handle = app.handle().clone();

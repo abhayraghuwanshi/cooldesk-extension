@@ -27,7 +27,6 @@ import {
   faNewspaper,
   faPalette,
   faPlane,
-  faPlus,
   faRobot,
   faSearch,
   faShoppingBag,
@@ -43,7 +42,8 @@ import {
   faVrCardboard
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { getUrlAnalytics } from '../../db/index.js';
 import { recordFeedbackEvent, recordUrlWorkspace } from '../../services/feedbackService.js';
 import { getBaseDomainFromUrl, getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
@@ -141,8 +141,8 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
 
   const [popoverState, setPopoverState] = useState({ index: null, rect: null });
   const [hoveredLink, setHoveredLink] = useState(null);
-  const [showAll, setShowAll] = useState(false);
   const [showDrafts, setShowDrafts] = useState(false);
+  const [contextMenu, setContextMenu] = useState(null); // { x, y }
   const activePopover = popoverState.index;
 
   const { name, urls = [], apps = [], description, icon = 'folder' } = workspace;
@@ -392,8 +392,6 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   }, [urls, urlsHash, deferAnalytics]); // Re-run if URLs change
 
   const [groupPopoverState, setGroupPopoverState] = useState({ group: null, rect: null });
-  const [visibleCount, setVisibleCount] = useState(8);
-  const iconsContainerRef = useRef(null);
 
   // Grouping Logic using PSL for proper base domain detection
   // Strategy: Group by base domain (company/org level)
@@ -525,252 +523,160 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     });
   }, [sortedUrls, compact]); // Depend on sortedUrls
 
-  // Calculate how many items can fit in the available width
-  const calculateVisibleItems = useCallback(() => {
-    if (!iconsContainerRef.current || !compact) return;
-
-    const container = iconsContainerRef.current;
-    let containerWidth = container.offsetWidth;
-
-    // Account for padding
-    const computedStyle = window.getComputedStyle(container);
-    containerWidth -= (parseFloat(computedStyle.paddingLeft || '0') + parseFloat(computedStyle.paddingRight || '0'));
-
-    if (containerWidth <= 0) return;
-
-    // Use dynamic measurements if available to be 100% accurate across all screen resolutions
-    const sampleItem = container.querySelector('.compact-url-icon:not(.compact-more-btn), .compact-url-group');
-    const iconBaseWidth = sampleItem ? sampleItem.offsetWidth : 64;
-    const gap = parseFloat(computedStyle.columnGap || computedStyle.gap || '12');
-    const itemFullWidth = iconBaseWidth + gap;
-
-    // Optional Add URL button needs space. It matches the width of standard icons.
-    const addBtnSpace = onAddUrl ? itemFullWidth : 0;
-
-    // Check if we can fit EVERYTHING including the Add button natively on one line
-    // Include both URL groups and apps in total count
-    const totalItems = groupedItems.length + apps.length;
-    const maxAllowedItems = totalItems;
-    let widthForEverything = maxAllowedItems * itemFullWidth - gap + addBtnSpace;
-
-    // Safety buffer to prevent rounding issues causing accidental overflow
-    const safeContainerWidth = containerWidth - 8;
-
-    if (maxAllowedItems > 0 && widthForEverything <= safeContainerWidth) {
-      // Everything fits perfectly, including the + Add button
-      setVisibleCount(totalItems);
-      return;
-    }
-
-    if (maxAllowedItems === 0 && addBtnSpace <= safeContainerWidth) {
-      setVisibleCount(0);
-      return;
-    }
-
-    // We can't fit everything. We reserve space for the Expand button. 
-    // The Expand button takes the space of one icon.
-    // We drop the Add button if not expanded (per layout constraints and user req)
-    const reservedWidthForExpand = itemFullWidth;
-    const availableWidthForIcons = safeContainerWidth - reservedWidthForExpand;
-
-    let count = 0;
-    if (availableWidthForIcons >= iconBaseWidth) {
-      count = Math.floor((availableWidthForIcons + gap) / itemFullWidth);
-    }
-
-    // Never show more than length - 1, since if we show length, we'd have no overflow and wouldn't need expand btn
-    setVisibleCount(Math.max(0, Math.min(count, Math.max(0, totalItems - 1))));
-  }, [groupedItems, apps, compact, onAddUrl]);
-
-  // Recalculate on mount and resize
-  useEffect(() => {
-    if (!compact) return;
-
-    calculateVisibleItems();
-
-    const resizeObserver = new ResizeObserver(() => {
-      calculateVisibleItems();
-    });
-
-    if (iconsContainerRef.current) {
-      resizeObserver.observe(iconsContainerRef.current);
-    }
-
-    return () => resizeObserver.disconnect();
-  }, [calculateVisibleItems, compact]);
-
   const handleCardClick = () => {
     onClick?.(workspace);
   };
+
+  const handleContextMenu = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  // Dismiss context menu on outside click
+  useEffect(() => {
+    if (!contextMenu) return;
+    const dismiss = () => setContextMenu(null);
+    window.addEventListener('click', dismiss);
+    window.addEventListener('contextmenu', dismiss);
+    return () => {
+      window.removeEventListener('click', dismiss);
+      window.removeEventListener('contextmenu', dismiss);
+    };
+  }, [contextMenu]);
 
   // Show fewer links in compact mode, unless expanded
   // Split into active vs draft tiers
   const activeUrls = sortedUrls.filter(u => u.status !== 'draft');
   const draftUrls = sortedUrls.filter(u => u.status === 'draft');
 
-  // Use activeUrls for normal display
-  const linkLimit = showAll ? activeUrls.length : (compact ? 3 : 5);
-  const displayLinks = activeUrls.slice(0, linkLimit);
+  const displayLinks = activeUrls;
 
   return (
     <div
       className={`cooldesk-workspace-card ${isActive ? 'active' : ''} ${compact ? 'compact' : ''}`}
       onClick={handleCardClick}
+      onContextMenu={handleContextMenu}
       style={{ position: 'relative' }}
       {...rest}
     >
       {compact ? (
         /* macOS Dock-Style List View - Using CSS Classes */
-        <div className="compact-card-inner" style={{ alignItems: showAll ? 'flex-start' : 'center' }}>
+        <div className="compact-card-inner" style={{ alignItems: 'center' }}>
           {/* Workspace Icon on Left */}
           <div className={`compact-workspace-icon workspace-icon ${colorClass}`}>
             <FontAwesomeIcon icon={iconToUse} />
           </div>
 
           {/* Workspace Info */}
-          <div className="compact-workspace-info" style={{ marginTop: showAll ? '12px' : '0' }}>
+          <div className="compact-workspace-info">
             <div className="compact-workspace-name">{name}</div>
             <div className="compact-workspace-count">
               {urlCount > 0 && <span>{urlCount} URL{urlCount !== 1 ? 's' : ''}</span>}
               {urlCount > 0 && appCount > 0 && <span style={{ margin: '0 4px' }}>•</span>}
-              {appCount > 0 && <span style={{ color: '#22C55E' }}>{appCount} App{appCount !== 1 ? 's' : ''}</span>}
+              {appCount > 0 && <span style={{ color: '#8b5cf6' }}>{appCount} App{appCount !== 1 ? 's' : ''}</span>}
               {totalCount === 0 && <span>Empty</span>}
             </div>
           </div>
 
-          {/* URL Favicons - Grouped */}
-          <div ref={iconsContainerRef} className="compact-icons-container" style={{ flexWrap: showAll ? 'wrap' : 'nowrap' }}>
-            {groupedItems.slice(0, showAll ? groupedItems.length : visibleCount).map((item, idx) => {
-              const isGroup = item.type === 'group';
-              const url = isGroup ? item.primaryUrl : item.url;
-              const faviconUrl = getFaviconUrl(url, 20);
+          {/* URL Favicons - Grouped, resizable scroll like a text editor */}
+          <div className="compact-icons-scroll" onClick={(e) => e.stopPropagation()}>
+            <div className="compact-icons-container">
+              {groupedItems.map((item, idx) => {
+                const isGroup = item.type === 'group';
+                const url = isGroup ? item.primaryUrl : item.url;
+                const faviconUrl = getFaviconUrl(url, 20);
 
-              return (
-                <div
-                  key={idx}
-                  className={isGroup ? 'compact-url-group' : 'compact-url-icon'}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (isGroup) {
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      setGroupPopoverState({ group: item, rect });
-                    } else {
-                      openUrl(item.url, name, item.title);
-                    }
-                  }}
-                  title={isGroup ? `${item.label} (${item.urls.length}) - ${item.subLabel || item.domain}` : (item.title || formatDomainName(item.url))}
-                >
-                  {(() => {
-                    const avatar = getLetterAvatar(url);
-                    return (
-                      <>
-                        {faviconUrl ? (
-                          <img
-                            src={faviconUrl}
-                            alt=""
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                              e.target.nextSibling.style.display = 'flex';
+                return (
+                  <div
+                    key={idx}
+                    className={isGroup ? 'compact-url-group' : 'compact-url-icon'}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isGroup) {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setGroupPopoverState({ group: item, rect });
+                      } else {
+                        openUrl(item.url, name, item.title);
+                      }
+                    }}
+                    title={isGroup ? `${item.label} (${item.urls.length}) - ${item.subLabel || item.domain}` : (item.title || formatDomainName(item.url))}
+                  >
+                    {(() => {
+                      const avatar = getLetterAvatar(url);
+                      return (
+                        <>
+                          {faviconUrl ? (
+                            <img
+                              src={faviconUrl}
+                              alt=""
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.nextSibling.style.display = 'flex';
+                              }}
+                            />
+                          ) : null}
+                          <div
+                            className="letter-avatar"
+                            style={{
+                              display: faviconUrl ? 'none' : 'flex',
+                              background: avatar.color
                             }}
-                          />
-                        ) : null}
-                        <div
-                          className="letter-avatar"
-                          style={{
-                            display: faviconUrl ? 'none' : 'flex',
-                            background: avatar.color
-                          }}
-                        >
-                          {avatar.letter}
-                        </div>
-                      </>
-                    );
-                  })()}
+                          >
+                            {avatar.letter}
+                          </div>
+                        </>
+                      );
+                    })()}
 
-                  {/* Pill Text Content */}
-                  {isGroup && (
-                    <div className="compact-group-text">
-                      <div className="compact-group-label">{item.label}</div>
-                      <div className="compact-group-count">{item.urls.length}</div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                    {/* Pill Text Content */}
+                    {isGroup && (
+                      <div className="compact-group-text">
+                        <div className="compact-group-label">{item.label}</div>
+                        <div className="compact-group-count">{item.urls.length}</div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
 
-            {/* App Icons - Distinct styling based on appType */}
-            {apps.slice(0, showAll ? apps.length : Math.max(0, visibleCount - groupedItems.length)).map((app, idx) => {
-              const CUSTOM_EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'rubymine', 'fleet', 'zed'];
-              const isEditor = CUSTOM_EDITORS.includes(app.appType?.toLowerCase());
-              
-              const appColor = isEditor ? '#38bdf8' : app.appType === 'folder' ? '#facc15' : app.appType === 'file' ? '#94a3b8' : '#22C55E';
-              const appIcon = isEditor ? faCode : app.appType === 'folder' ? faFolderOpen : app.appType === 'file' ? faFileLines : faDesktop;
-              
-              return (
-              <div
-                key={`app-${idx}`}
-                className="compact-url-icon compact-app-icon"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!app.path || !window.electronAPI) return;
-                  
-                  if (isEditor && window.electronAPI.launchAppWithArgs) {
-                    const cmd = app.appType.toLowerCase() === 'vscode' ? 'code' : app.appType.toLowerCase();
-                    window.electronAPI.launchAppWithArgs(cmd, [app.path]);
-                  } else if (app.appType === 'folder' && window.electronAPI.openFolder) {
-                    window.electronAPI.openFolder(app.path);
-                  } else if (app.appType === 'file' && window.electronAPI.launchApp) {
-                    window.electronAPI.launchApp(app.path);
-                  } else if (window.electronAPI.launchApp) {
-                    window.electronAPI.launchApp(app.path);
-                  }
-                }}
-                title={app.name}
-                style={{
-                  border: `2px solid ${appColor}66`,
-                  background: `${appColor}1a`
-                }}
-              >
-                {app.icon ? (
-                  <img src={app.icon} alt="" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
-                ) : (
-                  <FontAwesomeIcon icon={appIcon} style={{ color: appColor, fontSize: '18px' }} />
-                )}
-              </div>
-            )})}
+              {/* App Icons */}
+              {apps.map((app, idx) => {
+                const CUSTOM_EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'rubymine', 'fleet', 'zed'];
+                const isEditor = CUSTOM_EDITORS.includes(app.appType?.toLowerCase());
+                const appColor = isEditor ? '#38bdf8' : app.appType === 'folder' ? '#facc15' : app.appType === 'file' ? '#94a3b8' : '#8b5cf6';
+                const appIcon = isEditor ? faCode : app.appType === 'folder' ? faFolderOpen : app.appType === 'file' ? faFileLines : faDesktop;
 
-            {/* Inline Add URL Button */}
-            {onAddUrl && (showAll || ((groupedItems.length + apps.length) <= visibleCount)) && (
-              <div
-                className="compact-url-icon"
-                style={{
-                  border: '1px dashed rgba(148, 163, 184, 0.4)',
-                  background: 'transparent',
-                  color: 'rgba(148, 163, 184, 0.8)'
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddUrl(workspace);
-                }}
-                title="Add Link"
-              >
-                <FontAwesomeIcon icon={faPlus} style={{ fontSize: '18px' }} />
-              </div>
-            )}
-
-            {/* Expand/Collapse Button */}
-            {(groupedItems.length + apps.length) > visibleCount && (
-              <div
-                className="compact-more-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowAll(!showAll);
-                }}
-                title={showAll ? "Collapse" : "Expand"}
-              >
-                <FontAwesomeIcon icon={showAll ? faChevronUp : faChevronDown} style={{ fontSize: '16px' }} />
-              </div>
-            )}
+                return (
+                  <div
+                    key={`app-${idx}`}
+                    className="compact-url-icon compact-app-icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!app.path || !window.electronAPI) return;
+                      if (isEditor && window.electronAPI.launchAppWithArgs) {
+                        const cmd = app.appType.toLowerCase() === 'vscode' ? 'code' : app.appType.toLowerCase();
+                        window.electronAPI.launchAppWithArgs(cmd, [app.path]);
+                      } else if (app.appType === 'folder' && window.electronAPI.openFolder) {
+                        window.electronAPI.openFolder(app.path);
+                      } else if (app.appType === 'file' && window.electronAPI.launchApp) {
+                        window.electronAPI.launchApp(app.path);
+                      } else if (window.electronAPI.launchApp) {
+                        window.electronAPI.launchApp(app.path);
+                      }
+                    }}
+                    title={app.name}
+                    style={{ border: `1px solid ${appColor}55`, background: `${appColor}12` }}
+                  >
+                    {app.icon ? (
+                      <img src={app.icon} alt="" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
+                    ) : (
+                      <FontAwesomeIcon icon={appIcon} style={{ color: appColor, fontSize: '18px' }} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Render Group Popover if Active */}
@@ -782,33 +688,6 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
             />
           )}
 
-          {/* Pin Button */}
-          {onPin && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onPin(workspace);
-              }}
-              className={`compact-action-btn pin-btn ${isPinned ? 'pinned' : ''}`}
-              title={isPinned ? "Unpin Workspace" : "Pin Workspace"}
-            >
-              <FontAwesomeIcon icon={faThumbtack} transform={isPinned ? "" : { rotate: 45 }} />
-            </button>
-          )}
-
-          {/* Delete Button */}
-          {onDelete && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(workspace);
-              }}
-              className="compact-action-btn delete-btn"
-              title="Delete Workspace"
-            >
-              <FontAwesomeIcon icon={faTrash} />
-            </button>
-          )}
         </div>
       ) : (
         /* Original Grid View */
@@ -822,111 +701,14 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
               <div className="workspace-count">
                 {urlCount > 0 && <span>{urlCount} URL{urlCount !== 1 ? 's' : ''}</span>}
                 {urlCount > 0 && appCount > 0 && <span> • </span>}
-                {appCount > 0 && <span style={{ color: '#22C55E' }}>{appCount} App{appCount !== 1 ? 's' : ''}</span>}
+                {appCount > 0 && <span style={{ color: '#8b5cf6' }}>{appCount} App{appCount !== 1 ? 's' : ''}</span>}
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              {/* Add URL Button */}
-              {onAddUrl && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAddUrl(workspace);
-                  }}
-                  className="workspace-add-btn"
-                  title="Add URL to Workspace"
-                  data-onboarding="add-link-btn"
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'rgba(96, 165, 250, 0.6)',
-                    cursor: 'pointer',
-                    padding: '8px',
-                    transition: 'all 0.2s ease',
-                    opacity: 0,
-                    fontSize: '14px'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.color = '#60A5FA';
-                    e.currentTarget.style.opacity = '1';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.color = 'rgba(96, 165, 250, 0.6)';
-                    e.currentTarget.style.opacity = '0';
-                  }}
-                >
-                  <FontAwesomeIcon icon={faPlus} />
-                </button>
-              )}
-
-              {/* Pin Button */}
-              {onPin && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onPin(workspace);
-                  }}
-                  className={`workspace-pin-btn ${isPinned ? 'pinned' : ''}`}
-                  title={isPinned ? "Unpin Workspace" : "Pin Workspace"}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: isPinned ? '#FDE047' : 'rgba(148, 163, 184, 0.4)',
-                    cursor: 'pointer',
-                    padding: '8px',
-                    transition: 'all 0.2s ease',
-                    opacity: 0,
-                    fontSize: '14px'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.color = '#FDE047';
-                    e.currentTarget.style.opacity = '1';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.color = isPinned ? '#FDE047' : 'rgba(148, 163, 184, 0.4)';
-                    e.currentTarget.style.opacity = '0';
-                  }}
-                >
-                  <FontAwesomeIcon icon={faThumbtack} transform={isPinned ? "" : { rotate: 45 }} />
-                </button>
-              )}
-
-              {/* Delete Button */}
-              {onDelete && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(workspace);
-                  }}
-                  className="workspace-delete-btn"
-                  title="Delete Workspace"
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'rgba(239, 68, 68, 0.4)',
-                    cursor: 'pointer',
-                    padding: '8px',
-                    transition: 'all 0.2s ease',
-                    opacity: 0,
-                    fontSize: '14px'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.color = '#EF4444';
-                    e.currentTarget.style.opacity = '1';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.color = 'rgba(239, 68, 68, 0.4)';
-                    e.currentTarget.style.opacity = '0';
-                  }}
-                >
-                  <FontAwesomeIcon icon={faTrash} />
-                </button>
-              )}
-            </div>
           </div>
 
           {displayLinks.length > 0 && (
+            <div className="workspace-links-scroll">
             <ul className="workspace-links">
               {displayLinks.map((urlObj, idx) => {
                 const faviconUrl = getFaviconUrl(urlObj.url, 16);
@@ -1036,24 +818,11 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                   </li>
                 );
               })}
-              {activeUrls.length > (compact ? 3 : 5) && !showAll && (
-                <li
-                  className="workspace-link-item"
-                  style={{ opacity: 0.6, fontStyle: 'italic', cursor: 'pointer' }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowAll(true);
-                  }}
-                >
-                  <span className="workspace-link-text">
-                    + {activeUrls.length - (compact ? 3 : 5)} more items...
-                  </span>
-                </li>
-              )}
             </ul>
+            </div>
           )}
 
-          {/* Apps Section - Green themed */}
+          {/* Apps Section */}
           {apps.length > 0 && (
             <div className="workspace-apps-section" style={{ marginTop: '8px' }}>
               <div style={{
@@ -1061,7 +830,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                 alignItems: 'center',
                 gap: '6px',
                 marginBottom: '6px',
-                color: '#22C55E',
+                color: '#8b5cf6',
                 fontSize: '11px',
                 fontWeight: 600,
                 textTransform: 'uppercase',
@@ -1079,7 +848,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                   const CUSTOM_EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'rubymine', 'fleet', 'zed'];
                   const isEditor = CUSTOM_EDITORS.includes(app.appType?.toLowerCase());
                   
-                  const appColor = isEditor ? '#38bdf8' : app.appType === 'folder' ? '#facc15' : app.appType === 'file' ? '#94a3b8' : '#22C55E';
+                  const appColor = isEditor ? '#38bdf8' : app.appType === 'folder' ? '#facc15' : app.appType === 'file' ? '#94a3b8' : '#8b5cf6';
                   const appIcon = isEditor ? faCode : app.appType === 'folder' ? faFolderOpen : app.appType === 'file' ? faFileLines : faDesktop;
                   
                   return (
@@ -1263,6 +1032,36 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
             </div>
           )}
         </>
+      )}
+
+      {/* Right-click context menu — rendered via portal to escape backdrop-filter stacking context */}
+      {contextMenu && createPortal(
+        <div
+          className="workspace-context-menu"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          {onPin && (
+            <button
+              className="context-menu-item"
+              onClick={() => { onPin(workspace); setContextMenu(null); }}
+            >
+              <FontAwesomeIcon icon={faThumbtack} style={{ color: isPinned ? '#FDE047' : undefined }} />
+              {isPinned ? 'Unpin' : 'Pin'}
+            </button>
+          )}
+          {onDelete && (
+            <button
+              className="context-menu-item context-menu-item--danger"
+              onClick={() => { onDelete(workspace); setContextMenu(null); }}
+            >
+              <FontAwesomeIcon icon={faTrash} />
+              Delete
+            </button>
+          )}
+        </div>,
+        document.body
       )}
     </div>
   );

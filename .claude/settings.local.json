@@ -28,7 +28,10 @@
       "Bash(cmd /c 'c:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\AppScanner_test.exe --debug 2>&1 | findstr /C:\"\"[VirtualDesktop]\"\" | head -10')",
       "Bash(python3:*)",
       "Bash(node test/test_simple_chat.js)",
-      "Bash(taskkill //F //IM app.exe)"
+      "Bash(taskkill //F //IM app.exe)",
+      "Bash(cmd /c \"C:\\\\Windows\\\\Microsoft.NET\\\\Framework64\\\\v4.0.30319\\\\csc.exe /r:System.Drawing.dll /r:System.Windows.Forms.dll /out:C:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\scripts\\\\AppScannerTest.exe C:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\scripts\\\\AppScanner.cs\")",
+      "Bash(powershell -ExecutionPolicy Bypass -File /c/Users/raghu/projects/extension/scripts/build-appscanner.ps1 2>&1)",
+      "Bash(powershell -ExecutionPolicy Bypass -File scripts/build-appscanner.ps1)"
     ],
     "deny": [],
     "ask": [],

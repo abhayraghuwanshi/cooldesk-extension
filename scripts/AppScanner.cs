@@ -83,6 +83,7 @@ public class AppScanner {
     }
 
     static bool debug = false;
+    static HashSet<string> seenExePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     static Dictionary<string, List<uint>> pathPidMap = new Dictionary<string, List<uint>>(StringComparer.OrdinalIgnoreCase);
     static Dictionary<string, List<uint>> namePidMap = new Dictionary<string, List<uint>>(StringComparer.OrdinalIgnoreCase);
     static HashSet<uint> windowPids = new HashSet<uint>();
@@ -115,14 +116,30 @@ public class AppScanner {
             // Method 1: Scan Start Menu shortcuts (most reliable)
             ScanStartMenu();
 
-            // Method 2: Scan Program Files directories
-            ScanProgramDirs();
-
-            // Method 3: Scan Registry (for apps without shortcuts)
+            // Method 2: Scan Registry (for apps without shortcuts)
             ScanRegistry();
 
-            // Method 4: Scan Running Processes
+            // Method 3: Scan Running Processes
             ScanRunning();
+
+            // Final dedup pass: prefer startmenu > registry. Dedup by exe path AND by normalized name.
+            var dedupedApps = new Dictionary<string, AppInfo>(StringComparer.OrdinalIgnoreCase);
+            var seenFinalPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seenFinalNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string[] sourceOrder = { "startmenu", "registry", "apppaths", "programfiles" };
+            foreach (string src in sourceOrder) {
+                foreach (var kvp in apps) {
+                    if (kvp.Value.source != src) continue;
+                    string exePath = kvp.Value.path ?? "";
+                    string normName = NormalizeAppName(kvp.Value.name).ToLower();
+                    if (!seenFinalPaths.Contains(exePath) && !seenFinalNames.Contains(normName)) {
+                        dedupedApps[kvp.Key] = kvp.Value;
+                        if (!string.IsNullOrEmpty(exePath)) seenFinalPaths.Add(exePath);
+                        seenFinalNames.Add(normName);
+                    }
+                }
+            }
+            apps = dedupedApps;
 
             // Output JSON: { "installed": [...], "windows": [...] }
             Console.Write("{\"installed\":[");
@@ -156,7 +173,14 @@ public class AppScanner {
                 string wPath;
                 if (!pidToPath.TryGetValue(pid, out wPath) || string.IsNullOrEmpty(wPath)) continue;
 
+                // Skip Windows OS processes — they're never user-switchable apps.
+                // Legitimate System32 user tools (cmd, notepad) are in the installed list via Start Menu
+                // so they'll still get isRunning:true via AppMatcher path-matching.
                 string exeName = Path.GetFileNameWithoutExtension(wPath);
+                if (_windowsOSProcesses.Contains(exeName)) continue;
+                string wPathLower = wPath.ToLower();
+                if (wPathLower.Contains("\\windows\\system32\\") ||
+                    wPathLower.Contains("\\windows\\syswow64\\")) continue;
                 List<Tuple<long, string>> titles;
                 if (!pidToTitles.TryGetValue(pid, out titles)) titles = new List<Tuple<long, string>>();
 
@@ -226,8 +250,13 @@ public class AppScanner {
                     string name = Path.GetFileNameWithoutExtension(lnkFile);
                     if (name.ToLower().EndsWith(".exe")) name = name.Substring(0, name.Length - 4);
 
-                    // Generic cleanup: Remove common suffixes like "-cli", " (x64)", etc.
-                    name = name.Replace("-cli", "").Replace(" (x64)", "").Replace(" (32-bit)", "").Trim();
+                    // Generic cleanup: Remove common suffixes like "-cli", " (x64)", "(64bit)", etc.
+                    name = name.Replace("-cli", "")
+                               .Replace(" (x64)", "").Replace(" (x86)", "")
+                               .Replace(" (32-bit)", "").Replace(" (64-bit)", "")
+                               .Replace(" (64bit)", "").Replace(" (32bit)", "")
+                               .Replace(" (64-Bit)", "").Replace(" (32-Bit)", "")
+                               .Trim();
 
                     if (ShouldSkip(name)) continue;
 
@@ -241,8 +270,9 @@ public class AppScanner {
                         category = sep > 0 ? folderPart.Substring(0, sep) : folderPart;
                     }
 
-                    string key = name.ToLower();
-                    if (!apps.ContainsKey(key)) {
+                    // Use normalized key so registry entries that strip version/arch will match
+                    string key = NormalizeAppName(name).ToLower();
+                    if (!apps.ContainsKey(key) && seenExePaths.Add(target)) {
                         apps[key] = new AppInfo {
                             name = name,
                             path = target,
@@ -254,6 +284,71 @@ public class AppScanner {
                 } catch { }
             }
         }
+    }
+
+    static void ScanAppPaths() {
+        // HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths
+        // This is the Windows-curated registry of explicitly launchable apps.
+        // These are high-confidence user-facing apps — Chrome, VSCode, Notepad++, etc.
+        string[] appPathsKeys = {
+            @"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths",
+            @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths"
+        };
+
+        foreach (string regPath in appPathsKeys) {
+            try {
+                using (RegistryKey key = Registry.LocalMachine.OpenSubKey(regPath)) {
+                    if (key == null) continue;
+                    foreach (string subKeyName in key.GetSubKeyNames()) {
+                        try {
+                            using (RegistryKey subKey = key.OpenSubKey(subKeyName)) {
+                                if (subKey == null) continue;
+
+                                // Key name is the exe filename e.g. "chrome.exe"
+                                string exeFileName = Path.GetFileNameWithoutExtension(subKeyName);
+                                if (string.IsNullOrEmpty(exeFileName)) continue;
+
+                                // Default value is the full path to the exe
+                                string exePath = subKey.GetValue(null) as string;
+                                if (string.IsNullOrEmpty(exePath)) continue;
+                                exePath = exePath.Trim('"').Trim();
+
+                                if (!exePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) continue;
+                                if (!File.Exists(exePath)) continue;
+                                if (ShouldSkipPath(exePath)) continue;
+                                if (ShouldSkipExeName(exeFileName)) continue;
+
+                                // Use a clean display name: title-case the exe name as fallback
+                                // Many App Paths entries are bare exe names; a better name comes from file version info
+                                string displayName = GetExeProductName(exePath);
+                                if (string.IsNullOrEmpty(displayName))
+                                    displayName = System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(exeFileName.Replace("-", " ").Replace("_", " "));
+
+                                string keyLower = displayName.ToLower();
+                                string exeKeyLower = exeFileName.ToLower();
+                                if (apps.ContainsKey(keyLower) || apps.ContainsKey(exeKeyLower)) continue;
+
+                                apps[keyLower] = new AppInfo {
+                                    name = displayName,
+                                    path = exePath,
+                                    source = "apppaths",
+                                    iconBase64 = ExtractIconAsBase64(exePath)
+                                };
+                            }
+                        } catch { }
+                    }
+                }
+            } catch { }
+        }
+    }
+
+    // Read ProductName from the exe's version info — cleaner than using the exe filename
+    static string GetExeProductName(string exePath) {
+        try {
+            var info = System.Diagnostics.FileVersionInfo.GetVersionInfo(exePath);
+            if (!string.IsNullOrWhiteSpace(info.ProductName)) return info.ProductName.Trim();
+        } catch { }
+        return null;
     }
 
     static void ScanProgramDirs() {
@@ -325,29 +420,68 @@ public class AppScanner {
 
                                 string name = subKey.GetValue("DisplayName") as string;
                                 string installLocation = subKey.GetValue("InstallLocation") as string;
+                                string displayIcon = subKey.GetValue("DisplayIcon") as string;
 
                                 if (string.IsNullOrEmpty(name) || ShouldSkip(name)) continue;
-                                if (string.IsNullOrEmpty(installLocation) || !Directory.Exists(installLocation)) continue;
 
-                                string keyLower = name.ToLower();
+                                // SystemComponent=1 is the Windows flag for "hide from Add/Remove Programs"
+                                // Drivers, OEM services, redistributables, and background components all set this.
+                                // This replaces almost every OEM name-based heuristic.
+                                object sysComp = subKey.GetValue("SystemComponent");
+                                if (sysComp is int scInt && scInt == 1) continue;
+
+                                // NoRemove=1 with no install location = system glue, not a user app
+                                object noRemove = subKey.GetValue("NoRemove");
+                                if (noRemove is int nrInt && nrInt == 1 && string.IsNullOrEmpty(installLocation)) continue;
+
+                                // Normalize name to deduplicate against startmenu entries
+                                // e.g. "Beyond Compare 5.0.5" → "beyond compare 5", "Cursor (User)" → "cursor"
+                                string normalizedName = NormalizeAppName(name);
+                                string keyLower = normalizedName.ToLower();
                                 if (apps.ContainsKey(keyLower)) continue;
+                                // Also check the original key in case startmenu used the unnormalized name
+                                if (apps.ContainsKey(name.ToLower())) continue;
 
-                                // Find an exe in install location
-                                try {
-                                    string[] exeFiles = Directory.GetFiles(installLocation, "*.exe", SearchOption.TopDirectoryOnly);
-                                    foreach (string exe in exeFiles) {
-                                        if (ShouldSkipPath(exe)) continue;  // Filter by path
-                                        if (!ShouldSkip(Path.GetFileNameWithoutExtension(exe))) {
-                                            apps[keyLower] = new AppInfo { 
-                                                name = name, 
-                                                path = exe, 
-                                                source = "registry",
-                                                iconBase64 = ExtractIconAsBase64(exe)
-                                            };
-                                            break;
+                                // Try InstallLocation first
+                                bool added = false;
+                                if (!string.IsNullOrEmpty(installLocation) && Directory.Exists(installLocation)) {
+                                    try {
+                                        string[] exeFiles = Directory.GetFiles(installLocation, "*.exe", SearchOption.TopDirectoryOnly);
+                                        foreach (string exe in exeFiles) {
+                                            if (ShouldSkipPath(exe)) continue;
+                                            if (!ShouldSkip(Path.GetFileNameWithoutExtension(exe)) && seenExePaths.Add(exe)) {
+                                                apps[keyLower] = new AppInfo {
+                                                    name = normalizedName,
+                                                    path = exe,
+                                                    source = "registry",
+                                                    iconBase64 = ExtractIconAsBase64(exe)
+                                                };
+                                                added = true;
+                                                break;
+                                            }
                                         }
-                                    }
-                                } catch { }
+                                    } catch { }
+                                }
+
+                                // Fallback: use DisplayIcon path (many apps set this even without InstallLocation)
+                                if (!added && !string.IsNullOrEmpty(displayIcon)) {
+                                    try {
+                                        // DisplayIcon may be "C:\path\app.exe,0" — strip the icon index
+                                        string iconPath = displayIcon.Split(',')[0].Trim().Trim('"');
+                                        if (iconPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                                            File.Exists(iconPath) &&
+                                            !ShouldSkipPath(iconPath) &&
+                                            !ShouldSkip(Path.GetFileNameWithoutExtension(iconPath)) &&
+                                            seenExePaths.Add(iconPath)) {
+                                            apps[keyLower] = new AppInfo {
+                                                name = normalizedName,
+                                                path = iconPath,
+                                                source = "registry",
+                                                iconBase64 = ExtractIconAsBase64(iconPath)
+                                            };
+                                        }
+                                    } catch { }
+                                }
                             }
                         } catch { }
                     }
@@ -366,28 +500,55 @@ public class AppScanner {
 
                                 string name = subKey.GetValue("DisplayName") as string;
                                 string installLocation = subKey.GetValue("InstallLocation") as string;
+                                string displayIcon = subKey.GetValue("DisplayIcon") as string;
 
                                 if (string.IsNullOrEmpty(name) || ShouldSkip(name)) continue;
-                                if (string.IsNullOrEmpty(installLocation) || !Directory.Exists(installLocation)) continue;
 
-                                string keyLower = name.ToLower();
+                                object sysComp = subKey.GetValue("SystemComponent");
+                                if (sysComp is int scInt2 && scInt2 == 1) continue;
+
+                                string normalizedName = NormalizeAppName(name);
+                                string keyLower = normalizedName.ToLower();
                                 if (apps.ContainsKey(keyLower)) continue;
+                                if (apps.ContainsKey(name.ToLower())) continue;
 
-                                try {
-                                    string[] exeFiles = Directory.GetFiles(installLocation, "*.exe", SearchOption.TopDirectoryOnly);
-                                    foreach (string exe in exeFiles) {
-                                        if (ShouldSkipPath(exe)) continue;  // Filter by path
-                                        if (!ShouldSkip(Path.GetFileNameWithoutExtension(exe))) {
-                                            apps[keyLower] = new AppInfo { 
-                                                name = name, 
-                                                path = exe, 
-                                                source = "registry",
-                                                iconBase64 = ExtractIconAsBase64(exe)
-                                            };
-                                            break;
+                                bool added = false;
+                                if (!string.IsNullOrEmpty(installLocation) && Directory.Exists(installLocation)) {
+                                    try {
+                                        string[] exeFiles = Directory.GetFiles(installLocation, "*.exe", SearchOption.TopDirectoryOnly);
+                                        foreach (string exe in exeFiles) {
+                                            if (ShouldSkipPath(exe)) continue;
+                                            if (!ShouldSkip(Path.GetFileNameWithoutExtension(exe)) && seenExePaths.Add(exe)) {
+                                                apps[keyLower] = new AppInfo {
+                                                    name = normalizedName,
+                                                    path = exe,
+                                                    source = "registry",
+                                                    iconBase64 = ExtractIconAsBase64(exe)
+                                                };
+                                                added = true;
+                                                break;
+                                            }
                                         }
-                                    }
-                                } catch { }
+                                    } catch { }
+                                }
+
+                                if (!added && !string.IsNullOrEmpty(displayIcon)) {
+                                    try {
+                                        string iconPath = displayIcon.Split(',')[0].Trim().Trim('"');
+                                        if (iconPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                                            File.Exists(iconPath) &&
+                                            !ShouldSkipPath(iconPath) &&
+                                            !ShouldSkip(Path.GetFileNameWithoutExtension(iconPath)) &&
+                                            seenExePaths.Add(iconPath)) {
+                                            apps[keyLower] = new AppInfo {
+                                                name = normalizedName,
+                                                path = iconPath,
+                                                source = "registry",
+                                                iconBase64 = ExtractIconAsBase64(iconPath)
+                                            };
+                                        }
+                                    } catch { }
+                                }
                             }
                         } catch { }
                     }
@@ -434,7 +595,7 @@ public class AppScanner {
             // 2. NOISE FILTER: Skip common background/utility windows
             string titleLower = title.ToLower();
             if (string.IsNullOrWhiteSpace(title) ||
-                titleLower == "program manager" || 
+                titleLower == "program manager" ||
                 titleLower == "microsoft text input application" ||
                 titleLower == "windows input experience" ||
                 titleLower == "settings" ||
@@ -444,14 +605,55 @@ public class AppScanner {
                 titleLower == "cptmsg" || // Zoom helper
                 titleLower == "nvcontainer" ||
                 titleLower.StartsWith("uwp-") ||
-                titleLower == "media context menu") {
+                titleLower == "media context menu" ||
+                // System host / service windows
+                titleLower == "hidden window" ||
+                titleLower == "task host window" ||
+                titleLower == "windows push notifications platform" ||
+                titleLower == "hcontrol" ||
+                // Background event / broadcast windows
+                titleLower.StartsWith(".net-broadcasteventwindow") ||
+                titleLower.Contains("broadcastlistenerwindow") ||
+                titleLower.Contains("messageonly") ||
+                titleLower.Contains("ms_webcheck") ||
+                titleLower.Contains("wingetmessage") ||
+                // GUID-style titles like {5AEA657D-F3F5-...} — message-only sinks
+                (title.Length == 38 && title[0] == '{' && title[37] == '}') ||
+                // Very short titles (1–2 chars) are never real app windows
+                title.Trim().Length <= 2 ||
+                // DDE Server Window — universal Windows IPC pattern used by background services
+                titleLower == "dde server window" ||
+                // Path-as-title: background helpers that set their exe path as window title
+                title.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                // Windows containing "hidden wnd" are explicitly hidden helper windows
+                titleLower.Contains("hidden wnd") ||
+                // Toast notification windows are internal OS/app infrastructure
+                titleLower.EndsWith(" toast") ||
+                // Programmatic/class-name-style titles: no spaces and length > 12.
+                // Real app windows always have human-readable titles with spaces (e.g. "Visual Studio Code").
+                // Background services create windows named after their class: "CrossDeviceResumeWindow",
+                // "BluetoothNotificationAreaIconWindowClass", "MediaContextNotificationWindow", etc.
+                (!title.Contains(' ') && title.Length > 12)) {
+                return true;
+            }
+
+            // 3. CLASS FILTER: Background/service window classes are never user-facing app windows.
+            // These class names are set by the framework (.NET, NVIDIA driver stack, Realtek driver),
+            // not by individual exe names — so this is stable across OEM hardware.
+            StringBuilder clsb = new StringBuilder(256);
+            GetClassName(hWnd, clsb, clsb.Capacity);
+            string cls = clsb.ToString();
+            string clsLower = cls.ToLower();
+            if (clsLower.StartsWith(".net-broadcasteventwindow") ||  // .NET internal event pump
+                clsLower.EndsWith("backgroundprocessclass") ||        // driver/service background class
+                clsLower.StartsWith("nvcontainerwindowclass")) {      // NVIDIA container
                 return true;
             }
 
             int cloaked = 0;
             DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, out cloaked, 4);
 
-            // 3. CLOAKED FILTER: 
+            // 4. CLOAKED FILTER: 
             // 0 = Visible, 1 = Cloaked by app (usually hidden/suspended), 2 = Cloaked by Shell (Virtual Desktops)
             // We want 0 and 2. We usually want to SKIP 1 as it's often a "zombie" UWP app.
             if (cloaked == 1) return true;
@@ -575,32 +777,168 @@ public class AppScanner {
         return null;
     }
 
+    // ShouldSkip: lightweight filter for display names.
+    // Heavy lifting (OEM services, system components) is done via SystemComponent=1 in registry.
+    // Only filter things that are truly never user-launchable regardless of source.
     static bool ShouldSkip(string name) {
         if (string.IsNullOrEmpty(name)) return true;
         string lower = name.ToLower();
-        
-        // Only filter obvious system utilities - be very conservative
-        // Most filtering will happen based on Start Menu presence
-        return lower.Contains("uninstall") || 
-               lower.Contains("setup") ||
-               lower.Contains("installer") ||
-               (lower.Contains("update") && !lower.Contains("updater")) || // Skip "update" but not apps like "Updater"
-               lower.Contains("helper") ||
-               lower.Contains("crash");
+
+        // Installers, setup, crash handlers, redistributables — never user apps
+        if (lower.Contains("uninstall") || lower.Contains("setup") ||
+            lower.Contains("installer") || lower.Contains("redistributable") ||
+            lower.Contains("vcredist") || lower.Contains("directx")) return true;
+
+        // Start Menu shortcut noise: these appear as .lnk files but aren't launchable apps
+        if (lower.Contains("native tools command prompt") ||
+            lower.Contains("cross tools command prompt") ||
+            lower.Contains("developer command prompt") ||
+            lower.Contains("developer powershell for vs")) return true;
+
+        // Module docs, configure/about dialogs that get .lnk shortcuts
+        if (lower.Contains("module docs") || lower == "about java" ||
+            lower == "configure java") return true;
+
+        // .NET / SDK runtimes — components, not apps
+        if (lower.Contains(".net runtime") || lower.Contains(".net sdk") ||
+            lower.Contains(".net desktop runtime") || lower.Contains("visual c++ ") ||
+            lower.Contains("visual c++ redistributable")) return true;
+
+        // Background services and helpers
+        if (lower.EndsWith(" service") || lower.EndsWith(" services") ||
+            lower.Contains("sdk service") || lower.Contains("framesdk") ||
+            lower.Contains("helper compact") || lower.Contains("nativepush")) return true;
+
+        // Updaters, error reporters, autostart helpers — not user apps
+        if (lower.EndsWith(" updater") || lower.Contains("error reporter") ||
+            lower.Contains("autostart") || lower == "check for updates") return true;
+
+        // Terminal/shell shortcuts that aren't real apps
+        if ((lower.Contains("command prompt") || lower.Contains("powershell prompt")) &&
+            lower != "command prompt" && lower != "windows powershell") return true;
+        if (lower.Contains("sdk shell") || lower.Contains("cloud tools for powershell")) return true;
+
+        // Office sub-tools (not standalone apps)
+        if (lower.Contains("database compare") || lower.Contains("spreadsheet compare") ||
+            lower.Contains("telemetry log") || lower.Contains("recording manager") ||
+            lower.Contains("language preferences") || lower == "send to onenote") return true;
+
+        // App sub-components / stores
+        if (lower == "bluestacks store" || lower.Contains("bluestacks services") ||
+            lower.Contains("bluestacks_") || lower == "bluestacks x") return true;
+
+        // LibreOffice Safe Mode shortcut
+        if (lower.Contains("safe mode") && lower.Contains("libreoffice")) return true;
+
+        // Windows admin/system tools listed in start menu
+        if (lower == "resource monitor" || lower == "recovery drive" || lower == "recoverydrive" ||
+            lower == "administrative tools" || lower == "task manager" ||
+            lower == "livecaptions" || lower == "live captions") return true;
+        if (lower.Contains("windows software development kit") ||
+            lower.Contains("windows app cert") ||
+            lower.Contains("application verifier") ||
+            lower.Contains("powershell ise")) return true;
+
+        // Background services / libraries (not user-launchable apps)
+        if (lower == "bonjour" || lower.Contains("riot vanguard") ||
+            lower.Contains("frameview sdk") || lower.Contains("framesdk") ||
+            lower == "espeak" || lower.StartsWith("espeak ")) return true;
+
+        // Dev version managers / CLI tools registered in Uninstall (no GUI)
+        if (lower == "fast node manager" || lower == "fnm") return true;
+        // Office suite umbrella entry (individual Office apps come from startmenu)
+        if (lower.Contains("365 apps for enterprise") || lower.Contains("office 365")) return true;
+        // Git is a CLI tool; Git Bash/CMD/GUI come from startmenu
+        if (lower == "git") return true;
+
+        // Misc junk
+        if (lower.Contains("antigravity") || lower.Contains("access logs")) return true;
+        if (lower.Contains("additional tools for node")) return true;
+        if (lower.Contains("microsoft silverlight")) return true;
+        if (lower == "ttsapp") return true;
+
+        return false;
     }
-    
+
+    // ShouldSkipExeName: used for App Paths entries where we only have the exe filename.
+    // Filters clear non-app exes — background services, updaters, helpers.
+    static bool ShouldSkipExeName(string name) {
+        if (string.IsNullOrEmpty(name)) return true;
+        string lower = name.ToLower();
+        if (lower.Contains("unins") || lower.Contains("setup") ||
+            lower.Contains("update") || lower.Contains("updater") ||
+            lower.Contains("crash") || lower.Contains("helper") ||
+            lower.Contains("svc") || lower.EndsWith("service") ||
+            lower.Contains("daemon") || lower.Contains("agent") ||
+            lower.Contains("launcher") && lower.Contains("helper")) return true;
+        return false;
+    }
+
+    // Normalize a registry display name for dedup: strip suffixes so names match their start menu equivalents.
+    static string NormalizeAppName(string name) {
+        if (string.IsNullOrEmpty(name)) return name;
+        // Strip " (User)" suffix
+        name = System.Text.RegularExpressions.Regex.Replace(name, @"\s*\(User\)\s*$", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+        // Strip arch suffixes FIRST so they don't block version stripping
+        // e.g. "WinRAR 5.91 (64-bit)" → "WinRAR 5.91" → "WinRAR"
+        name = System.Text.RegularExpressions.Regex.Replace(name, @"\s*\((x64|x86|32-bit|64-bit)\)\s*$", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+        name = System.Text.RegularExpressions.Regex.Replace(name, @"\s+x64\s*$", "").Trim();
+        // Strip trailing version numbers like " 5.0.5", " 1.1", " 7.3", " 11.76.9"
+        name = System.Text.RegularExpressions.Regex.Replace(name, @"\s+[\d]+(\.\d+)+\s*$", "").Trim();
+        // Strip trailing "version X.X.X" or bare "version" suffix
+        name = System.Text.RegularExpressions.Regex.Replace(name, @"\s+version\s+[\d.]+\s*$", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+        name = System.Text.RegularExpressions.Regex.Replace(name, @"\s+version\s*$", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+        // Strip leading "Microsoft " prefix so "Microsoft Visual Studio Code" matches "Visual Studio Code"
+        name = System.Text.RegularExpressions.Regex.Replace(name, @"^Microsoft\s+", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+        return name;
+    }
+
+    // Core Windows OS host processes. These are documented OS internals that have been stable
+    // for 20+ years and will never be user-launchable apps regardless of system configuration.
+    // Kept intentionally small — no OEM/third-party names here.
+    private static readonly HashSet<string> _windowsOSProcesses = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+        "svchost", "taskhostw", "wininit", "winlogon", "services", "lsass", "csrss", "smss",
+        "RuntimeBroker", "dllhost", "sihost", "WerFault", "conhost",
+        "SearchHost", "StartMenuExperienceHost", "ShellExperienceHost", "TextInputHost",
+    };
+
+    // Windows admin/system tools that pollute the start menu but aren't user apps.
+    // Identified by their exe filename (without extension).
+    private static readonly HashSet<string> _systemAdminExeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+        // Admin / maintenance tools
+        "dfrgui", "cleanmgr", "iscsicpl", "mdsched", "odbcad32", "recdisc", "recoverydrive",
+        "regedit", "resmon", "msconfig", "msinfo32", "psr", "wfs",
+        "mstsc", "charmap", "fxscover",
+        // Accessibility (rarely searched by name in a spotlight launcher)
+        "magnify", "narrator", "osk", "voiceaccess",
+        // Legacy media / Office tools
+        "wmplayer", "databasecompare", "spreadsheetcompare",
+        // Silverlight
+        "silverlight",
+        // Windows SDK / certification tools
+        "appcertui", "appverif"
+    };
+
     static bool ShouldSkipPath(string path) {
         if (string.IsNullOrEmpty(path)) return false;
-        
         string lowerPath = path.ToLower();
-        
-        // ONLY filter out very specific Windows system paths that are NEVER user apps
-        // Avoid filtering c:\windows\system32 entirely as apps like Calculator live there
-        return lowerPath.Contains("c:\\windows\\syswow64") || // SysWOW64 usually contains helpers
-               lowerPath.Contains("c:\\windows\\inf") ||
-               lowerPath.Contains("c:\\windows\\resources") ||
-               lowerPath.Contains("c:\\windows\\debug") ||
-               lowerPath.Contains("c:\\windows\\servicing");
+
+        // Windows system-only paths
+        if (lowerPath.Contains("c:\\windows\\syswow64") ||
+            lowerPath.Contains("c:\\windows\\inf") ||
+            lowerPath.Contains("c:\\windows\\resources") ||
+            lowerPath.Contains("c:\\windows\\debug") ||
+            lowerPath.Contains("c:\\windows\\servicing")) return true;
+
+        // WindowsApps contains raw UWP package folders (e.g. Microsoft.Paint_8wekyb3d8bbwe)
+        // These are already captured with clean names via Start Menu shortcuts — skip entirely
+        if (lowerPath.Contains("\\windowsapps\\")) return true;
+
+        // Block known Windows admin/system tool executables by name
+        string exeName = Path.GetFileNameWithoutExtension(path);
+        if (_systemAdminExeNames.Contains(exeName)) return true;
+
+        return false;
     }
 
     static string GetShortcutTarget(string lnkPath) {
@@ -712,6 +1050,9 @@ public class AppScanner {
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     static extern bool QueryFullProcessImageName([In] IntPtr hProcess, [In] int dwFlags, [Out] StringBuilder lpExeName, [In, Out] ref int lpdwSize);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
 
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 

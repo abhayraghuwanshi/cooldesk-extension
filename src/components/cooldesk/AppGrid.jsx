@@ -5,14 +5,17 @@
 /* global chrome */
 
 import {
+    faBox,
     faChevronDown,
     faChevronUp,
     faCode,
+    faComments,
     faDesktop,
     faFilm,
     faGamepad,
     faGlobe,
     faGraduationCap,
+    faHeartPulse,
     faMusic,
     faNewspaper,
     faPaintBrush,
@@ -20,15 +23,12 @@ import {
     faRocket,
     faShoppingBag,
     faTools,
-    faWallet,
-    faComments,
-    faHeartPulse,
-    faBox
+    faWallet
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { runningAppsService } from '../../services/runningAppsService.js';
 import { categorizeApp, STANDARD_CATEGORIES } from '../../services/appCategorizationService.js';
+import { runningAppsService } from '../../services/runningAppsService.js';
 
 // Category to FontAwesome icon mapping
 const CATEGORY_FA_ICONS = {
@@ -154,14 +154,24 @@ function CategorySection({ category, apps, onLaunch }) {
                             }}
                             title={app.name}
                             style={{
-                                border: app.isRunning
-                                    ? '2px solid rgba(34, 197, 94, 0.6)'
-                                    : '1px solid rgba(255, 255, 255, 0.08)',
-                                background: app.isRunning
-                                    ? 'rgba(34, 197, 94, 0.15)'
-                                    : 'rgba(255, 255, 255, 0.05)'
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                background: 'rgba(255, 255, 255, 0.05)',
+                                position: 'relative'
                             }}
                         >
+                            {app.isRunning && (
+                                <span style={{
+                                    position: 'absolute',
+                                    bottom: '2px',
+                                    right: '2px',
+                                    width: '6px',
+                                    height: '6px',
+                                    borderRadius: '50%',
+                                    background: '#22c55e',
+                                    boxShadow: '0 0 4px rgba(34,197,94,0.7)',
+                                    pointerEvents: 'none'
+                                }} />
+                            )}
                             {app.icon ? (
                                 <img
                                     src={app.icon}

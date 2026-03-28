@@ -966,6 +966,49 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   transform: scale(1.1) !important;
 }
 
+/* Right-click context menu */
+.workspace-context-menu {
+  position: fixed;
+  z-index: 9999;
+  background: #1e293b;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 8px;
+  padding: 4px;
+  min-width: 140px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: none;
+  background: transparent;
+  color: #e2e8f0;
+  font-size: 13px;
+  border-radius: 5px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.context-menu-item:hover {
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.context-menu-item--danger {
+  color: #f87171;
+}
+
+.context-menu-item--danger:hover {
+  background: rgba(239, 68, 68, 0.12);
+}
+
 .workspace-card-header {
   display: flex;
   align-items: flex-start;
@@ -1060,36 +1103,48 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   background: var(--glass-bg, rgba(30, 41, 59, 0.7));
 }
 
-.workspace-links {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 8px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex: 1;
+.workspace-links-scroll {
+  resize: vertical;
   overflow-y: auto;
   overflow-x: hidden;
-  max-height: 140px;
-  width: 100%;
+  min-height: 40px;
+  max-height: 320px;
+  margin: 0 0 8px 0;
 }
 
-.workspace-links::-webkit-scrollbar {
+.workspace-links-scroll::-webkit-scrollbar {
   width: 6px;
 }
 
-.workspace-links::-webkit-scrollbar-track {
+.workspace-links-scroll::-webkit-scrollbar-track {
   background: rgba(15, 23, 42, 0.3);
   border-radius: 3px;
 }
 
-.workspace-links::-webkit-scrollbar-thumb {
+.workspace-links-scroll::-webkit-scrollbar-thumb {
   background: rgba(59, 130, 246, 0.3);
   border-radius: 3px;
 }
 
-.workspace-links::-webkit-scrollbar-thumb:hover {
+.workspace-links-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(59, 130, 246, 0.5);
+}
+
+/* Resize handle hint */
+.workspace-links-scroll::after {
+  content: '';
+  display: block;
+  height: 4px;
+}
+
+.workspace-links {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
 }
 
 .workspace-link-item {
@@ -1219,8 +1274,8 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   gap: 6px;
   padding: 6px 10px;
   border-radius: 8px;
-  background: rgba(34, 197, 94, 0.1);
-  border: 1px solid rgba(34, 197, 94, 0.3);
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.25);
   cursor: pointer;
   transition: all 0.2s ease;
   font-size: var(--font-sm, 12px);
@@ -1228,10 +1283,10 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 }
 
 .workspace-app-chip:hover {
-  background: rgba(34, 197, 94, 0.2);
-  border-color: rgba(34, 197, 94, 0.5);
+  background: rgba(139, 92, 246, 0.18);
+  border-color: rgba(139, 92, 246, 0.45);
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.2);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.2);
 }
 
 .workspace-app-chip img {
@@ -2315,14 +2370,34 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 }
 
 
+/* Compact Icons Scroll Wrapper - resizable like a text editor */
+.compact-icons-scroll {
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
+  overflow: auto;
+  min-height: 44px;
+  max-height: 200px;
+  border-radius: 6px;
+}
+
+.compact-icons-scroll::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.compact-icons-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 2px;
+}
+
 /* Compact URL Icons Container */
 .compact-icons-container {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 12px;
-  flex: 1;
-  overflow: visible;
-  padding-left: 24px;
+  padding: 4px 8px 4px 24px;
   min-width: 0;
 }
 
@@ -2385,15 +2460,15 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 
 /* App Icon in Compact View - Green Theme */
 .compact-app-icon {
-  border: 2px solid rgba(34, 197, 94, 0.4) !important;
-  background: rgba(34, 197, 94, 0.1) !important;
+  border: 1px solid rgba(139, 92, 246, 0.3) !important;
+  background: rgba(139, 92, 246, 0.08) !important;
 }
 
 .compact-app-icon:hover {
-  border-color: rgba(34, 197, 94, 0.7) !important;
-  background: rgba(34, 197, 94, 0.2) !important;
+  border-color: rgba(139, 92, 246, 0.55) !important;
+  background: rgba(139, 92, 246, 0.15) !important;
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
 }
 
 .compact-app-icon img {
@@ -2495,30 +2570,6 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   opacity: 1;
 }
 
-/* +N More Button */
-.compact-more-btn {
-  padding: 0;
-  width: calc(var(--font-5xl) * 1.5) !important;
-  height: calc(var(--font-5xl) * 1.5) !important;
-  border-radius: 50% !important;
-  background: rgba(148, 163, 184, 0.15);
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  font-size: calc(var(--font-5xl) * 0.45);
-  font-weight: 600;
-  color: var(--text-secondary, #94A3B8);
-  cursor: pointer;
-  flex-shrink: 0;
-  white-space: nowrap;
-  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.compact-more-btn:hover {
-  background: rgba(148, 163, 184, 0.25);
-  color: var(--text-primary, #E5E7EB);
-}
 
 /* Action Buttons (Pin/Delete/Add) - Hidden by default, show on hover with blur effect */
 .compact-action-btn {
@@ -3083,11 +3134,6 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
     font-size: var(--font-xs);
   }
 
-  .compact-more-btn {
-    height: 36px;
-    font-size: var(--font-md);
-    padding: 6px 12px;
-  }
 }
 
 /* QHD / 27" Monitors (2560px - 3839px) */
@@ -3148,10 +3194,6 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
     font-size: var(--font-xs);
   }
 
-  .compact-more-btn {
-    height: 32px;
-    font-size: var(--font-sm);
-  }
 }
 
 /* Full HD / 24" Monitors (1920px - 2559px) */
@@ -3325,12 +3367,6 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
     font-size: var(--font-xs);
   }
 
-  .compact-more-btn {
-    height: 26px;
-    font-size: var(--font-xs);
-    padding: 3px 6px;
-  }
-
   .compact-action-btn {
     padding: 6px;
     font-size: var(--font-sm);
@@ -3400,11 +3436,6 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
     font-size: var(--font-xs);
   }
 
-  .compact-more-btn {
-    height: 24px;
-    font-size: var(--font-xs);
-    padding: 2px 5px;
-  }
 }
 
 /* Sidebar / Mobile (501px - 767px) */
@@ -3460,12 +3491,6 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 
   .compact-group-count {
     display: none;
-  }
-
-  .compact-more-btn {
-    height: 28px;
-    font-size: var(--font-xs);
-    padding: 4px 8px;
   }
 
   .compact-action-btn {
@@ -3539,13 +3564,6 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
     display: none;
   }
 
-  .compact-more-btn {
-    height: 26px;
-    font-size: var(--font-xs);
-    padding: 4px 8px;
-    border-radius: 6px;
-  }
-
   .compact-action-btn {
     display: none;
   }
@@ -3596,11 +3614,6 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
     font-size: var(--font-xs);
   }
 
-  .compact-more-btn {
-    height: 24px;
-    font-size: var(--font-xs);
-    padding: 3px 6px;
-  }
 }
 
 /* Very narrow (350px and below) - minimal but readable */
@@ -3648,11 +3661,6 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
     font-size: var(--font-xs);
   }
 
-  .compact-more-btn {
-    height: 22px;
-    font-size: var(--font-xs);
-    padding: 2px 5px;
-  }
 }
 
 /* ==========================================
