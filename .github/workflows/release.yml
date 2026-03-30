@@ -5,8 +5,32 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
-  release:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.releaseId }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create draft release
+        id: create
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'CoolDesk ${{ github.ref_name }}'
+          releaseBody: |
+            ## What's new
+            See the full changelog for details.
+          releaseDraft: true
+          prerelease: false
+
+  build:
+    needs: create-release
     strategy:
       fail-fast: false
       matrix:
@@ -19,8 +43,6 @@ jobs:
             target: aarch64-apple-darwin
 
     runs-on: ${{ matrix.os }}
-    permissions:
-      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -40,8 +62,6 @@ jobs:
         if: runner.os == 'macOS'
         run: echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
 
-      # Per-target Rust + llama.cpp CMake cache
-      # shared-key ties the cache to the target triple so each matrix leg gets its own cache
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
@@ -49,14 +69,12 @@ jobs:
           shared-key: ${{ matrix.target }}
           cache-on-failure: true
 
-      # Cache Homebrew packages so brew install cmake doesn't re-download every run
       - name: Cache Homebrew
         if: runner.os == 'macOS'
         uses: actions/cache@v4
         with:
           path: |
             ~/Library/Caches/Homebrew
-            /usr/local/Cellar/cmake
             /opt/homebrew/Cellar/cmake
           key: brew-cmake-${{ runner.os }}
 
@@ -66,25 +84,28 @@ jobs:
           if ! command -v cmake &>/dev/null; then
             brew install cmake
           else
-            echo "cmake already available: $(cmake --version | head -1)"
+            echo "cmake $(cmake --version | head -1) already available"
           fi
+
+      - name: Build sidecar binaries (macOS)
+        if: runner.os == 'macOS'
+        working-directory: src-tauri
+        run: |
+          cargo build --release --bin matcher --target ${{ matrix.target }}
+          cargo build --release --bin AppScannerMac --target ${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/matcher bin/AppMatcher-${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/AppScannerMac bin/AppScanner-${{ matrix.target }}
 
       - name: Install frontend dependencies
         run: npm install
 
-      - name: Build and release
+      - name: Build and upload
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'CoolDesk ${{ github.ref_name }}'
-          releaseBody: |
-            ## What's new
-            See the full changelog for details.
-          releaseDraft: true
-          prerelease: false
+          releaseId: ${{ needs.create-release.outputs.release_id }}
           args: --target ${{ matrix.target }}
           updaterJsonKeepUniversal: true
