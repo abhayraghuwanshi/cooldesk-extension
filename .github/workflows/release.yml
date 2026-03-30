@@ -12,21 +12,18 @@ jobs:
   create-release:
     runs-on: ubuntu-latest
     outputs:
-      release_id: ${{ steps.create.outputs.releaseId }}
+      release_id: ${{ steps.create.outputs.id }}
     steps:
-      - uses: actions/checkout@v4
       - name: Create draft release
         id: create
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'CoolDesk ${{ github.ref_name }}'
-          releaseBody: |
+          tag_name: ${{ github.ref_name }}
+          name: 'CoolDesk ${{ github.ref_name }}'
+          body: |
             ## What's new
             See the full changelog for details.
-          releaseDraft: true
+          draft: true
           prerelease: false
 
   build:
