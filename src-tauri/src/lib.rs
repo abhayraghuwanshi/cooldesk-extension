@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tauri::Manager; // Import Manager trait
+use tauri::{Manager, Emitter};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tauri::tray::TrayIconBuilder;

@@ -39,6 +39,10 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Install cmake (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake
+
       - name: Install frontend dependencies
         run: npm install
 
