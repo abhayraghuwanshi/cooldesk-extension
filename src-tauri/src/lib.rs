@@ -403,6 +403,8 @@ pub fn run() {
     }))
     .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_dialog::init())
+    .plugin(tauri_plugin_updater::Builder::new().build())
+    .plugin(tauri_plugin_process::init())
     .invoke_handler(tauri::generate_handler![
         get_running_apps,
         get_installed_apps,
@@ -429,6 +431,23 @@ pub fn run() {
       tauri::async_runtime::spawn(async {
           if let Err(e) = sidecar::start_server().await {
               log::error!("[Sidecar] Server failed: {}", e);
+          }
+      });
+
+      // Check for updates in the background on startup
+      let update_handle = app.handle().clone();
+      tauri::async_runtime::spawn(async move {
+          use tauri_plugin_updater::UpdaterExt;
+          match update_handle.updater() {
+              Ok(updater) => match updater.check().await {
+                  Ok(Some(update)) => {
+                      log::info!("[Updater] New version available: {}", update.version);
+                      let _ = update_handle.emit("update-available", &update.version);
+                  }
+                  Ok(None) => log::info!("[Updater] App is up to date"),
+                  Err(e) => log::warn!("[Updater] Update check failed: {}", e),
+              },
+              Err(e) => log::warn!("[Updater] Updater init failed: {}", e),
           }
       });
 

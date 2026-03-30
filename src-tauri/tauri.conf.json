@@ -37,6 +37,14 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM0OEUzMkNGOUY5M0Q5REYKUldUZjJaT2Z6ektPTk9hUVhxdU43N1QvTlJHYVdLMUJhdGRMalBzUldXdVUwRGlROXdpOVB6d3IK",
+      "endpoints": [
+        "https://github.com/abhayraghuwanshi/cooldesk-extension/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",

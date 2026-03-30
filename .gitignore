@@ -31,6 +31,10 @@ src-tauri/gen/
 src-tauri/capabilities/
 src-tauri/Wix/
 
+# Tauri signing keys
+*.key
+*.key.pub
+
 # Sidecar Data & Models
 sync-data/
 *.gguf

@@ -53,6 +53,8 @@ urlencoding = "2.1"
 uuid = { version = "1.0", features = ["v4"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-single-instance = "2.4.0"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 
 [dev-dependencies]
 tempfile = "3.10"
