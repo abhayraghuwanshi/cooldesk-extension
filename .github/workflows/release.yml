@@ -34,14 +34,34 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      # Per-target Rust + llama.cpp CMake cache
+      # shared-key ties the cache to the target triple so each matrix leg gets its own cache
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          shared-key: ${{ matrix.target }}
+          cache-on-failure: true
+
+      # Cache Homebrew packages so brew install cmake doesn't re-download every run
+      - name: Cache Homebrew
+        if: runner.os == 'macOS'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /usr/local/Cellar/cmake
+            /opt/homebrew/Cellar/cmake
+          key: brew-cmake-${{ runner.os }}
 
       - name: Install cmake (macOS)
         if: runner.os == 'macOS'
-        run: brew install cmake
+        run: |
+          if ! command -v cmake &>/dev/null; then
+            brew install cmake
+          else
+            echo "cmake already available: $(cmake --version | head -1)"
+          fi
 
       - name: Install frontend dependencies
         run: npm install
