@@ -57,7 +57,11 @@ jobs:
 
       - name: Set macOS deployment target
         if: runner.os == 'macOS'
-        run: echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
+        run: |
+          echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
+          echo "CMAKE_OSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
+          echo "CXXFLAGS=-D_LIBCPP_DISABLE_AVAILABILITY" >> $GITHUB_ENV
+          echo "CMAKE_CXX_FLAGS=-D_LIBCPP_DISABLE_AVAILABILITY" >> $GITHUB_ENV
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
