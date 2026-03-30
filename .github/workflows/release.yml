@@ -106,6 +106,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
+          tagName: ${{ github.ref_name }}
+          releaseName: 'CoolDesk ${{ github.ref_name }}'
           args: --target ${{ matrix.target }}
           updaterJsonKeepUniversal: true
           updaterJsonPreferNsis: true
@@ -114,6 +116,45 @@ jobs:
     needs: [create-release, build]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate and upload latest.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          VERSION="${TAG#v}"
+          DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          # Download .sig files from the release
+          gh release download "$TAG" --repo "$REPO" --pattern "*.sig" --dir /tmp/sigs
+
+          WIN_SIG=$(cat "/tmp/sigs/cooldesk_${VERSION}_x64-setup.nsis.zip.sig" 2>/dev/null || echo "")
+          MAC_SIG=$(cat "/tmp/sigs/cooldesk_aarch64.app.tar.gz.sig" 2>/dev/null || echo "")
+
+          BASE="https://github.com/${REPO}/releases/download/${TAG}"
+
+          cat > /tmp/latest.json << EOF
+          {
+            "version": "${VERSION}",
+            "notes": "See release notes.",
+            "pub_date": "${DATE}",
+            "platforms": {
+              "windows-x86_64": {
+                "signature": "${WIN_SIG}",
+                "url": "${BASE}/cooldesk_${VERSION}_x64-setup.nsis.zip"
+              },
+              "darwin-aarch64": {
+                "signature": "${MAC_SIG}",
+                "url": "${BASE}/cooldesk_aarch64.app.tar.gz"
+              }
+            }
+          }
+          EOF
+
+          gh release upload "$TAG" /tmp/latest.json --repo "$REPO" --clobber
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
