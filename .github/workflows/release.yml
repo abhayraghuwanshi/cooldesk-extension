@@ -19,6 +19,8 @@ jobs:
             target: aarch64-apple-darwin
 
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -33,6 +35,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Set macOS deployment target
+        if: runner.os == 'macOS'
+        run: echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
 
       # Per-target Rust + llama.cpp CMake cache
       # shared-key ties the cache to the target triple so each matrix leg gets its own cache
@@ -72,8 +78,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # Required for llama-cpp-sys C++17 filesystem APIs on macOS
-          MACOSX_DEPLOYMENT_TARGET: "11.0"
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'CoolDesk ${{ github.ref_name }}'
