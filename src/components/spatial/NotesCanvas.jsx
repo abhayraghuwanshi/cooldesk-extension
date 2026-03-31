@@ -32,6 +32,7 @@ import { NOTE_TEMPLATES, getTemplatesByCategory } from '../../services/noteTempl
 import { p2pStorage } from '../../services/p2p/storageService';
 import { teamManager } from '../../services/p2p/teamManager';
 import { syncOrchestrator } from '../../services/syncOrchestrator';
+import { marked } from 'marked';
 import { getFaviconUrl } from '../../utils/helpers';
 import { ShareNoteModal } from '../popups/ShareNoteModal';
 import TiptapEditor from './editor/TiptapEditor';
@@ -1061,66 +1062,19 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
     }
   }, [activeFolder, activeNote, loadNotes, loadUrlNotes]);
 
-  // Helper to auto-format plain text summaries into Rich Text
+  // Helper to auto-format plain text / markdown into Rich Text HTML for Tiptap
   const formatAutoSummary = useCallback((text) => {
-    if (!text || text.includes('<h2>') || text.includes('<strong>') || text.includes('<img')) return text; // Already formatted
+    if (!text) return text;
+    // Already HTML (Tiptap content) — leave it alone
+    if (text.includes('<p>') || text.includes('<h1>') || text.includes('<h2>') || text.includes('<ul>') || text.includes('<img')) return text;
 
-    // Detect if this is likely an auto-generated summary or structured text
-    // We check for "AI Summary:", bullet points, OR markdown bolding which is common in AI outputs
-    const hasSummaryHeader = text.includes('AI Summary:');
-    const hasBullets = text.includes('•') || text.match(/^\s*- /m);
-    const hasMarkdownBold = text.includes('**');
+    // Normalize bullet chars (•) to markdown dashes so marked handles them
+    const normalized = text.replace(/^•\s*/gm, '- ');
+    // Detect if it has any markdown structure worth converting
+    const looksLikeMarkdown = /^#{1,6}\s|^\*\*|^[-*]\s|\*\*.*\*\*|^>\s|^```|^\d+\.\s/m.test(normalized);
+    if (!looksLikeMarkdown) return text;
 
-    // If it looks like plain text without any structure, leave it alone to avoid messing up user notes
-    if (!hasSummaryHeader && !hasBullets && !hasMarkdownBold) return text;
-
-    let html = text;
-
-    // 1. Convert "AI Summary:" title to H2
-    if (html.includes('AI Summary:')) {
-      html = html.replace(/AI Summary:/g, '<h2>AI Summary</h2>');
-    }
-
-    // 2. Process lines (Lists and Paragraphs)
-    const lines = html.split('\n');
-    let inList = false;
-    let newLines = [];
-
-    lines.forEach(line => {
-      let trimmed = line.trim();
-
-      // Handle Markdown Bold: **text** -> <strong>text</strong>
-      if (trimmed.includes('**')) {
-        trimmed = trimmed.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-      }
-
-      const isBullet = trimmed.startsWith('•') || trimmed.startsWith('-');
-
-      if (isBullet) {
-        if (!inList) {
-          newLines.push('<ul>');
-          inList = true;
-        }
-        // Remove bullet char and wrap in li
-        const content = trimmed.substring(1).trim();
-        newLines.push(`<li>${content}</li>`);
-      } else {
-        if (inList) {
-          newLines.push('</ul>');
-          inList = false;
-        }
-        // Wrap non-empty text in p tags if NOT a header
-        if (trimmed && !trimmed.startsWith('<h')) {
-          newLines.push(`<p>${trimmed}</p>`);
-        } else if (trimmed) {
-          newLines.push(trimmed);
-        }
-      }
-    });
-
-    if (inList) newLines.push('</ul>');
-
-    return newLines.join('');
+    return marked.parse(normalized, { breaks: true });
   }, []);
 
   // Select note (workspace or URL note)

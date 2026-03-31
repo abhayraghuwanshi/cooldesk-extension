@@ -16,6 +16,7 @@ import {
     faUnderline
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { marked } from 'marked';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -34,6 +35,8 @@ import './TiptapEditor.css';
 const TiptapEditor = forwardRef(({ content, onChange, isEditable = true }, ref) => {
     // Debounce timer ref for onChange
     const debounceRef = useRef(null);
+    // Ref to access the editor instance from inside the paste handler closure
+    const editorInstanceRef = useRef(null);
 
     const extensions = useMemo(() => [
         StarterKit.configure({
@@ -77,31 +80,37 @@ const TiptapEditor = forwardRef(({ content, onChange, isEditable = true }, ref) 
         },
         handlePaste: (view, event, slice) => {
             const items = Array.from(event.clipboardData?.items || []);
-            console.log('[Tiptap] Paste event items:', items.length, items);
-            const item = items.find(x => x.type.indexOf('image') === 0);
+            const imageItem = items.find(x => x.type.indexOf('image') === 0);
 
-            if (item) {
-                console.log('[Tiptap] Image item found:', item.type);
+            if (imageItem) {
                 event.preventDefault();
-                const file = item.getAsFile();
+                const file = imageItem.getAsFile();
                 const reader = new FileReader();
-
                 reader.onload = (e) => {
-                    console.log('[Tiptap] Image read successfully, creating node');
                     const { schema } = view.state;
                     const node = schema.nodes.image.create({ src: e.target.result });
                     const transaction = view.state.tr.replaceSelectionWith(node);
                     view.dispatch(transaction);
                 };
-
-                reader.onerror = (e) => {
-                    console.error('[Tiptap] Failed to read image file:', e);
-                };
-
+                reader.onerror = (e) => console.error('[Tiptap] Failed to read image file:', e);
                 reader.readAsDataURL(file);
                 return true;
             }
-            console.log('[Tiptap] No image item found in paste');
+
+            // If there's already rich HTML in the clipboard (e.g. copy from a webpage), let Tiptap handle it
+            const hasHtml = items.some(x => x.type === 'text/html');
+            if (hasHtml) return false;
+
+            // Check if plain text looks like markdown and convert it
+            const text = event.clipboardData?.getData('text/plain') || '';
+            const looksLikeMarkdown = /^#{1,6}\s|^\*\*|^[-*]\s|\*\*.*\*\*|^>\s|^```|^\d+\.\s/m.test(text);
+            if (text && looksLikeMarkdown) {
+                event.preventDefault();
+                const html = marked.parse(text, { breaks: true });
+                editorInstanceRef.current?.chain().focus().insertContent(html).run();
+                return true;
+            }
+
             return false;
         },
     }), []);
@@ -130,6 +139,9 @@ const TiptapEditor = forwardRef(({ content, onChange, isEditable = true }, ref) 
             debouncedOnChange(editor.getHTML());
         },
         editorProps,
+        onCreate: ({ editor }) => {
+            editorInstanceRef.current = editor;
+        },
     }, []); // Stable dependency array
 
     // Handle external updates to content (e.g. switching notes)

@@ -125,7 +125,18 @@ fn toggle_spotlight(app: tauri::AppHandle) {
                     None
                 }
             };
-            #[cfg(not(target_os = "windows"))]
+            #[cfg(target_os = "macos")]
+            let cursor_pos: Option<(i32, i32)> = {
+                use core_graphics::event::CGEvent;
+                use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+                CGEventSource::new(CGEventSourceStateID::HIDSystemState).ok().and_then(|src| {
+                    CGEvent::new(src).ok().map(|e| {
+                        let loc = e.location();
+                        (loc.x as i32, loc.y as i32)
+                    })
+                })
+            };
+            #[cfg(not(any(target_os = "windows", target_os = "macos")))]
             let cursor_pos: Option<(i32, i32)> = None;
 
             // Find which monitor contains this cursor point
@@ -172,10 +183,16 @@ fn hide_spotlight(app: tauri::AppHandle) {
 async fn launch_app(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("explorer")
-            .arg(path)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        // Try direct spawn first (fastest, works for normal .exe paths).
+        // Fall back to ShellExecute via cmd /c start for Store apps (WindowsApps),
+        // .lnk shortcuts, and anything else direct spawn can't handle.
+        let direct_ok = std::process::Command::new(&path).spawn().is_ok();
+        if !direct_ok {
+            std::process::Command::new("cmd")
+                .args(["/c", "start", "", &path])
+                .spawn()
+                .map_err(|e| format!("launch failed: {e}"))?;
+        }
     }
     #[cfg(target_os = "macos")]
     {
