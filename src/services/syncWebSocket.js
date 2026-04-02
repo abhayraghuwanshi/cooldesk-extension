@@ -360,17 +360,17 @@ class SyncWebSocket {
                         : Promise.resolve()
                 ]);
 
-                // Tell sidecar to use native focus on this browser
-                // This is more reliable than chrome.windows.update on Windows
-                this.send('request-native-focus', { browser: browserExeName, tabId });
-
-                // Also try script injection as backup
-                if (chrome.scripting?.executeScript) {
-                    chrome.scripting.executeScript({
-                        target: { tabId },
-                        func: () => window.focus()
-                    }).catch(() => { });
+                // Get window bounds so Tauri can find the exact HWND (handles multiple browser windows)
+                let bounds = null;
+                if (targetWindowId && chrome.windows?.get) {
+                    try {
+                        const win = await chrome.windows.get(targetWindowId);
+                        if (win) bounds = { left: win.left, top: win.top, width: win.width, height: win.height };
+                    } catch (_) {}
                 }
+
+                // Tell sidecar to do native focus — bounds let it pick the correct OS window
+                this.send('request-native-focus', { browser: browserExeName, tabId, bounds });
 
                 console.log(`[SyncWS][${browserName}] Jumped to tab:`, tabId);
             } catch (e) {

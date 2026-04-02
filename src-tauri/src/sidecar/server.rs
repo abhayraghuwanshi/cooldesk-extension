@@ -550,9 +550,35 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
 
         "request-native-focus" => {
             if let Some(payload) = msg.payload {
-                let browser = payload.get("browser").and_then(|v| v.as_str()).unwrap_or("unknown");
+                let browser = payload.get("browser")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .to_string();
                 log::info!("[Sidecar] Native focus requested for: {}", browser);
-                state.broadcast("native-focus", payload);
+
+                // Extract window bounds from payload for precise HWND targeting
+                let bx = payload.get("bounds").and_then(|b| b.get("left")).and_then(|v| v.as_i64()).map(|v| v as i32);
+                let by = payload.get("bounds").and_then(|b| b.get("top")).and_then(|v| v.as_i64()).map(|v| v as i32);
+                let bw = payload.get("bounds").and_then(|b| b.get("width")).and_then(|v| v.as_i64()).map(|v| v as i32);
+                let bh = payload.get("bounds").and_then(|b| b.get("height")).and_then(|v| v.as_i64()).map(|v| v as i32);
+
+                let hwnd = if let (Some(x), Some(y), Some(w), Some(h)) = (bx, by, bw, bh) {
+                    crate::focus::find_hwnd_by_bounds(&browser, x, y, w, h)
+                } else {
+                    None
+                };
+
+                if let Some(hwnd) = hwnd {
+                    log::info!("[Sidecar] Found HWND {} for {}, focusing directly", hwnd, browser);
+                    tokio::task::spawn_blocking(move || {
+                        if let Err(e) = crate::focus::focus_window_by_hwnd(hwnd) {
+                            log::warn!("[Sidecar] HWND focus failed for {}: {}", browser, e);
+                        }
+                    });
+                } else {
+                    // Fallback: broadcast to Tauri frontend shim (handles macOS/Linux or missing bounds)
+                    state.broadcast("native-focus", payload);
+                }
             }
         }
 

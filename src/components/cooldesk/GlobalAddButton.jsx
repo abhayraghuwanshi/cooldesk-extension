@@ -313,7 +313,7 @@ export function GlobalAddButton({
       else if (urlInput.trim()) {
         await onAddUrlToWorkspace?.(selectedWorkspace.id, {
           url: urlInput,
-          title: urlTitle || safeGetHostname(urlInput)
+          title: urlTitle || urlInput.replace(new RegExp('^https?:\\\\/\\\\/(www\\\\.)?', 'i'), '')
         });
       }
       handleClose();
@@ -416,7 +416,7 @@ export function GlobalAddButton({
       if (newWorkspace?.id && urlInput) {
         await onAddUrlToWorkspace?.(newWorkspace.id, {
           url: urlInput,
-          title: urlTitle || safeGetHostname(urlInput)
+          title: urlTitle || urlInput.replace(new RegExp('^https?:\\\\/\\\\/(www\\\\.)?', 'i'), '')
         });
         handleClose();
       }

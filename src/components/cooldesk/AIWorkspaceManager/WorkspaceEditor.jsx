@@ -93,7 +93,7 @@ export default function WorkspaceEditor({
       items.push({
         id: `url:${urlItem.url}`,
         type: 'url',
-        title: urlItem.title || safeGetHostname(urlItem.url),
+        title: urlItem.title || urlItem.url.replace(new RegExp('^https?:\\\\/\\\\/(www\\\\.)?', 'i'), ''),
         subtitle: safeGetHostname(urlItem.url),
         url: urlItem.url,
         favicon: urlItem.favicon,
@@ -147,7 +147,7 @@ export default function WorkspaceEditor({
         results.push({
           id: `manual:${urlToAdd}`,
           type: 'url',
-          title: safeGetHostname(urlToAdd),
+          title: urlToAdd.replace(new RegExp('^https?:\\\\/\\\\/(www\\\\.)?', 'i'), ''),
           subtitle: 'Add custom URL',
           url: urlToAdd,
           favicon: null,

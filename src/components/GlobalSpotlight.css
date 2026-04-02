@@ -29,7 +29,7 @@ html, body {
 .spotlight-container {
   pointer-events: auto;
   width: 100%;
-  max-width: 620px;
+  max-width: 700px;
   margin: 0 16px;
   background: rgba(22, 22, 26, 0.98);
   backdrop-filter: blur(20px);
@@ -122,14 +122,37 @@ html, body {
   margin-bottom: 0;
 }
 
+.context-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
 .context-section-label {
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: rgba(255, 255, 255, 0.35);
-  margin-bottom: 6px;
   padding-left: 2px;
+}
+
+.context-expand-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.context-expand-btn:hover {
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .context-row {
@@ -431,6 +454,8 @@ html, body {
   text-transform: uppercase;
   letter-spacing: 0.03em;
   flex-shrink: 0;
+  min-width: 52px;
+  text-align: center;
 }
 
 .pin-btn {
@@ -795,4 +820,106 @@ html, body {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+/* ============================================
+   WORKSPACE DROPDOWN SELECTOR
+   ============================================ */
+.workspace-dropdown-wrapper {
+  position: relative;
+}
+
+.workspace-dropdown-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
+  max-width: 180px;
+}
+
+.workspace-dropdown-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-dropdown-btn:hover,
+.workspace-dropdown-btn.active {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: rgba(139, 92, 246, 0.35);
+  color: #a78bfa;
+}
+
+.ws-chevron {
+  font-size: 9px;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.workspace-dropdown-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 200px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: rgba(18, 18, 22, 0.99);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  padding: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.08) transparent;
+}
+
+.workspace-dropdown-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.workspace-dropdown-row:hover,
+.workspace-dropdown-row.expanded {
+  background: rgba(139, 92, 246, 0.14);
+}
+
+.ws-item-icon {
+  color: #a78bfa;
+  font-size: 12px;
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+}
+
+.ws-item-name {
+  flex: 1;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ws-item-count {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
 }

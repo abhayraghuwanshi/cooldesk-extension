@@ -396,6 +396,84 @@ pub fn focus_window(hwnd: Option<isize>, pid: Option<u32>, process_name: Option<
     Err(FocusError::WindowNotFound)
 }
 
+/// Find the OS window handle for a browser window by matching its screen bounds.
+/// Used to target a specific browser window precisely when multiple windows are open.
+/// Returns None on non-Windows platforms or when no match is found.
+#[cfg(target_os = "windows")]
+pub fn find_hwnd_by_bounds(process_name: &str, x: i32, y: i32, width: i32, height: i32) -> Option<isize> {
+    use windows::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowRect, GetWindowThreadProcessId, IsWindowVisible,
+    };
+    use sysinfo::{ProcessRefreshKind, System};
+
+    let mut sys = System::new();
+    sys.refresh_processes_specifics(ProcessRefreshKind::new());
+    let name_clean = process_name.trim_end_matches(".exe").to_lowercase();
+    let pids: Vec<u32> = sys
+        .processes()
+        .iter()
+        .filter(|(_, p)| p.name().to_lowercase().contains(&name_clean))
+        .map(|(pid, _)| pid.as_u32())
+        .collect();
+
+    if pids.is_empty() {
+        return None;
+    }
+
+    struct SearchCtx {
+        pids: Vec<u32>,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        result: Option<isize>,
+    }
+
+    let mut ctx = SearchCtx { pids, x, y, w: width, h: height, result: None };
+
+    unsafe extern "system" fn callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        let ctx = &mut *(lparam.0 as *mut SearchCtx);
+        let mut pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        if !ctx.pids.contains(&pid) || !IsWindowVisible(hwnd).as_bool() {
+            return BOOL(1);
+        }
+        let mut rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+        if GetWindowRect(hwnd, &mut rect).is_ok() {
+            const TOLERANCE: i32 = 30;
+            let ww = rect.right - rect.left;
+            let wh = rect.bottom - rect.top;
+            if (rect.left - ctx.x).abs() <= TOLERANCE
+                && (rect.top - ctx.y).abs() <= TOLERANCE
+                && (ww - ctx.w).abs() <= TOLERANCE
+                && (wh - ctx.h).abs() <= TOLERANCE
+            {
+                ctx.result = Some(hwnd.0 as isize);
+                return BOOL(0);
+            }
+        }
+        BOOL(1)
+    }
+
+    unsafe {
+        let _ = EnumWindows(Some(callback), LPARAM(&mut ctx as *mut SearchCtx as isize));
+    }
+
+    ctx.result
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn find_hwnd_by_bounds(
+    _process_name: &str,
+    _x: i32,
+    _y: i32,
+    _width: i32,
+    _height: i32,
+) -> Option<isize> {
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

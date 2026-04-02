@@ -10,6 +10,7 @@ const WS_URL = 'ws://localhost:4545';
 
 let ws = null;
 const listeners = new Map(); // channel -> Set<callback>
+let _jumpToTabTimer = null; // debounce handle for JUMP_TO_TAB
 
 // Initialize WebSocket connection to Sidecar
 function connectWebSocket() {
@@ -235,71 +236,25 @@ const electronAPI = {
         }
 
         if (msg?.type === 'JUMP_TO_TAB') {
-            console.log('[Shim] JUMP_TO_TAB requested:', msg.tabId);
-            try {
-                // Hide spotlight immediately
-                invoke('hide_spotlight').catch(() => invoke('toggle_spotlight').catch(() => { }));
+            // Hide spotlight immediately on first click
+            invoke('hide_spotlight').catch(() => invoke('toggle_spotlight').catch(() => {}));
 
-                const processMap = {
-                    chrome: 'chrome', edge: 'msedge', brave: 'brave',
-                    firefox: 'firefox', opera: 'opera', vivaldi: 'vivaldi'
-                };
-
-                // FIRST: Focus the browser window (this switches virtual desktops if needed)
-                // Must happen BEFORE telling extension to switch tabs
-                let browserFocused = false;
-                if (msg._deviceId) {
-                    const browserKey = msg._deviceId.split('-')[0];
-                    const processName = processMap[browserKey];
-                    if (processName) {
-                        console.log('[Shim] Focusing browser first:', processName);
-                        await invoke('focus_window', { pid: 0, name: processName });
-                        browserFocused = true;
-                    }
-                }
-
-                // Fallback: Try to find the tab's browser from sidecar data
-                if (!browserFocused && msg.tabId) {
-                    try {
-                        const tabs = await (await fetch(`${SIDECAR_URL}/tabs`)).json();
-                        const tab = tabs.find(t => t.id === msg.tabId);
-                        if (tab?._deviceId) {
-                            const browserKey = tab._deviceId.split('-')[0];
-                            const processName = processMap[browserKey];
-                            if (processName) {
-                                console.log('[Shim] Focusing browser (from lookup):', processName);
-                                await invoke('focus_window', { pid: 0, name: processName });
-                                browserFocused = true;
-                            }
-                        }
-                    } catch (e) {
-                        console.warn('[Shim] Tab lookup failed:', e);
-                    }
-                }
-
-                // Last resort: try chrome then edge (most common browsers)
-                if (!browserFocused) {
-                    console.log('[Shim] No deviceId, trying chrome/edge');
-                    await invoke('focus_window', { pid: 0, name: 'chrome' }).catch(() =>
-                        invoke('focus_window', { pid: 0, name: 'msedge' }).catch(() => {})
-                    );
-                }
-
-                // Small delay to let virtual desktop switch complete
-                await new Promise(r => setTimeout(r, 100));
-
-                // THEN: Tell extension to switch to the tab
+            // Debounce: coalesce rapid requests (spam-proof), only process the latest
+            const tabId = msg.tabId;
+            const windowId = msg.windowId;
+            if (_jumpToTabTimer) clearTimeout(_jumpToTabTimer);
+            _jumpToTabTimer = setTimeout(() => {
+                _jumpToTabTimer = null;
+                // Tell extension to switch tab; extension will send back window bounds,
+                // and the sidecar will do a precise HWND-based native focus.
                 fetch(`${SIDECAR_URL}/cmd/jump-to-tab`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tabId: msg.tabId, windowId: msg.windowId })
-                }).catch(() => { });
+                    body: JSON.stringify({ tabId, windowId })
+                }).catch(() => {});
+            }, 100);
 
-                return { success: true };
-            } catch (e) {
-                console.error('[Shim] JUMP_TO_TAB failed:', e);
-                return { success: false, error: e.message };
-            }
+            return { success: true };
         }
 
         // Handle Workspace commands

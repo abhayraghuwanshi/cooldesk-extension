@@ -1,5 +1,5 @@
 import { faChrome, faDiscord, faEdge, faFirefox, faGithub, faSlack, faSpotify } from '@fortawesome/free-brands-svg-icons';
-import { faBriefcase, faCalculator, faChartLine, faCloud, faCode, faCog, faComments, faDesktop, faEnvelope, faFile, faFlask, faFolder, faGamepad, faGlobe, faGraduationCap, faHashtag, faHeartPulse, faHistory, faHome, faImage, faLightbulb, faLink, faMusic, faNewspaper, faPalette, faPlane, faRobot, faSearch, faShoppingBag, faStar, faStickyNote, faTasks, faTerminal, faThumbtack, faTools, faUtensils, faVial, faVideo } from '@fortawesome/free-solid-svg-icons';
+import { faBriefcase, faCalculator, faChartLine, faCloud, faCode, faCog, faComments, faDatabase, faDesktop, faEnvelope, faFile, faFileCode, faFileLines, faFilePdf, faFileZipper, faFlask, faFolder, faFont, faGamepad, faGlobe, faGraduationCap, faHashtag, faHeartPulse, faHistory, faHome, faImage, faLightbulb, faLink, faMicrochip, faMusic, faNewspaper, faPalette, faPlane, faRobot, faSearch, faShoppingBag, faStar, faStickyNote, faTasks, faTerminal, faThumbtack, faTools, faUtensils, faVial, faVideo } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { storageGet, storageSet } from '../services/extensionApi';
@@ -149,6 +149,12 @@ export function GlobalSpotlight() {
     const containerRef = useRef(null);
 
     const [contextItems, setContextItems] = useState([]);
+    const [showAllTabs, setShowAllTabs] = useState(false);
+    const [showAllApps, setShowAllApps] = useState(false);
+    const [workspaces, setWorkspaces] = useState([]);
+    const [expandedWorkspaceId, setExpandedWorkspaceId] = useState(null);
+    const [showWorkspacesDropdown, setShowWorkspacesDropdown] = useState(false);
+    const workspaceDropdownRef = useRef(null);
 
     // AI/Model command states
     const [commandMode, setCommandMode] = useState(null); // null, 'ai', 'model'
@@ -183,6 +189,7 @@ export function GlobalSpotlight() {
         console.log('[Spotlight] Initial mount - loading context items');
         loadContextItems();
         loadPinnedItems();
+        loadWorkspaces();
         // Pre-warm the search cache so history/workspace results are ready for first search
         refreshElectronCache().catch(() => { });
 
@@ -216,6 +223,11 @@ export function GlobalSpotlight() {
                 setResults([]);
                 setSelectedIndex(-1);
                 setSelectedPinIndex(-1);
+                setShowAllTabs(false);
+                setShowAllApps(false);
+                setExpandedWorkspaceId(null);
+                setShowWorkspacesDropdown(false);
+                loadWorkspaces();
 
                 // Refresh search cache (non-blocking)
                 refreshElectronCache();
@@ -297,9 +309,9 @@ export function GlobalSpotlight() {
             const recommendations = [];
             const usedIds = new Set();
 
-            // 1. Running Apps (top priority - what user is actively using)
-            // Enrich with icons from installed apps, then filter
-            const enrichedRunning = enrichRunningAppsWithIcons(runningApps, installedApps);
+            // 1. Apps — all installed apps (mirrors AppGrid), running ones shown first
+            const runningNames = new Set(runningApps.map(a => (a.name || '').toLowerCase().replace(/\.exe$/i, '')));
+            const enrichedAll = enrichRunningAppsWithIcons(installedApps, installedApps);
 
             // Exact process names that are pure system noise (no user value)
             const systemExactNames = new Set([
@@ -330,115 +342,69 @@ export function GlobalSpotlight() {
                 'fontd', 'fontregistryuitool', 'universalcontrol',
                 'sharedfilelistd', 'taptoradar',
             ]);
-            // macOS system process patterns — filter by name prefix/content
             const isMacSystemProcess = (name) =>
-                name.startsWith('com.apple.') ||   // reverse-DNS = system XPC service
-                name.startsWith('com.microsoft.') || // MS background services
-                name.includes('.xpc.') ||           // XPC helper process
-                name.includes('extensionprocess') || // app extension hosts
-                (name.endsWith('helper') && !name.includes(' ')) ||  // bare lowercase helpers
-                (name.endsWith('agent') && !name.includes(' ')) ||   // bare lowercase agents
-                (name.endsWith('daemon') && !name.includes(' ')) ||  // bare lowercase daemons
-                (name.endsWith('service') && !name.includes(' '));   // bare lowercase services
-            // Browser keywords — matched via substring so macOS full names like
-            // "Google Chrome", "Brave Browser", "Microsoft Edge" are also caught.
+                name.startsWith('com.apple.') ||
+                name.startsWith('com.microsoft.') ||
+                name.includes('.xpc.') ||
+                name.includes('extensionprocess') ||
+                (name.endsWith('helper') && !name.includes(' ')) ||
+                (name.endsWith('agent') && !name.includes(' ')) ||
+                (name.endsWith('daemon') && !name.includes(' ')) ||
+                (name.endsWith('service') && !name.includes(' '));
             const browserKeywords = [
                 'chrome', 'msedge', 'edge', 'firefox', 'brave', 'opera', 'vivaldi',
                 'iexplore', 'chromium', 'safari', 'waterfox', 'librewolf', 'thorium',
                 'arc', 'floorp', 'zen'
             ];
             const isBrowserApp = (name) => browserKeywords.some(k => name.includes(k));
-            // CoolDesk app names to exclude (we are the app, don't show ourselves)
             const coolDeskNames = new Set([
                 'cooldesk', 'cool desk', 'cool-desk', 'tauri', 'webview', 'wry'
             ]);
 
-            const activeApps = enrichedRunning
+            const activeApps = enrichedAll
                 .filter(a => {
                     const name = (a.name || '').toLowerCase().replace(/\.exe$/i, '');
                     const nameNoSpaces = name.replace(/\s+/g, '');
                     const title = (a.title || '').toLowerCase();
 
                     if (usedIds.has(name)) return false;
-
-                    // Skip known system noise processes (exact name match or macOS patterns)
-                    // Check both "notification center" and "notificationcenter" forms
                     if (systemExactNames.has(name) || systemExactNames.has(nameNoSpaces)) return false;
                     if (isMacSystemProcess(name) || isMacSystemProcess(nameNoSpaces)) return false;
-
-                    // Skip browsers (tabs are shown separately)
                     if (isBrowserApp(name)) return false;
-
-                    // Filter the spotlight/cooldesk app itself
                     if (coolDeskNames.has(name)) return false;
-                    // Also check partial matches for cooldesk variants
                     if (name.includes('cooldesk') || name.includes('cool-desk') || name.includes('tauri')) return false;
 
-                    // Filter tray/background windows.
-                    // Windows: cloaked===2 means "on another virtual desktop" — keep those.
-                    // macOS:   cloaked is always 0, so treat any running app as showable
-                    //          regardless of isVisible (many macOS apps sit in background).
-                    const isMacStyle = a.source === 'applications' || a.source === 'system_applications' || a.source === 'user_applications';
-                    if (a.isVisible === false && !isMacStyle && (a.cloaked || 0) !== 2) return false;
-
-                    // Filter obvious noise: log windows, tray windows
-                    if (title.endsWith(' log') || title === 'temp window' || title.endsWith('trayiconwindow')) return false;
+                    // Apply visibility/noise filter only for currently running apps
+                    // (installed/offline apps naturally have isVisible: false — don't exclude them)
+                    const isAppRunning = a.isRunning === true || runningNames.has(name);
+                    if (isAppRunning) {
+                        const isMacStyle = a.source === 'applications' || a.source === 'system_applications' || a.source === 'user_applications';
+                        if (a.isVisible === false && !isMacStyle && (a.cloaked || 0) !== 2) return false;
+                        if (title.endsWith(' log') || title === 'temp window' || title.endsWith('trayiconwindow')) return false;
+                    }
 
                     usedIds.add(name);
                     return true;
                 })
-                // Sort by usage frequency — most-used apps appear first
                 .sort((a, b) => {
-                    const freqA = frequentApps[(a.name || '').toLowerCase()] || 0;
-                    const freqB = frequentApps[(b.name || '').toLowerCase()] || 0;
-                    return freqB - freqA;
+                    const nameA = (a.name || '').toLowerCase().replace(/\.exe$/i, '');
+                    const nameB = (b.name || '').toLowerCase().replace(/\.exe$/i, '');
+                    const runA = a.isRunning === true || runningNames.has(nameA);
+                    const runB = b.isRunning === true || runningNames.has(nameB);
+                    // Running apps first, then by usage frequency
+                    if (runA && !runB) return -1;
+                    if (!runA && runB) return 1;
+                    return (frequentApps[nameB] || 0) - (frequentApps[nameA] || 0);
                 })
-                .slice(0, 4)
-                .map(a => ({ ...a, type: 'app', description: 'Running', isRunning: true }));
-
-            console.log('[Spotlight] Active apps after filter:', activeApps.length, activeApps.map(a => `${a.name}(icon:${!!a.icon})`));
-            recommendations.push(...activeApps);
-
-            // 2. Frequently Used Apps (from usage history)
-            const sortedFrequent = Object.entries(frequentApps)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 4);
-
-            for (const [appName] of sortedFrequent) {
-                if (usedIds.has(appName.toLowerCase())) continue;
-
-                // Skip browsers (they're shown as tabs instead) and cooldesk
-                const appNameLower = appName.toLowerCase().replace(/\.exe$/i, '');
-                const appNameNoSpaces = appNameLower.replace(/\s+/g, '');
-                if (isBrowserApp(appNameLower) || systemExactNames.has(appNameLower) || systemExactNames.has(appNameNoSpaces) || coolDeskNames.has(appNameLower)) continue;
-                if (isMacSystemProcess(appNameLower) || isMacSystemProcess(appNameNoSpaces)) continue;
-                if (appNameLower.includes('cooldesk') || appNameLower.includes('tauri')) continue;
-
-                // Find app in installed apps with flexible matching
-                const frequentName = appName.toLowerCase();
-                const app = installedApps.find(a => {
-                    const installedName = (a.name || '').toLowerCase();
-                    if (installedName === frequentName) return true;
-                    if (frequentName.includes(installedName) || installedName.includes(frequentName)) return true;
-                    const exeName = (a.path || '').split(/[/\\]/).pop()?.toLowerCase().replace('.exe', '');
-                    if (exeName && (frequentName.includes(exeName) || exeName.includes(frequentName))) return true;
-                    return false;
+                .slice(0, 8)
+                .map(a => {
+                    const name = (a.name || '').toLowerCase().replace(/\.exe$/i, '');
+                    const isRunning = a.isRunning === true || runningNames.has(name);
+                    return { ...a, type: 'app', description: isRunning ? 'Running' : 'Installed', isRunning };
                 });
-                if (app) {
-                    // Skip if this app's name is a system process, browser, or cooldesk
-                    const installedExe = (app.path || '').split(/[\/\\]/).pop()?.toLowerCase().replace(/\.exe$/i, '') || '';
-                    if (isBrowserApp(installedExe) || systemExactNames.has(installedExe) || coolDeskNames.has(installedExe)) continue;
-                    if (installedExe.includes('cooldesk') || installedExe.includes('tauri')) continue;
 
-                    usedIds.add(appName.toLowerCase());
-                    recommendations.push({
-                        ...app,
-                        type: 'app',
-                        description: 'Frequent',
-                        isRunning: false
-                    });
-                }
-            }
+            console.log('[Spotlight] Apps after filter:', activeApps.length, activeApps.map(a => `${a.name}(running:${a.isRunning},icon:${!!a.icon})`));
+            recommendations.push(...activeApps);
 
             // 3. Active Tabs (unique by domain)
             console.log('[Spotlight] Processing tabs, raw count:', safeTabs.length);
@@ -453,7 +419,7 @@ export function GlobalSpotlight() {
                         try { return new URL(s.url).hostname === new URL(t.url).hostname; } catch { return s.url === t.url; }
                     })
                 )
-                .slice(0, 3)
+                .slice(0, 10)
                 .map(t => ({
                     ...t,
                     type: 'tab',
@@ -464,8 +430,8 @@ export function GlobalSpotlight() {
             console.log('[Spotlight] Relevant tabs after dedup:', relevantTabs.length, relevantTabs.map(t => ({ title: t.title, url: t.url, type: t.type })));
             recommendations.push(...relevantTabs);
 
-            // Cap at 8 items
-            const finalRecs = recommendations.slice(0, 8);
+            // Cap at 20 items
+            const finalRecs = recommendations.slice(0, 20);
             console.log('[Spotlight] Final recommendations:', finalRecs.length, finalRecs.map(r => r.name || r.title));
             setContextItems(finalRecs);
 
@@ -483,6 +449,18 @@ export function GlobalSpotlight() {
             console.warn('Failed to load pins', e);
         }
     };
+
+    // Load Workspaces from own DB
+    const loadWorkspaces = useCallback(async () => {
+        try {
+            const { listWorkspaces } = await import('../db/index.js');
+            const res = await listWorkspaces();
+            const list = res?.success ? res.data : (Array.isArray(res) ? res : []);
+            setWorkspaces(list);
+        } catch (e) {
+            console.warn('[Spotlight] Failed to load workspaces', e);
+        }
+    }, []);
 
     // Save Pinned Items
     const savePinnedItems = async (items) => {
@@ -1217,6 +1195,7 @@ export function GlobalSpotlight() {
 
     // Close on click outside
     useOnClickOutside(containerRef, handleClose);
+    useOnClickOutside(workspaceDropdownRef, () => setShowWorkspacesDropdown(false));
 
     // Format URL helper
     const formatUrl = (url) => {
@@ -1373,9 +1352,19 @@ export function GlobalSpotlight() {
                             {/* Apps Row */}
                             {apps.length > 0 && (
                                 <div className="context-section">
-                                    <div className="context-section-label">Apps</div>
+                                    <div className="context-section-header">
+                                        <div className="context-section-label">Apps</div>
+                                        {apps.length > 2 && (
+                                            <button
+                                                className="context-expand-btn"
+                                                onClick={() => setShowAllApps(v => !v)}
+                                            >
+                                                {showAllApps ? '▴ less' : `▾ ${apps.length - 2} more`}
+                                            </button>
+                                        )}
+                                    </div>
                                     <div className="context-row">
-                                        {apps.map((item, i) => {
+                                        {apps.slice(0, showAllApps ? apps.length : 2).map((item, i) => {
                                             const itemIndex = flatIndex++;
                                             return (
                                                 <ContextItem
@@ -1395,9 +1384,19 @@ export function GlobalSpotlight() {
                             {/* Tabs Row */}
                             {tabs.length > 0 && (
                                 <div className="context-section">
-                                    <div className="context-section-label">Tabs</div>
+                                    <div className="context-section-header">
+                                        <div className="context-section-label">Tabs</div>
+                                        {tabs.length > 2 && (
+                                            <button
+                                                className="context-expand-btn"
+                                                onClick={() => setShowAllTabs(v => !v)}
+                                            >
+                                                {showAllTabs ? '▴ less' : `▾ ${tabs.length - 2} more`}
+                                            </button>
+                                        )}
+                                    </div>
                                     <div className="context-row">
-                                        {tabs.map((item, i) => {
+                                        {tabs.slice(0, showAllTabs ? tabs.length : 2).map((item, i) => {
                                             const itemIndex = flatIndex++;
                                             return (
                                                 <ContextItem
@@ -1418,34 +1417,94 @@ export function GlobalSpotlight() {
                     );
                 })()}
 
-                {/* Pinned Section - Only visible when NOT searching */}
+                {/* Workspaces Section */}
                 {!query.trim() && !commandMode && (
                     <div className="spotlight-pins">
                         <div className="spotlight-pins-header">
-                            <span className="spotlight-pins-title">Pinned Quick Access</span>
-                            {pinnedItems.length > 0 && (
-                                <span className="spotlight-pins-hint">Use arrow keys to navigate</span>
-                            )}
+                            <span className="spotlight-pins-title">Workspaces</span>
+                            <div className="workspace-dropdown-wrapper" ref={workspaceDropdownRef}>
+                                <button
+                                    className={`workspace-dropdown-btn ${showWorkspacesDropdown ? 'active' : ''}`}
+                                    onClick={() => setShowWorkspacesDropdown(v => !v)}
+                                    title="Select workspace"
+                                >
+                                    {expandedWorkspaceId && workspaces.find(w => w.id === expandedWorkspaceId) ? (
+                                        <>
+                                            <FontAwesomeIcon icon={getWorkspaceIcon(workspaces.find(w => w.id === expandedWorkspaceId).name)} />
+                                            <span>{workspaces.find(w => w.id === expandedWorkspaceId).name}</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <FontAwesomeIcon icon={faBriefcase} />
+                                            <span>{workspaces.length === 0 ? 'No workspaces' : 'Select workspace'}</span>
+                                        </>
+                                    )}
+                                    <span className="ws-chevron">{showWorkspacesDropdown ? '▴' : '▾'}</span>
+                                </button>
+                                {showWorkspacesDropdown && workspaces.length > 0 && (
+                                    <div className="workspace-dropdown-panel">
+                                        {workspaces.map(ws => (
+                                            <div
+                                                key={ws.id}
+                                                className={`workspace-dropdown-row ${expandedWorkspaceId === ws.id ? 'expanded' : ''}`}
+                                                onClick={() => {
+                                                    setExpandedWorkspaceId(ws.id);
+                                                    setShowWorkspacesDropdown(false);
+                                                }}
+                                            >
+                                                <FontAwesomeIcon icon={getWorkspaceIcon(ws.name)} className="ws-item-icon" />
+                                                <span className="ws-item-name">{ws.name}</span>
+                                                <span className="ws-item-count">{(ws.urls || []).length}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                        <div className="spotlight-pins-grid">
-                            {pinnedItems.map((pin, i) => (
-                                <PinItem
-                                    key={i}
-                                    pin={pin}
-                                    index={i}
-                                    isSelected={i === selectedPinIndex}
-                                    onSelect={handleSelect}
-                                    onHover={setSelectedPinIndex}
-                                    onRemove={removePin}
-                                    getAppIcon={getAppIcon}
-                                />
-                            ))}
-                            {pinnedItems.length < 8 && (
-                                <div style={{ opacity: 0.3, fontSize: 11, padding: '6px', fontStyle: 'italic' }}>
-                                    {/* Placeholder for alignment */}
+
+                        {/* Active workspace URLs shown as context items */}
+                        {expandedWorkspaceId && (() => {
+                            const ws = workspaces.find(w => w.id === expandedWorkspaceId);
+                            if (!ws) return null;
+                            const urls = ws.urls || [];
+                            return (
+                                <div className="context-section">
+                                    {urls.length === 0 ? (
+                                        <div style={{ opacity: 0.4, fontSize: 11, padding: '6px 12px', fontStyle: 'italic' }}>No URLs in this workspace</div>
+                                    ) : (
+                                        <div className="context-row">
+                                            {urls.map((u, idx) => {
+                                                const resolvedFavicon = u.favicon || (u.url ? getFaviconUrl(u.url, 16, null, true) : null);
+                                                return (
+                                                    <div
+                                                        key={idx}
+                                                        className="context-item context-tab"
+                                                        onClick={() => {
+                                                            if (window.electronAPI?.openExternal) {
+                                                                window.electronAPI.openExternal(u.url);
+                                                            } else {
+                                                                window.open(u.url, '_blank');
+                                                            }
+                                                            handleClose();
+                                                        }}
+                                                        title={u.title || u.url}
+                                                    >
+                                                        <div className="pin-icon">
+                                                            {resolvedFavicon ? (
+                                                                <img src={resolvedFavicon} onError={e => { e.target.style.display = 'none'; }} alt="" />
+                                                            ) : (
+                                                                <FontAwesomeIcon icon={faGlobe} style={{ color: '#a78bfa' }} />
+                                                            )}
+                                                        </div>
+                                                        <span className="pin-label">{u.title || 'Link'}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
-                            )}
-                        </div>
+                            );
+                        })()}
                     </div>
                 )}
 
@@ -1549,6 +1608,38 @@ function getWorkspaceIcon(name) {
     return faFolder;
 }
 
+function getFileIcon(filename) {
+    const ext = (filename || '').split('.').pop().toLowerCase();
+    switch (ext) {
+        case 'jpg': case 'jpeg': case 'png': case 'gif': case 'svg': case 'webp': case 'bmp': case 'ico': case 'tiff': case 'heic':
+            return faImage;
+        case 'mp4': case 'mkv': case 'avi': case 'mov': case 'wmv': case 'flv': case 'webm': case 'm4v':
+            return faVideo;
+        case 'mp3': case 'wav': case 'flac': case 'ogg': case 'aac': case 'm4a': case 'wma':
+            return faMusic;
+        case 'pdf':
+            return faFilePdf;
+        case 'js': case 'ts': case 'jsx': case 'tsx': case 'py': case 'java': case 'c': case 'cpp': case 'cs':
+        case 'go': case 'rs': case 'rb': case 'php': case 'swift': case 'kt': case 'html': case 'css':
+        case 'json': case 'xml': case 'yaml': case 'yml': case 'toml': case 'vue': case 'svelte':
+            return faFileCode;
+        case 'txt': case 'md': case 'log': case 'rtf': case 'csv':
+            return faFileLines;
+        case 'zip': case 'rar': case '7z': case 'tar': case 'gz': case 'bz2': case 'xz':
+            return faFileZipper;
+        case 'sql': case 'db': case 'sqlite': case 'sqlite3':
+            return faDatabase;
+        case 'sh': case 'bash': case 'zsh': case 'bat': case 'cmd': case 'ps1':
+            return faTerminal;
+        case 'ttf': case 'otf': case 'woff': case 'woff2':
+            return faFont;
+        case 'exe': case 'msi': case 'dmg': case 'pkg': case 'deb': case 'rpm': case 'appimage':
+            return faMicrochip;
+        default:
+            return faFile;
+    }
+}
+
 function getIcon(type, name) {
     switch (type) {
         case 'tab': return faGlobe;
@@ -1557,7 +1648,7 @@ function getIcon(type, name) {
         case 'workspace': return getWorkspaceIcon(name);
         case 'note': return faStickyNote;
         case 'app': return faDesktop;
-        case 'file': return faFile;
+        case 'file': return getFileIcon(name);
         default: return faLink;
     }
 }
@@ -1704,15 +1795,14 @@ const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect,
                 </span>
             )}
 
-            {(item.url || item.type === 'app') && (
-                <span
-                    className="pin-btn"
-                    title="Pin this"
-                    onClick={handlePinClick}
-                >
-                    <FontAwesomeIcon icon={faThumbtack} />
-                </span>
-            )}
+            <span
+                className="pin-btn"
+                title="Pin this"
+                onClick={handlePinClick}
+                style={(item.url || item.type === 'app') ? undefined : { visibility: 'hidden', pointerEvents: 'none' }}
+            >
+                <FontAwesomeIcon icon={faThumbtack} />
+            </span>
         </div>
     );
 });
