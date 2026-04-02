@@ -254,6 +254,26 @@ html, body {
   letter-spacing: -0.01em;
 }
 
+/* Live workspace item - subtle highlight when URL is open / app is running */
+.context-item.ws-item-live {
+  border-color: rgba(34, 197, 94, 0.25);
+}
+
+.context-item.ws-item-live:hover {
+  border-color: rgba(34, 197, 94, 0.45);
+}
+
+/* Green dot for open tab in workspace */
+.ws-live-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #22c55e;
+  flex-shrink: 0;
+  box-shadow: 0 0 4px #22c55e;
+  margin-left: auto;
+}
+
 /* Running dot - small and clean */
 .context-item .running-dot {
   width: 5px;

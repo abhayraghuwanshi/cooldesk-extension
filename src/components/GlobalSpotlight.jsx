@@ -1471,6 +1471,18 @@ export function GlobalSpotlight() {
                             const apps = ws.apps || [];
                             const EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'fleet', 'zed'];
                             const isEmpty = urls.length === 0 && apps.length === 0;
+
+                            // Build live-state lookups from contextItems
+                            const getHostname = (url) => { try { return new URL(url).hostname; } catch { return null; } };
+                            const openTabsByHostname = new Map(
+                                contextItems.filter(c => c.type === 'tab' && c.url)
+                                    .map(c => [getHostname(c.url), c])
+                            );
+                            const runningAppsByName = new Map(
+                                contextItems.filter(c => c.type === 'app' && c.isRunning)
+                                    .map(c => [(c.name || '').toLowerCase().replace(/\.exe$/i, ''), c])
+                            );
+
                             return (
                                 <div className="context-section">
                                     {isEmpty ? (
@@ -1479,19 +1491,23 @@ export function GlobalSpotlight() {
                                         <div className="context-row context-row--grid">
                                             {urls.map((u, idx) => {
                                                 const resolvedFavicon = u.favicon || (u.url ? getFaviconUrl(u.url, 16, null, true) : null);
+                                                const openTab = u.url ? openTabsByHostname.get(getHostname(u.url)) : null;
                                                 return (
                                                     <div
                                                         key={`url-${idx}`}
-                                                        className="context-item context-tab"
+                                                        className={`context-item context-tab${openTab ? ' ws-item-live' : ''}`}
                                                         onClick={() => {
-                                                            if (window.electronAPI?.openExternal) {
+                                                            if (openTab) {
+                                                                handleSelect(openTab);
+                                                            } else if (window.electronAPI?.openExternal) {
                                                                 window.electronAPI.openExternal(u.url);
+                                                                handleClose();
                                                             } else {
                                                                 window.open(u.url, '_blank');
+                                                                handleClose();
                                                             }
-                                                            handleClose();
                                                         }}
-                                                        title={u.title || u.url}
+                                                        title={openTab ? `Open tab: ${openTab.title || u.url}` : (u.title || u.url)}
                                                     >
                                                         <div className="pin-icon">
                                                             {resolvedFavicon ? (
@@ -1501,6 +1517,7 @@ export function GlobalSpotlight() {
                                                             )}
                                                         </div>
                                                         <span className="pin-label">{(u.title || u.url || 'Link').replace(/^https?:\/\//, '')}</span>
+                                                        {openTab && <span className="ws-live-dot" title="Tab open" />}
                                                     </div>
                                                 );
                                             })}
@@ -1508,27 +1525,36 @@ export function GlobalSpotlight() {
                                                 const isEditor = EDITORS.includes(app.appType?.toLowerCase());
                                                 const appColor = isEditor ? '#38bdf8' : app.appType === 'folder' ? '#facc15' : app.appType === 'file' ? '#94a3b8' : '#8b5cf6';
                                                 const appIcon = isEditor ? faCode : app.appType === 'folder' ? faFolderOpen : app.appType === 'file' ? faFileLines : faDesktop;
+                                                const normalizedName = (app.name || '').toLowerCase().replace(/\.exe$/i, '');
+                                                const runningApp = (app.appType !== 'folder' && app.appType !== 'file')
+                                                    ? runningAppsByName.get(normalizedName)
+                                                    : null;
                                                 return (
                                                     <div
                                                         key={`app-${idx}`}
-                                                        className="context-item context-app"
+                                                        className={`context-item context-app${runningApp ? ' ws-item-live' : ''}`}
                                                         onClick={() => {
-                                                            if (isEditor && window.electronAPI?.launchAppWithArgs) {
+                                                            if (runningApp) {
+                                                                handleSelect(runningApp);
+                                                            } else if (isEditor && window.electronAPI?.launchAppWithArgs) {
                                                                 const cmd = app.appType.toLowerCase() === 'vscode' ? 'code' : app.appType.toLowerCase();
                                                                 window.electronAPI.launchAppWithArgs(cmd, [app.path]);
+                                                                handleClose();
                                                             } else if (app.appType === 'folder' && window.electronAPI?.openFolder) {
                                                                 window.electronAPI.openFolder(app.path);
+                                                                handleClose();
                                                             } else if (window.electronAPI?.launchApp) {
                                                                 window.electronAPI.launchApp(app.path);
+                                                                handleClose();
                                                             }
-                                                            handleClose();
                                                         }}
-                                                        title={app.path || app.name}
+                                                        title={runningApp ? `Running: ${app.name}` : (app.path || app.name)}
                                                     >
                                                         <div className="pin-icon">
                                                             <FontAwesomeIcon icon={appIcon} style={{ color: appColor }} />
                                                         </div>
                                                         <span className="pin-label">{app.name}</span>
+                                                        {runningApp && <span className="running-dot" />}
                                                     </div>
                                                 );
                                             })}
