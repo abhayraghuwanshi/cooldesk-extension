@@ -168,8 +168,9 @@ fn toggle_spotlight(app: tauri::AppHandle) {
 
             let _ = window.show();
             let _ = window.set_focus();
+            let _ = app.emit("spotlight-shown", ());
         }
-    }   
+    }
 }
 
 #[tauri::command]

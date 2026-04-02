@@ -1167,6 +1167,18 @@ function loadData() {
             syncData.deviceTabsMap = preservedMap;
             // Also ensure tabs array is fresh (will be populated by connected browsers)
             syncData.tabs = [];
+            // Load spotlight shortcut from settings if present
+            try {
+                const storedShortcut = syncData?.settings?.spotlightShortcut;
+                if (typeof storedShortcut === 'string' && storedShortcut.trim()) {
+                    spotlightShortcut = storedShortcut.trim();
+                    console.log('[Electron] Loaded custom spotlight shortcut from settings:', spotlightShortcut);
+                } else {
+                    spotlightShortcut = DEFAULT_SPOTLIGHT_SHORTCUT;
+                }
+            } catch {
+                spotlightShortcut = DEFAULT_SPOTLIGHT_SHORTCUT;
+            }
             console.log('[Electron] Loaded sync data from disk (deviceTabsMap preserved as Map)');
         }
     } catch (error) {
@@ -2429,9 +2441,45 @@ ipcMain.handle('sync:get-settings', () => syncData.settings);
 ipcMain.handle('sync:set-settings', (_event, data) => {
     syncData.settings = { ...syncData.settings, ...data };
     syncData.lastUpdated.settings = Date.now();
+
+    // If spotlight shortcut changed, update and re-register global shortcut
+    if (data && typeof data.spotlightShortcut === 'string') {
+        const next = data.spotlightShortcut.trim();
+        const resolved = normalizeSpotlightShortcut(next || DEFAULT_SPOTLIGHT_SHORTCUT);
+        if (resolved !== spotlightShortcut) {
+            const previousShortcut = spotlightShortcut;
+            spotlightShortcut = resolved;
+            console.log('[Electron] Updating spotlight shortcut to:', spotlightShortcut);
+            try {
+                const registered = registerSpotlightShortcut();
+                if (!registered) {
+                    spotlightShortcut = previousShortcut;
+                    registerSpotlightShortcut();
+                    return {
+                        ok: false,
+                        error: `Failed to register shortcut: ${resolved}`,
+                        spotlightShortcut: previousShortcut
+                    };
+                }
+            } catch (e) {
+                spotlightShortcut = previousShortcut;
+                try {
+                    registerSpotlightShortcut();
+                } catch { }
+                console.warn('[Electron] Failed to re-register spotlight shortcut:', e?.message || e);
+                return {
+                    ok: false,
+                    error: e?.message || 'Failed to register shortcut',
+                    spotlightShortcut: previousShortcut
+                };
+            }
+        }
+        syncData.settings.spotlightShortcut = spotlightShortcut;
+    }
+
     saveData();
     broadcastToClients('settings-updated', syncData.settings);
-    return { ok: true };
+    return { ok: true, spotlightShortcut };
 });
 
 ipcMain.handle('sync:get-activity', (_event, since) => {
@@ -3119,24 +3167,72 @@ ipcMain.handle('get-processes', () => {
 // ==========================================
 
 // Global shortcut configuration
-const SPOTLIGHT_SHORTCUT = 'Alt+K';
+const DEFAULT_SPOTLIGHT_SHORTCUT = 'Alt+K';
+let spotlightShortcut = DEFAULT_SPOTLIGHT_SHORTCUT;
+let registeredSpotlightShortcut = null;
 const SPOTLIGHT_RELOAD_SHORTCUT = 'Alt+Shift+R'; // Dev: reload spotlight
 
+function normalizeSpotlightShortcut(shortcut) {
+    const raw = typeof shortcut === 'string' ? shortcut.trim() : '';
+    if (!raw) return DEFAULT_SPOTLIGHT_SHORTCUT;
+
+    const tokenMap = {
+        cmd: 'Command',
+        command: 'Command',
+        ctrl: 'CommandOrControl',
+        control: 'CommandOrControl',
+        cmdorctrl: 'CommandOrControl',
+        commandorcontrol: 'CommandOrControl',
+        option: 'Alt',
+        alt: 'Alt',
+        shift: 'Shift',
+        meta: process.platform === 'darwin' ? 'Command' : 'Super',
+        super: 'Super',
+        space: 'Space',
+        plus: 'Plus',
+        up: 'Up',
+        down: 'Down',
+        left: 'Left',
+        right: 'Right',
+        esc: 'Escape',
+        escape: 'Escape',
+        enter: 'Enter',
+        return: 'Enter',
+        tab: 'Tab',
+        backspace: 'Backspace',
+        delete: 'Delete'
+    };
+
+    return raw
+        .split('+')
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map((part) => {
+            const mapped = tokenMap[part.toLowerCase()];
+            if (mapped) return mapped;
+            if (part.length === 1) return part.toUpperCase();
+            return part;
+        })
+        .join('+');
+}
+
 function registerSpotlightShortcut() {
-    // Unregister first to avoid conflicts
-    if (globalShortcut.isRegistered(SPOTLIGHT_SHORTCUT)) {
-        globalShortcut.unregister(SPOTLIGHT_SHORTCUT);
+    // Unregister the previously registered accelerator, not the new target value.
+    if (registeredSpotlightShortcut && globalShortcut.isRegistered(registeredSpotlightShortcut)) {
+        globalShortcut.unregister(registeredSpotlightShortcut);
     }
 
-    const success = globalShortcut.register(SPOTLIGHT_SHORTCUT, () => {
-        console.log('[Electron] Global shortcut triggered:', SPOTLIGHT_SHORTCUT);
+    const success = globalShortcut.register(spotlightShortcut, () => {
+        console.log('[Electron] Global shortcut triggered:', spotlightShortcut);
         toggleSpotlight();
     });
 
     if (!success) {
-        console.error(`[Electron] Global shortcut registration failed for ${SPOTLIGHT_SHORTCUT}`);
+        console.error(`[Electron] Global shortcut registration failed for ${spotlightShortcut}`);
         return false;
     }
+
+    registeredSpotlightShortcut = spotlightShortcut;
 
     // Dev mode: register reload shortcut for spotlight
     if (process.env.NODE_ENV === 'development') {
@@ -3150,7 +3246,7 @@ function registerSpotlightShortcut() {
         console.log(`[Electron] Dev reload shortcut registered: ${SPOTLIGHT_RELOAD_SHORTCUT}`);
     }
 
-    console.log(`[Electron] Global shortcut registered: ${SPOTLIGHT_SHORTCUT}`);
+    console.log(`[Electron] Global shortcut registered: ${spotlightShortcut}`);
     return true;
 }
 
@@ -3189,7 +3285,7 @@ app.whenReady().then(() => {
     // Re-register shortcut periodically to ensure it stays active
     // Windows can sometimes "steal" global shortcuts
     setInterval(() => {
-        if (!globalShortcut.isRegistered(SPOTLIGHT_SHORTCUT)) {
+        if (!globalShortcut.isRegistered(spotlightShortcut)) {
             console.log('[Electron] Shortcut was unregistered, re-registering...');
             registerSpotlightShortcut();
         }

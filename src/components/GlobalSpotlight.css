@@ -31,10 +31,10 @@ html, body {
   width: 100%;
   max-width: 700px;
   margin: 0 16px;
-  background: rgba(22, 22, 26, 0.98);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgb(22, 22, 26);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 12px;
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.3),
@@ -44,9 +44,13 @@ html, body {
   display: flex;
   flex-direction: column;
   color: rgba(255, 255, 255, 0.9);
-  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+  font-family: 'Inter', 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv01', 'cv02', 'cv03', 'cv04';
   max-height: 70vh;
   font-size: 13px;
+  line-height: 1;
 }
 
 @keyframes spotlightEnter {
@@ -83,6 +87,8 @@ html, body {
   font-size: 16px;
   font-family: inherit;
   font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1;
   caret-color: #8b5cf6;
 }
 
@@ -133,9 +139,10 @@ html, body {
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: rgba(255, 255, 255, 0.35);
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.4);
   padding-left: 2px;
+  line-height: 1;
 }
 
 .context-expand-btn {
@@ -159,6 +166,20 @@ html, body {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.context-row--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 6px;
+}
+
+.context-row--grid .context-item {
+  display: flex;
+  max-width: none;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 /* Compact pill-style items */
@@ -223,12 +244,14 @@ html, body {
 }
 
 .context-item .pin-label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   color: rgba(255, 255, 255, 0.85);
+  line-height: 1;
+  letter-spacing: -0.01em;
 }
 
 /* Running dot - small and clean */
@@ -260,8 +283,9 @@ html, body {
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: rgba(255, 255, 255, 0.35);
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.4);
+  line-height: 1;
 }
 
 .spotlight-pins-hint {
@@ -430,32 +454,37 @@ html, body {
 .result-title {
   font-size: 13px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.92);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
 }
 
 .result-desc {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.38);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.2;
+  letter-spacing: 0;
 }
 
 .result-badge {
-  font-size: 9px;
+  font-size: 9.5px;
   padding: 2px 6px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.5);
-  font-weight: 500;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   flex-shrink: 0;
   min-width: 52px;
   text-align: center;
+  line-height: 1.5;
 }
 
 .pin-btn {
@@ -823,103 +852,77 @@ html, body {
 }
 
 /* ============================================
-   WORKSPACE DROPDOWN SELECTOR
+   WORKSPACE TAB SWITCHER
    ============================================ */
-.workspace-dropdown-wrapper {
-  position: relative;
+.ws-tabs-row {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  padding: 0 0 6px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-.workspace-dropdown-btn {
-  display: flex;
+.ws-tabs-row::-webkit-scrollbar {
+  display: none;
+}
+
+.ws-tab {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  gap: 5px;
+  padding: 4px 9px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 6px;
-  color: rgba(255, 255, 255, 0.65);
+  color: rgba(255, 255, 255, 0.5);
   font-size: 11px;
   font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
   font-family: inherit;
-  white-space: nowrap;
-  max-width: 180px;
-}
-
-.workspace-dropdown-btn span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.workspace-dropdown-btn:hover,
-.workspace-dropdown-btn.active {
-  background: rgba(139, 92, 246, 0.15);
-  border-color: rgba(139, 92, 246, 0.35);
-  color: #a78bfa;
-}
-
-.ws-chevron {
-  font-size: 9px;
-  opacity: 0.6;
-  flex-shrink: 0;
-}
-
-.workspace-dropdown-panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  min-width: 200px;
-  max-height: 220px;
-  overflow-y: auto;
-  background: rgba(18, 18, 22, 0.99);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
-  z-index: 200;
-  padding: 4px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.08) transparent;
-}
-
-.workspace-dropdown-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  border-radius: 6px;
   cursor: pointer;
-  transition: background 0.1s;
-}
-
-.workspace-dropdown-row:hover,
-.workspace-dropdown-row.expanded {
-  background: rgba(139, 92, 246, 0.14);
-}
-
-.ws-item-icon {
-  color: #a78bfa;
-  font-size: 12px;
-  flex-shrink: 0;
-  width: 14px;
-  text-align: center;
-}
-
-.ws-item-name {
-  flex: 1;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.85);
+  transition: all 0.12s ease;
   white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ws-tab:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.8);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.ws-tab.active {
+  background: rgba(139, 92, 246, 0.18);
+  border-color: rgba(139, 92, 246, 0.4);
+  color: #c4b5fd;
+}
+
+.ws-tab-icon {
+  font-size: 11px;
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
+.ws-tab.active .ws-tab-icon {
+  opacity: 1;
+}
+
+.ws-tab-name {
+  max-width: 100px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.ws-item-count {
+.ws-tab-count {
   font-size: 10px;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.35);
+  padding: 0px 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.3);
   flex-shrink: 0;
+}
+
+.ws-tab.active .ws-tab-count {
+  background: rgba(139, 92, 246, 0.25);
+  color: rgba(196, 181, 253, 0.7);
 }

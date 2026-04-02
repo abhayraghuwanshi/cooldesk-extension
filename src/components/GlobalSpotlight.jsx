@@ -1,5 +1,5 @@
 import { faChrome, faDiscord, faEdge, faFirefox, faGithub, faSlack, faSpotify } from '@fortawesome/free-brands-svg-icons';
-import { faBriefcase, faCalculator, faChartLine, faCloud, faCode, faCog, faComments, faDatabase, faDesktop, faEnvelope, faFile, faFileCode, faFileLines, faFilePdf, faFileZipper, faFlask, faFolder, faFont, faGamepad, faGlobe, faGraduationCap, faHashtag, faHeartPulse, faHistory, faHome, faImage, faLightbulb, faLink, faMicrochip, faMusic, faNewspaper, faPalette, faPlane, faRobot, faSearch, faShoppingBag, faStar, faStickyNote, faTasks, faTerminal, faThumbtack, faTools, faUtensils, faVial, faVideo } from '@fortawesome/free-solid-svg-icons';
+import { faBriefcase, faCalculator, faChartLine, faCloud, faCode, faCog, faComments, faDatabase, faDesktop, faEnvelope, faFile, faFileCode, faFileLines, faFilePdf, faFileZipper, faFlask, faFolder, faFolderOpen, faFont, faGamepad, faGlobe, faGraduationCap, faHashtag, faHeartPulse, faHistory, faHome, faImage, faLightbulb, faLink, faMicrochip, faMusic, faNewspaper, faPalette, faPlane, faRobot, faSearch, faShoppingBag, faStar, faStickyNote, faTasks, faTerminal, faThumbtack, faTools, faUtensils, faVial, faVideo } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { storageGet, storageSet } from '../services/extensionApi';
@@ -152,9 +152,9 @@ export function GlobalSpotlight() {
     const [showAllTabs, setShowAllTabs] = useState(false);
     const [showAllApps, setShowAllApps] = useState(false);
     const [workspaces, setWorkspaces] = useState([]);
-    const [expandedWorkspaceId, setExpandedWorkspaceId] = useState(null);
-    const [showWorkspacesDropdown, setShowWorkspacesDropdown] = useState(false);
-    const workspaceDropdownRef = useRef(null);
+    const [expandedWorkspaceId, setExpandedWorkspaceId] = useState(() => {
+        try { return localStorage.getItem('spotlight_ws_id') || null; } catch { return null; }
+    });
 
     // AI/Model command states
     const [commandMode, setCommandMode] = useState(null); // null, 'ai', 'model'
@@ -400,6 +400,16 @@ export function GlobalSpotlight() {
                 .map(a => {
                     const name = (a.name || '').toLowerCase().replace(/\.exe$/i, '');
                     const isRunning = a.isRunning === true || runningNames.has(name);
+                    // If the installed app is running, grab its pid/hwnd from the runningApps list
+                    // so focus works instead of falling back to launching a new instance
+                    if (isRunning && !a.pid) {
+                        const runningEntry = runningApps.find(r =>
+                            (r.name || '').toLowerCase().replace(/\.exe$/i, '') === name
+                        );
+                        if (runningEntry?.pid) {
+                            return { ...a, ...runningEntry, type: 'app', description: 'Running', isRunning: true };
+                        }
+                    }
                     return { ...a, type: 'app', description: isRunning ? 'Running' : 'Installed', isRunning };
                 });
 
@@ -457,10 +467,22 @@ export function GlobalSpotlight() {
             const res = await listWorkspaces();
             const list = res?.success ? res.data : (Array.isArray(res) ? res : []);
             setWorkspaces(list);
+            // Auto-select: validate saved ID still exists, else pick first
+            setExpandedWorkspaceId(prev => {
+                if (prev && list.find(w => w.id === prev)) return prev;
+                return list[0]?.id || null;
+            });
         } catch (e) {
             console.warn('[Spotlight] Failed to load workspaces', e);
         }
     }, []);
+
+    // Persist selected workspace
+    useEffect(() => {
+        try {
+            if (expandedWorkspaceId) localStorage.setItem('spotlight_ws_id', expandedWorkspaceId);
+        } catch {}
+    }, [expandedWorkspaceId]);
 
     // Save Pinned Items
     const savePinnedItems = async (items) => {
@@ -1195,7 +1217,6 @@ export function GlobalSpotlight() {
 
     // Close on click outside
     useOnClickOutside(containerRef, handleClose);
-    useOnClickOutside(workspaceDropdownRef, () => setShowWorkspacesDropdown(false));
 
     // Format URL helper
     const formatUrl = (url) => {
@@ -1363,7 +1384,7 @@ export function GlobalSpotlight() {
                                             </button>
                                         )}
                                     </div>
-                                    <div className="context-row">
+                                    <div className="context-row context-row--grid">
                                         {apps.slice(0, showAllApps ? apps.length : 2).map((item, i) => {
                                             const itemIndex = flatIndex++;
                                             return (
@@ -1395,7 +1416,7 @@ export function GlobalSpotlight() {
                                             </button>
                                         )}
                                     </div>
-                                    <div className="context-row">
+                                    <div className="context-row context-row--grid">
                                         {tabs.slice(0, showAllTabs ? tabs.length : 2).map((item, i) => {
                                             const itemIndex = flatIndex++;
                                             return (
@@ -1422,62 +1443,45 @@ export function GlobalSpotlight() {
                     <div className="spotlight-pins">
                         <div className="spotlight-pins-header">
                             <span className="spotlight-pins-title">Workspaces</span>
-                            <div className="workspace-dropdown-wrapper" ref={workspaceDropdownRef}>
-                                <button
-                                    className={`workspace-dropdown-btn ${showWorkspacesDropdown ? 'active' : ''}`}
-                                    onClick={() => setShowWorkspacesDropdown(v => !v)}
-                                    title="Select workspace"
-                                >
-                                    {expandedWorkspaceId && workspaces.find(w => w.id === expandedWorkspaceId) ? (
-                                        <>
-                                            <FontAwesomeIcon icon={getWorkspaceIcon(workspaces.find(w => w.id === expandedWorkspaceId).name)} />
-                                            <span>{workspaces.find(w => w.id === expandedWorkspaceId).name}</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <FontAwesomeIcon icon={faBriefcase} />
-                                            <span>{workspaces.length === 0 ? 'No workspaces' : 'Select workspace'}</span>
-                                        </>
-                                    )}
-                                    <span className="ws-chevron">{showWorkspacesDropdown ? '▴' : '▾'}</span>
-                                </button>
-                                {showWorkspacesDropdown && workspaces.length > 0 && (
-                                    <div className="workspace-dropdown-panel">
-                                        {workspaces.map(ws => (
-                                            <div
-                                                key={ws.id}
-                                                className={`workspace-dropdown-row ${expandedWorkspaceId === ws.id ? 'expanded' : ''}`}
-                                                onClick={() => {
-                                                    setExpandedWorkspaceId(ws.id);
-                                                    setShowWorkspacesDropdown(false);
-                                                }}
-                                            >
-                                                <FontAwesomeIcon icon={getWorkspaceIcon(ws.name)} className="ws-item-icon" />
-                                                <span className="ws-item-name">{ws.name}</span>
-                                                <span className="ws-item-count">{(ws.urls || []).length}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
                         </div>
+                        {workspaces.length > 0 && (
+                            <div className="ws-tabs-row">
+                                {workspaces.map(ws => (
+                                    <button
+                                        key={ws.id}
+                                        className={`ws-tab ${expandedWorkspaceId === ws.id ? 'active' : ''}`}
+                                        onClick={() => setExpandedWorkspaceId(ws.id)}
+                                        title={ws.name}
+                                    >
+                                        <FontAwesomeIcon icon={getWorkspaceIcon(ws.name)} className="ws-tab-icon" />
+                                        <span className="ws-tab-name">{ws.name}</span>
+                                        {(ws.urls || []).length > 0 && (
+                                            <span className="ws-tab-count">{(ws.urls || []).length}</span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
 
                         {/* Active workspace URLs shown as context items */}
                         {expandedWorkspaceId && (() => {
                             const ws = workspaces.find(w => w.id === expandedWorkspaceId);
                             if (!ws) return null;
                             const urls = ws.urls || [];
+                            const apps = ws.apps || [];
+                            const EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'fleet', 'zed'];
+                            const isEmpty = urls.length === 0 && apps.length === 0;
                             return (
                                 <div className="context-section">
-                                    {urls.length === 0 ? (
-                                        <div style={{ opacity: 0.4, fontSize: 11, padding: '6px 12px', fontStyle: 'italic' }}>No URLs in this workspace</div>
+                                    {isEmpty ? (
+                                        <div style={{ opacity: 0.4, fontSize: 11, padding: '6px 0', fontStyle: 'italic' }}>Nothing in this workspace yet</div>
                                     ) : (
-                                        <div className="context-row">
+                                        <div className="context-row context-row--grid">
                                             {urls.map((u, idx) => {
                                                 const resolvedFavicon = u.favicon || (u.url ? getFaviconUrl(u.url, 16, null, true) : null);
                                                 return (
                                                     <div
-                                                        key={idx}
+                                                        key={`url-${idx}`}
                                                         className="context-item context-tab"
                                                         onClick={() => {
                                                             if (window.electronAPI?.openExternal) {
@@ -1496,7 +1500,35 @@ export function GlobalSpotlight() {
                                                                 <FontAwesomeIcon icon={faGlobe} style={{ color: '#a78bfa' }} />
                                                             )}
                                                         </div>
-                                                        <span className="pin-label">{u.title || 'Link'}</span>
+                                                        <span className="pin-label">{(u.title || u.url || 'Link').replace(/^https?:\/\//, '')}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                            {apps.map((app, idx) => {
+                                                const isEditor = EDITORS.includes(app.appType?.toLowerCase());
+                                                const appColor = isEditor ? '#38bdf8' : app.appType === 'folder' ? '#facc15' : app.appType === 'file' ? '#94a3b8' : '#8b5cf6';
+                                                const appIcon = isEditor ? faCode : app.appType === 'folder' ? faFolderOpen : app.appType === 'file' ? faFileLines : faDesktop;
+                                                return (
+                                                    <div
+                                                        key={`app-${idx}`}
+                                                        className="context-item context-app"
+                                                        onClick={() => {
+                                                            if (isEditor && window.electronAPI?.launchAppWithArgs) {
+                                                                const cmd = app.appType.toLowerCase() === 'vscode' ? 'code' : app.appType.toLowerCase();
+                                                                window.electronAPI.launchAppWithArgs(cmd, [app.path]);
+                                                            } else if (app.appType === 'folder' && window.electronAPI?.openFolder) {
+                                                                window.electronAPI.openFolder(app.path);
+                                                            } else if (window.electronAPI?.launchApp) {
+                                                                window.electronAPI.launchApp(app.path);
+                                                            }
+                                                            handleClose();
+                                                        }}
+                                                        title={app.path || app.name}
+                                                    >
+                                                        <div className="pin-icon">
+                                                            <FontAwesomeIcon icon={appIcon} style={{ color: appColor }} />
+                                                        </div>
+                                                        <span className="pin-label">{app.name}</span>
                                                     </div>
                                                 );
                                             })}

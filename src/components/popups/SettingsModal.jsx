@@ -60,6 +60,10 @@ export function SettingsModal({
   const [lastBackupTime, setLastBackupTime] = useState(null);
   const [backupInProgress, setBackupInProgress] = useState(false);
 
+  // Spotlight shortcut (desktop app)
+  const [spotlightShortcut, setSpotlightShortcut] = useState('Alt+K');
+  const [isRecordingShortcut, setIsRecordingShortcut] = useState(false);
+
   // Unsplash API Key State
   const [unsplashApiKey, setUnsplashApiKey] = useState('');
 
@@ -167,10 +171,101 @@ export function SettingsModal({
         setAutoGroupEnabled(result?.autoGroupEnabled || false);
       });
 
+      // Load desktop spotlight shortcut (if running in Electron)
+      try {
+        if (window.electronAPI?.getSettings) {
+          window.electronAPI.getSettings().then((hostSettings) => {
+            const stored = hostSettings?.spotlightShortcut;
+            if (typeof stored === 'string' && stored.trim()) {
+              setSpotlightShortcut(stored.trim());
+            } else {
+              setSpotlightShortcut('Alt+K');
+            }
+          }).catch(() => {
+            setSpotlightShortcut('Alt+K');
+          });
+        } else {
+          setSpotlightShortcut('Alt+K');
+        }
+      } catch {
+        setSpotlightShortcut('Alt+K');
+      }
+
     } catch (e) {
       console.warn('Error specific settings:', e);
     }
   }, [show]);
+
+  const updateSpotlightShortcut = async (value) => {
+    const trimmed = (value || '').trim();
+    setSpotlightShortcut(trimmed || 'Alt+K');
+    try {
+      if (window.electronAPI?.setSettings) {
+        const result = await window.electronAPI.setSettings({ spotlightShortcut: trimmed || 'Alt+K' });
+        if (result?.ok === false) {
+          setError(result.error || 'Failed to update spotlight shortcut');
+          if (result?.spotlightShortcut) {
+            setSpotlightShortcut(result.spotlightShortcut);
+          }
+          return;
+        }
+        if (result?.spotlightShortcut) {
+          setSpotlightShortcut(result.spotlightShortcut);
+        }
+        setError('');
+      }
+    } catch (err) {
+      setError(err?.message || 'Failed to update spotlight shortcut');
+    }
+  };
+
+  const normalizeShortcutKey = (key) => {
+    if (key === ' ') return 'Space';
+    if (key === 'Spacebar') return 'Space';
+    if (key === 'ArrowUp') return 'Up';
+    if (key === 'ArrowDown') return 'Down';
+    if (key === 'ArrowLeft') return 'Left';
+    if (key === 'ArrowRight') return 'Right';
+    if (key === 'Esc') return 'Escape';
+    if (key === '+') return 'Plus';
+    if (key.length === 1) return key.toUpperCase();
+    return key;
+  };
+
+  const handleShortcutKeyDown = (e) => {
+    if (!isRecordingShortcut) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Escape cancels recording without changes
+    if (e.key === 'Escape') {
+      setIsRecordingShortcut(false);
+      return;
+    }
+
+    // Ignore pure modifier presses
+    if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') {
+      return;
+    }
+
+    const parts = [];
+    if (e.ctrlKey) parts.push('Ctrl');
+    if (e.shiftKey) parts.push('Shift');
+    if (e.altKey) parts.push('Alt');
+    if (e.metaKey) parts.push('Meta');
+
+    const key = normalizeShortcutKey(e.key);
+
+    // Skip if key already represented by modifier
+    if (!['Shift', 'Control', 'Alt', 'Meta'].includes(key)) {
+      parts.push(key);
+    }
+
+    const combo = parts.join('+') || 'Alt+K';
+    void updateSpotlightShortcut(combo);
+    setIsRecordingShortcut(false);
+  };
 
   // Listen for extension updates
   useEffect(() => {
@@ -693,6 +788,96 @@ export function SettingsModal({
                     </div>
                   </label>
                 </section>
+
+                <div style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />
+
+                {/* Keyboard Shortcuts */}
+                {isDesktopApp && (
+                  <section>
+                    <div style={{ marginBottom: 20 }}>
+                      <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0', color: '#fff' }}>Keyboard Shortcut</h3>
+                      <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 }}>
+                        Choose the global shortcut that opens Spotlight (desktop app only).
+                      </p>
+                    </div>
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                      padding: 16,
+                      background: 'rgba(255,255,255,0.03)',
+                      borderRadius: 12,
+                      border: '1px solid rgba(255,255,255,0.04)'
+                    }}>
+                      <label style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
+                        Spotlight global shortcut
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div
+                          tabIndex={0}
+                          onKeyDown={handleShortcutKeyDown}
+                          onClick={(e) => {
+                            e.currentTarget.focus();
+                            setIsRecordingShortcut(true);
+                          }}
+                          style={{
+                            padding: '8px 10px',
+                            borderRadius: 8,
+                            border: isRecordingShortcut
+                              ? '1px solid rgba(96,165,250,0.9)'
+                              : '1px solid rgba(255,255,255,0.12)',
+                            background: 'rgba(15,23,42,0.9)',
+                            color: '#e5e7eb',
+                            fontSize: 13,
+                            fontFamily: 'inherit',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            cursor: 'pointer',
+                            minHeight: 32
+                          }}
+                        >
+                          {(spotlightShortcut || 'Alt+K').split('+').map((part) => (
+                            <span
+                              key={part}
+                              style={{
+                                padding: '2px 8px',
+                                borderRadius: 6,
+                                background: 'rgba(15,23,42,0.9)',
+                                border: '1px solid rgba(148,163,184,0.6)',
+                                fontSize: 12
+                              }}
+                            >
+                              {part}
+                            </span>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsRecordingShortcut((prev) => !prev)}
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: 8,
+                            border: '1px solid rgba(148,163,184,0.6)',
+                            background: isRecordingShortcut
+                              ? 'rgba(37,99,235,0.2)'
+                              : 'rgba(15,23,42,0.9)',
+                            color: '#e5e7eb',
+                            fontSize: 12,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {isRecordingShortcut ? 'Stop' : 'Change'}
+                        </button>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.9)' }}>
+                        {isRecordingShortcut
+                          ? 'Press your new shortcut now (Esc to cancel).'
+                          : 'Click “Change” and then press your preferred key combination.'}
+                      </div>
+                    </div>
+                  </section>
+                )}
 
                 <div style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />
 

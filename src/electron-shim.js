@@ -69,10 +69,29 @@ function connectWebSocket() {
     };
 }
 
-// Ensure connection starts
+// Bridge Tauri native events (emitted from Rust via app.emit) to the listeners Map
+async function bridgeTauriEvents() {
+    try {
+        const { listen } = await import('@tauri-apps/api/event');
+        // Events emitted from Rust that the frontend subscribes to
+        const tauriEvents = ['spotlight-shown', 'spotlight-hidden', 'tabs-updated', 'native-focus'];
+        for (const eventName of tauriEvents) {
+            await listen(eventName, (event) => {
+                if (listeners.has(eventName)) {
+                    listeners.get(eventName).forEach(cb => cb(event.payload));
+                }
+            });
+        }
+        console.log('[TauriShim] Tauri event bridge active');
+    } catch (e) {
+        console.warn('[TauriShim] Failed to bridge Tauri events:', e);
+    }
+}
+
 // Ensure connection starts
 if (typeof window !== 'undefined' && (window.__TAURI__ || window.__TAURI_INTERNALS__)) {
     connectWebSocket();
+    bridgeTauriEvents();
 }
 
 const electronAPI = {
