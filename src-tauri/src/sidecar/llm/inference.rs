@@ -1,6 +1,9 @@
 /// Chat with the loaded LLM model
 pub async fn chat(prompt: &str) -> Result<String, String> {
-    super::engine::engine_chat(prompt.to_string(), 2048).await
+    #[cfg(feature = "llm")]
+    return super::engine::engine_chat(prompt.to_string(), 2048).await;
+    #[cfg(not(feature = "llm"))]
+    Err("LLM feature not compiled in this build".to_string())
 }
 
 /// Chat with streaming (placeholder - returns full response for now)

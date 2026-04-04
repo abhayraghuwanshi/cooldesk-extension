@@ -183,6 +183,10 @@ pub async fn load_model(name: &str, gpu_layers: u32) -> Result<(), String> {
     log::info!("[LLM] Loading model from: {:?} (gpu_layers: {})", model_path, gpu_layers);
 
     // Actually load via the engine
+    #[cfg(not(feature = "llm"))]
+    return Err("LLM feature not compiled in this build".to_string());
+
+    #[cfg(feature = "llm")]
     match super::engine::engine_load_model(model_path, gpu_layers).await {
         Ok(_) => {
             let mut state = GLOBAL_LLM_STATE.lock().await;
@@ -288,6 +292,7 @@ pub async fn download_model(
 
 pub async fn unload_model() -> Result<(), String> {
     // Actually unload from the engine thread
+    #[cfg(feature = "llm")]
     let _ = super::engine::engine_unload_model().await;
 
     let mut state = GLOBAL_LLM_STATE.lock().await;

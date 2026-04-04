@@ -7,6 +7,7 @@ pub mod sync;
 pub mod server;
 pub mod handlers;
 pub mod llm;
+#[cfg(feature = "llm")]
 pub mod llm_v2;
 pub mod feedback;
 

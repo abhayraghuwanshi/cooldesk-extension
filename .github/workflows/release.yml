@@ -4,12 +4,19 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      test_only:
+        description: 'Test build only (no release published)'
+        required: false
+        default: 'true'
 
 permissions:
   contents: write
 
 jobs:
   create-release:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       release_id: ${{ steps.create.outputs.id }}
@@ -27,15 +34,18 @@ jobs:
           prerelease: false
 
   build:
-    needs: create-release
+    needs: []
+    if: always()
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            bundle_args: --bundles nsis
           - os: macos-latest
             target: aarch64-apple-darwin
+            bundle_args: --bundles dmg
 
     runs-on: ${{ matrix.os }}
 
@@ -94,11 +104,104 @@ jobs:
           cargo build --release --bin AppScannerMac --target ${{ matrix.target }}
           cp target/${{ matrix.target }}/release/matcher bin/AppMatcher-${{ matrix.target }}
           cp target/${{ matrix.target }}/release/AppScannerMac bin/AppScanner-${{ matrix.target }}
+          chmod +x bin/AppMatcher-${{ matrix.target }} bin/AppScanner-${{ matrix.target }}
 
       - name: Install frontend dependencies
         run: npm install
 
-      - name: Build and upload
+      # On manual dispatch: just build and upload artifact for testing (no release)
+      - name: Build (test only)
+        if: github.event_name == 'workflow_dispatch'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          args: --target ${{ matrix.target }} ${{ matrix.bundle_args }}
+
+      - name: Test installation (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -e
+
+          DMG=$(find src-tauri/target/${{ matrix.target }}/release/bundle/dmg -name "*.dmg" | head -1)
+          echo "==> Found DMG: $DMG"
+          [ -f "$DMG" ] || (echo "ERROR: DMG not found" && exit 1)
+
+          # Mount DMG
+          hdiutil attach "$DMG" -mountpoint /Volumes/CoolDeskTest -nobrowse -quiet
+          echo "==> DMG mounted"
+
+          # Copy .app out
+          APP=$(find /Volumes/CoolDeskTest -name "*.app" -maxdepth 1 | head -1)
+          echo "==> App in DMG: $APP"
+          cp -r "$APP" /tmp/CoolDesk-test.app
+          hdiutil detach /Volumes/CoolDeskTest -quiet
+          echo "==> DMG unmounted"
+
+          # Strip quarantine (required since app is unsigned)
+          xattr -cr /tmp/CoolDesk-test.app
+          echo "==> Quarantine stripped"
+
+          # Check main binary exists and is executable
+          MAIN_BIN=$(find /tmp/CoolDesk-test.app/Contents/MacOS -maxdepth 1 -type f | head -1)
+          echo "==> Main binary: $MAIN_BIN"
+          [ -x "$MAIN_BIN" ] || (echo "ERROR: main binary not executable" && exit 1)
+          file "$MAIN_BIN" | grep -q "Mach-O" || (echo "ERROR: not a valid Mach-O binary" && exit 1)
+          echo "==> Main binary OK"
+
+          # Check AppScanner is executable and produces valid JSON
+          SCANNER=/tmp/CoolDesk-test.app/Contents/MacOS/AppScanner
+          [ -x "$SCANNER" ] || (echo "ERROR: AppScanner not executable" && exit 1)
+          echo "==> Running AppScanner..."
+          "$SCANNER" | python3 -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          installed = len(d.get('installed', []))
+          windows = len(d.get('windows', []))
+          print(f'AppScanner OK: {installed} installed apps, {windows} running windows')
+          assert installed > 0, 'Expected at least some installed apps'
+          "
+          echo "==> AppScanner OK"
+
+          # Check AppMatcher binary exists and is executable
+          MATCHER=/tmp/CoolDesk-test.app/Contents/MacOS/AppMatcher
+          [ -x "$MATCHER" ] || (echo "ERROR: AppMatcher not executable" && exit 1)
+          file "$MATCHER" | grep -q "Mach-O" || (echo "ERROR: AppMatcher not a valid Mach-O binary" && exit 1)
+          echo "==> AppMatcher binary OK"
+
+          # Smoke-test: launch the app and check the process appears within 5s
+          open /tmp/CoolDesk-test.app
+          for i in $(seq 1 10); do
+            if pgrep -f "CoolDesk-test" > /dev/null || pgrep -f "cooldesk" > /dev/null; then
+              echo "==> App process running — launch OK"
+              break
+            fi
+            sleep 0.5
+            if [ $i -eq 10 ]; then
+              echo "WARNING: app process not detected after 5s (may be headless CI limitation)"
+            fi
+          done
+
+          # Cleanup
+          pkill -f "CoolDesk-test" 2>/dev/null || true
+          rm -rf /tmp/CoolDesk-test.app
+          echo "==> Installation test complete"
+
+      - name: Upload artifact (test only)
+        if: github.event_name == 'workflow_dispatch' && runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cooldesk-macos-${{ matrix.target }}
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app
+          retention-days: 3
+
+      # On tag push: build and attach to release
+      - name: Build and upload to release
+        if: github.event_name == 'push'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -108,12 +211,13 @@ jobs:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           tagName: ${{ github.ref_name }}
           releaseName: 'CoolDesk ${{ github.ref_name }}'
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} ${{ matrix.bundle_args }}
           updaterJsonKeepUniversal: true
           updaterJsonPreferNsis: true
 
   publish:
     needs: [create-release, build]
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -184,13 +184,19 @@ fn hide_spotlight(app: tauri::AppHandle) {
 async fn launch_app(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
         // Try direct spawn first (fastest, works for normal .exe paths).
         // Fall back to ShellExecute via cmd /c start for Store apps (WindowsApps),
         // .lnk shortcuts, and anything else direct spawn can't handle.
-        let direct_ok = std::process::Command::new(&path).spawn().is_ok();
+        let direct_ok = std::process::Command::new(&path)
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .is_ok();
         if !direct_ok {
             std::process::Command::new("cmd")
                 .args(["/c", "start", "", &path])
+                .creation_flags(CREATE_NO_WINDOW)
                 .spawn()
                 .map_err(|e| format!("launch failed: {e}"))?;
         }
@@ -226,14 +232,17 @@ async fn launch_app(path: String) -> Result<(), String> {
 async fn launch_app_with_args(app: String, args: Vec<String>) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
         let mut cmd = std::process::Command::new("powershell");
         cmd.arg("-WindowStyle").arg("Hidden").arg("-Command");
-        
+
         let mut script = format!("& '{}'", app.replace("'", "''"));
         for arg in &args {
             script.push_str(&format!(" '{}'", arg.replace("'", "''")));
         }
         cmd.arg(script)
+            .creation_flags(CREATE_NO_WINDOW)
             .spawn()
             .map_err(|e| e.to_string())?;
     }
@@ -375,12 +384,18 @@ async fn search_files(query: String) -> Result<Vec<SearchFileResult>, String> {
         ps_script.push_str(&format!("$rs = $con.Execute(\"{}\"); ", sql));
         ps_script.push_str("while($rs -ne $null -and -not $rs.EOF) { Write-Output $rs.Fields.Item('System.ItemPathDisplay').Value; $rs.MoveNext(); }");
         
-        let output = std::process::Command::new("powershell")
-            .arg("-NoProfile")
-            .arg("-Command")
-            .arg(&ps_script)
-            .output()
-            .map_err(|e| e.to_string())?;
+        #[cfg(target_os = "windows")]
+        let output = {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            std::process::Command::new("powershell")
+                .arg("-NoProfile")
+                .arg("-Command")
+                .arg(&ps_script)
+                .creation_flags(CREATE_NO_WINDOW)
+                .output()
+                .map_err(|e| e.to_string())?
+        };
             
         let output_str = String::from_utf8_lossy(&output.stdout);
         let results: Vec<String> = output_str.lines()

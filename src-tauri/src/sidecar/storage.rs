@@ -105,19 +105,23 @@ pub struct ChangeTracker {
 // Agent Memory Persistence
 // ==========================================
 
+#[cfg(feature = "llm")]
 use crate::sidecar::llm_v2::memory::{ConversationSession, LongTermMemory};
 
 /// Agent memory file path
+#[cfg(feature = "llm")]
 fn get_agent_memory_file() -> PathBuf {
     get_data_dir().join("agent-memory.json")
 }
 
 /// Agent conversations file path
+#[cfg(feature = "llm")]
 fn get_agent_conversations_file() -> PathBuf {
     get_data_dir().join("agent-conversations.json")
 }
 
 /// Saved agent memory state
+#[cfg(feature = "llm")]
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct SavedAgentState {
@@ -127,6 +131,7 @@ pub struct SavedAgentState {
 }
 
 /// Load agent state from disk
+#[cfg(feature = "llm")]
 pub fn load_agent_state() -> SavedAgentState {
     let memory_file = get_agent_memory_file();
 
@@ -160,6 +165,7 @@ pub fn load_agent_state() -> SavedAgentState {
 }
 
 /// Save agent state to disk
+#[cfg(feature = "llm")]
 pub fn save_agent_state(state: &SavedAgentState) -> std::io::Result<()> {
     ensure_data_dir()?;
     let file_path = get_agent_memory_file();
@@ -177,6 +183,7 @@ pub fn save_agent_state(state: &SavedAgentState) -> std::io::Result<()> {
 }
 
 /// Save just the long-term memory
+#[cfg(feature = "llm")]
 pub fn save_long_term_memory(memory: &LongTermMemory) -> std::io::Result<()> {
     let mut state = load_agent_state();
     state.long_term_memory = memory.clone();
@@ -185,6 +192,7 @@ pub fn save_long_term_memory(memory: &LongTermMemory) -> std::io::Result<()> {
 }
 
 /// Save just the conversations
+#[cfg(feature = "llm")]
 pub fn save_conversations(conversations: &[ConversationSession]) -> std::io::Result<()> {
     let mut state = load_agent_state();
     state.conversations = conversations.to_vec();

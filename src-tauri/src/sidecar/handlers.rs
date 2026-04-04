@@ -1088,8 +1088,11 @@ pub async fn llm_parse_command(Json(req): Json<ParseCommandRequest>) -> Json<Par
 // LLM v2 Handlers (Agent with Memory)
 // ==========================================
 
+#[cfg(feature = "llm")]
 use crate::sidecar::llm_v2::CoolDeskAgent;
+#[cfg(feature = "llm")]
 use crate::sidecar::storage::{load_agent_state, save_agent_state, SavedAgentState};
+#[cfg(feature = "llm")]
 use crate::sidecar::data::{
     V2CreateSessionRequest, V2SessionResponse, V2ChatRequest, V2ChatResponse,
     V2AddMemoryRequest, V2SessionSummary,
@@ -1097,12 +1100,13 @@ use crate::sidecar::data::{
 use lazy_static::lazy_static;
 use tokio::sync::Mutex;
 
+#[cfg(feature = "llm")]
 lazy_static! {
     /// Global agent instance (created lazily)
     static ref GLOBAL_AGENT: Mutex<Option<CoolDeskAgent>> = Mutex::new(None);
 }
 
-/// Initialize or get the global agent, loading persisted state
+#[cfg(feature = "llm")]
 async fn get_or_init_agent(sync_data: Arc<RwLock<SyncData>>) -> &'static Mutex<Option<CoolDeskAgent>> {
     let mut agent_guard = GLOBAL_AGENT.lock().await;
     if agent_guard.is_none() {
@@ -1132,7 +1136,7 @@ async fn get_or_init_agent(sync_data: Arc<RwLock<SyncData>>) -> &'static Mutex<O
     &GLOBAL_AGENT
 }
 
-/// Save agent state to disk
+#[cfg(feature = "llm")]
 async fn save_agent_to_disk(agent: &CoolDeskAgent) {
     let memory = agent.memory();
     let mem = memory.read().await;
@@ -1148,7 +1152,7 @@ async fn save_agent_to_disk(agent: &CoolDeskAgent) {
     }
 }
 
-/// Create a new session
+#[cfg(feature = "llm")]
 pub async fn v2_create_session(
     State(state): State<Arc<AppState>>,
     Json(req): Json<V2CreateSessionRequest>,
@@ -1179,7 +1183,7 @@ pub async fn v2_create_session(
     }
 }
 
-/// List all sessions
+#[cfg(feature = "llm")]
 pub async fn v2_list_sessions(
     State(state): State<Arc<AppState>>,
 ) -> Json<Vec<V2SessionSummary>> {
@@ -1206,7 +1210,7 @@ pub async fn v2_list_sessions(
     }
 }
 
-/// Get a specific session's history
+#[cfg(feature = "llm")]
 pub async fn v2_get_session(
     State(state): State<Arc<AppState>>,
     axum::extract::Path(session_id): axum::extract::Path<String>,
@@ -1229,7 +1233,7 @@ pub async fn v2_get_session(
     }
 }
 
-/// Delete a session
+#[cfg(feature = "llm")]
 pub async fn v2_delete_session(
     State(state): State<Arc<AppState>>,
     axum::extract::Path(session_id): axum::extract::Path<String>,
@@ -1244,7 +1248,7 @@ pub async fn v2_delete_session(
     StatusCode::NO_CONTENT
 }
 
-/// Chat with the agent
+#[cfg(feature = "llm")]
 pub async fn v2_chat(
     State(state): State<Arc<AppState>>,
     Json(req): Json<V2ChatRequest>,
@@ -1290,7 +1294,7 @@ pub async fn v2_chat(
     }
 }
 
-/// Get memory facts
+#[cfg(feature = "llm")]
 pub async fn v2_get_memory(
     State(state): State<Arc<AppState>>,
 ) -> Json<serde_json::Value> {
@@ -1309,7 +1313,7 @@ pub async fn v2_get_memory(
     }
 }
 
-/// Add a memory fact
+#[cfg(feature = "llm")]
 pub async fn v2_add_memory(
     State(state): State<Arc<AppState>>,
     Json(req): Json<V2AddMemoryRequest>,
@@ -1327,7 +1331,7 @@ pub async fn v2_add_memory(
     }
 }
 
-/// Clear all memory
+#[cfg(feature = "llm")]
 pub async fn v2_clear_memory(
     State(state): State<Arc<AppState>>,
 ) -> StatusCode {
@@ -1345,9 +1349,11 @@ pub async fn v2_clear_memory(
 // Simple Agent (Context-Injection Model)
 // ==========================================
 
+#[cfg(feature = "llm")]
 use crate::sidecar::llm_v2::SimpleAgent;
 
 /// Request for simple agent chat
+#[cfg(feature = "llm")]
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SimpleChatRequest {
@@ -1358,6 +1364,7 @@ pub struct SimpleChatRequest {
 
 /// Simple chat - context-injection approach (no tool routing)
 /// This endpoint injects user data as context and lets the LLM respond naturally.
+#[cfg(feature = "llm")]
 pub async fn v2_simple_chat(
     State(state): State<Arc<AppState>>,
     Json(req): Json<SimpleChatRequest>,

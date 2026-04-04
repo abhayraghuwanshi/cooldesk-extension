@@ -165,15 +165,19 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/llm/suggest-related", post(llm_suggest_related))
         .route("/llm/enhance-url", post(llm_enhance_url))
         .route("/llm/suggest-workspaces", post(llm_suggest_workspaces))
-        .route("/llm/parse-command", post(llm_parse_command))
-        // LLM v2 Agent endpoints
+        .route("/llm/parse-command", post(llm_parse_command));
+
+    // LLM v2 Agent endpoints (only compiled when llm feature is enabled)
+    #[cfg(feature = "llm")]
+    let app = app
         .route("/llm/v2/sessions", get(v2_list_sessions).post(v2_create_session))
         .route("/llm/v2/sessions/:id", get(v2_get_session).delete(v2_delete_session))
         .route("/llm/v2/chat", post(v2_chat))
         .route("/llm/v2/memory", get(v2_get_memory).post(v2_add_memory))
         .route("/llm/v2/memory/clear", post(v2_clear_memory))
-        // Simple Agent endpoint (context-injection, no tool routing)
-        .route("/llm/v2/simple-chat", post(v2_simple_chat))
+        .route("/llm/v2/simple-chat", post(v2_simple_chat));
+
+    let app = app
         // Feedback/RL endpoints
         .route("/feedback/event", post(feedback_record_event))
         .route("/feedback/stats", get(feedback_get_stats))
