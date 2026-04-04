@@ -261,15 +261,16 @@ const electronAPI = {
             // Debounce: coalesce rapid requests (spam-proof), only process the latest
             const tabId = msg.tabId;
             const windowId = msg.windowId;
+            const url = msg.url;
+            const deviceId = msg._deviceId;
+            const browser = msg.browser;
             if (_jumpToTabTimer) clearTimeout(_jumpToTabTimer);
             _jumpToTabTimer = setTimeout(() => {
                 _jumpToTabTimer = null;
-                // Tell extension to switch tab; extension will send back window bounds,
-                // and the sidecar will do a precise HWND-based native focus.
                 fetch(`${SIDECAR_URL}/cmd/jump-to-tab`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tabId, windowId })
+                    body: JSON.stringify({ tabId, windowId, url, deviceId, browser })
                 }).catch(() => {});
             }, 100);
 

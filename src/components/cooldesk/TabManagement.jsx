@@ -446,18 +446,16 @@ export function TabManagement() {
         await window.electronAPI.sendMessage({
           type: 'JUMP_TO_TAB',
           tabId: tab.id,
-          windowId: tab.windowId
+          windowId: tab.windowId,
+          url: tab.url,
+          _deviceId: tab._deviceId
         });
         return;
       }
 
-      // Fallback for Extension functionality
-      // Switch to the existing tab instead of opening a new one
-      if (typeof chrome !== 'undefined' && chrome?.tabs?.update) {
-        await chrome.tabs.update(tab.id, { active: true });
-        if (tab.windowId && chrome?.windows?.update) {
-          await chrome.windows.update(tab.windowId, { focused: true });
-        }
+      // Route through background.js so native focus fires for cross-desktop windows
+      if (typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage) {
+        chrome.runtime.sendMessage({ type: 'JUMP_TO_TAB', tabId: tab.id, url: tab.url });
       }
     } catch (error) {
       console.error('[TabManagement] Failed to activate tab:', error);

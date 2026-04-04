@@ -1054,13 +1054,15 @@ export function GlobalSpotlight() {
                 if (tabId) {
                     // Fire-and-forget — spotlight is already closing
                     if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-                        chrome.runtime.sendMessage({ type: 'JUMP_TO_TAB', tabId });
+                        chrome.runtime.sendMessage({ type: 'JUMP_TO_TAB', tabId, url: item.url, browser: item.browser });
                     } else if (window.electronAPI?.sendMessage) {
-                        // Pass _deviceId so shim can focus the correct browser directly
                         window.electronAPI.sendMessage({
                             type: 'JUMP_TO_TAB',
                             tabId,
-                            _deviceId: item._deviceId
+                            windowId: item.windowId || item.window_id,
+                            url: item.url,
+                            _deviceId: item._deviceId,
+                            browser: item.browser,
                         });
                     }
                     return;
@@ -1551,7 +1553,10 @@ export function GlobalSpotlight() {
                                                         title={runningApp ? `Running: ${app.name}` : (app.path || app.name)}
                                                     >
                                                         <div className="pin-icon">
-                                                            <FontAwesomeIcon icon={appIcon} style={{ color: appColor }} />
+                                                            {app.icon
+                                                                ? <img src={app.icon} alt="" onError={e => { e.target.style.display = 'none'; }} />
+                                                                : <FontAwesomeIcon icon={appIcon} style={{ color: appColor }} />
+                                                            }
                                                         </div>
                                                         <span className="pin-label">{app.name}</span>
                                                         {runningApp && <span className="running-dot" />}

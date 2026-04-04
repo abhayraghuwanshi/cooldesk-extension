@@ -70,11 +70,10 @@ mod platform {
     use super::*;
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{
-        BringWindowToTop, EnumWindows, GetForegroundWindow,
+        BringWindowToTop, EnumWindows,
         GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
         SetForegroundWindow, ShowWindow, SwitchToThisWindow, SW_RESTORE, SW_SHOW,
     };
-    use windows::Win32::System::Threading::{GetCurrentThreadId, AttachThreadInput};
 
     /// Focus a window by its handle (HWND)
     pub fn focus_window_by_hwnd(hwnd: isize) -> FocusResult<()> {
@@ -112,30 +111,29 @@ mod platform {
     }
 
     fn try_focus_pid(pid: u32) -> bool {
-        use std::sync::atomic::{AtomicBool, Ordering};
+        use windows::Win32::Foundation::LPARAM;
 
-        static FOUND: AtomicBool = AtomicBool::new(false);
-        FOUND.store(false, Ordering::SeqCst);
-
-        // Store the target PID in a thread-local for the callback
-        thread_local! {
-            static TARGET_PID: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+        struct Ctx {
+            target_pid: u32,
+            found: bool,
         }
-        TARGET_PID.with(|p| p.set(pid));
 
-        unsafe extern "system" fn enum_callback(hwnd: HWND, _: windows::Win32::Foundation::LPARAM) -> windows::Win32::Foundation::BOOL {
+        let mut ctx = Ctx { target_pid: pid, found: false };
+
+        unsafe extern "system" fn enum_callback(hwnd: HWND, lparam: LPARAM) -> windows::Win32::Foundation::BOOL {
+            let ctx = &mut *(lparam.0 as *mut Ctx);
             let mut window_pid: u32 = 0;
             GetWindowThreadProcessId(hwnd, Some(&mut window_pid));
 
-            let target = TARGET_PID.with(|p| p.get());
-
-            if window_pid == target {
+            if window_pid == ctx.target_pid {
                 let len = GetWindowTextLengthW(hwnd);
                 let visible = IsWindowVisible(hwnd).as_bool();
 
-                if len > 0 || visible {
+                // Require both a non-empty title AND visible — avoids focusing
+                // invisible GPU/renderer helper windows that browsers spawn.
+                if len > 0 && visible {
                     focus_window_aggressive(hwnd);
-                    FOUND.store(true, Ordering::SeqCst);
+                    ctx.found = true;
                     return windows::Win32::Foundation::FALSE; // Stop enumeration
                 }
             }
@@ -143,61 +141,45 @@ mod platform {
         }
 
         unsafe {
-            let _ = EnumWindows(Some(enum_callback), windows::Win32::Foundation::LPARAM(0));
+            let _ = EnumWindows(Some(enum_callback), LPARAM(&mut ctx as *mut Ctx as isize));
         }
 
-        FOUND.load(Ordering::SeqCst)
+        ctx.found
     }
 
     fn focus_window_aggressive(hwnd: HWND) {
         unsafe {
-            // Simulate Alt key press/release to allow SetForegroundWindow
-            simulate_alt_key();
-
-            let foreground = GetForegroundWindow();
-            let mut unused_pid: u32 = 0;
-            let foreground_thread = GetWindowThreadProcessId(foreground, Some(&mut unused_pid));
-            let current_thread = GetCurrentThreadId();
-
-            // Attach to foreground thread
-            let attached = if foreground_thread != current_thread {
-                AttachThreadInput(current_thread, foreground_thread, true).as_bool()
-            } else {
-                false
-            };
-
             // Restore if minimized
             if IsIconic(hwnd).as_bool() {
                 let _ = ShowWindow(hwnd, SW_RESTORE);
             }
 
-            // Method 1: SwitchToThisWindow (works across virtual desktops)
+            // SwitchToThisWindow handles cross-virtual-desktop switching without
+            // AttachThreadInput (which caused "Default IME not responding" errors).
             SwitchToThisWindow(hwnd, true);
 
-            // Small delay
+            // Brief delay so the desktop switch can complete
             std::thread::sleep(std::time::Duration::from_millis(50));
 
-            // Method 2: BringWindowToTop + SetForegroundWindow
+            // Bypass Windows foreground lock using SendInput (not deprecated keybd_event).
+            // Simulating a key event convinces Windows to grant SetForegroundWindow permission
+            // without merging thread input queues (safe for IME).
+            use windows::Win32::UI::Input::KeyboardAndMouse::{
+                SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_MENU,
+            };
+            let inputs = [
+                INPUT { r#type: INPUT_KEYBOARD, Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
+                    ki: KEYBDINPUT { wVk: VK_MENU, wScan: 0, dwFlags: Default::default(), time: 0, dwExtraInfo: 0 }
+                }},
+                INPUT { r#type: INPUT_KEYBOARD, Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
+                    ki: KEYBDINPUT { wVk: VK_MENU, wScan: 0, dwFlags: KEYEVENTF_KEYUP, time: 0, dwExtraInfo: 0 }
+                }},
+            ];
+            SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
+
             let _ = BringWindowToTop(hwnd);
             let _ = SetForegroundWindow(hwnd);
-
-            // Method 3: Show window
             let _ = ShowWindow(hwnd, SW_SHOW);
-
-            // Detach
-            if attached {
-                let _ = AttachThreadInput(current_thread, foreground_thread, false);
-            }
-        }
-    }
-
-    fn simulate_alt_key() {
-        use windows::Win32::UI::Input::KeyboardAndMouse::{
-            keybd_event, KEYEVENTF_KEYUP, VK_MENU,
-        };
-        unsafe {
-            keybd_event(VK_MENU.0 as u8, 0, Default::default(), 0);
-            keybd_event(VK_MENU.0 as u8, 0, KEYEVENTF_KEYUP, 0);
         }
     }
 }
@@ -439,19 +421,44 @@ pub fn find_hwnd_by_bounds(process_name: &str, x: i32, y: i32, width: i32, heigh
         if !ctx.pids.contains(&pid) || !IsWindowVisible(hwnd).as_bool() {
             return BOOL(1);
         }
+
+        // Prefer DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS) over GetWindowRect.
+        // On Windows 10/11, GetWindowRect includes the invisible DWM shadow/extended frame
+        // (~7px on each side) while Chrome's chrome.windows.get() reports visible bounds.
+        // DWMWA_EXTENDED_FRAME_BOUNDS returns the actual visible rect in physical pixels.
+        use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
+        use windows::Win32::UI::HiDpi::GetDpiForWindow;
         let mut rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
-        if GetWindowRect(hwnd, &mut rect).is_ok() {
-            const TOLERANCE: i32 = 30;
-            let ww = rect.right - rect.left;
-            let wh = rect.bottom - rect.top;
-            if (rect.left - ctx.x).abs() <= TOLERANCE
-                && (rect.top - ctx.y).abs() <= TOLERANCE
-                && (ww - ctx.w).abs() <= TOLERANCE
-                && (wh - ctx.h).abs() <= TOLERANCE
-            {
-                ctx.result = Some(hwnd.0 as isize);
-                return BOOL(0);
+        let got_rect = DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            &mut rect as *mut RECT as *mut std::ffi::c_void,
+            std::mem::size_of::<RECT>() as u32,
+        ).is_ok();
+        // Fallback to GetWindowRect if DWM attribute unavailable (e.g. minimised)
+        if !got_rect {
+            if GetWindowRect(hwnd, &mut rect).is_err() {
+                return BOOL(1);
             }
+        }
+
+        // Convert physical pixels → logical pixels using per-window DPI.
+        // Chrome API reports logical (CSS) pixels; Win32 reports physical pixels.
+        let dpi = GetDpiForWindow(hwnd) as f64;
+        let scale = if dpi > 0.0 { dpi / 96.0 } else { 1.0 };
+        let log_left = (rect.left  as f64 / scale).round() as i32;
+        let log_top  = (rect.top   as f64 / scale).round() as i32;
+        let log_w    = ((rect.right  - rect.left) as f64 / scale).round() as i32;
+        let log_h    = ((rect.bottom - rect.top)  as f64 / scale).round() as i32;
+
+        const TOLERANCE: i32 = 20;
+        if (log_left - ctx.x).abs() <= TOLERANCE
+            && (log_top - ctx.y).abs() <= TOLERANCE
+            && (log_w - ctx.w).abs() <= TOLERANCE
+            && (log_h - ctx.h).abs() <= TOLERANCE
+        {
+            ctx.result = Some(hwnd.0 as isize);
+            return BOOL(0);
         }
         BOOL(1)
     }

@@ -29,6 +29,18 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
     // Create shared state
     let state = Arc::new(AppState::new(ws_tx.clone()));
 
+    // Periodic tab-state refresh: broadcast "request-tabs" to all connected browsers every 30s.
+    // Each browser extension responds with its current tab list via "push-tabs", which clears stale entries.
+    let tab_poll_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        interval.tick().await; // skip first immediate tick
+        loop {
+            interval.tick().await;
+            tab_poll_state.broadcast("request-tabs", serde_json::json!({}));
+        }
+    });
+
     // Start background app activity tracking
     let tracker_state = state.clone();
     tokio::spawn(async move {
@@ -134,6 +146,7 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/dashboard", get(get_dashboard).post(post_dashboard))
         // Commands
         .route("/cmd/jump-to-tab", post(cmd_jump_to_tab))
+        .route("/cmd/jump-next", get(cmd_jump_next))
         // Full sync
         .route("/sync", post(post_sync))
         // WebSocket

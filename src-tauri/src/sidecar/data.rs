@@ -271,6 +271,11 @@ pub struct HealthResponse {
 pub struct JumpToTabRequest {
     pub tab_id: i64,
     pub window_id: Option<i64>,
+    pub url: Option<String>,
+    pub device_id: Option<String>,
+    /// Browser that owns this tab: "chrome", "edge", etc.
+    /// When set, only the matching browser extension handles the jump.
+    pub browser: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

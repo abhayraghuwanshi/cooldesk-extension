@@ -1,6 +1,22 @@
 // Host communication bridge (WebSocket, polling, redirects)
 import { getRedirectDecision } from '../services/extensionApi.js';
-import { isHostSyncEnabled, getHostUrl, getWebSocketUrl } from '../services/syncConfig.js';
+import { isHostSyncEnabled, getHostUrl, getWebSocketUrl, getDeviceId } from '../services/syncConfig.js';
+
+let myDeviceId = null;
+getDeviceId().then(id => { myDeviceId = id; }).catch(() => {});
+
+// Deduplication: track recently-handled jumps so the HTTP poll doesn't re-fire
+// a jump that was already handled by the WS handler moments before.
+const recentJumps = new Map(); // key → timestamp
+function markJumpHandled(key) {
+  recentJumps.set(key, Date.now());
+  // Clean up entries older than 10s to prevent unbounded growth
+  for (const [k, t] of recentJumps) { if (Date.now() - t > 10000) recentJumps.delete(k); }
+}
+function wasJumpRecentlyHandled(key) {
+  const t = recentJumps.get(key);
+  return t && (Date.now() - t < 5000); // 5s window
+}
 
 // Helper function to check if URL is HTTP/HTTPS
 function isHttpUrl(u) {
@@ -173,7 +189,7 @@ function startHostActionWS() {
       // Stop HTTP polling when WS is healthy
       ensureHostPolling(false);
       // Identify this client to the sidecar
-      try { hostWs.send(JSON.stringify({ type: 'identify', client: 'bridge' })); } catch { }
+      try { hostWs.send(JSON.stringify({ type: 'identify', client: 'bridge', deviceId: myDeviceId })); } catch { }
       // Drain any actions queued while offline
       drainQueuedActionsOnConnect().catch(() => { });
     };
@@ -192,6 +208,96 @@ function startHostActionWS() {
               await openOrFocusUrlInChrome(url, tabId);
             }
           }
+        }
+
+        if (msg && msg.type === 'request-tabs') {
+          // Sidecar is asking for a fresh snapshot of all open tabs in this browser.
+          // Respond via push-tabs so stale entries in the sidecar are overwritten.
+          try {
+            const allTabs = await chrome.tabs.query({});
+            const isEdge = navigator.userAgent.includes('Edg/');
+            const browser = isEdge ? 'edge' : 'chrome';
+            const tabs = allTabs.map(t => ({
+              id: t.id,
+              url: t.url || '',
+              title: t.title || '',
+              favIconUrl: t.favIconUrl || null,
+              windowId: t.windowId,
+              _deviceId: myDeviceId,
+              browser,
+            }));
+            if (hostWs && hostWs.readyState === WebSocket.OPEN) {
+              hostWs.send(JSON.stringify({
+                type: 'push-tabs',
+                payload: { deviceId: myDeviceId, tabs },
+              }));
+            }
+          } catch { /* service worker may lack tabs permission briefly */ }
+        }
+
+        if (msg && msg.type === 'jump-to-tab') {
+          const { tabId, url, deviceId, browser } = msg.payload || {};
+          // If the message targets a specific device, ignore if it's not us
+          if (deviceId && myDeviceId && deviceId !== myDeviceId) return;
+          // If the message targets a specific browser, ignore if it's not us.
+          // This prevents Chrome and Edge both racing to handle the same jump.
+          if (browser) {
+            const isEdge = navigator.userAgent.includes('Edg/');
+            const myBrowser = isEdge ? 'edge' : 'chrome';
+            if (browser !== myBrowser) return;
+          }
+          if (!tabId && !url) return;
+          // Deduplicate: skip if we already handled this jump recently
+          const jumpKey = `${tabId}:${url || ''}`;
+          if (wasJumpRecentlyHandled(jumpKey)) return;
+          try {
+            let tab = null;
+
+            // 1. Fast path: direct tabId lookup with cross-browser URL guard
+            if (tabId) {
+              try {
+                const candidate = await chrome.tabs.get(tabId);
+                if (url && candidate?.url) {
+                  if (candidate.url.split('?')[0] === url.split('?')[0]) tab = candidate;
+                  // else: tabId exists but points to different page — wrong browser
+                } else {
+                  tab = candidate;
+                }
+              } catch { /* tabId stale or belongs to another browser */ }
+            }
+
+            // 2. URL fallback — stale tabId or wrong browser
+            if (!tab && url) {
+              const hostname = (() => { try { return new URL(url).hostname; } catch { return null; } })();
+              if (hostname) {
+                const matches = await chrome.tabs.query({ url: `*://${hostname}/*` });
+                if (matches.length > 0) {
+                  tab = matches.find(t => t.url?.split('?')[0] === url.split('?')[0]) || matches[0];
+                }
+              }
+            }
+
+            if (!tab) return; // tab not in this browser
+
+            markJumpHandled(jumpKey); // mark before focus so HTTP poll skips it
+            await chrome.tabs.update(tab.id, { active: true });
+            if (tab.windowId) {
+              await chrome.windows.update(tab.windowId, { focused: true });
+              try {
+                const win = await chrome.windows.get(tab.windowId);
+                const isEdge = navigator.userAgent.includes('Edg/');
+                if (hostWs && hostWs.readyState === WebSocket.OPEN) {
+                  hostWs.send(JSON.stringify({
+                    type: 'request-native-focus',
+                    payload: {
+                      browser: isEdge ? 'msedge' : 'chrome',
+                      bounds: { left: win.left, top: win.top, width: win.width, height: win.height }
+                    }
+                  }));
+                }
+              } catch { }
+            }
+          } catch { }
         }
       } catch { /* ignore malformed frames */ }
     };
@@ -226,6 +332,67 @@ function startHostActionWS() {
   }
 }
 
+// HTTP fallback: poll /cmd/jump-next every 1s to catch jumps missed during WS suspension
+async function pollOnceForJumpNext() {
+  if (!isHostSyncEnabled()) return;
+  try {
+    const res = await fetch(`${getHostUrl()}/cmd/jump-next`);
+    if (!res.ok) return;
+    const data = await res.json().catch(() => ({}));
+    const action = data?.action;
+    if (!action) return;
+    const { tabId, windowId, url, deviceId, browser } = action;
+    // Only handle if targeting this device (or broadcast to all)
+    if (deviceId && myDeviceId && deviceId !== myDeviceId) return;
+    // Only handle if targeting this browser (or broadcast to all)
+    if (browser) {
+      const isEdge = navigator.userAgent.includes('Edg/');
+      const myBrowser = isEdge ? 'edge' : 'chrome';
+      if (browser !== myBrowser) return;
+    }
+    if (!tabId && !url) return;
+    // Skip if the WS handler already handled this jump (deduplication)
+    const jumpKey = `${tabId}:${url || ''}`;
+    if (wasJumpRecentlyHandled(jumpKey)) return;
+
+    let tab = null;
+    if (tabId) {
+      try {
+        const candidate = await chrome.tabs.get(tabId);
+        if (url && candidate?.url) {
+          if (candidate.url.split('?')[0] === url.split('?')[0]) tab = candidate;
+        } else {
+          tab = candidate;
+        }
+      } catch { /* stale tabId */ }
+    }
+    if (!tab && url) {
+      const hostname = (() => { try { return new URL(url).hostname; } catch { return null; } })();
+      if (hostname) {
+        const matches = await chrome.tabs.query({ url: `*://${hostname}/*` });
+        tab = matches.find(t => t.url?.split('?')[0] === url.split('?')[0]) || matches[0] || null;
+      }
+    }
+    if (!tab) return;
+
+    markJumpHandled(jumpKey);
+    await chrome.tabs.update(tab.id, { active: true });
+    if (tab.windowId) {
+      await chrome.windows.update(tab.windowId, { focused: true });
+      try { await requestNativeFocus(tab.windowId); } catch { }
+    }
+  } catch { /* sidecar unreachable */ }
+}
+
+let jumpPollTimer = null;
+function ensureJumpPolling(active) {
+  if (active) {
+    if (!jumpPollTimer) jumpPollTimer = setInterval(() => { pollOnceForJumpNext().catch(() => {}); }, 1000);
+  } else {
+    if (jumpPollTimer) { clearInterval(jumpPollTimer); jumpPollTimer = null; }
+  }
+}
+
 // Initialize bridge functionality
 export function initializeBridge() {
   // Redirect when a new tab is created with a URL (or pendingUrl)
@@ -242,12 +409,35 @@ export function initializeBridge() {
 
   // Start WebSocket bridge with HTTP polling fallback if enabled
   if (isHostSyncEnabled()) startHostActionWS();
+
+  // Always poll for pending jump-to-tab actions via HTTP — reliable even when
+  // the service worker was suspended and missed the WS push.
+  if (isHostSyncEnabled()) ensureJumpPolling(true);
 }
 
 // Placeholder for openOrFocusApp function (would need to be defined based on your app structure)
 async function openOrFocusApp() {
   // This would typically show/focus the main application window
   console.log('[Bridge] Opening/focusing app...');
+}
+
+// Send request-native-focus to sidecar so Tauri can focus the window at OS level.
+// This handles virtual desktop switching which chrome.windows.update cannot do.
+export async function requestNativeFocus(windowId) {
+  try {
+    const win = await chrome.windows.get(windowId);
+    const isEdge = typeof navigator !== 'undefined' && navigator.userAgent?.includes('Edg/');
+    const browser = isEdge ? 'msedge' : 'chrome';
+    if (hostWs && hostWs.readyState === WebSocket.OPEN) {
+      hostWs.send(JSON.stringify({
+        type: 'request-native-focus',
+        payload: {
+          browser,
+          bounds: { left: win.left, top: win.top, width: win.width, height: win.height }
+        }
+      }));
+    }
+  } catch { /* sidecar not running or window bounds unavailable */ }
 }
 
 export { openOrFocusUrlInChrome, maybeRedirect };

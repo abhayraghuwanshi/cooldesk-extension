@@ -1417,7 +1417,7 @@ export function injectFooterBar() {
       } else if (item.tabId !== undefined && item.tabId !== null) {
         // Use explicit check for tabId since tab ID 0 is falsy but valid
         console.log('[Spotlight:Content] Jumping to tab:', item.tabId);
-        chrome.runtime.sendMessage({ type: 'JUMP_TO_TAB', tabId: item.tabId }, (response) => {
+        chrome.runtime.sendMessage({ type: 'JUMP_TO_TAB', tabId: item.tabId, url: item.url }, (response) => {
           console.log('[Spotlight:Content] JUMP_TO_TAB response:', response);
         });
         toggleSpotlight();

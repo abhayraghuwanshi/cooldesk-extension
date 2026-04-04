@@ -269,6 +269,7 @@ import {
   initializeActivity
 } from './activity.js';
 import { initializeData } from './data.js';
+import { openOrFocusUrlInChrome, requestNativeFocus } from './bridge.js';
 // import { initializeProjectContext } from './projectContext.js'; // DISABLED - depends on ML modules
 import { CommandParser } from '../services/commandParser.js';
 import { cleanupBadUrls, listenForPromotionAlarm, runPromotion, schedulePromotion } from '../utils/promotionService.js';
@@ -2547,15 +2548,42 @@ async function main() {
     if (msg?.type === 'JUMP_TO_TAB') {
       (async () => {
         try {
-          console.log('[Background] JUMP_TO_TAB:', msg.tabId);
-          // First activate the tab
-          await chrome.tabs.update(msg.tabId, { active: true });
-          // Then focus the window
-          const tab = await chrome.tabs.get(msg.tabId);
-          if (tab?.windowId) {
-            await chrome.windows.update(tab.windowId, { focused: true });
+          let tab = null;
+
+          // 1. Try direct tabId lookup first (fast path)
+          try {
+            const candidate = await chrome.tabs.get(msg.tabId);
+            // Cross-browser guard: same tabId number can exist in Chrome and Edge pointing to different pages
+            if (msg.url && candidate?.url) {
+              const same = candidate.url.split('?')[0] === msg.url.split('?')[0];
+              if (same) tab = candidate;
+            } else {
+              tab = candidate;
+            }
+          } catch { /* tabId stale or belongs to another browser */ }
+
+          // 2. URL fallback — tabId was stale or belonged to another browser
+          if (!tab && msg.url) {
+            const hostname = (() => { try { return new URL(msg.url).hostname; } catch { return null; } })();
+            if (hostname) {
+              const matches = await chrome.tabs.query({ url: `*://${hostname}/*` });
+              if (matches.length > 0) {
+                // Prefer exact URL match, otherwise take first hostname match
+                tab = matches.find(t => t.url?.split('?')[0] === msg.url.split('?')[0]) || matches[0];
+              }
+            }
           }
-          console.log('[Background] JUMP_TO_TAB success');
+
+          if (!tab) {
+            sendResponse({ success: false, error: 'tab not found' });
+            return;
+          }
+
+          await chrome.tabs.update(tab.id, { active: true });
+          if (tab.windowId) {
+            await chrome.windows.update(tab.windowId, { focused: true });
+            requestNativeFocus(tab.windowId).catch(() => {});
+          }
           sendResponse({ success: true });
         } catch (e) {
           console.error('[Background] JUMP_TO_TAB failed:', e);

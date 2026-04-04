@@ -194,8 +194,8 @@ class SyncWebSocket {
                 this.emit('sync-complete', { timestamp });
                 break;
             case 'jump-to-tab':
-                // Handle tab switching request from Electron desktop app
-                this.handleJumpToTab(payload);
+                // Handled exclusively by bridge.js (has deviceId guard + URL fallback).
+                // Do not handle here to avoid duplicate focus across multiple WS connections.
                 break;
             default:
                 console.log('[SyncWS] Unknown message type:', type);
