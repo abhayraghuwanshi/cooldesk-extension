@@ -181,6 +181,41 @@ fn hide_spotlight(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
+fn set_spotlight_shortcut(app: tauri::AppHandle, shortcut: String) -> Result<serde_json::Value, String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+
+    let shortcut_str = if shortcut.trim().is_empty() { "Alt+K".to_string() } else { shortcut.trim().to_string() };
+
+    // Unregister all existing shortcuts then register the new one
+    if let Err(e) = app.global_shortcut().unregister_all() {
+        log::warn!("[Shortcut] Failed to unregister old shortcuts: {}", e);
+    }
+
+    let handle = app.clone();
+    match app.global_shortcut().on_shortcut(shortcut_str.as_str(), move |_app, _shortcut, event| {
+        if event.state == ShortcutState::Pressed {
+            toggle_spotlight(handle.clone());
+        }
+    }) {
+        Ok(_) => {
+            log::info!("[Shortcut] Registered new spotlight shortcut: {}", shortcut_str);
+            Ok(serde_json::json!({ "ok": true, "spotlightShortcut": shortcut_str }))
+        }
+        Err(e) => {
+            // Failed — fall back to Alt+K
+            log::error!("[Shortcut] Failed to register '{}': {}. Falling back to Alt+K", shortcut_str, e);
+            let handle2 = app.clone();
+            let _ = app.global_shortcut().on_shortcut("Alt+K", move |_app, _shortcut, event| {
+                if event.state == ShortcutState::Pressed {
+                    toggle_spotlight(handle2.clone());
+                }
+            });
+            Err(format!("Invalid shortcut '{}': {}. Reverted to Alt+K.", shortcut_str, e))
+        }
+    }
+}
+
+#[tauri::command]
 async fn launch_app(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
@@ -445,6 +480,7 @@ pub fn run() {
         focus_window,
         toggle_spotlight,
         hide_spotlight,
+        set_spotlight_shortcut,
         launch_app,
         launch_app_with_args,
         open_folder,
@@ -531,20 +567,28 @@ pub fn run() {
           })
           .build(app)?;
 
-      // Register Global Shortcut
+      // Register Global Shortcut — load saved shortcut or default to Alt+K
+      let saved_shortcut = {
+          let data = sidecar::storage::load_data();
+          data.settings.get("spotlightShortcut")
+              .and_then(|v| v.as_str())
+              .unwrap_or("Alt+K")
+              .to_string()
+      };
+      let startup_shortcut = if saved_shortcut.trim().is_empty() { "Alt+K".to_string() } else { saved_shortcut };
+
+      // Register plugin without a global handler — use per-shortcut on_shortcut() instead.
+      // Using with_handler() here would cause double-fire after set_spotlight_shortcut()
+      // re-registers via on_shortcut(), toggling the window open then immediately closed.
+      app.handle().plugin(tauri_plugin_global_shortcut::Builder::new().build())?;
+
       let handle = app.handle().clone();
-      app.handle().plugin(
-          tauri_plugin_global_shortcut::Builder::new()
-            .with_shortcut("Alt+K")?
-            .with_handler(move |_app, shortcut, event| {
-              if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                  if shortcut.matches(tauri_plugin_global_shortcut::Modifiers::ALT, tauri_plugin_global_shortcut::Code::KeyK) {
-                      toggle_spotlight(handle.clone());
-                  }
-              }
-            })
-          .build(),
-      )?;
+      use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+      app.global_shortcut().on_shortcut(startup_shortcut.as_str(), move |_app, _shortcut, event| {
+          if event.state == ShortcutState::Pressed {
+              toggle_spotlight(handle.clone());
+          }
+      }).map_err(|e| format!("Failed to register shortcut '{}': {}", startup_shortcut, e))?;
 
       Ok(())
     })

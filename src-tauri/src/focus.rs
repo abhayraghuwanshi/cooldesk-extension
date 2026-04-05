@@ -70,23 +70,38 @@ mod platform {
     use super::*;
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{
-        BringWindowToTop, EnumWindows,
-        GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
-        SetForegroundWindow, ShowWindow, SwitchToThisWindow, SW_RESTORE, SW_SHOW,
+        BringWindowToTop, EnumWindows, GetAncestor,
+        GetForegroundWindow, GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
+        SetForegroundWindow, ShowWindow, SwitchToThisWindow, GA_ROOT, SW_RESTORE, SW_SHOW,
     };
 
     /// Focus a window by its handle (HWND)
     pub fn focus_window_by_hwnd(hwnd: isize) -> FocusResult<()> {
-        let hwnd = HWND(hwnd as *mut _);
-        focus_window_aggressive(hwnd);
-        Ok(())
+        let hwnd = normalize_focus_hwnd(HWND(hwnd as *mut _));
+        if focus_window_aggressive(hwnd, None) {
+            Ok(())
+        } else {
+            Err(FocusError::CommandFailed("Failed to bring target window to foreground".to_string()))
+        }
     }
 
     /// Focus a window by process ID, optionally with process name fallback
     pub fn focus_window_by_pid(pid: u32, process_name: Option<&str>) -> FocusResult<()> {
-        // Try by PID first
+        // Try by PID first (Win32 SetForegroundWindow path)
         if try_focus_pid(pid) {
             return Ok(());
+        }
+
+        // For MSIX/packaged apps (e.g. Windows Terminal) Win32 focus can fail
+        // even though the window exists. Try the shell activation path: this calls
+        // IApplicationActivationManager::ActivateApplication, the same channel
+        // Windows uses when you click the taskbar button, so the app's WinUI
+        // activation handler receives it cleanly with no focus race.
+        if let Some(aumid) = get_aumid_for_pid(pid) {
+            log::info!("[Focus] Packaged app detected (AUMID: {}), trying shell activation", aumid);
+            if activate_via_aumid(&aumid) {
+                return Ok(());
+            }
         }
 
         // Fallback: try by process name if provided
@@ -132,9 +147,10 @@ mod platform {
                 // Require both a non-empty title AND visible — avoids focusing
                 // invisible GPU/renderer helper windows that browsers spawn.
                 if len > 0 && visible {
-                    focus_window_aggressive(hwnd);
-                    ctx.found = true;
-                    return windows::Win32::Foundation::FALSE; // Stop enumeration
+                    if focus_window_aggressive(hwnd, Some(ctx.target_pid)) {
+                        ctx.found = true;
+                        return windows::Win32::Foundation::FALSE; // Stop enumeration
+                    }
                 }
             }
             windows::Win32::Foundation::TRUE // Continue
@@ -147,8 +163,151 @@ mod platform {
         ctx.found
     }
 
-    fn focus_window_aggressive(hwnd: HWND) {
+    /// Returns the AUMID for a packaged (MSIX) process, or None for plain Win32 apps.
+    fn get_aumid_for_pid(pid: u32) -> Option<String> {
+        use windows::Win32::Foundation::CloseHandle;
+        use windows::Win32::Storage::Packaging::Appx::GetApplicationUserModelId;
+        use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+
         unsafe {
+            let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+
+            // First call: null buffer → get required length
+            let mut len: u32 = 0;
+            let _ = GetApplicationUserModelId(
+                handle,
+                &mut len,
+                windows::core::PWSTR(std::ptr::null_mut()),
+            );
+
+            if len == 0 {
+                let _ = CloseHandle(handle);
+                return None;
+            }
+
+            let mut buf = vec![0u16; len as usize];
+            let err = GetApplicationUserModelId(
+                handle,
+                &mut len,
+                windows::core::PWSTR(buf.as_mut_ptr()),
+            );
+            let _ = CloseHandle(handle);
+
+            // ERROR_SUCCESS = WIN32_ERROR(0)
+            if err.0 != 0 {
+                return None;
+            }
+
+            let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+            let aumid = String::from_utf16_lossy(&buf[..end]);
+            if aumid.is_empty() { None } else { Some(aumid) }
+        }
+    }
+
+    /// Activate a packaged app via IApplicationActivationManager — the "building
+    /// manager" path. Windows routes the request through the app's own activation
+    /// channel (same as clicking the taskbar button), so WinUI apps like Windows
+    /// Terminal handle it cleanly without a focus race.
+    ///
+    /// ⚠ For multi-instance apps (Windows Terminal's default) this may open a
+    /// new window rather than focusing the existing one. Prefer Win32
+    /// SetForegroundWindow for a specific known HWND; use this only as a fallback.
+    fn activate_via_aumid(aumid: &str) -> bool {
+        use windows::Win32::System::Com::{
+            CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
+        };
+        use windows::Win32::UI::Shell::{IApplicationActivationManager, ACTIVATEOPTIONS};
+        use windows::core::GUID;
+
+        // CLSID_ApplicationActivationManager = {45BA127D-10A8-46EA-8AB7-56EA9078943C}
+        const CLSID_AAM: GUID = GUID {
+            data1: 0x45BA_127D,
+            data2: 0x10A8,
+            data3: 0x46EA,
+            data4: [0x8A, 0xB7, 0x56, 0xEA, 0x90, 0x78, 0x94, 0x3C],
+        };
+
+        unsafe {
+            // Ignore S_FALSE / RPC_E_CHANGED_MODE — thread may already have COM.
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+
+            let manager: windows::core::Result<IApplicationActivationManager> =
+                CoCreateInstance(&CLSID_AAM, None, CLSCTX_ALL);
+
+            let manager = match manager {
+                Ok(m) => m,
+                Err(e) => {
+                    log::warn!("[Focus] IApplicationActivationManager unavailable: {}", e);
+                    return false;
+                }
+            };
+
+            // &HSTRING implements Param<PCWSTR>; PWSTR(null) for empty arguments.
+            let aumid_h = windows::core::HSTRING::from(aumid);
+            // ActivateApplication returns Result<u32> where the u32 is the new PID.
+            match manager.ActivateApplication(
+                &aumid_h,
+                windows::core::PWSTR(std::ptr::null_mut()),
+                ACTIVATEOPTIONS(0),
+            ) {
+                Ok(new_pid) => {
+                    log::info!(
+                        "[Focus] AUMID activation ok: '{}' → new_pid={}",
+                        aumid, new_pid
+                    );
+                    true
+                }
+                Err(e) => {
+                    log::warn!("[Focus] AUMID activation failed for '{}': {}", aumid, e);
+                    false
+                }
+            }
+        }
+    }
+
+    fn normalize_focus_hwnd(hwnd: HWND) -> HWND {
+        unsafe {
+            let root = GetAncestor(hwnd, GA_ROOT);
+            if root.0.is_null() { hwnd } else { root }
+        }
+    }
+
+    fn foreground_matches_target(target_hwnd: HWND, target_pid: Option<u32>) -> bool {
+        unsafe {
+            let foreground = GetForegroundWindow();
+            if foreground == target_hwnd {
+                return true;
+            }
+
+            let foreground_root = normalize_focus_hwnd(foreground);
+            if foreground_root == target_hwnd {
+                return true;
+            }
+
+            if let Some(pid) = target_pid {
+                let mut foreground_pid: u32 = 0;
+                GetWindowThreadProcessId(foreground, Some(&mut foreground_pid));
+                if foreground_pid == pid {
+                    return true;
+                }
+                let mut foreground_root_pid: u32 = 0;
+                GetWindowThreadProcessId(foreground_root, Some(&mut foreground_root_pid));
+                if foreground_root_pid == pid {
+                    return true;
+                }
+            }
+
+            false
+        }
+    }
+
+    fn focus_window_aggressive(hwnd: HWND, target_pid: Option<u32>) -> bool {
+        let hwnd = normalize_focus_hwnd(hwnd);
+        unsafe {
+            let before_foreground = normalize_focus_hwnd(GetForegroundWindow());
+            let mut before_pid: u32 = 0;
+            GetWindowThreadProcessId(before_foreground, Some(&mut before_pid));
+
             // Restore if minimized
             if IsIconic(hwnd).as_bool() {
                 let _ = ShowWindow(hwnd, SW_RESTORE);
@@ -156,7 +315,10 @@ mod platform {
 
             // SwitchToThisWindow handles cross-virtual-desktop switching without
             // AttachThreadInput (which caused "Default IME not responding" errors).
-            SwitchToThisWindow(hwnd, true);
+            // Use fAltTab=FALSE for direct app activation (launcher-style).
+            // fAltTab=TRUE is for the Alt+Tab switcher and can cause WinUI/WinAppSDK
+            // apps (e.g. Windows Terminal) to race-lose focus after the 50ms check.
+            SwitchToThisWindow(hwnd, false);
 
             // Brief delay so the desktop switch can complete
             std::thread::sleep(std::time::Duration::from_millis(50));
@@ -180,6 +342,37 @@ mod platform {
             let _ = BringWindowToTop(hwnd);
             let _ = SetForegroundWindow(hwnd);
             let _ = ShowWindow(hwnd, SW_SHOW);
+
+            // 100ms gives WinUI/WinAppSDK apps (e.g. Windows Terminal) enough time
+            // to finish their internal activation before we verify — avoids a
+            // false-positive success=true that was clearing before the user saw it.
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let mut focused = foreground_matches_target(hwnd, target_pid);
+
+            // One retry for apps (like Windows Terminal) whose WinUI activation
+            // temporarily steals focus back during the first attempt.
+            if !focused {
+                let _ = SetForegroundWindow(hwnd);
+                std::thread::sleep(std::time::Duration::from_millis(80));
+                focused = foreground_matches_target(hwnd, target_pid);
+            }
+
+            let after_foreground = normalize_focus_hwnd(GetForegroundWindow());
+            let mut after_pid: u32 = 0;
+            GetWindowThreadProcessId(after_foreground, Some(&mut after_pid));
+
+            log::info!(
+                "[Focus] target_hwnd={:?} target_pid={:?} before_hwnd={:?} before_pid={} after_hwnd={:?} after_pid={} success={}",
+                hwnd.0,
+                target_pid,
+                before_foreground.0,
+                before_pid,
+                after_foreground.0,
+                after_pid,
+                focused
+            );
+
+            focused
         }
     }
 }
@@ -360,14 +553,8 @@ pub use platform::*;
 /// Similar to the original AppFocus.exe CLI interface
 pub fn focus_window(hwnd: Option<isize>, pid: Option<u32>, process_name: Option<&str>) -> FocusResult<()> {
     if let Some(h) = hwnd {
-        let result = focus_window_by_hwnd(h);
-        match result {
-            Ok(()) => return Ok(()),
-            // PlatformNotSupported means hwnd focus isn't available (e.g. macOS where
-            // we store CGWindowID in hwnd but can't activate by it directly).
-            // Fall through to the PID / name approach instead.
-            Err(FocusError::PlatformNotSupported) => {}
-            Err(e) => return Err(e),
+        if let Ok(()) = focus_window_by_hwnd(h) {
+            return Ok(());
         }
     }
 
