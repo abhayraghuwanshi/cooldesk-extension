@@ -189,12 +189,16 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
   const titleRef = useRef('');
   const folderRef = useRef('');
   const urlRef = useRef('');
+  const activeNoteRef = useRef(activeNote);
+  const activeFolderRef = useRef(activeFolder);
 
   // Sync refs with state
   useEffect(() => { titleRef.current = noteTitle; }, [noteTitle]);
   useEffect(() => { folderRef.current = noteFolder; }, [noteFolder]);
   useEffect(() => { urlRef.current = noteUrl; }, [noteUrl]);
   useEffect(() => { noteContentRef.current = noteContent; }, [noteContent]);
+  useEffect(() => { activeNoteRef.current = activeNote; }, [activeNote]);
+  useEffect(() => { activeFolderRef.current = activeFolder; }, [activeFolder]);
 
   // Share note with team
   const handleShareNote = async () => {
@@ -401,7 +405,8 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
             // If we already have an active note (optimistic), we might want to keep it unless the DB version is newer?
             // For now, simpler is better: update if found.
             // Check if we need to update active note (if changed or stale cache)
-            if (!activeNote || activeNote.id !== found.id || (found.updatedAt && activeNote.updatedAt && found.updatedAt > activeNote.updatedAt)) {
+            const cur = activeNoteRef.current;
+            if (!cur || cur.id !== found.id || (found.updatedAt && cur.updatedAt && found.updatedAt > cur.updatedAt)) {
               console.log('[NotesCanvas] Updating active note from DB (newer version found)');
               setActiveNote(found);
               // Use helper to ensure images are rendered for screenshot notes
@@ -414,7 +419,7 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
           }
         } else if (lastActiveFolder) {
           // Only force folder if valid
-          if (!activeFolder) {
+          if (!activeFolderRef.current) {
             setActiveFolder(lastActiveFolder);
             setExpandedFolders(prev => new Set([...prev, lastActiveFolder]));
           }
@@ -432,7 +437,7 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
     } finally {
       setLoading(false);
     }
-  }, [activeFolder, activeNote]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Data loading aliases defined above
   const loadNotes = fetchAllData;

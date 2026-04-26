@@ -252,38 +252,8 @@ export function TabManagement() {
       });
     }
 
-    // Fetch initial tabs (works for both Electron and Extension mode)
-    const fetchInitial = async () => {
-      let allTabs = [];
-
-      if (window.electronAPI?.getTabs) {
-        allTabs = await window.electronAPI.getTabs();
-      } else if (chrome?.tabs?.query) {
-        const rawTabs = await chrome.tabs.query({});
-        // Add browser field to each tab
-        allTabs = rawTabs.map(tab => ({
-          ...tab,
-          browser: tab.browser || CURRENT_BROWSER
-        }));
-      }
-
-      setTabsLoading(false);
-      if (allTabs?.length) {
-        setTabs(allTabs);
-      }
-
-      // Fetch Chrome native tab groups for initial display
-      if (!window.electronAPI && typeof chrome !== 'undefined' && chrome.tabGroups?.query) {
-        try {
-          const groups = await chrome.tabGroups.query({});
-          const groupMap = {};
-          groups.forEach(g => { groupMap[g.id] = g; });
-          setChromeTabGroups(groupMap);
-        } catch { }
-      }
-    };
-
-    fetchInitial();
+    // Fetch initial tabs — use refreshTabs() so dedup/filter/sort are applied from the start
+    refreshTabs();
 
     // Tauri app mode: no electronAPI, no chrome.tabs — fetch via HTTP and subscribe to WS sync
     if (!window.electronAPI && !chrome?.tabs?.query) {

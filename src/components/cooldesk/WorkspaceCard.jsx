@@ -563,20 +563,44 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
       {compact ? (
         /* macOS Dock-Style List View - Using CSS Classes */
         <div className="compact-card-inner" style={{ alignItems: 'center' }}>
-          {/* Workspace Icon on Left */}
-          <div className={`compact-workspace-icon workspace-icon ${colorClass}`}>
-            <FontAwesomeIcon icon={iconToUse} />
-          </div>
-
-          {/* Workspace Info */}
-          <div className="compact-workspace-info">
-            <div className="compact-workspace-name">{name}</div>
-            <div className="compact-workspace-count">
-              {urlCount > 0 && <span>{urlCount} URL{urlCount !== 1 ? 's' : ''}</span>}
-              {urlCount > 0 && appCount > 0 && <span style={{ margin: '0 4px' }}>•</span>}
-              {appCount > 0 && <span style={{ color: '#8b5cf6' }}>{appCount} App{appCount !== 1 ? 's' : ''}</span>}
-              {totalCount === 0 && <span>Empty</span>}
+          {/* Workspace Icon + Name stacked (iOS app style) */}
+          <div className="compact-workspace-stack">
+            <div className={`compact-workspace-icon workspace-icon ${urls.length > 0 ? 'folder-collage' : colorClass}`}>
+              {urls.length === 0 ? (
+                <FontAwesomeIcon icon={iconToUse} />
+              ) : (
+                <div className="workspace-folder-grid">
+                  {urls.slice(0, 4).map((urlObj, i) => {
+                    const fUrl = getFaviconUrl(urlObj.url, 20);
+                    const avatar = getLetterAvatar(urlObj.url);
+                    return (
+                      <div key={i} className="folder-grid-cell">
+                        {fUrl && (
+                          <img
+                            src={fUrl}
+                            alt=""
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                            }}
+                          />
+                        )}
+                        <div
+                          className="folder-grid-letter"
+                          style={{ display: fUrl ? 'none' : 'flex', background: avatar.color }}
+                        >
+                          {avatar.letter}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {Array.from({ length: Math.max(0, 4 - Math.min(urls.length, 4)) }).map((_, i) => (
+                    <div key={`empty-${i}`} className="folder-grid-cell folder-grid-empty" />
+                  ))}
+                </div>
+              )}
             </div>
+            <div className="compact-workspace-label">{name}</div>
           </div>
 
           {/* URL Favicons - Grouped, resizable scroll like a text editor */}

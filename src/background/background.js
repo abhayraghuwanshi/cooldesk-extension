@@ -276,6 +276,7 @@ import { cleanupBadUrls, listenForPromotionAlarm, runPromotion, schedulePromotio
 // import '../utils/realTimeCategorizor.js'; // REMOVED
 import { scheduleDailySummary } from '../services/memory/dailySummaryGenerator.js';
 import { NanoAIService } from '../services/nanoAIService.js';
+import { nameTask } from '../services/localAIService.js';
 import { syncOrchestrator } from '../services/syncOrchestrator.js';
 import { forceIndexRebuild, initializeSearchIndexer } from './searchIndexer.js';
 import { handleGetTabActivity } from './tabCleanup.js';
@@ -2696,8 +2697,6 @@ async function main() {
             return;
           }
 
-          // Dynamically import localAIService to avoid circular dependencies
-          const { nameTask } = await import('../services/localAIService.js');
           const name = await nameTask(task);
 
           if (name) {

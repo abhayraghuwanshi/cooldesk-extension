@@ -179,9 +179,6 @@ const OverviewDashboard = memo(function OverviewDashboard({
         }}>
             {/* Left Column: Workspaces + Notes */}
             <div className="overview-left-column">
-                {/* Resume Work Widget - Shows last active session */}
-                <ResumeWorkWidget />
-
                 {/* Workspaces Section */}
                 <div>
                     <div style={{
@@ -247,7 +244,7 @@ const OverviewDashboard = memo(function OverviewDashboard({
                             flexDirection: 'column',
                             gap: '2px',
                             overflow: 'visible',
-                            minHeight: '160px' // Optimization: Reserve space to prevent layout shift
+                            minHeight: '240px'
                         }}>
                         {isLoading && displayedWorkspaces.length === 0 ? (
                             <div style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>
@@ -264,6 +261,7 @@ const OverviewDashboard = memo(function OverviewDashboard({
                                     compact={true}
                                     isPinned={pinnedWorkspaces.includes(workspace.name)}
                                     onAddUrl={isDesktopApp ? onAddUrl : undefined}
+                                    deferAnalytics={true}
                                     data-onboarding="workspace-card"
                                 />
                             ))
@@ -281,6 +279,9 @@ const OverviewDashboard = memo(function OverviewDashboard({
                         )}
                     </div>
                 </div>
+
+                {/* Resume Work Widget - after workspaces to avoid shifting the h3 on load */}
+                <ResumeWorkWidget />
 
                 {/* Notes Widget Section - Desktop App Only 
                 {isDesktopApp && (
@@ -327,7 +328,7 @@ const OverviewDashboard = memo(function OverviewDashboard({
 
             {/* Right Column: Unified Activity Feed (includes Calendar tab) */}
             <div className="overview-activity-column">
-                <Suspense fallback={<div style={{ padding: 20, color: '#64748B' }}>Loading feed...</div>}>
+                <Suspense fallback={<div style={{ minHeight: 400 }} />}>
                     <ActivityFeed />
                 </Suspense>
             </div>

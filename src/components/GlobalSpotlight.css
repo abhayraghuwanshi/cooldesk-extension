@@ -876,15 +876,22 @@ html, body {
    ============================================ */
 .ws-tabs-row {
   display: flex;
+  flex-wrap: nowrap;
   gap: 5px;
   overflow-x: auto;
   padding: 0 0 6px;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.15) transparent;
+  scroll-behavior: smooth;
 }
 
 .ws-tabs-row::-webkit-scrollbar {
-  display: none;
+  height: 3px;
+}
+
+.ws-tabs-row::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.15);
+  border-radius: 2px;
 }
 
 .ws-tab {

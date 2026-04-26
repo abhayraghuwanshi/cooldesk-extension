@@ -7,7 +7,7 @@ import { recordSearchSelection } from '../services/feedbackService';
 import * as LocalAI from '../services/localAIService';
 import { runningAppsService } from '../services/runningAppsService';
 import { isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../services/searchService';
-import { enrichRunningAppsWithIcons, getFaviconUrl } from '../utils/helpers';
+import { enrichRunningAppsWithIcons, getBaseDomainFromUrl, getFaviconUrl } from '../utils/helpers';
 import './GlobalSpotlight.css';
 
 
@@ -117,6 +117,46 @@ function getAppIcon(appName) {
     return faDesktop;
 }
 
+function getRunningAppContext(app) {
+    const title = (app?.title || '').trim();
+    const appName = (app?.name || '').trim();
+    if (!title) return null;
+
+    const normalizedApp = appName.toLowerCase().replace(/\.exe$/i, '');
+    const isEditor = ['code', 'vscode', 'visual studio code', 'cursor', 'windsurf', 'zed'].some(key =>
+        normalizedApp.includes(key)
+    );
+
+    if (isEditor) {
+        const parts = title.split(/\s[-–—]\s/).map(part => part.trim()).filter(Boolean);
+        const editorSuffixes = new Set([
+            'visual studio code',
+            'code',
+            'cursor',
+            'windsurf',
+            'zed'
+        ]);
+
+        while (parts.length > 0 && editorSuffixes.has(parts[parts.length - 1].toLowerCase())) {
+            parts.pop();
+        }
+
+        if (parts.length >= 2) return parts[parts.length - 1];
+        if (parts.length === 1 && parts[0].toLowerCase() !== title.toLowerCase()) return parts[0];
+    }
+
+    return title !== appName ? title : null;
+}
+
+function isWindowsTerminalApp(app) {
+    const name = (app?.name || '').toLowerCase();
+    const path = (app?.path || '').toLowerCase();
+    return name.includes('windowsterminal') ||
+        name.includes('windows terminal') ||
+        path.includes('windowsterminal') ||
+        path.includes('microsoft.windowsterminal');
+}
+
 // Hook to detect click outside
 function useOnClickOutside(ref, handler) {
     useEffect(() => {
@@ -193,14 +233,35 @@ export function GlobalSpotlight() {
         // Pre-warm the search cache so history/workspace results are ready for first search
         refreshElectronCache().catch(() => { });
 
-        // Subscribe to tabs-updated events (like TabManagement does)
+        // Subscribe to tabs-updated events (Electron mode)
         let unsubscribeTabs = null;
         if (window.electronAPI?.subscribe) {
             unsubscribeTabs = window.electronAPI.subscribe('tabs-updated', (updatedTabs) => {
                 console.log('[Spotlight] tabs-updated event received:', updatedTabs?.length);
-                // Reload context items when tabs change
                 loadContextItems();
             });
+        }
+
+        // Subscribe to tab changes in Chrome extension mode
+        let chromeTabsCleanup = null;
+        if (typeof chrome !== 'undefined' && chrome?.tabs && !window.electronAPI) {
+            const refreshOnTabChange = () => loadContextItems();
+            const chromeTabEvents = [
+                chrome.tabs.onCreated,
+                chrome.tabs.onUpdated,
+                chrome.tabs.onRemoved,
+                chrome.tabs.onActivated,
+            ];
+            chromeTabEvents.forEach(e => e?.addListener(refreshOnTabChange));
+            chromeTabsCleanup = () => chromeTabEvents.forEach(e => e?.removeListener(refreshOnTabChange));
+        }
+
+        // Subscribe to tab changes in Tauri mode (via syncOrchestrator WS push)
+        let unsubTauriTabs = null;
+        if (!window.electronAPI && !chrome?.tabs) {
+            import('../services/syncOrchestrator.js').then(({ syncOrchestrator }) => {
+                unsubTauriTabs = syncOrchestrator.on('tabs-synced', () => loadContextItems());
+            }).catch(() => {});
         }
 
         // Subscribe to running apps updates (like TabManagement does)
@@ -208,7 +269,6 @@ export function GlobalSpotlight() {
         if (window.electronAPI?.getRunningApps) {
             unsubscribeApps = runningAppsService.subscribe(({ runningApps, installedApps }) => {
                 console.log('[Spotlight] runningApps updated:', runningApps?.length);
-                // Reload context items when apps change
                 loadContextItems();
             });
         }
@@ -225,7 +285,7 @@ export function GlobalSpotlight() {
                 setSelectedPinIndex(-1);
                 setShowAllTabs(false);
                 setShowAllApps(false);
-                setExpandedWorkspaceId(null);
+                setExpandedWorkspaceId(() => { try { return localStorage.getItem('spotlight_ws_id') || null; } catch { return null; } });
                 setShowWorkspacesDropdown(false);
                 loadWorkspaces();
 
@@ -237,11 +297,22 @@ export function GlobalSpotlight() {
             });
         }
 
+        // Subscribe to workspace DB changes so new/edited workspaces appear immediately
+        let unsubscribeWorkspaces = null;
+        import('../db/unified-api.js').then(({ subscribeWorkspaceChanges }) => {
+            unsubscribeWorkspaces = subscribeWorkspaceChanges(() => {
+                loadWorkspaces();
+            });
+        }).catch(e => console.warn('[Spotlight] Could not subscribe to workspace changes', e));
+
         return () => {
             window.removeEventListener('focus', handleFocus);
             if (unsubscribeTabs) unsubscribeTabs();
+            if (chromeTabsCleanup) chromeTabsCleanup();
+            if (unsubTauriTabs) unsubTauriTabs?.();
             if (unsubscribeApps) unsubscribeApps();
             if (unsubscribeSpotlight) unsubscribeSpotlight();
+            if (unsubscribeWorkspaces) unsubscribeWorkspaces();
         };
     }, []);
 
@@ -282,6 +353,12 @@ export function GlobalSpotlight() {
                             favicon: tab.favIconUrl
                         }));
                     }
+                    // Tauri mode: fetch from sidecar HTTP endpoint
+                    try {
+                        const { getHostTabs } = await import('../services/extensionApi.js');
+                        const res = await getHostTabs();
+                        if (res.ok && Array.isArray(res.tabs)) return res.tabs;
+                    } catch { }
                     console.log('[Spotlight] No tab API available, returning empty array');
                     return [];
                 } catch (e) {
@@ -308,10 +385,18 @@ export function GlobalSpotlight() {
 
             const recommendations = [];
             const usedIds = new Set();
+            const usedRunningWindowKeys = new Set();
 
             // 1. Apps — all installed apps (mirrors AppGrid), running ones shown first
-            const runningNames = new Set(runningApps.map(a => (a.name || '').toLowerCase().replace(/\.exe$/i, '')));
-            const enrichedAll = enrichRunningAppsWithIcons(installedApps, installedApps);
+            // Merge from running apps first so the context still shows active apps
+            // even when installed-app metadata is stale or missing.
+            const normalizeAppName = (value) => (value || '').toLowerCase().replace(/\.exe$/i, '');
+            const runningNames = new Set(runningApps.map(a => normalizeAppName(a.name)));
+            const enrichedRunningApps = enrichRunningAppsWithIcons(runningApps, installedApps);
+            const runningAppsByName = new Map(
+                enrichedRunningApps.map(app => [normalizeAppName(app.name), app])
+            );
+            const enrichedAll = [...enrichedRunningApps, ...installedApps];
 
             // Exact process names that are pure system noise (no user value)
             const systemExactNames = new Set([
@@ -363,11 +448,18 @@ export function GlobalSpotlight() {
 
             const activeApps = enrichedAll
                 .filter(a => {
-                    const name = (a.name || '').toLowerCase().replace(/\.exe$/i, '');
+                    const name = normalizeAppName(a.name);
                     const nameNoSpaces = name.replace(/\s+/g, '');
                     const title = (a.title || '').toLowerCase();
+                    const isRunningEntry = a.isRunning === true || !!a.pid;
+                    const runningWindowKey = `${name}::${title}`;
 
-                    if (usedIds.has(name)) return false;
+                    if (isRunningEntry) {
+                        if (usedRunningWindowKeys.has(runningWindowKey)) return false;
+                        usedRunningWindowKeys.add(runningWindowKey);
+                    }
+
+                    if ((usedIds.has(name) || (runningNames.has(name) && !isRunningEntry)) && !isRunningEntry) return false;
                     if (systemExactNames.has(name) || systemExactNames.has(nameNoSpaces)) return false;
                     if (isMacSystemProcess(name) || isMacSystemProcess(nameNoSpaces)) return false;
                     if (isBrowserApp(name)) return false;
@@ -383,12 +475,12 @@ export function GlobalSpotlight() {
                         if (title.endsWith(' log') || title === 'temp window' || title.endsWith('trayiconwindow')) return false;
                     }
 
-                    usedIds.add(name);
+                    if (!isRunningEntry) usedIds.add(name);
                     return true;
                 })
                 .sort((a, b) => {
-                    const nameA = (a.name || '').toLowerCase().replace(/\.exe$/i, '');
-                    const nameB = (b.name || '').toLowerCase().replace(/\.exe$/i, '');
+                    const nameA = normalizeAppName(a.name);
+                    const nameB = normalizeAppName(b.name);
                     const runA = a.isRunning === true || runningNames.has(nameA);
                     const runB = b.isRunning === true || runningNames.has(nameB);
                     // Running apps first, then by usage frequency
@@ -398,22 +490,26 @@ export function GlobalSpotlight() {
                 })
                 .slice(0, 8)
                 .map(a => {
-                    const name = (a.name || '').toLowerCase().replace(/\.exe$/i, '');
+                    const name = normalizeAppName(a.name);
                     const isRunning = a.isRunning === true || runningNames.has(name);
+                    const appContext = getRunningAppContext(a);
                     // If the installed app is running, grab its pid/hwnd from the runningApps list
                     // so focus works instead of falling back to launching a new instance
                     if (isRunning && !a.pid) {
-                        const runningEntry = runningApps.find(r =>
-                            (r.name || '').toLowerCase().replace(/\.exe$/i, '') === name
-                        );
+                        const runningEntry = runningAppsByName.get(name);
                         if (runningEntry?.pid) {
                             return { ...a, ...runningEntry, type: 'app', description: 'Running', isRunning: true };
                         }
                     }
-                    return { ...a, type: 'app', description: isRunning ? 'Running' : 'Installed', isRunning };
+                    return {
+                        ...a,
+                        type: 'app',
+                        description: isRunning && appContext ? appContext : (isRunning ? 'Running' : 'Installed'),
+                        isRunning
+                    };
                 });
 
-            console.log('[Spotlight] Apps after filter:', activeApps.length, activeApps.map(a => `${a.name}(running:${a.isRunning},icon:${!!a.icon})`));
+            console.log('[Spotlight] Apps after filter:', activeApps.length, activeApps.map(a => `${a.name}(running:${a.isRunning},title:${a.title || ''})`));
             recommendations.push(...activeApps);
 
             // 3. Active Tabs (unique by domain)
@@ -425,15 +521,17 @@ export function GlobalSpotlight() {
 
             const relevantTabs = afterUrlFilter
                 .filter((t, index, self) =>
-                    index === self.findIndex(s => {
-                        try { return new URL(s.url).hostname === new URL(t.url).hostname; } catch { return s.url === t.url; }
-                    })
+                    index === self.findIndex(s => getBaseDomainFromUrl(s.url) === getBaseDomainFromUrl(t.url))
                 )
                 .slice(0, 10)
                 .map(t => ({
                     ...t,
                     type: 'tab',
-                    description: 'Active Tab',
+                    description: (() => {
+                        const domain = getBaseDomainFromUrl(t.url);
+                        const count = afterUrlFilter.filter(tab => getBaseDomainFromUrl(tab.url) === domain).length;
+                        return count > 1 ? `${count} tabs from ${domain}` : `Tab from ${domain}`;
+                    })(),
                     favicon: t.favIconUrl || t.favicon  // Map favIconUrl to favicon
                 }));
 
@@ -481,7 +579,8 @@ export function GlobalSpotlight() {
     useEffect(() => {
         try {
             if (expandedWorkspaceId) localStorage.setItem('spotlight_ws_id', expandedWorkspaceId);
-        } catch {}
+            else localStorage.removeItem('spotlight_ws_id');
+        } catch { }
     }, [expandedWorkspaceId]);
 
     // Save Pinned Items
@@ -746,11 +845,11 @@ export function GlobalSpotlight() {
                 // In Electron: quickSearch uses in-memory cache (includes apps, tabs, workspaces)
                 // In Chrome: quickSearch uses local index or IPC fallback
                 const isNaturalLanguage = isNaturalLanguageQuery(trimmedQuery);
-                
+
                 const searchPromise = isNaturalLanguage
                     ? naturalLanguageSearch(trimmedQuery, 15)
                     : quickSearch(trimmedQuery, 15);
-                    
+
                 const filesPromise = window.electronAPI?.searchFiles
                     ? window.electronAPI.searchFiles(trimmedQuery)
                     : Promise.resolve([]);
@@ -771,7 +870,7 @@ export function GlobalSpotlight() {
                         icon: 'file'
                     };
                 }).filter(Boolean);
-                
+
                 searchResults = [...(searchResults || []), ...mappedFiles];
 
                 // Check if still relevant (user may have typed more)
@@ -1081,7 +1180,7 @@ export function GlobalSpotlight() {
                 console.warn('[Spotlight] Failed to switch to tab:', e);
             }
         }
-        
+
         // Handle files natively using OS default viewer
         if (item.type === 'file') {
             try {
@@ -1144,6 +1243,14 @@ export function GlobalSpotlight() {
 
                 // App is not running - launch it
                 let launchPath = item.path;
+
+                // Windows Terminal is often a Store/MSIX app. Its scanned path may not
+                // be directly launchable, but the `wt` command alias is.
+                if (isWindowsTerminalApp(item) && window.electronAPI?.launchAppWithArgs) {
+                    console.log('[Spotlight] Launching Windows Terminal via wt command');
+                    await window.electronAPI.launchAppWithArgs('wt', []);
+                    return;
+                }
 
                 // If no path, try to find it from installed apps
                 if (!launchPath) {
@@ -1377,17 +1484,17 @@ export function GlobalSpotlight() {
                                 <div className="context-section">
                                     <div className="context-section-header">
                                         <div className="context-section-label">Apps</div>
-                                        {apps.length > 2 && (
+                                        {apps.length > 4 && (
                                             <button
                                                 className="context-expand-btn"
                                                 onClick={() => setShowAllApps(v => !v)}
                                             >
-                                                {showAllApps ? '▴ less' : `▾ ${apps.length - 2} more`}
+                                                {showAllApps ? '▴ less' : `▾ ${apps.length - 4} more`}
                                             </button>
                                         )}
                                     </div>
                                     <div className="context-row context-row--grid">
-                                        {apps.slice(0, showAllApps ? apps.length : 2).map((item, i) => {
+                                        {apps.slice(0, showAllApps ? apps.length : 4).map((item, i) => {
                                             const itemIndex = flatIndex++;
                                             return (
                                                 <ContextItem
@@ -1409,17 +1516,17 @@ export function GlobalSpotlight() {
                                 <div className="context-section">
                                     <div className="context-section-header">
                                         <div className="context-section-label">Tabs</div>
-                                        {tabs.length > 2 && (
+                                        {tabs.length > 4 && (
                                             <button
                                                 className="context-expand-btn"
                                                 onClick={() => setShowAllTabs(v => !v)}
                                             >
-                                                {showAllTabs ? '▴ less' : `▾ ${tabs.length - 2} more`}
+                                                {showAllTabs ? '▴ less' : `▾ ${tabs.length - 4} more`}
                                             </button>
                                         )}
                                     </div>
                                     <div className="context-row context-row--grid">
-                                        {tabs.slice(0, showAllTabs ? tabs.length : 2).map((item, i) => {
+                                        {tabs.slice(0, showAllTabs ? tabs.length : 4).map((item, i) => {
                                             const itemIndex = flatIndex++;
                                             return (
                                                 <ContextItem
@@ -1457,8 +1564,8 @@ export function GlobalSpotlight() {
                                     >
                                         <FontAwesomeIcon icon={getWorkspaceIcon(ws.name)} className="ws-tab-icon" />
                                         <span className="ws-tab-name">{ws.name}</span>
-                                        {(ws.urls || []).length > 0 && (
-                                            <span className="ws-tab-count">{(ws.urls || []).length}</span>
+                                        {((ws.urls || []).length + (ws.apps || []).length) > 0 && (
+                                            <span className="ws-tab-count">{(ws.urls || []).length + (ws.apps || []).length}</span>
                                         )}
                                     </button>
                                 ))}
@@ -1768,13 +1875,14 @@ const ContextItem = memo(function ContextItem({ item, index, isSelected, onSelec
 
     const isApp = item.type === 'app';
     const isRunning = isApp && item.isRunning;
+    const appContext = isApp ? getRunningAppContext(item) : null;
 
     return (
         <div
             className={`context-item ${isApp ? 'context-app' : 'context-tab'} ${isSelected ? 'pin-selected' : ''}`}
             onClick={handleClick}
             onMouseEnter={handleMouseEnter}
-            title={isApp ? (item.name || item.title) : (item.title || item.url)}
+            title={isApp ? [item.name || item.title, appContext].filter(Boolean).join(' • ') : (item.title || item.url)}
         >
             <div className="pin-icon">
                 {isApp ? (
@@ -1793,7 +1901,7 @@ const ContextItem = memo(function ContextItem({ item, index, isSelected, onSelec
                 })()}
             </div>
             <span className="pin-label">
-                {isApp ? (item.name || item.title) : (item.title || 'Tab')}
+                {isApp ? (appContext || item.name || item.title) : (item.title || 'Tab')}
             </span>
             {isRunning && <span className="running-dot" />}
         </div>

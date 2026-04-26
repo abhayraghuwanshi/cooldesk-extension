@@ -427,15 +427,7 @@ export function ResumeWorkWidget() {
         setDismissed(true);
     }
 
-    if (loading) {
-        return (
-            <div className="resume-work-widget loading">
-                <div className="spinner"></div>
-            </div>
-        );
-    }
-
-    if (!lastSession || dismissed) {
+    if (loading || !lastSession || dismissed) {
         return null;
     }
 
@@ -484,14 +476,6 @@ export function ResumeWorkWidget() {
                     <button className="rw-btn-close" onClick={handleDismiss} aria-label="Dismiss">×</button>
                 </div>
             </div>
-
-            {/* AI Summary - Compact */}
-            {aiSummary && (
-                <div className="rw-ai">
-                    <span className="rw-ai-icon"><FontAwesomeIcon icon={faMagic} /></span>
-                    <span className="rw-ai-text">{aiSummary}</span>
-                </div>
-            )}
 
             {/* Compact URL Grid */}
             <div className="rw-urls">
@@ -545,6 +529,14 @@ export function ResumeWorkWidget() {
                     </button>
                 )}
             </div>
+
+            {/* AI Summary - after URLs so it never pushes the URL list down */}
+            {aiSummary && (
+                <div className="rw-ai">
+                    <span className="rw-ai-icon"><FontAwesomeIcon icon={faMagic} /></span>
+                    <span className="rw-ai-text">{aiSummary}</span>
+                </div>
+            )}
 
             <style jsx>{`
                 .resume-widget {

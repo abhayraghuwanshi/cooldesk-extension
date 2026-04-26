@@ -114,6 +114,21 @@ const electronAPI = {
 
     getSettings: async () => (await fetch(`${SIDECAR_URL}/settings`)).json(),
     saveSettings: async (data) => { await fetch(`${SIDECAR_URL}/settings`, { method: 'POST', body: JSON.stringify(data) }); return { ok: true }; },
+    setSettings: async (data) => {
+        // Save to sidecar storage
+        await fetch(`${SIDECAR_URL}/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        // If spotlight shortcut changed, re-register it in Tauri
+        if (data?.spotlightShortcut) {
+            try {
+                const result = await invoke('set_spotlight_shortcut', { shortcut: data.spotlightShortcut });
+                return result ?? { ok: true };
+            } catch (e) {
+                console.warn('[TauriShim] set_spotlight_shortcut failed:', e);
+                return { ok: false, error: String(e), spotlightShortcut: 'Alt+K' };
+            }
+        }
+        return { ok: true };
+    },
 
     // ... Map other getters/setters similarly ...
     getTabs: async () => (await fetch(`${SIDECAR_URL}/tabs`)).json(),
