@@ -680,9 +680,10 @@ pub struct GraphEdge {
     pub source: String,
     pub target: String,
     #[serde(rename = "type")]
-    pub edge_type: String, // "co_occurrence" | "url_in_workspace" | "app_in_workspace"
-                           // | "folder_in_workspace" | "file_in_workspace"
-    pub weight: f64,       // normalised 0.0 – 1.0
+    pub edge_type: String,
+    pub weight: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_seen: Option<i64>, // ms timestamp — used by frontend time filter
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

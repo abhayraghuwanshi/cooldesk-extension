@@ -225,13 +225,13 @@ pub async fn record_session_snapshot(items: Vec<String>) {
 }
 
 fn normalize_url_for_graph(url: &str) -> String {
+    // Domain-only so workspace URLs ("github.com/user/repo") and snapshot URLs
+    // ("github.com") resolve to the same node ID, enabling app↔url edges.
     if let Ok(parsed) = url::Url::parse(url) {
         let host = parsed.host_str().unwrap_or(url);
-        let host = host.strip_prefix("www.").unwrap_or(host);
-        let path = parsed.path().trim_end_matches('/');
-        format!("{}{}", host.to_lowercase(), path.to_lowercase())
+        host.strip_prefix("www.").unwrap_or(host).to_lowercase()
     } else {
-        log::warn!("[graph] malformed URL skipped in normalization: {}", &url[..url.len().min(80)]);
+        log::warn!("[graph] malformed URL in graph normalization: {}", &url[..url.len().min(80)]);
         format!("raw::{}", url.to_lowercase())
     }
 }
@@ -271,8 +271,7 @@ pub async fn get_graph(State(state): State<Arc<AppState>>) -> Json<GraphResponse
                 edges.push(GraphEdge {
                     source: url_id,
                     target: ws_id.clone(),
-                    edge_type: "url_in_workspace".to_string(),
-                    weight: 1.0,
+                    edge_type: "url_in_workspace".to_string(), weight: 1.0, last_seen: None,
                 });
             }
 
@@ -300,6 +299,7 @@ pub async fn get_graph(State(state): State<Arc<AppState>>) -> Json<GraphResponse
                     target: ws_id.clone(),
                     edge_type: edge_type.to_string(),
                     weight: 1.0,
+                    last_seen: None,
                 });
             }
         }
@@ -343,6 +343,7 @@ pub async fn get_graph(State(state): State<Arc<AppState>>) -> Json<GraphResponse
             target: tgt_id,
             edge_type: "co_occurrence".to_string(),
             weight: score.min(1.0),
+            last_seen: None,
         });
     }
 
@@ -357,7 +358,7 @@ pub async fn get_graph(State(state): State<Arc<AppState>>) -> Json<GraphResponse
             id: app_id.clone(), node_type: "app".to_string(),
             label: assoc.app_name.clone(), title: None, weight: 0,
         });
-        entry.weight = entry.weight.saturating_add(assoc.count);
+        entry.weight = entry.weight.saturating_add(1); // degree: +1 per workspace association
 
         let w = (assoc.score().min(5.0) / 5.0).max(0.01);
         edges.push(GraphEdge {
@@ -365,6 +366,7 @@ pub async fn get_graph(State(state): State<Arc<AppState>>) -> Json<GraphResponse
             target: ws_id,
             edge_type: "app_in_workspace".to_string(),
             weight: w,
+            last_seen: None,
         });
     }
 
@@ -386,15 +388,16 @@ pub async fn get_graph(State(state): State<Arc<AppState>>) -> Json<GraphResponse
         };
 
         for item_id in [&co.item1, &co.item2] {
-            nodes.entry(item_id.clone()).or_insert_with(|| GraphNode {
+            let entry = nodes.entry(item_id.clone()).or_insert_with(|| GraphNode {
                 id: item_id.clone(),
                 node_type: node_type_from_id(item_id).to_string(),
                 label: label_from_id(item_id),
                 title: None,
                 weight: 0,
             });
-            nodes.get_mut(item_id).unwrap().weight =
-                nodes[item_id].weight.saturating_add(co.session_count);
+            // Weight = degree (number of unique connections), not accumulated session counts.
+            // This keeps weights bounded (max = number of distinct co-occurring items).
+            entry.weight = entry.weight.saturating_add(1);
         }
 
         edges.push(GraphEdge {
@@ -402,7 +405,50 @@ pub async fn get_graph(State(state): State<Arc<AppState>>) -> Json<GraphResponse
             target: co.item2.clone(),
             edge_type: "session_co_occurrence".to_string(),
             weight: (score / 5.0).min(1.0),
+            last_seen: Some(co.last_seen),
         });
+    }
+
+    // ── Pass 5: Workspace bridge edges ───────────────────────────────────────
+    // Two workspaces that share a URL or app are implicitly related.
+    // Draw a weak link between them so the graph is a connected web, not isolated stars.
+    {
+        use std::collections::HashSet;
+        // Build: ws_id → set of connected resource node IDs
+        let mut ws_resources: std::collections::HashMap<String, HashSet<String>> = nodes
+            .values()
+            .filter(|n| n.node_type == "workspace")
+            .map(|n| (n.id.clone(), HashSet::new()))
+            .collect();
+
+        for edge in &edges {
+            if matches!(
+                edge.edge_type.as_str(),
+                "url_in_workspace" | "app_in_workspace" | "folder_in_workspace"
+            ) {
+                if let Some(set) = ws_resources.get_mut(&edge.target) {
+                    set.insert(edge.source.clone());
+                }
+            }
+        }
+
+        let ws_ids: Vec<String> = ws_resources.keys().cloned().collect();
+        for i in 0..ws_ids.len() {
+            for j in (i + 1)..ws_ids.len() {
+                let shared = ws_resources[&ws_ids[i]]
+                    .intersection(&ws_resources[&ws_ids[j]])
+                    .count();
+                if shared > 0 {
+                    edges.push(GraphEdge {
+                        source: ws_ids[i].clone(),
+                        target: ws_ids[j].clone(),
+                        edge_type: "shared_resource".to_string(),
+                        weight: (shared as f64 / 5.0).min(1.0),
+                        last_seen: None,
+                    });
+                }
+            }
+        }
     }
 
     // ── Trim: cap node counts to keep the graph readable ──
