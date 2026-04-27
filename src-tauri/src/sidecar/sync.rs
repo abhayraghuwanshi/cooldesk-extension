@@ -137,6 +137,7 @@ pub fn merge_workspaces_by_name(local: Vec<Workspace>, remote: Vec<Workspace>) -
                     id: existing.id.clone(),
                     name: ws.name,
                     urls: deduped_urls,
+                    apps: if ws.apps.is_empty() { existing.apps.clone() } else { ws.apps },
                     created_at: ws.created_at,
                     updated_at: Some(std::cmp::max(remote_time, local_time)),
                 }
@@ -145,6 +146,7 @@ pub fn merge_workspaces_by_name(local: Vec<Workspace>, remote: Vec<Workspace>) -
                     id: existing.id.clone(),
                     name: existing.name.clone(),
                     urls: deduped_urls,
+                    apps: existing.apps.clone(),
                     created_at: existing.created_at,
                     updated_at: Some(std::cmp::max(remote_time, local_time)),
                 }
@@ -294,6 +296,7 @@ mod tests {
                 added_at: Some(1000),
                 created_at: None,
             }],
+            apps: vec![],
             created_at: Some(1000),
             updated_at: Some(1000),
         }];
@@ -307,6 +310,7 @@ mod tests {
                 added_at: Some(2000),
                 created_at: None,
             }],
+            apps: vec![],
             created_at: Some(2000),
             updated_at: Some(2000),
         }];

@@ -144,6 +144,8 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/daily-memory", get(get_daily_memory).post(post_daily_memory))
         .route("/ui-state", get(get_ui_state).post(post_ui_state))
         .route("/dashboard", get(get_dashboard).post(post_dashboard))
+        // Knowledge graph
+        .route("/graph", get(get_graph))
         // Commands
         .route("/cmd/jump-to-tab", post(cmd_jump_to_tab))
         .route("/cmd/jump-next", get(cmd_jump_next))

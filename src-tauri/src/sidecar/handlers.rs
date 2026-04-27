@@ -175,6 +175,190 @@ pub async fn get_dashboard(
     Json(data.dashboard.clone())
 }
 
+// ── Knowledge Graph ───────────────────────────────────────────────────────────
+
+const EDITOR_APP_TYPES: &[&str] = &[
+    "vscode", "cursor", "windsurf", "idea", "webstorm", "pycharm",
+    "goland", "phpstorm", "rider", "clion", "rubymine", "fleet", "zed", "sublime",
+];
+
+fn normalize_url_for_graph(url: &str) -> String {
+    if let Ok(parsed) = url::Url::parse(url) {
+        let host = parsed.host_str().unwrap_or(url);
+        let host = host.strip_prefix("www.").unwrap_or(host);
+        let path = parsed.path().trim_end_matches('/');
+        format!("{}{}", host.to_lowercase(), path.to_lowercase())
+    } else {
+        url.to_lowercase()
+    }
+}
+
+pub async fn get_graph(State(state): State<Arc<AppState>>) -> Json<GraphResponse> {
+    use std::collections::HashMap;
+
+    let mut nodes: HashMap<String, GraphNode> = HashMap::new();
+    let mut edges: Vec<GraphEdge> = Vec::new();
+
+    // ── Pass 1: Workspaces → URL / App / Folder / File nodes + membership edges ──
+    {
+        let data = state.sync_data.read().await;
+        for ws in &data.workspaces {
+            let ws_id = format!("ws::{}", ws.name.to_lowercase());
+            let url_count = ws.urls.len() as u32;
+            let app_count = ws.apps.len() as u32;
+            nodes.entry(ws_id.clone()).or_insert_with(|| GraphNode {
+                id: ws_id.clone(),
+                node_type: "workspace".to_string(),
+                label: ws.name.clone(),
+                title: None,
+                weight: url_count + app_count,
+            });
+
+            for wu in &ws.urls {
+                let norm = normalize_url_for_graph(&wu.url);
+                let url_id = format!("url::{}", norm);
+                let entry = nodes.entry(url_id.clone()).or_insert_with(|| GraphNode {
+                    id: url_id.clone(),
+                    node_type: "url".to_string(),
+                    label: norm.clone(),
+                    title: wu.title.clone(),
+                    weight: 1,
+                });
+                entry.weight = entry.weight.saturating_add(1);
+                edges.push(GraphEdge {
+                    source: url_id,
+                    target: ws_id.clone(),
+                    edge_type: "url_in_workspace".to_string(),
+                    weight: 1.0,
+                });
+            }
+
+            for app in &ws.apps {
+                let app_type = app.app_type.as_deref().unwrap_or("default");
+                let (node_type, id_prefix, edge_type) = if app_type == "folder" || EDITOR_APP_TYPES.contains(&app_type) {
+                    ("folder", "folder", "folder_in_workspace")
+                } else if app_type == "file" {
+                    ("file", "file", "file_in_workspace")
+                } else {
+                    ("app", "app", "app_in_workspace")
+                };
+
+                let node_id = format!("{}::{}", id_prefix, app.name.to_lowercase());
+                let entry = nodes.entry(node_id.clone()).or_insert_with(|| GraphNode {
+                    id: node_id.clone(),
+                    node_type: node_type.to_string(),
+                    label: app.name.clone(),
+                    title: Some(app.path.clone()),
+                    weight: 1,
+                });
+                entry.weight = entry.weight.saturating_add(1);
+                edges.push(GraphEdge {
+                    source: node_id,
+                    target: ws_id.clone(),
+                    edge_type: edge_type.to_string(),
+                    weight: 1.0,
+                });
+            }
+        }
+    } // sync_data lock dropped
+
+    // ── Pass 2 & 3: Co-occurrences + App-workspace associations (FeedbackStore) ──
+    {
+        let store_mutex = get_feedback_store().await;
+        let store_guard = store_mutex.lock().await;
+        if let Some(store) = store_guard.as_ref() {
+            // Pass 2: URL co-occurrence edges
+            let co_occurrences = store.get_all_co_occurrences().await;
+            for co in &co_occurrences {
+                let score = co.affinity_score();
+                if score <= 0.0 { continue; }
+
+                let src_id = format!("url::{}", co.url1);
+                let tgt_id = format!("url::{}", co.url2);
+
+                // Upsert both URL nodes (may not be in any workspace yet)
+                nodes.entry(src_id.clone()).or_insert_with(|| GraphNode {
+                    id: src_id.clone(), node_type: "url".to_string(),
+                    label: co.url1.clone(), title: None, weight: 1,
+                });
+                nodes.entry(tgt_id.clone()).or_insert_with(|| GraphNode {
+                    id: tgt_id.clone(), node_type: "url".to_string(),
+                    label: co.url2.clone(), title: None, weight: 1,
+                });
+
+                edges.push(GraphEdge {
+                    source: src_id,
+                    target: tgt_id,
+                    edge_type: "co_occurrence".to_string(),
+                    weight: score.min(1.0),
+                });
+            }
+
+            // Pass 3: App-workspace associations from FeedbackStore
+            let assocs = store.get_all_app_workspace_associations().await;
+            for assoc in &assocs {
+                let app_id = format!("app::{}", assoc.app_name);
+                let ws_id  = format!("ws::{}", assoc.workspace_name);
+
+                if !nodes.contains_key(&ws_id) { continue; } // workspace must exist
+
+                let entry = nodes.entry(app_id.clone()).or_insert_with(|| GraphNode {
+                    id: app_id.clone(), node_type: "app".to_string(),
+                    label: assoc.app_name.clone(), title: None, weight: 0,
+                });
+                entry.weight = entry.weight.saturating_add(assoc.count);
+
+                let w = (assoc.score().min(5.0) / 5.0).max(0.01);
+                edges.push(GraphEdge {
+                    source: app_id,
+                    target: ws_id,
+                    edge_type: "app_in_workspace".to_string(),
+                    weight: w,
+                });
+            }
+        }
+    } // feedback store lock dropped
+
+    // ── Trim: cap node counts to keep the graph readable ──
+    let mut url_nodes: Vec<_> = nodes.values()
+        .filter(|n| n.node_type == "url")
+        .cloned()
+        .collect();
+    url_nodes.sort_by(|a, b| b.weight.cmp(&a.weight));
+    let keep_urls: std::collections::HashSet<String> = url_nodes
+        .into_iter().take(200).map(|n| n.id).collect();
+
+    let mut app_nodes: Vec<_> = nodes.values()
+        .filter(|n| n.node_type == "app")
+        .cloned()
+        .collect();
+    app_nodes.sort_by(|a, b| b.weight.cmp(&a.weight));
+    let keep_apps: std::collections::HashSet<String> = app_nodes
+        .into_iter().take(50).map(|n| n.id).collect();
+
+    nodes.retain(|id, n| match n.node_type.as_str() {
+        "url"  => keep_urls.contains(id),
+        "app"  => keep_apps.contains(id),
+        _      => true, // keep all workspaces, folders, files
+    });
+
+    let node_ids: std::collections::HashSet<_> = nodes.keys().cloned().collect();
+    edges.retain(|e| node_ids.contains(&e.source) && node_ids.contains(&e.target));
+
+    let node_count = nodes.len();
+    let edge_count = edges.len();
+
+    Json(GraphResponse {
+        nodes: nodes.into_values().collect(),
+        edges,
+        meta: serde_json::json!({
+            "generatedAt": chrono::Utc::now().timestamp_millis(),
+            "nodeCount": node_count,
+            "edgeCount": edge_count,
+        }),
+    })
+}
+
 #[derive(Debug, serde::Deserialize)]
 pub struct ActivityQuery {
     since: Option<i64>,

@@ -397,6 +397,12 @@ impl FeedbackStore {
         let state = self.state.read().await;
         state.app_workspace_associations.clone()
     }
+
+    /// Get all URL co-occurrences (for graph building)
+    pub async fn get_all_co_occurrences(&self) -> Vec<UrlCoOccurrence> {
+        let state = self.state.read().await;
+        state.url_co_occurrences.clone()
+    }
 }
 
 /// Normalize app name for consistent lookup
