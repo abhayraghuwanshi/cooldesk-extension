@@ -1391,6 +1391,113 @@ pub async fn v2_simple_chat(
 }
 
 // ==========================================
+// LLM v3 Handlers (Cloud AI via rig-core)
+// ==========================================
+
+use crate::sidecar::llm_v3::{SimpleAgentV3, CloudAgent, load_config, save_config, get_api_key, mask_key};
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct V3SimpleChatRequest {
+    pub message: String,
+    pub request_id: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct V3ChatRequest {
+    pub message: String,
+    pub request_id: Option<String>,
+}
+
+/// Simple context-injection chat — drop-in replacement for /llm/v2/simple-chat
+/// Requires OPENAI_API_KEY env var.
+pub async fn v3_simple_chat(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<V3SimpleChatRequest>,
+) -> Json<serde_json::Value> {
+    log::info!("[v3] simple-chat: {}", &req.message[..req.message.len().min(60)]);
+    let agent = SimpleAgentV3::new(state.sync_data.clone());
+    let result = agent.chat(&req.message).await;
+
+    Json(serde_json::json!({
+        "ok": result.ok,
+        "response": result.response,
+        "actions": result.actions,
+        "provider": result.provider,
+        "requestId": req.request_id,
+        "error": result.error,
+    }))
+}
+
+/// Agentic chat with tool calling — uses rig's built-in tool loop.
+/// Requires OPENAI_API_KEY env var.
+pub async fn v3_chat(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<V3ChatRequest>,
+) -> Json<serde_json::Value> {
+    log::info!("[v3] chat: {}", &req.message[..req.message.len().min(60)]);
+    let agent = CloudAgent::new(state.sync_data.clone());
+    let result = agent.chat(&req.message).await;
+
+    Json(serde_json::json!({
+        "ok": result.ok,
+        "response": result.content,
+        "provider": result.provider,
+        "requestId": req.request_id,
+        "error": result.error,
+    }))
+}
+
+/// Returns whether cloud AI is configured (API key is set).
+pub async fn v3_status() -> Json<serde_json::Value> {
+    let config = load_config();
+    let configured = get_api_key().is_some();
+    Json(serde_json::json!({
+        "ok": configured,
+        "provider": config.provider,
+        "model": config.model,
+        "configured": configured,
+        "message": if configured { "Cloud AI ready" } else { "Add your API key in Settings → AI" }
+    }))
+}
+
+/// GET /llm/v3/config — returns current config with masked key.
+pub async fn v3_get_config() -> Json<serde_json::Value> {
+    let config = load_config();
+    let key = get_api_key().unwrap_or_default();
+    let masked = if key.is_empty() { String::new() } else { mask_key(&key) };
+    Json(serde_json::json!({
+        "provider": config.provider,
+        "model": config.model,
+        "apiKeyMasked": masked,
+        "configured": !key.is_empty(),
+    }))
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct V3ConfigRequest {
+    pub provider: Option<String>,
+    pub api_key: Option<String>,
+    pub model: Option<String>,
+}
+
+/// POST /llm/v3/config — save provider, API key, model.
+pub async fn v3_save_config(Json(req): Json<V3ConfigRequest>) -> Json<serde_json::Value> {
+    let mut config = load_config();
+
+    if let Some(p) = req.provider { config.provider = p; }
+    if let Some(k) = req.api_key  { config.api_key = k; }
+    if let Some(m) = req.model    { config.model = m; }
+
+    match save_config(&config) {
+        Ok(_) => Json(serde_json::json!({ "ok": true, "message": "Config saved" })),
+        Err(e) => Json(serde_json::json!({ "ok": false, "error": e })),
+    }
+}
+
+// ==========================================
 // Feedback/RL Handlers
 // ==========================================
 

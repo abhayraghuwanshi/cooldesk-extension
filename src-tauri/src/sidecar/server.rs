@@ -177,6 +177,13 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/llm/v2/memory/clear", post(v2_clear_memory))
         .route("/llm/v2/simple-chat", post(v2_simple_chat));
 
+    // LLM v3 — cloud AI via rig-core (no llm feature flag needed)
+    let app = app
+        .route("/llm/v3/simple-chat", post(v3_simple_chat))
+        .route("/llm/v3/chat", post(v3_chat))
+        .route("/llm/v3/status", get(v3_status))
+        .route("/llm/v3/config", get(v3_get_config).post(v3_save_config));
+
     let app = app
         // Feedback/RL endpoints
         .route("/feedback/event", post(feedback_record_event))

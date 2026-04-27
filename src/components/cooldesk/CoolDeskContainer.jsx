@@ -548,7 +548,7 @@ export function CoolDeskContainer({
       {/* Spatial Workspace Shell - Takes remaining height */}
       {/* In extension mode: Only show OverviewDashboard */}
       {/* In desktop app (Tauri/Electron): Show all faces with navigation */}
-      <WorkspaceShell activeFace={activeFace} onFaceChange={handleFaceChange} isDesktopApp={isDesktopApp}>
+      <WorkspaceShell activeFace={activeFace} onFaceChange={handleFaceChange} onOpenSettings={isDesktopApp ? onOpenSettings : undefined} isDesktopApp={isDesktopApp}>
         {/* Face 1: Workspace Details + ChatContext (Left) - Desktop App Only */}
         {isDesktopApp && (
           <Face index="workspace">

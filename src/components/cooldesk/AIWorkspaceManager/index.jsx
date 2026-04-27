@@ -1,5 +1,4 @@
 import {
-  faPlus,
   faTimes,
   faWandMagicSparkles
 } from '@fortawesome/free-solid-svg-icons';
@@ -7,12 +6,14 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { safeGetHostname } from '../../../utils/helpers';
 import { buildSyncContext, invalidateSyncContext } from '../../../services/syncContextService';
+import { runningAppsService } from '../../../services/runningAppsService';
 import WorkspaceSidebar from './WorkspaceSidebar';
 import WorkspaceEditor from './WorkspaceEditor';
 import AISuggestionPanel from './AISuggestionPanel';
 import AIPromptBar from './AIPromptBar';
 import { useBrowserData } from './useBrowserData';
 import { useAISuggestions } from './useAISuggestions';
+import { useWorkspaceAgent } from './useWorkspaceAgent';
 import { useMemory } from './useMemory';
 import './AIWorkspaceManager.css';
 
@@ -27,142 +28,151 @@ export default function AIWorkspaceManager({
   showFab = true,
   ...rest
 }) {
-  // Support both controlled and uncontrolled modes
+  // Controlled / uncontrolled open state
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isControlled = externalIsOpen !== undefined;
   const isOpen = isControlled ? externalIsOpen : internalIsOpen;
 
   const handleOpen = useCallback(() => {
-    if (isControlled) {
-      externalOnOpen?.();
-    } else {
-      setInternalIsOpen(true);
-    }
+    if (isControlled) externalOnOpen?.();
+    else setInternalIsOpen(true);
   }, [isControlled, externalOnOpen]);
 
   const handleClose = useCallback(() => {
-    if (isControlled) {
-      externalOnClose?.();
-    } else {
-      setInternalIsOpen(false);
-    }
+    if (isControlled) externalOnClose?.();
+    else setInternalIsOpen(false);
   }, [isControlled, externalOnClose]);
 
-  // Core state
+  // ── Core state ────────────────────────────────────────────────────────────
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(null);
   const [mode, setMode] = useState('suggestions'); // 'suggestions' | 'edit' | 'create'
 
-  // Form state
   const [formData, setFormData] = useState({
-    id: null,
-    name: '',
-    icon: 'folder',
-    description: '',
-    urls: [],
-    apps: [],
-    createdAt: null
+    id: null, name: '', icon: 'folder', description: '', urls: [], apps: [], createdAt: null
   });
 
-  // AI-suggested URLs for current workspace (edit mode)
+  // AI-suggested URLs shown inside the WorkspaceEditor
   const [relatedUrls, setRelatedUrls] = useState([]);
   const [relatedUrlsLoading, setRelatedUrlsLoading] = useState(false);
 
-  // Memory context (enriched hint string fetched from feedback store)
+  // Memory + sync context
   const [memoryContext, setMemoryContext] = useState('');
-  // Cleaned sync-data context (workspaces + activity from sidecar)
-  const [syncContext, setSyncContext] = useState('');
+  const [syncContext, setSyncContext]     = useState('');
 
-  // Browser data hook
-  const { tabs, history, bookmarks, isLoading: browserDataLoading, refresh: refreshBrowserData } = useBrowserData(isOpen);
+  // ── Running apps (desktop) ────────────────────────────────────────────────
+  const [runningApps, setRunningApps]     = useState([]);
+  const [installedApps, setInstalledApps] = useState([]);
 
-  // AI suggestions hook
+  useEffect(() => {
+    const unsub = runningAppsService.subscribe(({ runningApps: r, installedApps: i }) => {
+      setRunningApps(r || []);
+      setInstalledApps(i || []);
+    });
+    return unsub;
+  }, []);
+
+  // ── Browser data ──────────────────────────────────────────────────────────
+  const { tabs, history, bookmarks, isLoading: browserDataLoading } = useBrowserData(isOpen);
+
+  // ── Agent: three-tool workspace builder ───────────────────────────────────
+  const { suggestWorkspaces, resolveAcceptedGroup } = useWorkspaceAgent();
+  const [agentSuggestions, setAgentSuggestions] = useState([]);
+  const [agentLoading, setAgentLoading]         = useState(false);
+  const [agentError, setAgentError]             = useState(null);
+
+  // ── useAISuggestions: only used for workspace-context prompts (edit mode) ─
   const {
     aiPrompt,
     setAiPrompt,
-    suggestions,
-    isLoading: aiLoading,
-    error: aiError,
+    suggestions: contextSuggestions,
+    isLoading: contextLoading,
+    error: contextError,
     generateSuggestions,
     suggestRelatedUrls
   } = useAISuggestions(tabs, workspaces);
 
-  // Memory layer hook
+  // ── Memory ────────────────────────────────────────────────────────────────
   const memory = useMemory();
 
-  // ── Fetch sync context (workspaces + activity) once on open ───────────────
+  // ── Fetch sync context once on open ──────────────────────────────────────
   useEffect(() => {
     if (!isOpen) return;
     buildSyncContext().then(ctx => setSyncContext(ctx));
   }, [isOpen]);
 
-  // ── Auto-generate with memory context once tabs are ready ──────────────────
-  const hasAutoGeneratedRef = useRef(false);
-
+  // Reset suggestions when dialog closes so re-opening starts fresh
   useEffect(() => {
     if (!isOpen) {
-      // Reset auto-generate flag when dialog closes so re-opening refreshes
-      hasAutoGeneratedRef.current = false;
-      return;
-    }
-    if (tabs.length < 3 || hasAutoGeneratedRef.current) return;
-    if (initialWorkspace) return; // opened in edit mode — skip auto-generate
-
-    hasAutoGeneratedRef.current = true;
-
-    // Load learned patterns first, then generate suggestions with that context
-    memory.loadMemoryContext(tabs).then(ctx => {
-      setMemoryContext(ctx);
-      generateSuggestions('', ctx, null, syncContext);
-    });
-  }, [tabs, isOpen, initialWorkspace, syncContext]);
-
-  // ── Record ignored suggestions when dialog closes ─────────────────────────
-  const suggestionsRef = useRef(suggestions);
-  useEffect(() => { suggestionsRef.current = suggestions; }, [suggestions]);
-
-  useEffect(() => {
-    if (!isOpen && suggestionsRef.current.length > 0) {
-      memory.recordIgnoredSuggestions(suggestionsRef.current);
+      setAgentSuggestions([]);
+      setAgentError(null);
     }
   }, [isOpen]);
 
-  // Keyboard shortcuts
+  // ── Record ignored suggestions on close ──────────────────────────────────
+  const agentSuggestionsRef = useRef(agentSuggestions);
+  useEffect(() => { agentSuggestionsRef.current = agentSuggestions; }, [agentSuggestions]);
+
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isOpen) {
-        handleClose();
-      }
-    };
+    if (!isOpen && agentSuggestionsRef.current.length > 0) {
+      memory.recordIgnoredSuggestions(agentSuggestionsRef.current);
+    }
+  }, [isOpen]);
+
+  // ── Pipe workspace-context prompt results into relatedUrls ────────────────
+  const lastPromptHadWorkspaceContext = useRef(false);
+  useEffect(() => {
+    if (!lastPromptHadWorkspaceContext.current) return;
+    if (contextSuggestions.length === 0) return;
+
+    const newSuggested = contextSuggestions
+      .flatMap(g => g.suggestedUrls || [])
+      .filter(su => su?.url)
+      .map(su => ({
+        url: su.url,
+        title: su.title || safeGetHostname(su.url),
+        reason: su.reason || 'AI suggested',
+        _aiSuggested: true
+      }));
+
+    if (newSuggested.length > 0) {
+      setRelatedUrls(prev => {
+        const existing = new Set(prev.map(u => u.url));
+        return [...prev, ...newSuggested.filter(u => !existing.has(u.url))];
+      });
+    }
+  }, [contextSuggestions]);
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  useEffect(() => {
+    const handleKeyDown = (e) => { if (e.key === 'Escape' && isOpen) handleClose(); };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, handleClose]);
 
-  // Initialize from props
+  // ── Initialize from props ─────────────────────────────────────────────────
   useEffect(() => {
-    if (isOpen) {
-      if (initialWorkspace) {
-        setSelectedWorkspaceId(initialWorkspace.id);
-        setMode('edit');
-        setFormData({
-          id: initialWorkspace.id,
-          name: initialWorkspace.name || '',
-          icon: initialWorkspace.icon || 'folder',
-          description: initialWorkspace.description || '',
-          urls: initialWorkspace.urls || [],
-          apps: initialWorkspace.apps || [],
-          createdAt: initialWorkspace.createdAt || Date.now()
-        });
-      } else {
-        setSelectedWorkspaceId(null);
-        setMode('suggestions');
-        resetForm();
-      }
+    if (!isOpen) return;
+    if (initialWorkspace) {
+      setSelectedWorkspaceId(initialWorkspace.id);
+      setMode('edit');
+      setFormData({
+        id: initialWorkspace.id,
+        name: initialWorkspace.name || '',
+        icon: initialWorkspace.icon || 'folder',
+        description: initialWorkspace.description || '',
+        urls: initialWorkspace.urls || [],
+        apps: initialWorkspace.apps || [],
+        createdAt: initialWorkspace.createdAt || Date.now()
+      });
+    } else {
+      setSelectedWorkspaceId(null);
+      setMode('suggestions');
+      resetForm();
     }
   }, [isOpen, initialWorkspace]);
 
-  // Load workspace data when selection changes
+  // ── Load workspace when sidebar selection changes ─────────────────────────
   useEffect(() => {
-    // Clear suggestions immediately when workspace changes
     setRelatedUrls([]);
     setRelatedUrlsLoading(false);
 
@@ -179,14 +189,10 @@ export default function AIWorkspaceManager({
           createdAt: workspace.createdAt || Date.now()
         });
 
-        // Fetch AI-suggested URLs for this workspace (from user's actual history)
         if (workspace.urls?.length > 0) {
           setRelatedUrlsLoading(true);
           suggestRelatedUrls(workspace, history, bookmarks)
-            .then(urls => {
-              // Only set if still the same workspace (avoid race condition)
-              setRelatedUrls(urls);
-            })
+            .then(urls => setRelatedUrls(urls))
             .catch(() => setRelatedUrls([]))
             .finally(() => setRelatedUrlsLoading(false));
         }
@@ -194,17 +200,16 @@ export default function AIWorkspaceManager({
     }
   }, [selectedWorkspaceId, mode, workspaces, suggestRelatedUrls, history, bookmarks]);
 
+  // ── Helpers ───────────────────────────────────────────────────────────────
   const resetForm = useCallback(() => {
-    setFormData({
-      id: null,
-      name: '',
-      icon: 'folder',
-      description: '',
-      urls: [],
-      apps: [],
-      createdAt: null
-    });
+    setFormData({ id: null, name: '', icon: 'folder', description: '', urls: [], apps: [], createdAt: null });
   }, []);
+
+  const handleShowSuggestions = useCallback(() => {
+    setSelectedWorkspaceId(null);
+    setMode('suggestions');
+    resetForm();
+  }, [resetForm]);
 
   const handleSelectWorkspace = useCallback((workspace) => {
     setSelectedWorkspaceId(workspace.id);
@@ -217,54 +222,25 @@ export default function AIWorkspaceManager({
     resetForm();
   }, [resetForm]);
 
+  // Accept a suggestion from the agent panel
   const handleAcceptSuggestion = useCallback((group) => {
-    // Record positive feedback before switching mode (fire-and-forget)
     memory.recordAcceptedSuggestion(group, tabs);
-
     setMode('create');
     setSelectedWorkspaceId(null);
 
-    // Map group items (indices) back to actual URLs
-    const groupUrls = (group.items || [])
-      .map(idx => tabs[idx - 1])
-      .filter(Boolean)
-      .map(tab => ({
-        url: tab.url,
-        title: tab.title,
-        favicon: tab.favicon,
-        addedAt: Date.now()
-      }));
-
-    // Also include suggested URLs from AI
-    const suggestedUrls = (group.suggestedUrls || [])
-      .filter(su => su.url)
-      .map(su => ({
-        url: su.url,
-        title: su.title || '',
-        favicon: null,
-        addedAt: Date.now()
-      }));
-
-    // Deduplicate by URL
-    const allUrls = [...groupUrls];
-    const existingUrlSet = new Set(allUrls.map(u => u.url));
-    suggestedUrls.forEach(su => {
-      if (!existingUrlSet.has(su.url)) {
-        allUrls.push(su);
-        existingUrlSet.add(su.url);
-      }
-    });
+    // Resolve URLs + apps + folders using the agent's resolver
+    const { urls, apps } = resolveAcceptedGroup(group);
 
     setFormData({
       id: null,
       name: group.name || '',
       icon: 'folder',
       description: group.description || '',
-      urls: allUrls,
-      apps: [],
+      urls,
+      apps,
       createdAt: null
     });
-  }, [tabs, memory]);
+  }, [tabs, memory, resolveAcceptedGroup]);
 
   const handleSave = useCallback(async () => {
     if (!formData.name.trim()) return;
@@ -278,9 +254,7 @@ export default function AIWorkspaceManager({
 
     try {
       await onSave?.(workspaceData);
-      // Record URL → workspace associations for future memory enrichment
       memory.recordWorkspaceSaved(workspaceData);
-      // Invalidate sync context so the next open reflects the new workspace
       invalidateSyncContext();
       handleClose();
     } catch (err) {
@@ -290,10 +264,8 @@ export default function AIWorkspaceManager({
 
   const handleDelete = useCallback(async () => {
     if (!formData.id) return;
-
     const confirmed = window.confirm(`Delete workspace "${formData.name}"? This cannot be undone.`);
     if (!confirmed) return;
-
     try {
       await onDelete?.(formData.id);
       handleClose();
@@ -302,13 +274,10 @@ export default function AIWorkspaceManager({
     }
   }, [formData.id, formData.name, onDelete, handleClose]);
 
-  // Unified handler for adding URLs and apps from the selector
   const handleAddItems = useCallback(({ urls = [], apps = [] }) => {
-    // Deduplicate URLs
     const existingUrls = new Set(formData.urls.map(u => u.url));
     const uniqueNewUrls = urls.filter(u => !existingUrls.has(u.url));
 
-    // Deduplicate Apps by path AND appType
     const getAppKey = (a) => `${a.path}|${a.appType || 'default'}`;
     const existingAppKeys = new Set((formData.apps || []).map(getAppKey));
     const uniqueNewApps = apps.filter(a => !existingAppKeys.has(getAppKey(a)));
@@ -319,17 +288,13 @@ export default function AIWorkspaceManager({
       apps: [...(prev.apps || []), ...uniqueNewApps]
     }));
 
-    // Record URL → workspace associations
     if (formData.name && uniqueNewUrls.length > 0) {
       memory.recordUrlsAddedToWorkspace(uniqueNewUrls, formData.name);
     }
   }, [formData.urls, formData.apps, formData.name, memory]);
 
   const handleRemoveUrl = useCallback((urlToRemove) => {
-    setFormData(prev => ({
-      ...prev,
-      urls: prev.urls.filter(u => u.url !== urlToRemove)
-    }));
+    setFormData(prev => ({ ...prev, urls: prev.urls.filter(u => u.url !== urlToRemove) }));
   }, []);
 
   const handleRemoveApp = useCallback((appToRemove) => {
@@ -339,72 +304,53 @@ export default function AIWorkspaceManager({
     }));
   }, []);
 
-  const handleAddRelatedUrl = useCallback((urlItem) => {
-    // Check if already exists
-    if (formData.urls.some(u => u.url === urlItem.url)) return;
-
-    const newUrl = {
-      url: urlItem.url,
-      title: urlItem.title || '',
-      favicon: urlItem.favicon || urlItem.favIconUrl,
-      addedAt: Date.now()
-    };
-
-    setFormData(prev => ({
-      ...prev,
-      urls: [...prev.urls, newUrl]
-    }));
-
-    // Remove from suggestions list
-    setRelatedUrls(prev => prev.filter(u => u.url !== urlItem.url));
-
-    // Record association
-    if (formData.name) {
-      memory.recordUrlsAddedToWorkspace([newUrl], formData.name);
-    }
-  }, [formData.urls, formData.name, memory]);
-
   const handleUpdateForm = useCallback((field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   }, []);
 
-  // When a workspace-context prompt returns suggestions, pipe suggestedUrls into relatedUrls
-  // so they are visible in WorkspaceEditor (which doesn't show the AISuggestionPanel).
-  const lastPromptHadWorkspaceContext = useRef(false);
-  useEffect(() => {
-    if (!lastPromptHadWorkspaceContext.current) return;
-    if (suggestions.length === 0) return;
-
-    const newSuggested = suggestions
-      .flatMap(g => g.suggestedUrls || [])
-      .filter(su => su?.url)
-      .map(su => ({
-        url: su.url,
-        title: su.title || safeGetHostname(su.url),
-        reason: su.reason || 'AI suggested',
-        _aiSuggested: true
-      }));
-
-    if (newSuggested.length > 0) {
-      setRelatedUrls(prev => {
-        const existing = new Set(prev.map(u => u.url));
-        return [...prev, ...newSuggested.filter(u => !existing.has(u.url))];
-      });
-    }
-  }, [suggestions]);
-
-  // Manual send: refresh memory context then generate
+  // Prompt bar submit handler
   const handlePromptSubmit = useCallback(async (promptText) => {
     const ctx = await memory.loadMemoryContext(tabs);
     setMemoryContext(ctx);
-    // Pass current workspace as context when editing/creating so the AI prompt
-    // focuses on finding relevant URLs for that workspace rather than grouping tabs.
-    const wsContext = (mode === 'edit' || mode === 'create') && formData.name ? formData : null;
-    lastPromptHadWorkspaceContext.current = !!wsContext;
-    generateSuggestions(promptText, ctx, wsContext, syncContext);
-  }, [memory, tabs, generateSuggestions, mode, formData, syncContext]);
+
+    if (mode === 'suggestions') {
+      // Run the full three-tool agent with the user's prompt
+      setAgentLoading(true);
+      setAgentError(null);
+      try {
+        const groups = await suggestWorkspaces({
+          tabs, history, bookmarks,
+          runningApps, installedApps,
+          customPrompt: promptText,
+          syncContext,
+          memoryContext: ctx
+        });
+        setAgentSuggestions(groups);
+      } catch (err) {
+        setAgentError(err.message);
+        setAgentSuggestions([]);
+      } finally {
+        setAgentLoading(false);
+      }
+    } else {
+      // Workspace context: find related URLs for the current workspace
+      const wsContext = formData.name ? formData : null;
+      lastPromptHadWorkspaceContext.current = !!wsContext;
+      generateSuggestions(promptText, ctx, wsContext, syncContext);
+    }
+  }, [
+    memory, tabs, mode, formData, syncContext,
+    suggestWorkspaces, history, bookmarks, runningApps, installedApps,
+    generateSuggestions
+  ]);
 
   if (!isOpen) return null;
+
+  const isLoading = mode === 'suggestions'
+    ? agentLoading || browserDataLoading
+    : contextLoading;
+
+  const currentError = mode === 'suggestions' ? agentError : contextError;
 
   return (
     <div className="ai-workspace-manager-overlay" onClick={handleClose}>
@@ -421,31 +367,33 @@ export default function AIWorkspaceManager({
         </div>
 
         <div className="awm-content">
-          {/* Left Panel - Sidebar */}
+          {/* Left Panel */}
           <WorkspaceSidebar
             workspaces={workspaces}
             selectedId={selectedWorkspaceId}
             onSelect={handleSelectWorkspace}
             onCreateNew={handleCreateNew}
+            onShowSuggestions={handleShowSuggestions}
+            isSuggestionsMode={mode === 'suggestions'}
           />
 
           {/* Right Panel */}
           <div className="awm-main-panel">
-            {/* AI Prompt Bar */}
             <AIPromptBar
               value={aiPrompt}
               onChange={setAiPrompt}
               onSubmit={handlePromptSubmit}
-              isLoading={aiLoading}
+              isLoading={isLoading}
+              mode={mode}
+              workspaceName={formData.name}
             />
 
-            {/* Main Content Area */}
             <div className="awm-main-content">
               {mode === 'suggestions' ? (
                 <AISuggestionPanel
-                  suggestions={suggestions}
-                  isLoading={aiLoading || browserDataLoading}
-                  error={aiError}
+                  suggestions={agentSuggestions}
+                  isLoading={agentLoading || browserDataLoading}
+                  error={agentError}
                   onAccept={handleAcceptSuggestion}
                   onCreateNew={handleCreateNew}
                 />
@@ -462,7 +410,8 @@ export default function AIWorkspaceManager({
                   history={history}
                   bookmarks={bookmarks}
                   relatedUrls={relatedUrls}
-                  relatedUrlsLoading={relatedUrlsLoading}
+                  relatedUrlsLoading={relatedUrlsLoading || contextLoading}
+                  aiError={currentError}
                   onAddItem={handleAddItems}
                 />
               )}

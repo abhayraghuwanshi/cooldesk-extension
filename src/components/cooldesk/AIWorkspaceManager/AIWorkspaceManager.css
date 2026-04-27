@@ -287,6 +287,22 @@
   opacity: 0.9;
 }
 
+.awm-sidebar-suggestions-item {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 4px;
+  color: #a78bfa;
+}
+
+.awm-sidebar-suggestions-item:hover {
+  background: rgba(167, 139, 250, 0.1);
+  color: #c4b5fd;
+}
+
+.awm-sidebar-suggestions-item.selected {
+  background: rgba(167, 139, 250, 0.15);
+  color: #c4b5fd;
+}
+
 /* Main Panel */
 .awm-main-panel {
   display: flex;
@@ -565,6 +581,66 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── Suggestion card chips (url / app / folder) ─────────────────────────── */
+.awm-suggestion-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.awm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.awm-chip em {
+  font-style: normal;
+  opacity: 0.65;
+  font-size: 10px;
+}
+
+.awm-chip svg { font-size: 9px; flex-shrink: 0; }
+
+.awm-chip-url {
+  background: rgba(96, 165, 250, 0.12);
+  color: #93c5fd;
+}
+
+.awm-chip-app {
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
+}
+
+.awm-chip-folder {
+  background: rgba(250, 204, 21, 0.12);
+  color: #fde047;
+}
+
+/* ── Summary badges ─────────────────────────────────────────────────────── */
+.awm-suggestion-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.awm-badge-tab    { background: rgba(96, 165, 250, 0.1);  color: #93c5fd; }
+.awm-badge-url    { background: rgba(168, 85, 247, 0.1);  color: #d8b4fe; }
+.awm-badge-app    { background: rgba(34, 197, 94, 0.1);   color: #86efac; }
+.awm-badge-folder { background: rgba(250, 204, 21, 0.1);  color: #fde047; }
 
 /* Suggested URLs from history */
 .awm-suggested-urls {
@@ -2002,6 +2078,13 @@
 .awm-items-loading-text {
   font-size: 12px;
   color: #94a3b8;
+}
+
+.awm-items-ai-error {
+  padding: 12px;
+  gap: 10px;
+  color: #f87171;
+  font-size: 12px;
 }
 
 /* Description group compact */

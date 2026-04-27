@@ -1948,7 +1948,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       zIndex: 10002 // Ensure container is above other elements
     }}>
       {/* AI Chat - Clean Design */}
-      {activePill?.prefix === '/ai' && aiChatMessages.length > 0 && (
+      {false && activePill?.prefix === '/ai' && aiChatMessages.length > 0 && (
         <div className="ai-chat-panel" style={{
           marginBottom: '12px',
           maxHeight: '500px',

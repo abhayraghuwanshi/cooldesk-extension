@@ -10,6 +10,7 @@ pub mod llm;
 #[cfg(feature = "llm")]
 pub mod llm_v2;
 pub mod feedback;
+pub mod llm_v3;
 
 pub use server::start_server;
 pub use feedback::{FeedbackStore, FeedbackEvent, SuggestionType, UserAction};

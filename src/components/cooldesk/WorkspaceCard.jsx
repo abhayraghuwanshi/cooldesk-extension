@@ -523,6 +523,9 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     });
   }, [sortedUrls, compact]); // Depend on sortedUrls
 
+  const regularApps = useMemo(() => apps.filter(app => !['folder', 'file'].includes(app.appType?.toLowerCase())), [apps]);
+  const folderFileApps = useMemo(() => apps.filter(app => ['folder', 'file'].includes(app.appType?.toLowerCase())), [apps]);
+
   const handleCardClick = () => {
     onClick?.(workspace);
   };
@@ -732,199 +735,165 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
           </div>
 
           {displayLinks.length > 0 && (
-            <div className="workspace-links-scroll">
-            <ul className="workspace-links">
-              {displayLinks.map((urlObj, idx) => {
-                const faviconUrl = getFaviconUrl(urlObj.url, 16);
-                const isHovered = hoveredLink === idx;
-                const isPopoverOpen = activePopover === idx;
-
-                return (
-                  <li
-                    key={idx}
-                    className="workspace-link-item"
-                    onMouseEnter={() => setHoveredLink(idx)}
-                    onMouseLeave={() => {
-                      setHoveredLink(null);
-                      setPopoverState({ index: null, rect: null });
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (urlObj.url) {
-                        openUrl(urlObj.url, name, urlObj.title);
-                      }
-                    }}
-                    style={{ cursor: 'pointer', position: 'relative' }}
-                  >
-                    <span className="workspace-link-icon">
-                      {(() => {
-                        const avatar = getLetterAvatar(urlObj.url);
-                        return (
-                          <>
-                            {faviconUrl ? (
-                              <img
-                                src={faviconUrl}
-                                alt=""
-                                className="link-favicon"
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                  e.target.nextSibling.style.display = 'flex';
-                                }}
-                              />
-                            ) : null}
-                            <div
-                              className="letter-avatar"
-                              style={{
-                                display: faviconUrl ? 'none' : 'flex',
-                                background: avatar.color
-                              }}
-                            >
-                              {avatar.letter}
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </span>
-                    <span className="workspace-link-text" title={urlObj.url}>
-                      {(() => {
-                        // If title exists and is different from the hostname, use it
-                        // Otherwise use formatted domain name
-                        const hostname = safeGetHostname(urlObj.url);
-                        const title = urlObj.title;
-
-                        // Check if title is just the domain/hostname (common case)
-                        if (!title || title === hostname || title === hostname.replace(/^www\./, '') || title.endsWith('.com') || title.endsWith('.in') || title.endsWith('.org') || title.endsWith('.net') || title.endsWith('.io')) {
-                          return formatDomainName(urlObj.url);
-                        }
-
-                        return title;
-                      })()}
-                    </span>
-
-                    {/* Analytics Trigger */}
-                    <span
-                      className="workspace-link-analytics"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.stopPropagation(); // Double stop just in case
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setPopoverState(prev => prev.index === idx ? { index: null, rect: null } : { index: idx, rect });
-                      }}
-                      style={{
-                        padding: '4px 6px',
-                        fontSize: '11px',
-                        color: isPopoverOpen ? '#60A5FA' : 'rgba(148, 163, 184, 0.5)',
-                        opacity: (isHovered || isPopoverOpen) ? 1 : 0,
-                        transition: 'all 0.2s',
-                        marginRight: '4px',
-                        height: '44px',
-                        pointerEvents: (isHovered || isPopoverOpen) ? 'auto' : 'none'
-                      }}
-                      title="View Analytics"
+            <div className="workspace-row-section">
+              <div className="workspace-row-label">
+                <FontAwesomeIcon icon={faLink} style={{ fontSize: '9px' }} />
+                Links
+              </div>
+              <div className="workspace-chips-row">
+                {displayLinks.map((urlObj, idx) => {
+                  const faviconUrl = getFaviconUrl(urlObj.url, 16);
+                  const isHovered = hoveredLink === idx;
+                  const isPopoverOpen = activePopover === idx;
+                  const avatar = getLetterAvatar(urlObj.url);
+                  return (
+                    <div
+                      key={idx}
+                      className={`workspace-url-chip${isPopoverOpen ? ' analytics-open' : ''}`}
+                      onMouseEnter={() => setHoveredLink(idx)}
+                      onMouseLeave={() => { setHoveredLink(null); setPopoverState({ index: null, rect: null }); }}
+                      onClick={(e) => { e.stopPropagation(); openUrl(urlObj.url, name, urlObj.title); }}
+                      style={{ position: 'relative' }}
+                      title={urlObj.title || urlObj.url}
                     >
-                      <FontAwesomeIcon icon={faChartLine} />
-                    </span>
-
-                    <FontAwesomeIcon
-                      icon={faExternalLinkAlt}
-                      className="workspace-link-external"
-                    />
-
-                    {/* Analytics Popover */}
-                    {isPopoverOpen && (
-                      <UrlAnalyticsPopover
-                        url={urlObj.url}
-                        title={urlObj.title}
-                        onClose={() => setPopoverState({ index: null, rect: null })}
-                        triggerRect={popoverState.rect}
-                      />
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+                      <span className="workspace-link-icon">
+                        {faviconUrl ? (
+                          <img src={faviconUrl} alt="" className="link-favicon"
+                            onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                          />
+                        ) : null}
+                        <div className="letter-avatar" style={{ display: faviconUrl ? 'none' : 'flex', background: avatar.color }}>
+                          {avatar.letter}
+                        </div>
+                      </span>
+                      <span className="workspace-url-chip-text">
+                        {(() => {
+                          const hostname = safeGetHostname(urlObj.url);
+                          const title = urlObj.title;
+                          if (!title || title === hostname || title === hostname.replace(/^www\./, '') || title.endsWith('.com') || title.endsWith('.in') || title.endsWith('.org') || title.endsWith('.net') || title.endsWith('.io')) {
+                            return formatDomainName(urlObj.url);
+                          }
+                          return title;
+                        })()}
+                      </span>
+                      {(isHovered || isPopoverOpen) && (
+                        <span
+                          className="workspace-link-analytics"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setPopoverState(prev => prev.index === idx ? { index: null, rect: null } : { index: idx, rect });
+                          }}
+                          style={{
+                            color: isPopoverOpen ? '#60A5FA' : 'rgba(148, 163, 184, 0.5)',
+                            fontSize: '10px',
+                            padding: '2px 4px',
+                            marginLeft: 'auto',
+                            flexShrink: 0
+                          }}
+                          title="View Analytics"
+                        >
+                          <FontAwesomeIcon icon={faChartLine} />
+                        </span>
+                      )}
+                      {isPopoverOpen && (
+                        <UrlAnalyticsPopover
+                          url={urlObj.url}
+                          title={urlObj.title}
+                          onClose={() => setPopoverState({ index: null, rect: null })}
+                          triggerRect={popoverState.rect}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
-          {/* Apps Section */}
-          {apps.length > 0 && (
-            <div className="workspace-apps-section" style={{ marginTop: '8px' }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                marginBottom: '6px',
-                color: '#8b5cf6',
-                fontSize: '11px',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em'
-              }}>
-                <FontAwesomeIcon icon={faDesktop} style={{ fontSize: '10px' }} />
-                Apps ({apps.length})
+          {/* Row 2: Apps (editors / desktop) */}
+          {regularApps.length > 0 && (
+            <div className="workspace-row-section">
+              <div className="workspace-row-label">
+                <FontAwesomeIcon icon={faDesktop} style={{ fontSize: '9px' }} />
+                Apps
               </div>
-              <div style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '8px'
-              }}>
-                {apps.map((app, idx) => {
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {regularApps.map((app, idx) => {
                   const CUSTOM_EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'rubymine', 'fleet', 'zed'];
                   const isEditor = CUSTOM_EDITORS.includes(app.appType?.toLowerCase());
-                  
-                  const appColor = isEditor ? '#38bdf8' : app.appType === 'folder' ? '#facc15' : app.appType === 'file' ? '#94a3b8' : '#8b5cf6';
-                  const appIcon = isEditor ? faCode : app.appType === 'folder' ? faFolderOpen : app.appType === 'file' ? faFileLines : faDesktop;
-                  
+                  const appColor = isEditor ? '#38bdf8' : '#8b5cf6';
+                  const appIcon = isEditor ? faCode : faDesktop;
                   return (
-                  <div
-                    key={idx}
-                    className="workspace-app-chip"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (!app.path || !window.electronAPI) return;
-                      
-                      if (isEditor && window.electronAPI.launchAppWithArgs) {
-                        const cmd = app.appType.toLowerCase() === 'vscode' ? 'code' : app.appType.toLowerCase();
-                        window.electronAPI.launchAppWithArgs(cmd, [app.path]);
-                      } else if (app.appType === 'folder' && window.electronAPI.openFolder) {
-                        window.electronAPI.openFolder(app.path);
-                      } else if (app.appType === 'file' && window.electronAPI.launchApp) {
-                        window.electronAPI.launchApp(app.path);
-                      } else if (window.electronAPI.launchApp) {
-                        window.electronAPI.launchApp(app.path);
-                      }
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '6px 10px',
-                      borderRadius: '8px',
-                      background: `${appColor}1a`,
-                      border: `1px solid ${appColor}4d`,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      fontSize: '12px',
-                      color: '#E2E8F0'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = `${appColor}33`;
-                      e.currentTarget.style.borderColor = `${appColor}80`;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = `${appColor}1a`;
-                      e.currentTarget.style.borderColor = `${appColor}4d`;
-                    }}
-                    title={`Launch ${app.name}`}
-                  >
-                    {app.icon ? (
-                      <img src={app.icon} alt="" style={{ width: '16px', height: '16px', objectFit: 'contain' }} />
-                    ) : (
-                      <FontAwesomeIcon icon={appIcon} style={{ color: appColor, fontSize: '12px' }} />
-                    )}
-                    <span>{app.name}</span>
-                  </div>
-                )})}
+                    <div
+                      key={idx}
+                      className="workspace-app-chip"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!app.path || !window.electronAPI) return;
+                        if (isEditor && window.electronAPI.launchAppWithArgs) {
+                          const cmd = app.appType.toLowerCase() === 'vscode' ? 'code' : app.appType.toLowerCase();
+                          window.electronAPI.launchAppWithArgs(cmd, [app.path]);
+                        } else if (window.electronAPI.launchApp) {
+                          window.electronAPI.launchApp(app.path);
+                        }
+                      }}
+                      style={{ background: `${appColor}1a`, border: `1px solid ${appColor}4d` }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = `${appColor}33`; e.currentTarget.style.borderColor = `${appColor}80`; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = `${appColor}1a`; e.currentTarget.style.borderColor = `${appColor}4d`; }}
+                      title={`Launch ${app.name}`}
+                    >
+                      {app.icon ? (
+                        <img src={app.icon} alt="" style={{ width: '16px', height: '16px', objectFit: 'contain' }} />
+                      ) : (
+                        <FontAwesomeIcon icon={appIcon} style={{ color: appColor, fontSize: '12px' }} />
+                      )}
+                      <span>{app.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Row 3: Folders & Files */}
+          {folderFileApps.length > 0 && (
+            <div className="workspace-row-section">
+              <div className="workspace-row-label">
+                <FontAwesomeIcon icon={faFolderOpen} style={{ fontSize: '9px', color: '#facc15' }} />
+                Folders & Files
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {folderFileApps.map((app, idx) => {
+                  const appColor = app.appType === 'folder' ? '#facc15' : '#94a3b8';
+                  const appIcon = app.appType === 'folder' ? faFolderOpen : faFileLines;
+                  return (
+                    <div
+                      key={idx}
+                      className="workspace-app-chip"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!app.path || !window.electronAPI) return;
+                        if (app.appType === 'folder' && window.electronAPI.openFolder) {
+                          window.electronAPI.openFolder(app.path);
+                        } else if (window.electronAPI.launchApp) {
+                          window.electronAPI.launchApp(app.path);
+                        }
+                      }}
+                      style={{ background: `${appColor}1a`, border: `1px solid ${appColor}4d` }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = `${appColor}33`; e.currentTarget.style.borderColor = `${appColor}80`; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = `${appColor}1a`; e.currentTarget.style.borderColor = `${appColor}4d`; }}
+                      title={app.path || app.name}
+                    >
+                      {app.icon ? (
+                        <img src={app.icon} alt="" style={{ width: '16px', height: '16px', objectFit: 'contain' }} />
+                      ) : (
+                        <FontAwesomeIcon icon={appIcon} style={{ color: appColor, fontSize: '12px' }} />
+                      )}
+                      <span>{app.name}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

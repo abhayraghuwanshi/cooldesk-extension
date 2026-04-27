@@ -2,20 +2,37 @@ import { faMagicWandSparkles, faPaperPlane } from '@fortawesome/free-solid-svg-i
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useRef } from 'react';
 
-const EXAMPLE_PROMPTS = [
+const SUGGESTION_PROMPTS = [
   'Group by project',
   'Separate work from personal',
   'Focus on React development',
   'Find research tabs'
 ];
 
+const WORKSPACE_PROMPTS = [
+  'Find related URLs',
+  'Suggest similar sites',
+  'Discover related tools',
+  'Recommend resources'
+];
+
 export default function AIPromptBar({
   value,
   onChange,
   onSubmit,
-  isLoading
+  isLoading,
+  mode = 'suggestions',
+  workspaceName = ''
 }) {
   const inputRef = useRef(null);
+
+  const isWorkspaceMode = mode === 'edit' || mode === 'create';
+  const examples = isWorkspaceMode ? WORKSPACE_PROMPTS : SUGGESTION_PROMPTS;
+  const placeholder = isWorkspaceMode
+    ? workspaceName
+      ? `Ask AI to find URLs for "${workspaceName}"...`
+      : 'Ask AI to find related URLs for this workspace...'
+    : "Describe how to organize your tabs... (e.g., 'Group by project')";
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -26,8 +43,8 @@ export default function AIPromptBar({
 
   const handleExampleClick = useCallback((example) => {
     onChange(example);
-    inputRef.current?.focus();
-  }, [onChange]);
+    onSubmit(example);
+  }, [onChange, onSubmit]);
 
   return (
     <div className="awm-prompt-bar">
@@ -42,7 +59,7 @@ export default function AIPromptBar({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Describe how to organize your tabs... (e.g., 'Group by project')"
+          placeholder={placeholder}
           disabled={isLoading}
         />
         <button
@@ -60,7 +77,7 @@ export default function AIPromptBar({
 
       <div className="awm-prompt-examples">
         <span>Try:</span>
-        {EXAMPLE_PROMPTS.map((example, idx) => (
+        {examples.map((example, idx) => (
           <button
             key={idx}
             className="awm-prompt-example"
