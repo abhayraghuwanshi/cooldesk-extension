@@ -67,6 +67,7 @@
 .kg-pill.active.app    { color: #f59e0b; background: rgba(245,158,11,0.12); border-color: #f59e0b; }
 .kg-pill.active.folder { color: #facc15; background: rgba(250,204,21,0.12); border-color: #facc15; }
 .kg-pill.active.file   { color: #94a3b8; background: rgba(148,163,184,0.12); border-color: #94a3b8; }
+.kg-pill.active.media  { color: #ec4899; background: rgba(236,72,153,0.12); border-color: #ec4899; }
 .kg-pill.active.workspace { color: #6366f1; background: rgba(99,102,241,0.12); border-color: #6366f1; }
 
 .kg-actions {
@@ -89,6 +90,53 @@
 
 .kg-btn:hover { background: rgba(255,255,255,0.07); color: #e2e8f0; }
 .kg-btn.active { color: #6366f1; border-color: #6366f1; background: rgba(99,102,241,0.1); }
+
+/* ── Live badge ── */
+.kg-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.kg-live-badge.on  { color: #4ade80; border-color: rgba(74,222,128,0.3); background: rgba(74,222,128,0.08); }
+.kg-live-badge.off { color: #64748b; border-color: rgba(100,116,139,0.3); }
+
+.kg-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.kg-live-badge.on .kg-live-dot {
+  animation: kg-live-pulse 2s ease-in-out infinite;
+}
+
+@keyframes kg-live-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+/* Flash when new data arrives */
+.kg-live-badge.pulse {
+  background: rgba(74,222,128,0.2);
+  border-color: rgba(74,222,128,0.6);
+}
+
+.kg-last-updated {
+  font-size: 10px;
+  color: #475569;
+  padding: 0 4px;
+}
 
 .kg-close {
   width: 28px;

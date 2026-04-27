@@ -182,6 +182,48 @@ const EDITOR_APP_TYPES: &[&str] = &[
     "goland", "phpstorm", "rider", "clion", "rubymine", "fleet", "zed", "sublime",
 ];
 
+const EDITOR_NAME_PATTERNS: &[&str] = &[
+    "visual studio code", "code", "cursor", "windsurf",
+    "intellij idea", "webstorm", "pycharm", "goland",
+];
+
+const MEDIA_APP_PATTERNS: &[&str] = &[
+    "spotify", "music", "vlc", "foobar", "winamp", "tidal", "deezer",
+    "youtube music", "apple music", "soundcloud",
+];
+
+/// Extract the open project name from an editor's window title.
+/// VS Code format: "filename — project — Visual Studio Code"
+pub fn extract_editor_project(app_name: &str, title: &str) -> Option<String> {
+    let name_lower = app_name.to_lowercase();
+    let is_editor = EDITOR_NAME_PATTERNS.iter().any(|p| name_lower.contains(p));
+    if !is_editor { return None; }
+
+    let parts: Vec<&str> = title.split(" — ").collect();
+    if parts.len() < 2 { return None; }
+
+    let project = parts[parts.len() - 2]
+        .trim()
+        .trim_start_matches(['●', '•', ' '])
+        .trim_end_matches(" (Workspace)")
+        .trim();
+
+    if !project.is_empty() && project.len() < 60 {
+        Some(project.to_string())
+    } else {
+        None
+    }
+}
+
+/// Called by the background snapshot loop — records all pairwise co-occurrences.
+pub async fn record_session_snapshot(items: Vec<String>) {
+    let store_mutex = get_feedback_store().await;
+    let guard = store_mutex.lock().await;
+    if let Some(store) = guard.as_ref() {
+        store.record_snapshot(items).await;
+    }
+}
+
 fn normalize_url_for_graph(url: &str) -> String {
     if let Ok(parsed) = url::Url::parse(url) {
         let host = parsed.host_str().unwrap_or(url);
@@ -189,7 +231,8 @@ fn normalize_url_for_graph(url: &str) -> String {
         let path = parsed.path().trim_end_matches('/');
         format!("{}{}", host.to_lowercase(), path.to_lowercase())
     } else {
-        url.to_lowercase()
+        log::warn!("[graph] malformed URL skipped in normalization: {}", &url[..url.len().min(80)]);
+        format!("raw::{}", url.to_lowercase())
     }
 }
 
@@ -222,7 +265,7 @@ pub async fn get_graph(State(state): State<Arc<AppState>>) -> Json<GraphResponse
                     node_type: "url".to_string(),
                     label: norm.clone(),
                     title: wu.title.clone(),
-                    weight: 1,
+                    weight: 0,
                 });
                 entry.weight = entry.weight.saturating_add(1);
                 edges.push(GraphEdge {
@@ -249,7 +292,7 @@ pub async fn get_graph(State(state): State<Arc<AppState>>) -> Json<GraphResponse
                     node_type: node_type.to_string(),
                     label: app.name.clone(),
                     title: Some(app.path.clone()),
-                    weight: 1,
+                    weight: 0,
                 });
                 entry.weight = entry.weight.saturating_add(1);
                 edges.push(GraphEdge {
@@ -262,62 +305,105 @@ pub async fn get_graph(State(state): State<Arc<AppState>>) -> Json<GraphResponse
         }
     } // sync_data lock dropped
 
-    // ── Pass 2 & 3: Co-occurrences + App-workspace associations (FeedbackStore) ──
-    {
+    // ── Pass 2, 3 & 4: FeedbackStore data ──
+    // Clone everything out under one short lock window, then drop the mutex.
+    let (co_occurrences, assocs, item_co_occurrences) = {
         let store_mutex = get_feedback_store().await;
         let store_guard = store_mutex.lock().await;
         if let Some(store) = store_guard.as_ref() {
-            // Pass 2: URL co-occurrence edges
-            let co_occurrences = store.get_all_co_occurrences().await;
-            for co in &co_occurrences {
-                let score = co.affinity_score();
-                if score <= 0.0 { continue; }
-
-                let src_id = format!("url::{}", co.url1);
-                let tgt_id = format!("url::{}", co.url2);
-
-                // Upsert both URL nodes (may not be in any workspace yet)
-                nodes.entry(src_id.clone()).or_insert_with(|| GraphNode {
-                    id: src_id.clone(), node_type: "url".to_string(),
-                    label: co.url1.clone(), title: None, weight: 1,
-                });
-                nodes.entry(tgt_id.clone()).or_insert_with(|| GraphNode {
-                    id: tgt_id.clone(), node_type: "url".to_string(),
-                    label: co.url2.clone(), title: None, weight: 1,
-                });
-
-                edges.push(GraphEdge {
-                    source: src_id,
-                    target: tgt_id,
-                    edge_type: "co_occurrence".to_string(),
-                    weight: score.min(1.0),
-                });
-            }
-
-            // Pass 3: App-workspace associations from FeedbackStore
-            let assocs = store.get_all_app_workspace_associations().await;
-            for assoc in &assocs {
-                let app_id = format!("app::{}", assoc.app_name);
-                let ws_id  = format!("ws::{}", assoc.workspace_name);
-
-                if !nodes.contains_key(&ws_id) { continue; } // workspace must exist
-
-                let entry = nodes.entry(app_id.clone()).or_insert_with(|| GraphNode {
-                    id: app_id.clone(), node_type: "app".to_string(),
-                    label: assoc.app_name.clone(), title: None, weight: 0,
-                });
-                entry.weight = entry.weight.saturating_add(assoc.count);
-
-                let w = (assoc.score().min(5.0) / 5.0).max(0.01);
-                edges.push(GraphEdge {
-                    source: app_id,
-                    target: ws_id,
-                    edge_type: "app_in_workspace".to_string(),
-                    weight: w,
-                });
-            }
+            let co    = store.get_all_co_occurrences().await;
+            let asc   = store.get_all_app_workspace_associations().await;
+            let items = store.get_all_item_co_occurrences().await;
+            (co, asc, items)
+        } else {
+            (vec![], vec![], vec![])
         }
-    } // feedback store lock dropped
+        // store_guard (outer mutex) dropped here
+    };
+
+    // Pass 2: URL co-occurrence edges
+    for co in &co_occurrences {
+        let score = co.affinity_score();
+        if score <= 0.0 { continue; }
+
+        let src_id = format!("url::{}", co.url1);
+        let tgt_id = format!("url::{}", co.url2);
+
+        nodes.entry(src_id.clone()).or_insert_with(|| GraphNode {
+            id: src_id.clone(), node_type: "url".to_string(),
+            label: co.url1.clone(), title: None, weight: 0,
+        });
+        nodes.entry(tgt_id.clone()).or_insert_with(|| GraphNode {
+            id: tgt_id.clone(), node_type: "url".to_string(),
+            label: co.url2.clone(), title: None, weight: 0,
+        });
+
+        edges.push(GraphEdge {
+            source: src_id,
+            target: tgt_id,
+            edge_type: "co_occurrence".to_string(),
+            weight: score.min(1.0),
+        });
+    }
+
+    // Pass 3: App-workspace associations
+    for assoc in &assocs {
+        let app_id = format!("app::{}", assoc.app_name);
+        let ws_id  = format!("ws::{}", assoc.workspace_name);
+
+        if !nodes.contains_key(&ws_id) { continue; }
+
+        let entry = nodes.entry(app_id.clone()).or_insert_with(|| GraphNode {
+            id: app_id.clone(), node_type: "app".to_string(),
+            label: assoc.app_name.clone(), title: None, weight: 0,
+        });
+        entry.weight = entry.weight.saturating_add(assoc.count);
+
+        let w = (assoc.score().min(5.0) / 5.0).max(0.01);
+        edges.push(GraphEdge {
+            source: app_id,
+            target: ws_id,
+            edge_type: "app_in_workspace".to_string(),
+            weight: w,
+        });
+    }
+
+    // ── Pass 4: Cross-type item co-occurrences from session snapshots ──
+    for co in &item_co_occurrences {
+        let score = co.score();
+        if score <= 0.0 || co.session_count < 2 { continue; } // filter one-off noise
+
+        let node_type_from_id = |id: &str| -> &'static str {
+            if id.starts_with("url::") { "url" }
+            else if id.starts_with("folder::") { "folder" }
+            else if id.starts_with("file::") { "file" }
+            else if id.starts_with("media::") { "media" }
+            else { "app" }
+        };
+
+        let label_from_id = |id: &str| -> String {
+            id.splitn(2, "::").nth(1).unwrap_or(id).replace('_', " ").to_string()
+        };
+
+        for item_id in [&co.item1, &co.item2] {
+            nodes.entry(item_id.clone()).or_insert_with(|| GraphNode {
+                id: item_id.clone(),
+                node_type: node_type_from_id(item_id).to_string(),
+                label: label_from_id(item_id),
+                title: None,
+                weight: 0,
+            });
+            nodes.get_mut(item_id).unwrap().weight =
+                nodes[item_id].weight.saturating_add(co.session_count);
+        }
+
+        edges.push(GraphEdge {
+            source: co.item1.clone(),
+            target: co.item2.clone(),
+            edge_type: "session_co_occurrence".to_string(),
+            weight: (score / 5.0).min(1.0),
+        });
+    }
 
     // ── Trim: cap node counts to keep the graph readable ──
     let mut url_nodes: Vec<_> = nodes.values()
@@ -339,7 +425,7 @@ pub async fn get_graph(State(state): State<Arc<AppState>>) -> Json<GraphResponse
     nodes.retain(|id, n| match n.node_type.as_str() {
         "url"  => keep_urls.contains(id),
         "app"  => keep_apps.contains(id),
-        _      => true, // keep all workspaces, folders, files
+        _      => true, // keep all workspaces, folders, files, media
     });
 
     let node_ids: std::collections::HashSet<_> = nodes.keys().cloned().collect();

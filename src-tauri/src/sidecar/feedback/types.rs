@@ -350,6 +350,43 @@ impl AppWorkspaceAssociation {
     }
 }
 
+/// Cross-type item co-occurrence recorded automatically from 30-second session snapshots.
+/// Connects apps, URLs, folders, and media that are active simultaneously.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemCoOccurrence {
+    /// Unified item ID: "url::github.com", "app::vscode", "folder::extension", "media::spotify"
+    pub item1: String,
+    /// Always item1 <= item2 lexicographically for deduplication
+    pub item2: String,
+    /// Number of 30-second snapshots where both were active simultaneously
+    pub session_count: u32,
+    /// Last seen timestamp (ms)
+    pub last_seen: i64,
+}
+
+impl ItemCoOccurrence {
+    pub fn new(a: String, b: String) -> Self {
+        let (item1, item2) = if a <= b { (a, b) } else { (b, a) };
+        Self { item1, item2, session_count: 1, last_seen: chrono::Utc::now().timestamp_millis() }
+    }
+
+    pub fn key(&self) -> String {
+        format!("{}|{}", self.item1, self.item2)
+    }
+
+    pub fn make_key(a: &str, b: &str) -> String {
+        if a <= b { format!("{}|{}", a, b) } else { format!("{}|{}", b, a) }
+    }
+
+    /// Recency-weighted session count — decays over 30 days
+    pub fn score(&self) -> f64 {
+        let now = chrono::Utc::now().timestamp_millis();
+        let age_days = (now - self.last_seen).max(0) as f64 / (24.0 * 60.0 * 60.0 * 1000.0);
+        (self.session_count as f64 + 1.0).ln() * (-age_days / 30.0_f64).exp()
+    }
+}
+
 /// Persistent feedback state
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -364,13 +401,16 @@ pub struct FeedbackState {
     /// Stats per URL (keyed by normalized URL)
     #[serde(default)]
     pub url_stats: std::collections::HashMap<String, SuggestionStats>,
-    /// URL co-occurrence data
+    /// URL co-occurrence data (explicit user grouping signals)
     pub url_co_occurrences: Vec<UrlCoOccurrence>,
     /// Workspace patterns
     pub workspace_patterns: Vec<WorkspacePattern>,
     /// App-workspace associations for suggesting apps to workspaces
     #[serde(default)]
     pub app_workspace_associations: Vec<AppWorkspaceAssociation>,
+    /// Cross-type item co-occurrences from automatic session snapshots
+    #[serde(default)]
+    pub item_co_occurrences: Vec<ItemCoOccurrence>,
     /// Global stats
     pub total_events: u64,
     /// Last save timestamp

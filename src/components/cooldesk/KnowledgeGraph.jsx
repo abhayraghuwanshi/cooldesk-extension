@@ -1,7 +1,7 @@
 import { faDiagramProject, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { fetchGraph } from '../../services/graphService';
+import { fetchGraph, graphChanged } from '../../services/graphService';
 import './KnowledgeGraph.css';
 
 // ── Visual config ─────────────────────────────────────────────────────────────
@@ -12,18 +12,20 @@ const NODE_COLORS = {
   app:       '#f59e0b',
   folder:    '#facc15',
   file:      '#94a3b8',
+  media:     '#ec4899', // pink for music/media apps
 };
 
 const EDGE_COLORS = {
-  co_occurrence:       '#6366f1',
-  url_in_workspace:    '#22c55e',
-  app_in_workspace:    '#f59e0b',
-  folder_in_workspace: '#facc15',
-  file_in_workspace:   '#94a3b8',
+  co_occurrence:          '#6366f1',
+  session_co_occurrence:  '#a855f7', // purple — organic session-based connections
+  url_in_workspace:       '#22c55e',
+  app_in_workspace:       '#f59e0b',
+  folder_in_workspace:    '#facc15',
+  file_in_workspace:      '#94a3b8',
 };
 
 const BASE_RADIUS = 5;
-const FILTERS = ['all', 'url', 'app', 'folder', 'file', 'workspace'];
+const FILTERS = ['all', 'url', 'app', 'folder', 'file', 'media', 'workspace'];
 
 function nodeRadius(node) {
   return BASE_RADIUS + Math.sqrt(node.weight || 1) * 2;
@@ -64,6 +66,8 @@ function applyFilter(graphData, filter) {
 
 // ── GraphCanvas — embeddable graph component ──────────────────────────────────
 
+const LIVE_INTERVAL_MS = 30_000; // poll every 30 s
+
 export function GraphCanvas() {
   const [rawData, setRawData]         = useState({ nodes: [], links: [] });
   const [loading, setLoading]         = useState(false);
@@ -72,11 +76,20 @@ export function GraphCanvas() {
   const [selectedId, setSelectedId]   = useState(null);
   const [tooltip, setTooltip]         = useState(null);
   const [graphModule, setGraphModule] = useState(null);
-  const [dims, setDims]               = useState(null); // null until measured
+  const [dims, setDims]               = useState(null);
+  const [liveMode, setLiveMode]       = useState(true);  // on by default
+  const [lastUpdated, setLastUpdated] = useState(null);  // Date | null
+  const [hasNewData, setHasNewData]   = useState(false); // flash indicator
 
-  const fgRef      = useRef(null);
-  const canvasRef  = useRef(null);
-  const mousePos   = useRef({ x: 0, y: 0 }); // track real mouse coords for tooltip
+  const fgRef        = useRef(null);
+  const canvasRef    = useRef(null);
+  const mousePos     = useRef({ x: 0, y: 0 });
+  const rawDataRef   = useRef(rawData); // stable ref for interval closure
+  const flashTimer   = useRef(null);    // clearable timeout for hasNewData flash
+  useEffect(() => { rawDataRef.current = rawData; }, [rawData]);
+
+  // Clear flash timer on unmount to prevent setState on dead component
+  useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current); }, []);
 
   // Track mouse position globally so the tooltip can follow the cursor
   useEffect(() => {
@@ -98,17 +111,51 @@ export function GraphCanvas() {
     fgRef.current.d3Force('link')?.distance(80);
   }, [graphModule, rawData]);
 
-  // Fetch graph data on mount
-  useEffect(() => {
-    setLoading(true);
-    fetchGraph().then(data => {
-      if (!data) return;
-      setRawData({
-        nodes: data.nodes,
-        links: (data.edges || []).map(e => ({ ...e, source: e.source, target: e.target }))
-      });
-    }).finally(() => setLoading(false));
+  // Convert raw API response into graph data and merge smoothly
+  const applyGraphData = useCallback((data, isLiveUpdate = false) => {
+    if (!data) return;
+    const next = {
+      nodes: data.nodes,
+      links: (data.edges || []).map(e => ({ ...e }))
+    };
+    if (isLiveUpdate && !graphChanged({ nodes: rawDataRef.current.nodes, edges: rawDataRef.current.links }, { nodes: next.nodes, edges: next.links })) {
+      return; // no change — skip re-render
+    }
+    setRawData(next);
+    setLastUpdated(new Date());
+    if (isLiveUpdate) {
+      setHasNewData(true);
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+      flashTimer.current = setTimeout(() => setHasNewData(false), 2000);
+    }
   }, []);
+
+  // Initial fetch — aborted if component unmounts before response arrives
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    fetchGraph(false, controller.signal)
+      .then(data => { if (!controller.signal.aborted) applyGraphData(data); })
+      .catch(() => {}) // AbortError on unmount — ignore
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [applyGraphData]);
+
+  // Live update interval — re-fetches every 30 s when liveMode is on
+  useEffect(() => {
+    if (!liveMode) return;
+    const id = setInterval(async () => {
+      const data = await fetchGraph(true); // bypass cache
+      applyGraphData(data, true);
+    }, LIVE_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [liveMode, applyGraphData]);
+
+  // Manual refresh
+  const handleRefresh = useCallback(async () => {
+    const data = await fetchGraph(true);
+    applyGraphData(data);
+  }, [applyGraphData]);
 
   // Measure container synchronously on layout, then track resizes.
   // useLayoutEffect fires after DOM paint so getBoundingClientRect is accurate.
@@ -173,7 +220,6 @@ export function GraphCanvas() {
     if (node.type === 'workspace') {
       const rr = r * 1.4;
       ctx.beginPath();
-      // roundRect fallback for older WebKit
       if (ctx.roundRect) {
         ctx.roundRect(node.x - rr, node.y - rr, rr * 2, rr * 2, 4 / globalScale);
       } else {
@@ -183,6 +229,13 @@ export function GraphCanvas() {
       drawDiamond(ctx, node.x, node.y, r * 1.3);
     } else if (node.type === 'file') {
       drawSquare(ctx, node.x, node.y, r);
+    } else if (node.type === 'media') {
+      // Double-circle for media apps
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, r * 0.55, 0, 2 * Math.PI);
     } else {
       ctx.beginPath();
       ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
@@ -248,7 +301,26 @@ export function GraphCanvas() {
             </button>
           ))}
         </div>
+
         <div className="kg-actions">
+          {/* Live indicator */}
+          <span className={`kg-live-badge ${liveMode ? 'on' : 'off'} ${hasNewData ? 'pulse' : ''}`}
+                onClick={() => setLiveMode(v => !v)}
+                title={liveMode ? 'Live updates on — click to pause' : 'Live updates paused — click to resume'}>
+            <span className="kg-live-dot" />
+            {liveMode ? 'Live' : 'Paused'}
+          </span>
+
+          <button className="kg-btn" onClick={handleRefresh} title="Refresh graph now">
+            ↺
+          </button>
+
+          {lastUpdated && (
+            <span className="kg-last-updated" title={lastUpdated.toLocaleTimeString()}>
+              {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+
           <button className={`kg-btn ${showLabels ? 'active' : ''}`} onClick={() => setShowLabels(v => !v)}>
             Labels
           </button>

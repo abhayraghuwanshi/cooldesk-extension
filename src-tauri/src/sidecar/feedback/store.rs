@@ -403,6 +403,35 @@ impl FeedbackStore {
         let state = self.state.read().await;
         state.url_co_occurrences.clone()
     }
+
+    /// Record a session snapshot — everything active at the same moment.
+    /// Records all pairwise co-occurrences. Capped at 20 items to avoid N² blowup.
+    pub async fn record_snapshot(&self, items: Vec<String>) {
+        if items.len() < 2 { return; }
+        let items: Vec<_> = items.into_iter().take(20).collect();
+        let mut state = self.state.write().await;
+        let now = chrono::Utc::now().timestamp_millis();
+
+        for i in 0..items.len() {
+            for j in (i + 1)..items.len() {
+                let key = ItemCoOccurrence::make_key(&items[i], &items[j]);
+                if let Some(co) = state.item_co_occurrences.iter_mut().find(|c| c.key() == key) {
+                    co.session_count = co.session_count.saturating_add(1);
+                    co.last_seen = now;
+                } else {
+                    state.item_co_occurrences.push(
+                        ItemCoOccurrence::new(items[i].clone(), items[j].clone())
+                    );
+                }
+            }
+        }
+    }
+
+    /// Get all cross-type item co-occurrences (for graph building)
+    pub async fn get_all_item_co_occurrences(&self) -> Vec<ItemCoOccurrence> {
+        let state = self.state.read().await;
+        state.item_co_occurrences.clone()
+    }
 }
 
 /// Normalize app name for consistent lookup
