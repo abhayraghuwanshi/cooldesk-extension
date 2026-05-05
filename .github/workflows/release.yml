@@ -316,3 +316,33 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           draft: false
+
+      - name: Update GitHub Pages download
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Download the signed MSI from the release
+          MSI_URL=$(gh release view "$TAG" --repo "$REPO" --json assets \
+            --jq '.assets[] | select(.name | endswith("_en-US.msi")) | .browserDownloadUrl' | head -1)
+
+          if [ -z "$MSI_URL" ]; then
+            echo "No MSI found in release — skipping GitHub Pages update"
+            exit 0
+          fi
+
+          curl -L "$MSI_URL" -o CoolDesk-setup.msi
+          echo "Downloaded MSI: $(du -h CoolDesk-setup.msi | cut -f1)"
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Checkout gh-pages and update
+          git fetch origin gh-pages
+          git checkout gh-pages
+          cp CoolDesk-setup.msi downloads/CoolDesk-setup.msi
+          git add downloads/CoolDesk-setup.msi
+          git commit -m "update installer to $TAG"
+          git push origin gh-pages
