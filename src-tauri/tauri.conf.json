@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "CoolDesk",
-  "version": "1.1.1",
+  "version": "1.2.1",
   "identifier": "com.cooldesk.desktop",
   "build": {
     "frontendDist": "../dist-tauri",
@@ -34,7 +34,9 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; connect-src 'self' http://localhost:4545 ws://localhost:4545 https://github.com https://api.github.com https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob: https:; font-src 'self' data:; media-src 'self'",
+      "freezePrototype": true,
+      "dangerousDisableAssetCspModification": false
     }
   },
   "plugins": {
@@ -52,6 +54,8 @@
     "homepage": "https://github.com/abhayraghuwanshi/cooldesk-extension",
     "shortDescription": "AI-powered desktop workspace manager",
     "longDescription": "CoolDesk is an AI-powered workspace manager that helps you organize browser tabs, running apps, and workspaces across all your devices.",
+    "copyright": "© 2025 CoolDesk",
+    "category": "Productivity",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -62,6 +66,18 @@
     "externalBin": [
       "bin/AppScanner",
       "bin/AppMatcher"
-    ]
+    ],
+    "windows": {
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "http://timestamp.digicert.com"
+    },
+    "nsis": {
+      "displayLanguageSelector": false,
+      "installMode": "currentUser",
+      "installerIcon": "icons/icon.ico",
+      "languages": [
+        "English"
+      ]
+    }
   }
 }
