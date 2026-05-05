@@ -92,7 +92,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_CD }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
@@ -192,7 +192,7 @@ jobs:
         if: github.event_name == 'push'
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_CD }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
@@ -233,7 +233,7 @@ jobs:
         if: github.event_name == 'push' && runner.os == 'Windows'
         shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_CD }}
         run: |
           if (-not "${{ secrets.WINDOWS_CERT_PFX_BASE64 }}") {
             Write-Host "No cert — skipping re-upload"
@@ -255,14 +255,14 @@ jobs:
 
       - name: List release assets
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_CD }}
           TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name'
 
       - name: Generate latest.json for auto-updater
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_CD }}
           TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: |
