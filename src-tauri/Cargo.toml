@@ -16,7 +16,6 @@ name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
-llm = ["llama-cpp-2"]
 
 [build-dependencies]
 tauri-build = { version = "2.5.4", features = [] }
@@ -40,8 +39,6 @@ chrono = "0.4"
 url = "2"
 rand = "0.8"
 
-# Phase 2 ML/LLM dependencies (optional — compile with --features llm)
-llama-cpp-2 = { version = "0.1", optional = true }
 dirs = "5.0"
 reqwest = { version = "0.12", features = ["stream", "json"] }
 rig-core = "0.9"
