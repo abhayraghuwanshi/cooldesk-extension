@@ -1137,7 +1137,7 @@ pub async fn post_sync(
 
 use crate::sidecar::llm::models::{ModelInfo, LlmStatus, get_available_models, get_status, load_model, unload_model, download_model};
 use crate::sidecar::llm::inference::{chat};
-use crate::sidecar::llm::tasks::{summarize, categorize, group_workspaces, suggest_related, enhance_url, suggest_workspaces, parse_command};
+use crate::sidecar::llm::tasks::{summarize, group_workspaces, suggest_related, enhance_url, suggest_workspaces, parse_command};
 
 pub async fn llm_models() -> Json<HashMap<String, ModelInfo>> {
     if let Ok(models) = get_available_models().await {

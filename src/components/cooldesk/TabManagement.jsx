@@ -1,4 +1,4 @@
-import { faBrain, faClock, faDesktop, faDiagramProject, faSync, faTasks, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
+import { faBrain, faClock, faDesktop, faSync, faTasks, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { recordFeedbackEvent } from '../../services/feedbackService.js';
@@ -8,7 +8,6 @@ import { runningAppsService } from '../../services/runningAppsService.js';
 import { enrichRunningAppsWithIcons, getBaseDomainFromUrl } from '../../utils/helpers.js';
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
 import { AppCard, TabCard, TabGroupCard, TaskGroupCard } from './TabCard';
-import { GraphCanvas } from './KnowledgeGraph';
 
 // Chrome native tab group colors (matches Chrome's palette)
 const CHROME_GROUP_COLORS = {
@@ -70,8 +69,6 @@ export function TabManagement() {
   const [isPending, startTransition] = useTransition();
   const [runningApps, setRunningApps] = useState([]);
   const [chromeTabGroups, setChromeTabGroups] = useState({});
-
-  const [showGraph, setShowGraph] = useState(false);
 
   // Task-First Tab Modeling state
   const [taskViewEnabled, setTaskViewEnabled] = useState(false);
@@ -849,32 +846,6 @@ export function TabManagement() {
             />
             <span style={{ pointerEvents: 'none' }}>Auto Group</span>
           </button>
-          <button
-            onClick={() => setShowGraph(v => !v)}
-            style={{
-              background: showGraph
-                ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(79, 70, 229, 0.15))'
-                : 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))',
-              border: showGraph
-                ? '1px solid rgba(99, 102, 241, 0.4)'
-                : '1px solid rgba(100, 116, 139, 0.3)',
-              borderRadius: '8px',
-              padding: '6px 12px',
-              color: showGraph ? '#818cf8' : '#94A3B8',
-              cursor: 'pointer',
-              fontSize: 'var(--font-sm, 12px)',
-              fontWeight: 600,
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-            title={showGraph ? 'Back to tab list' : 'Show knowledge graph'}
-          >
-            <FontAwesomeIcon icon={faDiagramProject} style={{ pointerEvents: 'none' }} />
-            <span style={{ pointerEvents: 'none' }}>Graph</span>
-          </button>
-
           {/* <button
             onClick={() => {
               const newState = !taskViewEnabled;
@@ -946,16 +917,10 @@ export function TabManagement() {
         </div>
       </div>
 
-      {showGraph ? (
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <GraphCanvas />
-        </div>
-      ) : null}
-
       <div style={{
         flex: 1,
         overflowY: 'auto',
-        display: showGraph ? 'none' : 'flex',
+        display: 'flex',
         flexDirection: 'column',
         gap: '12px'
       }}>

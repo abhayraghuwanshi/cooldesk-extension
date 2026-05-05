@@ -34,7 +34,7 @@ jobs:
           prerelease: false
 
   build:
-    needs: []
+    needs: [create-release]
     if: always()
     strategy:
       fail-fast: false
@@ -65,11 +65,7 @@ jobs:
 
       - name: Set macOS deployment target
         if: runner.os == 'macOS'
-        run: |
-          echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
-          echo "CMAKE_OSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
-          echo "CXXFLAGS=-D_LIBCPP_DISABLE_AVAILABILITY" >> $GITHUB_ENV
-          echo "CMAKE_CXX_FLAGS=-D_LIBCPP_DISABLE_AVAILABILITY" >> $GITHUB_ENV
+        run: echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -77,24 +73,6 @@ jobs:
           workspaces: src-tauri
           shared-key: ${{ matrix.target }}
           cache-on-failure: true
-
-      - name: Cache Homebrew
-        if: runner.os == 'macOS'
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/Library/Caches/Homebrew
-            /opt/homebrew/Cellar/cmake
-          key: brew-cmake-${{ runner.os }}
-
-      - name: Install cmake (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          if ! command -v cmake &>/dev/null; then
-            brew install cmake
-          else
-            echo "cmake $(cmake --version | head -1) already available"
-          fi
 
       - name: Build sidecar binaries (macOS)
         if: runner.os == 'macOS'
@@ -121,7 +99,7 @@ jobs:
           args: --target ${{ matrix.target }} ${{ matrix.bundle_args }}
 
       - name: Test installation (macOS)
-        if: runner.os == 'macOS'
+        if: github.event_name == 'workflow_dispatch' && runner.os == 'macOS'
         run: |
           set -e
 
@@ -190,13 +168,14 @@ jobs:
           echo "==> Installation test complete"
 
       - name: Upload artifact (test only)
-        if: github.event_name == 'workflow_dispatch' && runner.os == 'macOS'
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: cooldesk-macos-${{ matrix.target }}
+          name: cooldesk-${{ matrix.target }}
           path: |
             src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
             src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app
+            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
           retention-days: 3
 
       # On tag push: build and attach to release
