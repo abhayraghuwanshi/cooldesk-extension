@@ -317,32 +317,36 @@ jobs:
           tag_name: ${{ github.ref_name }}
           draft: false
 
-      - name: Update GitHub Pages download
+      - name: Install AWS CLI
+        run: pip install awscli --quiet
+
+      - name: Upload installer to Cloudflare R2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_R2_ACCOUNT_ID }}
         run: |
           # Download the signed MSI from the release
           MSI_URL=$(gh release view "$TAG" --repo "$REPO" --json assets \
             --jq '.assets[] | select(.name | endswith("_en-US.msi")) | .browserDownloadUrl' | head -1)
 
           if [ -z "$MSI_URL" ]; then
-            echo "No MSI found in release — skipping GitHub Pages update"
+            echo "No MSI found in release — skipping R2 upload"
             exit 0
           fi
 
           curl -L "$MSI_URL" -o CoolDesk-setup.msi
-          echo "Downloaded MSI: $(du -h CoolDesk-setup.msi | cut -f1)"
+          echo "Downloaded: $(du -h CoolDesk-setup.msi | cut -f1)"
 
-          # Configure git
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Upload to R2 using S3-compatible API (R2 is S3-compatible)
+          aws s3 cp CoolDesk-setup.msi \
+            s3://cooldesk-downloads/CoolDesk-setup.msi \
+            --endpoint-url "https://${CF_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+            --region auto \
+            --no-progress
 
-          # Checkout gh-pages and update
-          git fetch origin gh-pages
-          git checkout gh-pages
-          cp CoolDesk-setup.msi downloads/CoolDesk-setup.msi
-          git add downloads/CoolDesk-setup.msi
-          git commit -m "update installer to $TAG"
-          git push origin gh-pages
+          echo "Uploaded to R2 — available at:"
+          echo "https://pub-<your-bucket-hash>.r2.dev/CoolDesk-setup.msi"
