@@ -69,15 +69,11 @@
     ],
     "windows": {
       "digestAlgorithm": "sha256",
-      "timestampUrl": "http://timestamp.digicert.com"
-    },
-    "nsis": {
-      "displayLanguageSelector": false,
-      "installMode": "currentUser",
-      "installerIcon": "icons/icon.ico",
-      "languages": [
-        "English"
-      ]
+      "timestampUrl": "http://timestamp.digicert.com",
+      "nsis": {
+        "displayLanguageSelector": false,
+        "installMode": "currentUser"
+      }
     }
   }
 }
