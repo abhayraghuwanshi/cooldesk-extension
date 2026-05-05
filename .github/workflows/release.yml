@@ -42,7 +42,7 @@ jobs:
         include:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            bundle_args: --bundles nsis
+            bundle_args: --bundles nsis,msi
           - os: macos-latest
             target: aarch64-apple-darwin
             bundle_args: --bundles dmg
@@ -87,7 +87,7 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
-      # On manual dispatch: just build and upload artifact for testing (no release)
+      # On manual dispatch: build only (no release)
       - name: Build (test only)
         if: github.event_name == 'workflow_dispatch'
         uses: tauri-apps/tauri-action@v0
@@ -98,6 +98,31 @@ jobs:
         with:
           args: --target ${{ matrix.target }} ${{ matrix.bundle_args }}
 
+      - name: Sign artifacts (Windows, test only)
+        if: github.event_name == 'workflow_dispatch' && runner.os == 'Windows'
+        shell: pwsh
+        env:
+          CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          if (-not $env:CERT_PFX_BASE64) {
+            Write-Host "WINDOWS_CERT_PFX_BASE64 not set — skipping signing"
+            exit 0
+          }
+          $certPath = "$env:TEMP\cooldesk.pfx"
+          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:CERT_PFX_BASE64))
+
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter "signtool.exe" |
+            Where-Object { $_.FullName -match "x64" } | Select-Object -First 1 -ExpandProperty FullName
+
+          Get-ChildItem "src-tauri\target\${{ matrix.target }}\release\bundle" -Recurse -Include "*.msi","*.exe" |
+            ForEach-Object {
+              Write-Host "Signing $($_.FullName)"
+              & $signtool sign /f $certPath /p $env:CERT_PASSWORD `
+                /tr http://timestamp.digicert.com /td sha256 /fd sha256 $_.FullName
+            }
+          Remove-Item $certPath
+
       - name: Test installation (macOS)
         if: github.event_name == 'workflow_dispatch' && runner.os == 'macOS'
         run: |
@@ -107,49 +132,35 @@ jobs:
           echo "==> Found DMG: $DMG"
           [ -f "$DMG" ] || (echo "ERROR: DMG not found" && exit 1)
 
-          # Mount DMG
           hdiutil attach "$DMG" -mountpoint /Volumes/CoolDeskTest -nobrowse -quiet
           echo "==> DMG mounted"
 
-          # Copy .app out
           APP=$(find /Volumes/CoolDeskTest -name "*.app" -maxdepth 1 | head -1)
-          echo "==> App in DMG: $APP"
           cp -r "$APP" /tmp/CoolDesk-test.app
           hdiutil detach /Volumes/CoolDeskTest -quiet
-          echo "==> DMG unmounted"
 
-          # Strip quarantine (required since app is unsigned)
           xattr -cr /tmp/CoolDesk-test.app
-          echo "==> Quarantine stripped"
 
-          # Check main binary exists and is executable
           MAIN_BIN=$(find /tmp/CoolDesk-test.app/Contents/MacOS -maxdepth 1 -type f | head -1)
-          echo "==> Main binary: $MAIN_BIN"
           [ -x "$MAIN_BIN" ] || (echo "ERROR: main binary not executable" && exit 1)
           file "$MAIN_BIN" | grep -q "Mach-O" || (echo "ERROR: not a valid Mach-O binary" && exit 1)
           echo "==> Main binary OK"
 
-          # Check AppScanner is executable and produces valid JSON
           SCANNER=/tmp/CoolDesk-test.app/Contents/MacOS/AppScanner
           [ -x "$SCANNER" ] || (echo "ERROR: AppScanner not executable" && exit 1)
-          echo "==> Running AppScanner..."
           "$SCANNER" | python3 -c "
           import sys, json
           d = json.load(sys.stdin)
           installed = len(d.get('installed', []))
-          windows = len(d.get('windows', []))
-          print(f'AppScanner OK: {installed} installed apps, {windows} running windows')
           assert installed > 0, 'Expected at least some installed apps'
+          print(f'AppScanner OK: {installed} installed apps')
           "
-          echo "==> AppScanner OK"
 
-          # Check AppMatcher binary exists and is executable
           MATCHER=/tmp/CoolDesk-test.app/Contents/MacOS/AppMatcher
           [ -x "$MATCHER" ] || (echo "ERROR: AppMatcher not executable" && exit 1)
           file "$MATCHER" | grep -q "Mach-O" || (echo "ERROR: AppMatcher not a valid Mach-O binary" && exit 1)
-          echo "==> AppMatcher binary OK"
+          echo "==> AppMatcher OK"
 
-          # Smoke-test: launch the app and check the process appears within 5s
           open /tmp/CoolDesk-test.app
           for i in $(seq 1 10); do
             if pgrep -f "CoolDesk-test" > /dev/null || pgrep -f "cooldesk" > /dev/null; then
@@ -157,12 +168,9 @@ jobs:
               break
             fi
             sleep 0.5
-            if [ $i -eq 10 ]; then
-              echo "WARNING: app process not detected after 5s (may be headless CI limitation)"
-            fi
+            [ $i -eq 10 ] && echo "WARNING: app process not detected (headless CI limitation)"
           done
 
-          # Cleanup
           pkill -f "CoolDesk-test" 2>/dev/null || true
           rm -rf /tmp/CoolDesk-test.app
           echo "==> Installation test complete"
@@ -176,9 +184,10 @@ jobs:
             src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
             src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app
             src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
+            src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
           retention-days: 3
 
-      # On tag push: build and attach to release
+      # On tag push: build and attach unsigned artifacts to release first
       - name: Build and upload to release
         if: github.event_name == 'push'
         uses: tauri-apps/tauri-action@v0
@@ -193,6 +202,49 @@ jobs:
           args: --target ${{ matrix.target }} ${{ matrix.bundle_args }}
           updaterJsonKeepUniversal: true
           updaterJsonPreferNsis: true
+
+      # Sign the built artifacts and re-upload to replace unsigned ones
+      - name: Sign artifacts (Windows)
+        if: github.event_name == 'push' && runner.os == 'Windows'
+        shell: pwsh
+        env:
+          CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          if (-not $env:CERT_PFX_BASE64) {
+            Write-Host "WINDOWS_CERT_PFX_BASE64 not set — skipping signing"
+            exit 0
+          }
+          $certPath = "$env:TEMP\cooldesk.pfx"
+          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:CERT_PFX_BASE64))
+
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter "signtool.exe" |
+            Where-Object { $_.FullName -match "x64" } | Select-Object -First 1 -ExpandProperty FullName
+
+          Get-ChildItem "src-tauri\target\${{ matrix.target }}\release\bundle" -Recurse -Include "*.msi","*.exe" |
+            ForEach-Object {
+              Write-Host "Signing $($_.FullName)"
+              & $signtool sign /f $certPath /p $env:CERT_PASSWORD `
+                /tr http://timestamp.digicert.com /td sha256 /fd sha256 $_.FullName
+            }
+          Remove-Item $certPath
+
+      - name: Re-upload signed artifacts to release (Windows)
+        if: github.event_name == 'push' && runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if (-not "${{ secrets.WINDOWS_CERT_PFX_BASE64 }}") {
+            Write-Host "No cert — skipping re-upload"
+            exit 0
+          }
+          $tag = "${{ github.ref_name }}"
+          Get-ChildItem "src-tauri\target\${{ matrix.target }}\release\bundle" -Recurse -Include "*.msi","*.exe" |
+            ForEach-Object {
+              Write-Host "Re-uploading signed: $($_.Name)"
+              gh release upload $tag $_.FullName --clobber --repo ${{ github.repository }}
+            }
 
   publish:
     needs: [create-release, build]

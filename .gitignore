@@ -1,3 +1,7 @@
+# Code signing — never commit these
+*.pfx
+*.b64.txt
+
 # Logs
 logs
 *.log
