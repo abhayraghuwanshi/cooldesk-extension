@@ -1,4 +1,3 @@
-use serde::Serialize;
 use tauri::{Manager, Emitter};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};

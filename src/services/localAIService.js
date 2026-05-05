@@ -753,8 +753,62 @@ export function getCurrentAgentSessionId() {
 // SIMPLE AGENT API (Context-Injection)
 // ==========================================
 
+// ==========================================
+// V3 CLOUD AI API (rig-core + OpenAI)
+// ==========================================
+
 /**
- * Chat with the simple agent (no tool routing, context-injection model)
+ * Check if cloud AI (v3) is configured and ready.
+ * @returns {Promise<{ok: boolean, configured: boolean, provider: string, model: string, message: string}>}
+ */
+export async function getCloudStatus() {
+    try {
+        const response = await fetch(`${SIDECAR_HTTP_URL}/llm/v3/status`);
+        if (!response.ok) return { ok: false, configured: false, provider: 'openai', model: 'gpt-4o-mini', message: 'Sidecar not running' };
+        return response.json();
+    } catch {
+        return { ok: false, configured: false, provider: 'openai', model: 'gpt-4o-mini', message: 'Sidecar not running' };
+    }
+}
+
+/**
+ * Chat with cloud AI — context-injection model (same interface as simpleChat).
+ * Calls /llm/v3/simple-chat. Requires OPENAI_API_KEY on the sidecar.
+ *
+ * @param {string} message
+ * @returns {Promise<{ok: boolean, response: string, actions: Array, provider: string, error?: string}>}
+ */
+export async function cloudSimpleChat(message) {
+    const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const response = await fetch(`${SIDECAR_HTTP_URL}/llm/v3/simple-chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, requestId })
+    });
+    if (!response.ok) throw new Error(`v3 simple-chat failed: ${response.status}`);
+    return response.json();
+}
+
+/**
+ * Chat with cloud AI agent — uses rig's tool-calling loop (workspaces, activity, etc.).
+ * Calls /llm/v3/chat. Requires OPENAI_API_KEY on the sidecar.
+ *
+ * @param {string} message
+ * @returns {Promise<{ok: boolean, response: string, provider: string, error?: string}>}
+ */
+export async function cloudChat(message) {
+    const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const response = await fetch(`${SIDECAR_HTTP_URL}/llm/v3/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, requestId })
+    });
+    if (!response.ok) throw new Error(`v3 chat failed: ${response.status}`);
+    return response.json();
+}
+
+/**
+ * Chat with cloud AI — context-injection model (same interface as simpleChat).
  * This endpoint passes user data as context and lets the LLM respond naturally.
  *
  * @param {string} message - User message

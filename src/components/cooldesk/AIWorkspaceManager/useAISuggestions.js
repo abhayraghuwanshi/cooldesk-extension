@@ -2,6 +2,19 @@ import { useState, useCallback, useRef } from 'react';
 import * as LocalAIService from '../../../services/localAIService';
 import { safeGetHostname } from '../../../utils/helpers';
 
+// Resolve the best available chat function: cloud → local → null
+async function resolveChatFn() {
+  try {
+    const cloud = await LocalAIService.getCloudStatus();
+    if (cloud?.configured) return LocalAIService.cloudSimpleChat;
+  } catch { /* ignore */ }
+  try {
+    const local = await LocalAIService.isAvailable();
+    if (local) return LocalAIService.simpleChat;
+  } catch { /* ignore */ }
+  return null;
+}
+
 // Cache for related URLs suggestions (persists across hook instances)
 const suggestionsCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -46,12 +59,12 @@ export function useAISuggestions(tabs, workspaces) {
     setError(null);
 
     try {
-      // Check if local AI is available
-      console.log('[useAISuggestions] Checking AI availability...');
-      const isAvailable = await LocalAIService.isAvailable();
-      console.log('[useAISuggestions] AI available:', isAvailable);
-      if (!isAvailable) {
-        throw new Error('AI not available. Please ensure CoolDesk desktop app is running.');
+      // Resolve best available chat function (cloud AI first, then local)
+      console.log('[useAISuggestions] Resolving AI backend...');
+      const chatFn = await resolveChatFn();
+      console.log('[useAISuggestions] Chat function resolved:', chatFn ? chatFn.name : 'none');
+      if (!chatFn) {
+        throw new Error('AI not available. Please configure a cloud AI key in Settings, or ensure the local AI model is loaded.');
       }
 
       // Format tabs for AI
@@ -118,10 +131,10 @@ Return JSON only:
 {"groups": [{"name": "Name", "description": "Brief desc", "items": [1,2], "suggestedUrls": [{"url": "https://example.com", "title": "Site Name", "reason": "Why useful"}]}]}`;
       }
 
-      // Use simple chat endpoint
-      console.log('[useAISuggestions] Calling simpleChat...');
-      const result = await LocalAIService.simpleChat(prompt);
-      console.log('[useAISuggestions] simpleChat result:', result);
+      // Use resolved chat endpoint
+      console.log('[useAISuggestions] Calling chat...');
+      const result = await chatFn(prompt);
+      console.log('[useAISuggestions] chat result:', result);
 
       if (!result.ok) {
         throw new Error(result.error || 'AI request failed');
@@ -180,7 +193,9 @@ Available workspaces: ${workspaceNames.join(', ')}
 
 Return JSON: {"workspace": "Best Workspace Name", "confidence": 0.8}`;
 
-      const result = await LocalAIService.simpleChat(prompt);
+      const chatFn = await resolveChatFn();
+      if (!chatFn) return null;
+      const result = await chatFn(prompt);
       if (result.ok && result.response) {
         const jsonMatch = result.response.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
@@ -288,7 +303,9 @@ Return JSON with indices from the list above:
 {"picks": [{"index": 1, "reason": "Brief reason why it fits"}]}`;
 
         console.log('[useAISuggestions] suggestRelatedUrls for:', workspace.name, 'with', candidateUrls.length, 'candidates');
-        const result = await LocalAIService.simpleChat(prompt);
+        const chatFn = await resolveChatFn();
+        if (!chatFn) return [];
+        const result = await chatFn(prompt);
 
         let suggestions = [];
         if (result.ok && result.response) {
@@ -344,11 +361,11 @@ Return JSON with indices from the list above:
    */
   const classifyAppsToWorkspaces = useCallback(async (installedApps, targetWorkspaces) => {
     try {
-      const isAvailable = await LocalAIService.isAvailable();
-      if (!isAvailable) return {};
+      const chatFn = await resolveChatFn();
+      if (!chatFn) return {};
 
       const { classifyAppsToWorkspaces: classify } = await import('../../../services/appCategorizationService');
-      return await classify(installedApps, targetWorkspaces, LocalAIService.simpleChat);
+      return await classify(installedApps, targetWorkspaces, chatFn);
     } catch (err) {
       console.error('[useAISuggestions] classifyAppsToWorkspaces error:', err);
       return {};

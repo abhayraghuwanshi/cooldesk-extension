@@ -57,6 +57,7 @@ export default function WorkspaceEditor({
   // AI suggestions
   relatedUrls = [],
   relatedUrlsLoading = false,
+  aiError = null,
   onAddItem
 }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -528,6 +529,14 @@ export default function WorkspaceEditor({
               <div className="awm-items-row awm-items-loading">
                 <div className="awm-spinner-xs" />
                 <span className="awm-items-loading-text">Finding suggestions...</span>
+              </div>
+            )}
+
+            {/* AI error state */}
+            {aiError && !relatedUrlsLoading && !hasSuggestions && (
+              <div className="awm-items-row awm-items-ai-error">
+                <FontAwesomeIcon icon={faWandMagicSparkles} />
+                <span className="awm-items-loading-text">{aiError}</span>
               </div>
             )}
 

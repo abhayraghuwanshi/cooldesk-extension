@@ -49,6 +49,7 @@
     "psl": "^1.15.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-force-graph-2d": "^1.29.1",
     "y-indexeddb": "^9.0.12",
     "y-webrtc": "^10.3.0",
     "yjs": "^13.6.29"

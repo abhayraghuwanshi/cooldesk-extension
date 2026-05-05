@@ -1,4 +1,4 @@
-import { faGear } from '@fortawesome/free-solid-svg-icons';
+import { faDiagramProject, faGear } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import logo from '../../../logo-2.png';
@@ -12,6 +12,7 @@ import '../../styles/spatial.css';
 import '../../styles/tabCard.css';
 import { Face, WorkspaceShell } from '../spatial/WorkspaceShell';
 import AIWorkspaceManager from './AIWorkspaceManager';
+import { KnowledgeGraph } from './KnowledgeGraph';
 import { CoolSearch } from './CoolSearch';
 import { GlobalAddButton } from './GlobalAddButton';
 import { OverviewDashboard } from './OverviewDashboard';
@@ -133,6 +134,8 @@ export function CoolDeskContainer({
     initialWorkspace: null
   });
 
+  const [graphOpen, setGraphOpen] = useState(false);
+
   const handleOpenAIManager = useCallback((workspace = null) => {
     setAiManagerState({
       isOpen: true,
@@ -177,14 +180,16 @@ export function CoolDeskContainer({
     }
   }, []);
 
-  // Keyboard shortcut for AI Workspace Manager (Cmd/Ctrl+Shift+K)
+  // Keyboard shortcuts for AI Workspace Manager (Ctrl+Shift+K) and Graph (Ctrl+Shift+G)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'k') {
         e.preventDefault();
-        if (!aiManagerState.isOpen) {
-          handleOpenAIManager(null);
-        }
+        if (!aiManagerState.isOpen) handleOpenAIManager(null);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'g') {
+        e.preventDefault();
+        setGraphOpen(prev => !prev);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -539,6 +544,9 @@ export function CoolDeskContainer({
         </div>
 
         <div className="header-right">
+          <button className="cooldesk-settings-btn" onClick={() => setGraphOpen(true)} title="Knowledge Graph (Ctrl+Shift+G)">
+            <FontAwesomeIcon icon={faDiagramProject} />
+          </button>
           <button className="cooldesk-settings-btn" onClick={onOpenSettings} title="Settings">
             <FontAwesomeIcon icon={faGear} />
           </button>
@@ -548,7 +556,7 @@ export function CoolDeskContainer({
       {/* Spatial Workspace Shell - Takes remaining height */}
       {/* In extension mode: Only show OverviewDashboard */}
       {/* In desktop app (Tauri/Electron): Show all faces with navigation */}
-      <WorkspaceShell activeFace={activeFace} onFaceChange={handleFaceChange} isDesktopApp={isDesktopApp}>
+      <WorkspaceShell activeFace={activeFace} onFaceChange={handleFaceChange} onOpenSettings={isDesktopApp ? onOpenSettings : undefined} isDesktopApp={isDesktopApp}>
         {/* Face 1: Workspace Details + ChatContext (Left) - Desktop App Only */}
         {isDesktopApp && (
           <Face index="workspace">
@@ -660,6 +668,9 @@ export function CoolDeskContainer({
         onClose={handleCloseAIManager}
         initialWorkspace={aiManagerState.initialWorkspace}
       />
+
+      {/* Knowledge Graph */}
+      <KnowledgeGraph isOpen={graphOpen} onClose={() => setGraphOpen(false)} />
     </div >
   );
 }

@@ -3,7 +3,8 @@ import {
   faChevronRight,
   faFolder,
   faFolderOpen,
-  faPlus
+  faPlus,
+  faWandMagicSparkles
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useState } from 'react';
@@ -12,7 +13,9 @@ export default function WorkspaceSidebar({
   workspaces = [],
   selectedId,
   onSelect,
-  onCreateNew
+  onCreateNew,
+  onShowSuggestions,
+  isSuggestionsMode = false
 }) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -27,7 +30,14 @@ export default function WorkspaceSidebar({
           <FontAwesomeIcon icon={faChevronRight} />
         </button>
         <div className="awm-sidebar-icons">
-          {workspaces.slice(0, 8).map(workspace => (
+          <button
+            className={`awm-sidebar-icon-btn ${isSuggestionsMode ? 'selected' : ''}`}
+            onClick={onShowSuggestions}
+            title="AI Suggestions"
+          >
+            <FontAwesomeIcon icon={faWandMagicSparkles} />
+          </button>
+          {workspaces.slice(0, 7).map(workspace => (
             <button
               key={workspace.id}
               className={`awm-sidebar-icon-btn ${workspace.id === selectedId ? 'selected' : ''}`}
@@ -64,6 +74,15 @@ export default function WorkspaceSidebar({
 
       {/* Workspace List */}
       <div className="awm-sidebar-list">
+        {/* AI Suggestions entry — always at top, acts as "home" */}
+        <button
+          className={`awm-sidebar-item awm-sidebar-suggestions-item ${isSuggestionsMode ? 'selected' : ''}`}
+          onClick={onShowSuggestions}
+        >
+          <FontAwesomeIcon icon={faWandMagicSparkles} className="awm-sidebar-item-icon-sm" />
+          <span className="awm-sidebar-item-name">AI Suggestions</span>
+        </button>
+
         {workspaces.map(workspace => {
           const isSelected = workspace.id === selectedId;
           return (

@@ -45,6 +45,18 @@ pub struct SyncData {
     pub client_to_device: HashMap<String, String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceApp {
+    pub name: String,
+    #[serde(default)]
+    pub path: String,
+    pub icon: Option<String>,
+    /// "default" | "folder" | "file" | "vscode" | "cursor" | "windsurf" | "idea" | ...
+    pub app_type: Option<String>,
+    pub added_at: Option<i64>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Workspace {
@@ -52,6 +64,8 @@ pub struct Workspace {
     pub name: String,
     #[serde(default)]
     pub urls: Vec<WorkspaceUrl>,
+    #[serde(default)]
+    pub apps: Vec<WorkspaceApp>,
     pub created_at: Option<i64>,
     pub updated_at: Option<i64>,
 }
@@ -646,3 +660,36 @@ fn default_workspace_for_app_count() -> usize {
 }
 
 // Note: Reuses WorkspaceSuggestionResponse and ScoredSuggestion from above
+
+// ── Knowledge Graph ───────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphNode {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub node_type: String, // "url" | "app" | "folder" | "file" | "workspace"
+    pub label: String,
+    pub title: Option<String>,
+    pub weight: u32, // visit / association count → drives node radius in UI
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphEdge {
+    pub source: String,
+    pub target: String,
+    #[serde(rename = "type")]
+    pub edge_type: String,
+    pub weight: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_seen: Option<i64>, // ms timestamp — used by frontend time filter
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphResponse {
+    pub nodes: Vec<GraphNode>,
+    pub edges: Vec<GraphEdge>,
+    pub meta: serde_json::Value,
+}

@@ -1,4 +1,4 @@
-import { faFolder, faStickyNote, faTh, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faFolder, faGear, faStickyNote, faTh, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { teamManager } from '../../services/p2p/teamManager';
@@ -18,7 +18,7 @@ import '../../styles/spatial.css';
 // Create context for face state management to avoid prop drilling
 const WorkspaceFaceContext = React.createContext({ currentFace: 'overview', isDesktopApp: false });
 
-export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange, onSearch, isDesktopApp = false }) {
+export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange, onSearch, onOpenSettings, isDesktopApp = false }) {
   const [currentFace, setCurrentFace] = useState(activeFace);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [activeTeam, setActiveTeam] = useState(null);
@@ -336,6 +336,18 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
             >
               <FontAwesomeIcon icon={faStickyNote} className="face-icon" />
             </button>
+            {onOpenSettings && (
+              <button
+                className="face-dot"
+                onClick={onOpenSettings}
+                onMouseEnter={() => setHoveredFace('settings')}
+                onMouseLeave={() => setHoveredFace(null)}
+                title="Settings"
+                data-onboarding="nav-settings"
+              >
+                <FontAwesomeIcon icon={faGear} className="face-icon" />
+              </button>
+            )}
           </div>
         )}
 

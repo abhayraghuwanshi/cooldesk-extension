@@ -4,7 +4,7 @@
  * Manages local LLM download, loading, and configuration
  */
 
-import { faBolt, faCircleNotch, faCloud, faDownload, faMemory, faMicrochip, faRocket, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faBolt, faCheck, faCircleNotch, faCloud, faDownload, faEye, faEyeSlash, faKey, faMemory, faMicrochip, faRocket, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 
@@ -212,6 +212,9 @@ export default function LocalAITab() {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {/* Cloud AI Section — always shown */}
+            <CloudAISection sidecarAvailable={sidecarAvailable} />
+
             {/* Status Card */}
             <div style={{
                 padding: 20,
@@ -453,6 +456,291 @@ export default function LocalAITab() {
         </div>
     );
 }
+
+// =============================================================================
+// CLOUD AI SECTION
+// =============================================================================
+
+const SIDECAR_URL = 'http://127.0.0.1:4545';
+
+const OPENAI_MODELS = [
+    { value: 'gpt-4o-mini', label: 'GPT-4o Mini — fast, cheap, great for most tasks' },
+    { value: 'gpt-4o',      label: 'GPT-4o — more capable, higher cost' },
+    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+];
+
+const ANTHROPIC_MODELS = [
+    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku — fastest, lowest cost' },
+    { value: 'claude-sonnet-4-6',         label: 'Claude Sonnet — balanced' },
+];
+
+function CloudAISection({ sidecarAvailable }) {
+    const [provider, setProvider] = useState('openai');
+    const [apiKey, setApiKey] = useState('');
+    const [model, setModel] = useState('gpt-4o-mini');
+    const [showKey, setShowKey] = useState(false);
+    const [status, setStatus] = useState(null); // {configured, apiKeyMasked, model, provider}
+    const [saving, setSaving] = useState(false);
+    const [saveMsg, setSaveMsg] = useState(null); // {ok, text}
+    const [testing, setTesting] = useState(false);
+    const [testResult, setTestResult] = useState(null);
+
+    useEffect(() => {
+        if (!sidecarAvailable) return;
+        fetch(`${SIDECAR_URL}/llm/v3/config`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data) return;
+                setStatus(data);
+                setProvider(data.provider || 'openai');
+                setModel(data.model || 'gpt-4o-mini');
+                // Don't pre-fill the key input — user must re-enter to change
+            })
+            .catch(() => {});
+    }, [sidecarAvailable]);
+
+    const handleSave = async () => {
+        setSaving(true);
+        setSaveMsg(null);
+        try {
+            const body = { provider, model };
+            if (apiKey.trim()) body.apiKey = apiKey.trim();
+            const res = await fetch(`${SIDECAR_URL}/llm/v3/config`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const data = await res.json();
+            setSaveMsg({ ok: data.ok, text: data.ok ? 'Saved!' : data.error || 'Save failed' });
+            if (data.ok) {
+                setApiKey('');
+                // Refresh status
+                const s = await fetch(`${SIDECAR_URL}/llm/v3/config`).then(r => r.json()).catch(() => null);
+                if (s) setStatus(s);
+            }
+        } catch (e) {
+            setSaveMsg({ ok: false, text: e.message });
+        } finally {
+            setSaving(false);
+            setTimeout(() => setSaveMsg(null), 3000);
+        }
+    };
+
+    const handleTest = async () => {
+        setTesting(true);
+        setTestResult(null);
+        try {
+            const res = await fetch(`${SIDECAR_URL}/llm/v3/simple-chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: 'Reply with exactly: "Connection OK"' }),
+            });
+            const data = await res.json();
+            setTestResult({ ok: data.ok, text: data.ok ? `✓ ${data.response?.slice(0, 80)}` : data.error });
+        } catch (e) {
+            setTestResult({ ok: false, text: e.message });
+        } finally {
+            setTesting(false);
+            setTimeout(() => setTestResult(null), 5000);
+        }
+    };
+
+    const modelOptions = provider === 'anthropic' ? ANTHROPIC_MODELS : OPENAI_MODELS;
+    const isConfigured = status?.configured;
+
+    return (
+        <div style={{
+            padding: 20,
+            background: 'rgba(255,255,255,0.03)',
+            borderRadius: 16,
+            border: isConfigured
+                ? '1px solid rgba(139, 92, 246, 0.35)'
+                : '1px solid rgba(255,255,255,0.06)',
+        }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+                <div style={{
+                    width: 40, height: 40, borderRadius: 12,
+                    background: isConfigured
+                        ? 'linear-gradient(135deg, #8b5cf6, #6366f1)'
+                        : 'linear-gradient(135deg, #4b5563, #374151)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', transition: 'background 0.3s',
+                }}>
+                    <FontAwesomeIcon icon={faCloud} />
+                </div>
+                <div>
+                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#fff' }}>
+                        Cloud AI
+                    </h3>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
+                        {isConfigured
+                            ? `${status.provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} · ${status.model} · ${status.apiKeyMasked}`
+                            : 'Connect OpenAI or Anthropic for smarter AI features'}
+                    </div>
+                </div>
+                {isConfigured && (
+                    <span style={{
+                        marginLeft: 'auto', fontSize: 11, padding: '3px 8px', borderRadius: 6,
+                        background: 'rgba(139, 92, 246, 0.2)', color: '#c4b5fd',
+                    }}>
+                        CONFIGURED
+                    </span>
+                )}
+            </div>
+
+            {/* Form */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {/* Provider + Model row */}
+                <div style={{ display: 'flex', gap: 12 }}>
+                    <div style={{ flex: 1 }}>
+                        <label style={{ display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>
+                            Provider
+                        </label>
+                        <select
+                            value={provider}
+                            onChange={e => {
+                                setProvider(e.target.value);
+                                setModel(e.target.value === 'anthropic' ? 'claude-haiku-4-5-20251001' : 'gpt-4o-mini');
+                            }}
+                            style={{
+                                width: '100%', padding: '9px 12px', borderRadius: 8,
+                                background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
+                                color: '#fff', fontSize: 13, outline: 'none', cursor: 'pointer',
+                            }}
+                        >
+                            <option value="openai">OpenAI</option>
+                            <option value="anthropic">Anthropic</option>
+                        </select>
+                    </div>
+                    <div style={{ flex: 2 }}>
+                        <label style={{ display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>
+                            Model
+                        </label>
+                        <select
+                            value={model}
+                            onChange={e => setModel(e.target.value)}
+                            style={{
+                                width: '100%', padding: '9px 12px', borderRadius: 8,
+                                background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
+                                color: '#fff', fontSize: 13, outline: 'none', cursor: 'pointer',
+                            }}
+                        >
+                            {modelOptions.map(m => (
+                                <option key={m.value} value={m.value}>{m.label}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+
+                {/* API Key */}
+                <div>
+                    <label style={{ display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>
+                        <FontAwesomeIcon icon={faKey} style={{ marginRight: 6 }} />
+                        API Key {isConfigured && <span style={{ color: 'rgba(255,255,255,0.3)' }}>— leave blank to keep existing</span>}
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                        <input
+                            type={showKey ? 'text' : 'password'}
+                            value={apiKey}
+                            onChange={e => setApiKey(e.target.value)}
+                            placeholder={isConfigured ? status.apiKeyMasked : (provider === 'anthropic' ? 'sk-ant-...' : 'sk-...')}
+                            style={{
+                                width: '100%', padding: '9px 40px 9px 12px', borderRadius: 8,
+                                background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
+                                color: '#fff', fontSize: 13, outline: 'none',
+                                boxSizing: 'border-box',
+                            }}
+                        />
+                        <button
+                            onClick={() => setShowKey(v => !v)}
+                            style={{
+                                position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                                background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)',
+                                cursor: 'pointer', padding: 4, fontSize: 13,
+                            }}
+                        >
+                            <FontAwesomeIcon icon={showKey ? faEyeSlash : faEye} />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Action buttons */}
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <button
+                        onClick={handleSave}
+                        disabled={saving || (!apiKey.trim() && !isConfigured)}
+                        style={{
+                            padding: '9px 20px', borderRadius: 8, border: 'none',
+                            background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                            color: '#fff', fontSize: 13, fontWeight: 500,
+                            cursor: saving ? 'wait' : 'pointer',
+                            opacity: (saving || (!apiKey.trim() && !isConfigured)) ? 0.5 : 1,
+                            display: 'flex', alignItems: 'center', gap: 6,
+                        }}
+                    >
+                        {saving
+                            ? <><FontAwesomeIcon icon={faCircleNotch} spin /> Saving...</>
+                            : <><FontAwesomeIcon icon={faCheck} /> Save</>}
+                    </button>
+
+                    {isConfigured && (
+                        <button
+                            onClick={handleTest}
+                            disabled={testing}
+                            style={{
+                                padding: '9px 16px', borderRadius: 8,
+                                border: '1px solid rgba(255,255,255,0.15)',
+                                background: 'rgba(255,255,255,0.05)',
+                                color: '#fff', fontSize: 13, cursor: testing ? 'wait' : 'pointer',
+                                display: 'flex', alignItems: 'center', gap: 6,
+                            }}
+                        >
+                            {testing ? <><FontAwesomeIcon icon={faCircleNotch} spin /> Testing...</> : 'Test Connection'}
+                        </button>
+                    )}
+
+                    {saveMsg && (
+                        <span style={{ fontSize: 13, color: saveMsg.ok ? '#4ade80' : '#f87171' }}>
+                            {saveMsg.text}
+                        </span>
+                    )}
+                </div>
+
+                {/* Test result */}
+                {testResult && (
+                    <div style={{
+                        padding: '10px 14px', borderRadius: 8, fontSize: 13,
+                        background: testResult.ok ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                        border: `1px solid ${testResult.ok ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                        color: testResult.ok ? '#4ade80' : '#f87171',
+                    }}>
+                        {testResult.text}
+                    </div>
+                )}
+
+                {/* Hint */}
+                {!isConfigured && (
+                    <div style={{
+                        padding: '10px 14px', borderRadius: 8, fontSize: 12,
+                        background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.15)',
+                        color: 'rgba(255,255,255,0.5)', lineHeight: 1.5,
+                    }}>
+                        Get your API key from{' '}
+                        <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer"
+                            style={{ color: '#818cf8' }}>platform.openai.com</a>{' '}
+                        (OpenAI) or{' '}
+                        <a href="https://console.anthropic.com/account/keys" target="_blank" rel="noreferrer"
+                            style={{ color: '#818cf8' }}>console.anthropic.com</a>{' '}
+                        (Anthropic). Keys are stored locally on your device.
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// =============================================================================
 
 function ModelCard({ filename, model, isLoaded, isLoading, downloadProgress, onDownload, onLoad }) {
     const isDownloading = downloadProgress !== undefined;

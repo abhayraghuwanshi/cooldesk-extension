@@ -5,9 +5,14 @@
 
 import {
     faBolt,
+    faCheck,
     faChevronDown,
     faCircleNotch,
+    faCloud,
     faDownload,
+    faEye,
+    faEyeSlash,
+    faKey,
     faMemory,
     faMicrochip,
     faRocket,
@@ -215,6 +220,9 @@ export default function AIModelsTab() {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {/* Cloud AI */}
+            <CloudAISection sidecarAvailable={sidecarAvailable} />
+
             {/* Error Display */}
             {error && (
                 <div style={{
@@ -483,6 +491,311 @@ export default function AIModelsTab() {
         </div>
     );
 }
+
+// =============================================================================
+// CLOUD AI SECTION
+// =============================================================================
+
+const PROVIDER_MODELS = {
+    openai: [
+        { value: 'gpt-4o-mini', label: 'GPT-4o Mini — fast & cheap (recommended)' },
+        { value: 'gpt-4o',      label: 'GPT-4o — most capable' },
+        { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+    ],
+    anthropic: [
+        { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 — fastest, lowest cost' },
+        { value: 'claude-sonnet-4-6',         label: 'Claude Sonnet 4.6 — balanced' },
+        { value: 'claude-opus-4-7',           label: 'Claude Opus 4.7 — most capable' },
+    ],
+    gemini: [
+        { value: 'gemini-2.5-flash',            label: 'Gemini 2.5 Flash — fast, stable (recommended)' },
+        { value: 'gemini-2.5-flash-lite',        label: 'Gemini 2.5 Flash Lite — cheapest, stable' },
+        { value: 'gemini-3-flash-preview',       label: 'Gemini 3 Flash Preview — latest (preview)' },
+        { value: 'gemini-3.1-pro-preview',       label: 'Gemini 3.1 Pro Preview — most capable (preview)' },
+        { value: 'gemini-3.1-flash-lite-preview',label: 'Gemini 3.1 Flash Lite Preview — fast (preview)' },
+    ],
+};
+
+function CloudAISection({ sidecarAvailable }) {
+    const [provider, setProvider] = useState('openai');
+    const [apiKey, setApiKey] = useState('');
+    const [model, setModel] = useState('gpt-4o-mini');
+    const [showKey, setShowKey] = useState(false);
+    const [configStatus, setConfigStatus] = useState(null);
+    const [saving, setSaving] = useState(false);
+    const [saveMsg, setSaveMsg] = useState(null);
+    const [testing, setTesting] = useState(false);
+    const [testResult, setTestResult] = useState(null);
+    const [expanded, setExpanded] = useState(true);
+
+    useEffect(() => {
+        if (!sidecarAvailable) return;
+        fetch(`${SIDECAR_URL}/llm/v3/config`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data) return;
+                setConfigStatus(data);
+                setProvider(data.provider || 'openai');
+                setModel(data.model || 'gpt-4o-mini');
+            })
+            .catch(() => {});
+    }, [sidecarAvailable]);
+
+    const handleSave = async () => {
+        setSaving(true);
+        setSaveMsg(null);
+        try {
+            const body = { provider, model };
+            if (apiKey.trim()) body.apiKey = apiKey.trim();
+            const res = await fetch(`${SIDECAR_URL}/llm/v3/config`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const data = await res.json();
+            setSaveMsg({ ok: data.ok, text: data.ok ? 'Saved!' : (data.error || 'Save failed') });
+            if (data.ok) {
+                setApiKey('');
+                const s = await fetch(`${SIDECAR_URL}/llm/v3/config`).then(r => r.json()).catch(() => null);
+                if (s) setConfigStatus(s);
+            }
+        } catch (e) {
+            setSaveMsg({ ok: false, text: e.message });
+        } finally {
+            setSaving(false);
+            setTimeout(() => setSaveMsg(null), 3000);
+        }
+    };
+
+    const handleTest = async () => {
+        setTesting(true);
+        setTestResult(null);
+        try {
+            const res = await fetch(`${SIDECAR_URL}/llm/v3/simple-chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: 'Reply with exactly two words: Connection OK' }),
+            });
+            const data = await res.json();
+            setTestResult({ ok: data.ok, text: data.ok ? `✓ ${data.response?.slice(0, 80)}` : (data.error || 'Failed') });
+        } catch (e) {
+            setTestResult({ ok: false, text: e.message });
+        } finally {
+            setTesting(false);
+            setTimeout(() => setTestResult(null), 5000);
+        }
+    };
+
+    const isConfigured = configStatus?.configured;
+
+    return (
+        <div style={{
+            background: 'rgba(255,255,255,0.02)',
+            borderRadius: 16,
+            border: isConfigured
+                ? '1px solid rgba(139, 92, 246, 0.3)'
+                : '1px solid rgba(255,255,255,0.06)',
+            overflow: 'hidden',
+        }}>
+            {/* Header (collapsible) */}
+            <div
+                onClick={() => setExpanded(v => !v)}
+                style={{
+                    padding: '16px 20px',
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    cursor: 'pointer',
+                    borderBottom: expanded ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                }}
+            >
+                <div style={{
+                    width: 40, height: 40, borderRadius: 12,
+                    background: isConfigured
+                        ? 'linear-gradient(135deg, #8b5cf6, #6366f1)'
+                        : 'linear-gradient(135deg, #4b5563, #374151)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', transition: 'background 0.3s', flexShrink: 0,
+                }}>
+                    <FontAwesomeIcon icon={faCloud} />
+                </div>
+                <div style={{ flex: 1 }}>
+                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#fff' }}>Cloud AI</h3>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
+                        {isConfigured
+                            ? `${{ openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Gemini' }[configStatus.provider] || configStatus.provider} · ${configStatus.model} · ${configStatus.apiKeyMasked}`
+                            : 'Connect OpenAI, Anthropic, or Gemini for smarter AI'}
+                    </div>
+                </div>
+                {isConfigured && (
+                    <span style={{
+                        fontSize: 10, padding: '3px 8px', borderRadius: 6,
+                        background: 'rgba(139,92,246,0.2)', color: '#c4b5fd',
+                        marginRight: 8,
+                    }}>
+                        CONFIGURED
+                    </span>
+                )}
+                <FontAwesomeIcon
+                    icon={faChevronDown}
+                    style={{
+                        color: '#9ca3af', transition: 'transform 0.2s',
+                        transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                    }}
+                />
+            </div>
+
+            {expanded && (
+                <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {/* Provider + Model */}
+                    <div style={{ display: 'flex', gap: 12 }}>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                Provider
+                            </label>
+                            <select
+                                value={provider}
+                                onChange={e => {
+                                    setProvider(e.target.value);
+                                    const defaults = { openai: 'gpt-4o-mini', anthropic: 'claude-haiku-4-5-20251001', gemini: 'gemini-2.5-flash' };
+                                    setModel(defaults[e.target.value] || 'gpt-4o-mini');
+                                }}
+                                style={{
+                                    width: '100%', padding: '8px 10px', borderRadius: 8,
+                                    background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
+                                    color: '#fff', fontSize: 13, outline: 'none', cursor: 'pointer',
+                                }}
+                            >
+                                <option value="openai">OpenAI</option>
+                                <option value="anthropic">Anthropic</option>
+                                <option value="gemini">Google Gemini</option>
+                            </select>
+                        </div>
+                        <div style={{ flex: 2 }}>
+                            <label style={{ display: 'block', fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                Model
+                            </label>
+                            <select
+                                value={model}
+                                onChange={e => setModel(e.target.value)}
+                                style={{
+                                    width: '100%', padding: '8px 10px', borderRadius: 8,
+                                    background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
+                                    color: '#fff', fontSize: 13, outline: 'none', cursor: 'pointer',
+                                }}
+                            >
+                                {(PROVIDER_MODELS[provider] || PROVIDER_MODELS.openai).map(m => (
+                                    <option key={m.value} value={m.value}>{m.label}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* API Key */}
+                    <div>
+                        <label style={{ display: 'block', fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            <FontAwesomeIcon icon={faKey} style={{ marginRight: 5 }} />
+                            API Key {isConfigured && <span style={{ color: 'rgba(255,255,255,0.25)', textTransform: 'none' }}>— leave blank to keep current</span>}
+                        </label>
+                        <div style={{ position: 'relative' }}>
+                            <input
+                                type={showKey ? 'text' : 'password'}
+                                value={apiKey}
+                                onChange={e => setApiKey(e.target.value)}
+                                placeholder={isConfigured ? configStatus.apiKeyMasked : (provider === 'anthropic' ? 'sk-ant-...' : 'sk-...')}
+                                style={{
+                                    width: '100%', padding: '8px 36px 8px 10px', borderRadius: 8,
+                                    background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
+                                    color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                                }}
+                            />
+                            <button
+                                onClick={() => setShowKey(v => !v)}
+                                style={{
+                                    position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                                    background: 'none', border: 'none', color: 'rgba(255,255,255,0.35)',
+                                    cursor: 'pointer', padding: 4, fontSize: 12,
+                                }}
+                            >
+                                <FontAwesomeIcon icon={showKey ? faEyeSlash : faEye} />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Buttons row */}
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button
+                            onClick={handleSave}
+                            disabled={saving || (!apiKey.trim() && !isConfigured)}
+                            style={{
+                                padding: '8px 18px', borderRadius: 8, border: 'none',
+                                background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                                color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                                opacity: (saving || (!apiKey.trim() && !isConfigured)) ? 0.45 : 1,
+                                display: 'flex', alignItems: 'center', gap: 6,
+                            }}
+                        >
+                            {saving
+                                ? <><FontAwesomeIcon icon={faCircleNotch} spin /> Saving...</>
+                                : <><FontAwesomeIcon icon={faCheck} /> Save</>}
+                        </button>
+
+                        {isConfigured && (
+                            <button
+                                onClick={handleTest}
+                                disabled={testing}
+                                style={{
+                                    padding: '8px 14px', borderRadius: 8,
+                                    border: '1px solid rgba(255,255,255,0.12)',
+                                    background: 'rgba(255,255,255,0.04)',
+                                    color: '#fff', fontSize: 13, cursor: 'pointer',
+                                    display: 'flex', alignItems: 'center', gap: 6,
+                                }}
+                            >
+                                {testing ? <><FontAwesomeIcon icon={faCircleNotch} spin /> Testing...</> : 'Test Connection'}
+                            </button>
+                        )}
+
+                        {saveMsg && (
+                            <span style={{ fontSize: 13, color: saveMsg.ok ? '#4ade80' : '#f87171' }}>
+                                {saveMsg.text}
+                            </span>
+                        )}
+                    </div>
+
+                    {/* Test result */}
+                    {testResult && (
+                        <div style={{
+                            padding: '9px 12px', borderRadius: 8, fontSize: 13,
+                            background: testResult.ok ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+                            border: `1px solid ${testResult.ok ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)'}`,
+                            color: testResult.ok ? '#4ade80' : '#f87171',
+                        }}>
+                            {testResult.text}
+                        </div>
+                    )}
+
+                    {/* First-time hint */}
+                    {!isConfigured && (
+                        <div style={{
+                            padding: '10px 12px', borderRadius: 8, fontSize: 12,
+                            background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.12)',
+                            color: 'rgba(255,255,255,0.45)', lineHeight: 1.55,
+                        }}>
+                            Get your key from{' '}
+                            <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" style={{ color: '#818cf8' }}>
+                                platform.openai.com
+                            </a>{' '}(OpenAI) or{' '}
+                            <a href="https://console.anthropic.com/account/keys" target="_blank" rel="noreferrer" style={{ color: '#818cf8' }}>
+                                console.anthropic.com
+                            </a>{' '}(Anthropic). Keys are stored locally on your device.
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// =============================================================================
 
 // Model Card Component
 function ModelCard({ filename, model, isLoaded, isLoading, downloadProgress, onDownload, onLoad }) {

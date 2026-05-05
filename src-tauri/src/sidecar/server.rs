@@ -41,6 +41,92 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         }
     });
 
+    // ── Session snapshot loop (every 30 s) ────────────────────────────────────
+    // Records cross-type item co-occurrences: apps, tabs, folders, media that
+    // are active at the same time. This grows the graph organically without any
+    // user action in CoolDesk.
+    let snapshot_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        let mut last_snapshot_ms: i64 = 0;
+        const SESSION_GAP_MS: i64 = 30 * 60 * 1000; // 30-minute idle = new session
+
+        interval.tick().await; // skip first immediate tick
+
+        loop {
+            interval.tick().await;
+
+            let now = chrono::Utc::now().timestamp_millis();
+
+            // Skip if the user was idle for more than 30 minutes (new session)
+            if last_snapshot_ms > 0 && now - last_snapshot_ms > SESSION_GAP_MS {
+                last_snapshot_ms = now;
+                continue;
+            }
+            last_snapshot_ms = now;
+
+            // ── 1. Visible desktop apps ──────────────────────────────────────
+            let visible_apps = crate::system::get_visible_apps_info().await;
+
+            // ── 2. Current browser tabs (deduplicated by domain) ─────────────
+            let tab_ids: Vec<String> = {
+                let data = snapshot_state.sync_data.read().await;
+                let mut seen = std::collections::HashSet::new();
+                data.device_tabs_map.values()
+                    .flatten()
+                    .filter_map(|t| {
+                        url::Url::parse(&t.url).ok().and_then(|u| {
+                            u.host_str().map(|h| {
+                                let h = h.strip_prefix("www.").unwrap_or(h).to_lowercase();
+                                format!("url::{}", h)
+                            })
+                        })
+                    })
+                    .filter(|id| seen.insert(id.clone()))
+                    .collect()
+            };
+
+            // ── 3. Build unified item list ───────────────────────────────────
+            let mut items: Vec<String> = vec![];
+            let mut seen_ids = std::collections::HashSet::new();
+
+            for app in &visible_apps {
+                if crate::system::is_browser(&app.name) { continue; }
+
+                let name_lower = app.name.to_lowercase();
+
+                // Folder: extract open project from editor window title
+                if let Some(proj) = crate::sidecar::handlers::extract_editor_project(&app.name, &app.title) {
+                    let id = format!("folder::{}", proj.to_lowercase().replace(' ', "_"));
+                    if seen_ids.insert(id.clone()) { items.push(id); }
+                }
+
+                // Media vs regular app
+                let is_media = ["spotify", "music", "vlc", "foobar", "winamp", "tidal", "deezer"]
+                    .iter().any(|p| name_lower.contains(p));
+
+                let prefix = if is_media { "media" } else { "app" };
+                let clean = name_lower
+                    .replace(".exe", "")
+                    .replace("visual studio code", "vscode")
+                    .trim()
+                    .replace(' ', "_");
+                let id = format!("{}::{}", prefix, clean);
+                if seen_ids.insert(id.clone()) { items.push(id); }
+            }
+
+            // Add tab URLs
+            for tid in tab_ids {
+                if seen_ids.insert(tid.clone()) { items.push(tid); }
+            }
+
+            // ── 4. Record pairwise co-occurrences ────────────────────────────
+            if items.len() >= 2 {
+                crate::sidecar::handlers::record_session_snapshot(items).await;
+            }
+        }
+    });
+
     // Start background app activity tracking
     let tracker_state = state.clone();
     tokio::spawn(async move {
@@ -144,6 +230,8 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/daily-memory", get(get_daily_memory).post(post_daily_memory))
         .route("/ui-state", get(get_ui_state).post(post_ui_state))
         .route("/dashboard", get(get_dashboard).post(post_dashboard))
+        // Knowledge graph
+        .route("/graph", get(get_graph))
         // Commands
         .route("/cmd/jump-to-tab", post(cmd_jump_to_tab))
         .route("/cmd/jump-next", get(cmd_jump_next))
@@ -176,6 +264,13 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/llm/v2/memory", get(v2_get_memory).post(v2_add_memory))
         .route("/llm/v2/memory/clear", post(v2_clear_memory))
         .route("/llm/v2/simple-chat", post(v2_simple_chat));
+
+    // LLM v3 — cloud AI via rig-core (no llm feature flag needed)
+    let app = app
+        .route("/llm/v3/simple-chat", post(v3_simple_chat))
+        .route("/llm/v3/chat", post(v3_chat))
+        .route("/llm/v3/status", get(v3_status))
+        .route("/llm/v3/config", get(v3_get_config).post(v3_save_config));
 
     let app = app
         // Feedback/RL endpoints

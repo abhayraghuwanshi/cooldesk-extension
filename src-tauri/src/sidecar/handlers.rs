@@ -175,6 +175,322 @@ pub async fn get_dashboard(
     Json(data.dashboard.clone())
 }
 
+// ── Knowledge Graph ───────────────────────────────────────────────────────────
+
+const EDITOR_APP_TYPES: &[&str] = &[
+    "vscode", "cursor", "windsurf", "idea", "webstorm", "pycharm",
+    "goland", "phpstorm", "rider", "clion", "rubymine", "fleet", "zed", "sublime",
+];
+
+const EDITOR_NAME_PATTERNS: &[&str] = &[
+    "visual studio code", "code", "cursor", "windsurf",
+    "intellij idea", "webstorm", "pycharm", "goland",
+];
+
+const MEDIA_APP_PATTERNS: &[&str] = &[
+    "spotify", "music", "vlc", "foobar", "winamp", "tidal", "deezer",
+    "youtube music", "apple music", "soundcloud",
+];
+
+/// Extract the open project name from an editor's window title.
+/// VS Code format: "filename — project — Visual Studio Code"
+pub fn extract_editor_project(app_name: &str, title: &str) -> Option<String> {
+    let name_lower = app_name.to_lowercase();
+    let is_editor = EDITOR_NAME_PATTERNS.iter().any(|p| name_lower.contains(p));
+    if !is_editor { return None; }
+
+    let parts: Vec<&str> = title.split(" — ").collect();
+    if parts.len() < 2 { return None; }
+
+    let project = parts[parts.len() - 2]
+        .trim()
+        .trim_start_matches(['●', '•', ' '])
+        .trim_end_matches(" (Workspace)")
+        .trim();
+
+    if !project.is_empty() && project.len() < 60 {
+        Some(project.to_string())
+    } else {
+        None
+    }
+}
+
+/// Called by the background snapshot loop — records all pairwise co-occurrences.
+pub async fn record_session_snapshot(items: Vec<String>) {
+    let store_mutex = get_feedback_store().await;
+    let guard = store_mutex.lock().await;
+    if let Some(store) = guard.as_ref() {
+        store.record_snapshot(items).await;
+    }
+}
+
+fn normalize_url_for_graph(url: &str) -> String {
+    // Domain-only so workspace URLs ("github.com/user/repo") and snapshot URLs
+    // ("github.com") resolve to the same node ID, enabling app↔url edges.
+    if let Ok(parsed) = url::Url::parse(url) {
+        let host = parsed.host_str().unwrap_or(url);
+        host.strip_prefix("www.").unwrap_or(host).to_lowercase()
+    } else {
+        log::warn!("[graph] malformed URL in graph normalization: {}", &url[..url.len().min(80)]);
+        format!("raw::{}", url.to_lowercase())
+    }
+}
+
+pub async fn get_graph(State(state): State<Arc<AppState>>) -> Json<GraphResponse> {
+    use std::collections::HashMap;
+
+    let mut nodes: HashMap<String, GraphNode> = HashMap::new();
+    let mut edges: Vec<GraphEdge> = Vec::new();
+
+    // ── Pass 1: Workspaces → URL / App / Folder / File nodes + membership edges ──
+    {
+        let data = state.sync_data.read().await;
+        for ws in &data.workspaces {
+            let ws_id = format!("ws::{}", ws.name.to_lowercase());
+            let url_count = ws.urls.len() as u32;
+            let app_count = ws.apps.len() as u32;
+            nodes.entry(ws_id.clone()).or_insert_with(|| GraphNode {
+                id: ws_id.clone(),
+                node_type: "workspace".to_string(),
+                label: ws.name.clone(),
+                title: None,
+                weight: url_count + app_count,
+            });
+
+            for wu in &ws.urls {
+                let norm = normalize_url_for_graph(&wu.url);
+                let url_id = format!("url::{}", norm);
+                let entry = nodes.entry(url_id.clone()).or_insert_with(|| GraphNode {
+                    id: url_id.clone(),
+                    node_type: "url".to_string(),
+                    label: norm.clone(),
+                    title: wu.title.clone(),
+                    weight: 0,
+                });
+                entry.weight = entry.weight.saturating_add(1);
+                edges.push(GraphEdge {
+                    source: url_id,
+                    target: ws_id.clone(),
+                    edge_type: "url_in_workspace".to_string(), weight: 1.0, last_seen: None,
+                });
+            }
+
+            for app in &ws.apps {
+                let app_type = app.app_type.as_deref().unwrap_or("default");
+                let (node_type, id_prefix, edge_type) = if app_type == "folder" || EDITOR_APP_TYPES.contains(&app_type) {
+                    ("folder", "folder", "folder_in_workspace")
+                } else if app_type == "file" {
+                    ("file", "file", "file_in_workspace")
+                } else {
+                    ("app", "app", "app_in_workspace")
+                };
+
+                let node_id = format!("{}::{}", id_prefix, app.name.to_lowercase());
+                let entry = nodes.entry(node_id.clone()).or_insert_with(|| GraphNode {
+                    id: node_id.clone(),
+                    node_type: node_type.to_string(),
+                    label: app.name.clone(),
+                    title: Some(app.path.clone()),
+                    weight: 0,
+                });
+                entry.weight = entry.weight.saturating_add(1);
+                edges.push(GraphEdge {
+                    source: node_id,
+                    target: ws_id.clone(),
+                    edge_type: edge_type.to_string(),
+                    weight: 1.0,
+                    last_seen: None,
+                });
+            }
+        }
+    } // sync_data lock dropped
+
+    // ── Pass 2, 3 & 4: FeedbackStore data ──
+    // Clone everything out under one short lock window, then drop the mutex.
+    let (co_occurrences, assocs, item_co_occurrences) = {
+        let store_mutex = get_feedback_store().await;
+        let store_guard = store_mutex.lock().await;
+        if let Some(store) = store_guard.as_ref() {
+            let co    = store.get_all_co_occurrences().await;
+            let asc   = store.get_all_app_workspace_associations().await;
+            let items = store.get_all_item_co_occurrences().await;
+            (co, asc, items)
+        } else {
+            (vec![], vec![], vec![])
+        }
+        // store_guard (outer mutex) dropped here
+    };
+
+    // Pass 2: URL co-occurrence edges
+    for co in &co_occurrences {
+        let score = co.affinity_score();
+        if score <= 0.0 { continue; }
+
+        let src_id = format!("url::{}", co.url1);
+        let tgt_id = format!("url::{}", co.url2);
+
+        nodes.entry(src_id.clone()).or_insert_with(|| GraphNode {
+            id: src_id.clone(), node_type: "url".to_string(),
+            label: co.url1.clone(), title: None, weight: 0,
+        });
+        nodes.entry(tgt_id.clone()).or_insert_with(|| GraphNode {
+            id: tgt_id.clone(), node_type: "url".to_string(),
+            label: co.url2.clone(), title: None, weight: 0,
+        });
+
+        edges.push(GraphEdge {
+            source: src_id,
+            target: tgt_id,
+            edge_type: "co_occurrence".to_string(),
+            weight: score.min(1.0),
+            last_seen: None,
+        });
+    }
+
+    // Pass 3: App-workspace associations
+    for assoc in &assocs {
+        let app_id = format!("app::{}", assoc.app_name);
+        let ws_id  = format!("ws::{}", assoc.workspace_name);
+
+        if !nodes.contains_key(&ws_id) { continue; }
+
+        let entry = nodes.entry(app_id.clone()).or_insert_with(|| GraphNode {
+            id: app_id.clone(), node_type: "app".to_string(),
+            label: assoc.app_name.clone(), title: None, weight: 0,
+        });
+        entry.weight = entry.weight.saturating_add(1); // degree: +1 per workspace association
+
+        let w = (assoc.score().min(5.0) / 5.0).max(0.01);
+        edges.push(GraphEdge {
+            source: app_id,
+            target: ws_id,
+            edge_type: "app_in_workspace".to_string(),
+            weight: w,
+            last_seen: None,
+        });
+    }
+
+    // ── Pass 4: Cross-type item co-occurrences from session snapshots ──
+    for co in &item_co_occurrences {
+        let score = co.score();
+        if score <= 0.0 || co.session_count < 2 { continue; } // filter one-off noise
+
+        let node_type_from_id = |id: &str| -> &'static str {
+            if id.starts_with("url::") { "url" }
+            else if id.starts_with("folder::") { "folder" }
+            else if id.starts_with("file::") { "file" }
+            else if id.starts_with("media::") { "media" }
+            else { "app" }
+        };
+
+        let label_from_id = |id: &str| -> String {
+            id.splitn(2, "::").nth(1).unwrap_or(id).replace('_', " ").to_string()
+        };
+
+        for item_id in [&co.item1, &co.item2] {
+            let entry = nodes.entry(item_id.clone()).or_insert_with(|| GraphNode {
+                id: item_id.clone(),
+                node_type: node_type_from_id(item_id).to_string(),
+                label: label_from_id(item_id),
+                title: None,
+                weight: 0,
+            });
+            // Weight = degree (number of unique connections), not accumulated session counts.
+            // This keeps weights bounded (max = number of distinct co-occurring items).
+            entry.weight = entry.weight.saturating_add(1);
+        }
+
+        edges.push(GraphEdge {
+            source: co.item1.clone(),
+            target: co.item2.clone(),
+            edge_type: "session_co_occurrence".to_string(),
+            weight: (score / 5.0).min(1.0),
+            last_seen: Some(co.last_seen),
+        });
+    }
+
+    // ── Pass 5: Workspace bridge edges ───────────────────────────────────────
+    // Two workspaces that share a URL or app are implicitly related.
+    // Draw a weak link between them so the graph is a connected web, not isolated stars.
+    {
+        use std::collections::HashSet;
+        // Build: ws_id → set of connected resource node IDs
+        let mut ws_resources: std::collections::HashMap<String, HashSet<String>> = nodes
+            .values()
+            .filter(|n| n.node_type == "workspace")
+            .map(|n| (n.id.clone(), HashSet::new()))
+            .collect();
+
+        for edge in &edges {
+            if matches!(
+                edge.edge_type.as_str(),
+                "url_in_workspace" | "app_in_workspace" | "folder_in_workspace"
+            ) {
+                if let Some(set) = ws_resources.get_mut(&edge.target) {
+                    set.insert(edge.source.clone());
+                }
+            }
+        }
+
+        let ws_ids: Vec<String> = ws_resources.keys().cloned().collect();
+        for i in 0..ws_ids.len() {
+            for j in (i + 1)..ws_ids.len() {
+                let shared = ws_resources[&ws_ids[i]]
+                    .intersection(&ws_resources[&ws_ids[j]])
+                    .count();
+                if shared > 0 {
+                    edges.push(GraphEdge {
+                        source: ws_ids[i].clone(),
+                        target: ws_ids[j].clone(),
+                        edge_type: "shared_resource".to_string(),
+                        weight: (shared as f64 / 5.0).min(1.0),
+                        last_seen: None,
+                    });
+                }
+            }
+        }
+    }
+
+    // ── Trim: cap node counts to keep the graph readable ──
+    let mut url_nodes: Vec<_> = nodes.values()
+        .filter(|n| n.node_type == "url")
+        .cloned()
+        .collect();
+    url_nodes.sort_by(|a, b| b.weight.cmp(&a.weight));
+    let keep_urls: std::collections::HashSet<String> = url_nodes
+        .into_iter().take(200).map(|n| n.id).collect();
+
+    let mut app_nodes: Vec<_> = nodes.values()
+        .filter(|n| n.node_type == "app")
+        .cloned()
+        .collect();
+    app_nodes.sort_by(|a, b| b.weight.cmp(&a.weight));
+    let keep_apps: std::collections::HashSet<String> = app_nodes
+        .into_iter().take(50).map(|n| n.id).collect();
+
+    nodes.retain(|id, n| match n.node_type.as_str() {
+        "url"  => keep_urls.contains(id),
+        "app"  => keep_apps.contains(id),
+        _      => true, // keep all workspaces, folders, files, media
+    });
+
+    let node_ids: std::collections::HashSet<_> = nodes.keys().cloned().collect();
+    edges.retain(|e| node_ids.contains(&e.source) && node_ids.contains(&e.target));
+
+    let node_count = nodes.len();
+    let edge_count = edges.len();
+
+    Json(GraphResponse {
+        nodes: nodes.into_values().collect(),
+        edges,
+        meta: serde_json::json!({
+            "generatedAt": chrono::Utc::now().timestamp_millis(),
+            "nodeCount": node_count,
+            "edgeCount": edge_count,
+        }),
+    })
+}
+
 #[derive(Debug, serde::Deserialize)]
 pub struct ActivityQuery {
     since: Option<i64>,
@@ -821,7 +1137,7 @@ pub async fn post_sync(
 
 use crate::sidecar::llm::models::{ModelInfo, LlmStatus, get_available_models, get_status, load_model, unload_model, download_model};
 use crate::sidecar::llm::inference::{chat};
-use crate::sidecar::llm::tasks::{summarize, categorize, group_workspaces, suggest_related, enhance_url, suggest_workspaces, parse_command};
+use crate::sidecar::llm::tasks::{summarize, group_workspaces, suggest_related, enhance_url, suggest_workspaces, parse_command};
 
 pub async fn llm_models() -> Json<HashMap<String, ModelInfo>> {
     if let Ok(models) = get_available_models().await {
@@ -1387,6 +1703,113 @@ pub async fn v2_simple_chat(
                 "requestId": req.request_id,
             }))
         }
+    }
+}
+
+// ==========================================
+// LLM v3 Handlers (Cloud AI via rig-core)
+// ==========================================
+
+use crate::sidecar::llm_v3::{SimpleAgentV3, CloudAgent, load_config, save_config, get_api_key, mask_key};
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct V3SimpleChatRequest {
+    pub message: String,
+    pub request_id: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct V3ChatRequest {
+    pub message: String,
+    pub request_id: Option<String>,
+}
+
+/// Simple context-injection chat — drop-in replacement for /llm/v2/simple-chat
+/// Requires OPENAI_API_KEY env var.
+pub async fn v3_simple_chat(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<V3SimpleChatRequest>,
+) -> Json<serde_json::Value> {
+    log::info!("[v3] simple-chat: {}", &req.message[..req.message.len().min(60)]);
+    let agent = SimpleAgentV3::new(state.sync_data.clone());
+    let result = agent.chat(&req.message).await;
+
+    Json(serde_json::json!({
+        "ok": result.ok,
+        "response": result.response,
+        "actions": result.actions,
+        "provider": result.provider,
+        "requestId": req.request_id,
+        "error": result.error,
+    }))
+}
+
+/// Agentic chat with tool calling — uses rig's built-in tool loop.
+/// Requires OPENAI_API_KEY env var.
+pub async fn v3_chat(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<V3ChatRequest>,
+) -> Json<serde_json::Value> {
+    log::info!("[v3] chat: {}", &req.message[..req.message.len().min(60)]);
+    let agent = CloudAgent::new(state.sync_data.clone());
+    let result = agent.chat(&req.message).await;
+
+    Json(serde_json::json!({
+        "ok": result.ok,
+        "response": result.content,
+        "provider": result.provider,
+        "requestId": req.request_id,
+        "error": result.error,
+    }))
+}
+
+/// Returns whether cloud AI is configured (API key is set).
+pub async fn v3_status() -> Json<serde_json::Value> {
+    let config = load_config();
+    let configured = get_api_key().is_some();
+    Json(serde_json::json!({
+        "ok": configured,
+        "provider": config.provider,
+        "model": config.model,
+        "configured": configured,
+        "message": if configured { "Cloud AI ready" } else { "Add your API key in Settings → AI" }
+    }))
+}
+
+/// GET /llm/v3/config — returns current config with masked key.
+pub async fn v3_get_config() -> Json<serde_json::Value> {
+    let config = load_config();
+    let key = get_api_key().unwrap_or_default();
+    let masked = if key.is_empty() { String::new() } else { mask_key(&key) };
+    Json(serde_json::json!({
+        "provider": config.provider,
+        "model": config.model,
+        "apiKeyMasked": masked,
+        "configured": !key.is_empty(),
+    }))
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct V3ConfigRequest {
+    pub provider: Option<String>,
+    pub api_key: Option<String>,
+    pub model: Option<String>,
+}
+
+/// POST /llm/v3/config — save provider, API key, model.
+pub async fn v3_save_config(Json(req): Json<V3ConfigRequest>) -> Json<serde_json::Value> {
+    let mut config = load_config();
+
+    if let Some(p) = req.provider { config.provider = p; }
+    if let Some(k) = req.api_key  { config.api_key = k; }
+    if let Some(m) = req.model    { config.model = m; }
+
+    match save_config(&config) {
+        Ok(_) => Json(serde_json::json!({ "ok": true, "message": "Config saved" })),
+        Err(e) => Json(serde_json::json!({ "ok": false, "error": e })),
     }
 }
 
