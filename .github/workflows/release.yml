@@ -349,4 +349,4 @@ jobs:
             --no-progress
 
           echo "Uploaded to R2 — available at:"
-          echo "https://pub-<your-bucket-hash>.r2.dev/CoolDesk-setup.msi"
+          echo "https://pub-c48321b20c8942d1ad52781d27b6b607.r2.dev/CoolDesk-setup.msi"
