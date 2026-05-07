@@ -74,16 +74,6 @@ jobs:
           shared-key: ${{ matrix.target }}
           cache-on-failure: true
 
-      - name: Build sidecar binaries (macOS)
-        if: runner.os == 'macOS'
-        working-directory: src-tauri
-        run: |
-          cargo build --release --bin matcher --target ${{ matrix.target }}
-          cargo build --release --bin AppScannerMac --target ${{ matrix.target }}
-          cp target/${{ matrix.target }}/release/matcher bin/AppMatcher-${{ matrix.target }}
-          cp target/${{ matrix.target }}/release/AppScannerMac bin/AppScanner-${{ matrix.target }}
-          chmod +x bin/AppMatcher-${{ matrix.target }} bin/AppScanner-${{ matrix.target }}
-
       - name: Install frontend dependencies
         run: npm install
 
@@ -145,21 +135,6 @@ jobs:
           [ -x "$MAIN_BIN" ] || (echo "ERROR: main binary not executable" && exit 1)
           file "$MAIN_BIN" | grep -q "Mach-O" || (echo "ERROR: not a valid Mach-O binary" && exit 1)
           echo "==> Main binary OK"
-
-          SCANNER=/tmp/CoolDesk-test.app/Contents/MacOS/AppScanner
-          [ -x "$SCANNER" ] || (echo "ERROR: AppScanner not executable" && exit 1)
-          "$SCANNER" | python3 -c "
-          import sys, json
-          d = json.load(sys.stdin)
-          installed = len(d.get('installed', []))
-          assert installed > 0, 'Expected at least some installed apps'
-          print(f'AppScanner OK: {installed} installed apps')
-          "
-
-          MATCHER=/tmp/CoolDesk-test.app/Contents/MacOS/AppMatcher
-          [ -x "$MATCHER" ] || (echo "ERROR: AppMatcher not executable" && exit 1)
-          file "$MATCHER" | grep -q "Mach-O" || (echo "ERROR: AppMatcher not a valid Mach-O binary" && exit 1)
-          echo "==> AppMatcher OK"
 
           open /tmp/CoolDesk-test.app
           for i in $(seq 1 10); do
