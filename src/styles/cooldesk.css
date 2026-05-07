@@ -2919,9 +2919,9 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   display: grid;
   grid-template-columns: 1.5fr 1fr;
   gap: 20px;
-  height: auto;
+  height: calc(100vh - 48px);
   min-height: 0;
-  overflow: visible;
+  overflow: hidden;
   padding-right: 4px;
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.2) transparent;
@@ -2950,7 +2950,29 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   flex-direction: column;
   gap: 16px;
   min-width: 0;
-  overflow: visible;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.2) transparent;
+}
+
+.overview-left-column::-webkit-scrollbar {
+  width: 6px;
+}
+
+.overview-left-column::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.overview-left-column::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 3px;
+}
+
+.overview-left-column::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.4);
 }
 
 .overview-notes-section {
@@ -2968,15 +2990,14 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 .overview-activity-column {
   display: flex;
   flex-direction: column;
-  height: auto;
-  min-height: 400px;
-  max-height: 600px;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
   overflow: hidden;
   border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.1);
   background: rgba(15, 23, 42, 0.3);
   min-width: 0;
-  /* Prevent content from overflowing horizontally */
   width: 100%;
   box-sizing: border-box;
 }
@@ -2986,6 +3007,16 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   .overview-dashboard-grid {
     grid-template-columns: 1fr;
     gap: 16px;
+    height: calc(100vh - 48px);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .overview-left-column {
+    height: auto;
+    overflow: visible;
+    overflow-x: hidden;
+    padding-right: 0;
   }
 
   .overview-activity-column {
@@ -3010,10 +3041,16 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
     grid-template-columns: 1fr;
     gap: 12px;
     padding-right: 0;
+    height: calc(100vh - 48px);
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .overview-left-column {
     gap: 12px;
+    height: auto;
+    overflow: visible;
+    padding-right: 0;
   }
 
   .overview-notes-section {
@@ -3071,6 +3108,9 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 
   .overview-left-column {
     gap: 12px;
+    height: auto;
+    overflow: visible;
+    padding-right: 0;
   }
 
   .overview-notes-section {

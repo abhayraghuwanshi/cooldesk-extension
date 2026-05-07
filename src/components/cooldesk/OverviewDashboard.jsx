@@ -149,32 +149,33 @@ const OverviewDashboard = memo(function OverviewDashboard({
     // Use recent workspaces if loaded, otherwise fallback or empty
     const allWorkspaces = recentWorkspaces.length > 0 ? recentWorkspaces : (isLoading ? [] : savedWorkspaces.slice(0, MAX_WORKSPACE_COUNT));
 
+    const nonEmptyWorkspaces = useMemo(() =>
+        savedWorkspaces.filter(w => w.urls && w.urls.length > 0),
+        [savedWorkspaces]
+    );
+
     // Show limited or all workspaces based on toggle state
     // In extension mode when expanded, use savedWorkspaces directly (up to MAX) to show all available
     const displayedWorkspaces = useMemo(() => {
+        const base = allWorkspaces.filter(w => w.urls && w.urls.length > 0);
         if (!isDesktopApp && showAllWorkspaces) {
-            // When expanded in extension mode, show from savedWorkspaces up to MAX_WORKSPACE_COUNT
-            return savedWorkspaces.slice(0, MAX_WORKSPACE_COUNT);
+            return nonEmptyWorkspaces.slice(0, MAX_WORKSPACE_COUNT);
         }
-        return showAllWorkspaces ? allWorkspaces : allWorkspaces.slice(0, DEFAULT_WORKSPACE_COUNT);
-    }, [isDesktopApp, showAllWorkspaces, savedWorkspaces, allWorkspaces, MAX_WORKSPACE_COUNT, DEFAULT_WORKSPACE_COUNT]);
+        return showAllWorkspaces ? base : base.slice(0, DEFAULT_WORKSPACE_COUNT);
+    }, [isDesktopApp, showAllWorkspaces, nonEmptyWorkspaces, allWorkspaces, MAX_WORKSPACE_COUNT, DEFAULT_WORKSPACE_COUNT]);
     // For extension mode, check against total savedWorkspaces count to show "more" button
     const hasMoreWorkspaces = !isDesktopApp
-        ? savedWorkspaces.length > DEFAULT_WORKSPACE_COUNT
-        : allWorkspaces.length > DEFAULT_WORKSPACE_COUNT;
+        ? nonEmptyWorkspaces.length > DEFAULT_WORKSPACE_COUNT
+        : allWorkspaces.filter(w => w.urls && w.urls.length > 0).length > DEFAULT_WORKSPACE_COUNT;
     // Calculate how many more workspaces are available (for the button text)
     const moreWorkspacesCount = showAllWorkspaces
         ? 0
-        : Math.min(savedWorkspaces.length, MAX_WORKSPACE_COUNT) - DEFAULT_WORKSPACE_COUNT;
+        : Math.min(nonEmptyWorkspaces.length, MAX_WORKSPACE_COUNT) - DEFAULT_WORKSPACE_COUNT;
 
     return (
         <div className="overview-dashboard-grid" style={{
-            height: '100%',
-            overflowY: 'auto',
-            overflowX: 'hidden',
             borderRadius: 16,
             border: '1px solid transparent',
-            paddingRight: '4px',
             marginTop: '24px'
         }}>
             {/* Left Column: Workspaces + Notes */}
@@ -200,8 +201,7 @@ const OverviewDashboard = memo(function OverviewDashboard({
                             margin: 0
                         }}>
                             Workspaces
-                            {/* Show count badge in extension mode - show total savedWorkspaces count */}
-                            {!isDesktopApp && savedWorkspaces.length > 0 && (
+                            {!isDesktopApp && nonEmptyWorkspaces.length > 0 && (
                                 <span style={{
                                     fontSize: '11px',
                                     fontWeight: 600,
@@ -212,7 +212,7 @@ const OverviewDashboard = memo(function OverviewDashboard({
                                     textTransform: 'none',
                                     letterSpacing: 'normal'
                                 }}>
-                                    {savedWorkspaces.length}
+                                    {nonEmptyWorkspaces.length}
                                 </span>
                             )}
                         </h3>
