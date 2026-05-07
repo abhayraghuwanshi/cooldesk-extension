@@ -381,9 +381,12 @@ export function Face({ index, children, className = '' }) {
     >
       {/* Optimization: While blurred/inactive, we can also hint browser to deprioritize hit testing */}
       <div style={{
-        height: '100%',
+        flex: 1,
+        minHeight: 0,
+        display: 'flex',
+        flexDirection: 'column',
         pointerEvents: isActive ? 'auto' : 'none',
-        transition: 'opacity 0.4s ease' // Smooth internal fade
+        transition: 'opacity 0.4s ease'
       }}>
         {children}
       </div>

@@ -428,7 +428,10 @@ async fn search_files(query: String) -> Result<Vec<SearchFileResult>, String> {
         }
         
         let folder_clause = format!("({})", folder_conditions.join(" OR "));
-        let query_sanitized = query.replace("'", "''");
+        // Escape both ' (SQL string delimiter) and " (PowerShell string delimiter).
+        // The SQL is embedded inside a double-quoted PowerShell string, so an unescaped
+        // " would break out of it and allow arbitrary PowerShell injection.
+        let query_sanitized = query.replace('"', "\\\"").replace("'", "''");
         
         // SQL query for Windows Search using valid CONTAINS syntax
         let sql = format!(

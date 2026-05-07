@@ -145,8 +145,9 @@ export function WorkspaceList({
         });
     }, []);
 
-    const pinned = useMemo(() => savedWorkspaces.filter(ws => pinnedWorkspaces.includes(ws.name)), [savedWorkspaces, pinnedWorkspaces]);
-    const unpinned = useMemo(() => savedWorkspaces.filter(ws => !pinnedWorkspaces.includes(ws.name)), [savedWorkspaces, pinnedWorkspaces]);
+    const hasItems = (ws) => (ws.urls?.length || 0) + (ws.apps?.length || 0) > 0;
+    const pinned = useMemo(() => savedWorkspaces.filter(ws => pinnedWorkspaces.includes(ws.name) && hasItems(ws)), [savedWorkspaces, pinnedWorkspaces]);
+    const unpinned = useMemo(() => savedWorkspaces.filter(ws => !pinnedWorkspaces.includes(ws.name) && hasItems(ws)), [savedWorkspaces, pinnedWorkspaces]);
 
     // State for workspace activity scores
     // Load cached scores synchronously to prevent layout shift on refresh

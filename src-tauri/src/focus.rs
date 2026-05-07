@@ -425,6 +425,9 @@ mod platform {
         // Method 2: Try by app name if provided
         if let Some(name) = process_name {
             let app_name = name.trim_end_matches(".app").trim_end_matches(".exe");
+            // Strip " to prevent breaking out of the AppleScript string literal.
+            // App names never legitimately contain double-quotes.
+            let app_name = app_name.replace('"', "");
             let script = format!(
                 r#"tell application "{}" to activate"#,
                 app_name

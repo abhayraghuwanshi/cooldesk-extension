@@ -46,10 +46,12 @@
   box-sizing: border-box;
 }
 
-/* Add padding to notes face only - other faces handle their own layout */
+/* Notes face: flex column like the other complex faces, owns its own overflow */
 .workspace-face[data-face="notes"] {
   padding: 16px 0;
-  /* Vertical only padding */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* Workspace, Overview, Tabs, Team: Flex column, hidden overflow (child handles scroll) */
