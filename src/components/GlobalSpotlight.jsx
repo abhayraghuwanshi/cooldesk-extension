@@ -191,6 +191,8 @@ export function GlobalSpotlight() {
     const [contextItems, setContextItems] = useState([]);
     const [showAllTabs, setShowAllTabs] = useState(false);
     const [showAllApps, setShowAllApps] = useState(false);
+    const [wsDropdownOpen, setWsDropdownOpen] = useState(false);
+    const wsDropdownRef = useRef(null);
     const [workspaces, setWorkspaces] = useState([]);
     const [expandedWorkspaceId, setExpandedWorkspaceId] = useState(() => {
         try { return localStorage.getItem('spotlight_ws_id') || null; } catch { return null; }
@@ -209,6 +211,18 @@ export function GlobalSpotlight() {
 
     // Track when results were displayed (for response time feedback)
     const resultsDisplayedAtRef = useRef(null);
+
+    // Close workspace dropdown when clicking outside
+    useEffect(() => {
+        if (!wsDropdownOpen) return;
+        const handler = (e) => {
+            if (wsDropdownRef.current && !wsDropdownRef.current.contains(e.target)) {
+                setWsDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [wsDropdownOpen]);
 
     // Focus input on mount and load items
     useEffect(() => {
@@ -523,7 +537,6 @@ export function GlobalSpotlight() {
                 .filter((t, index, self) =>
                     index === self.findIndex(s => getBaseDomainFromUrl(s.url) === getBaseDomainFromUrl(t.url))
                 )
-                .slice(0, 10)
                 .map(t => ({
                     ...t,
                     type: 'tab',
@@ -1516,17 +1529,17 @@ export function GlobalSpotlight() {
                                 <div className="context-section">
                                     <div className="context-section-header">
                                         <div className="context-section-label">Tabs</div>
-                                        {tabs.length > 4 && (
+                                        {tabs.length > 8 && (
                                             <button
                                                 className="context-expand-btn"
                                                 onClick={() => setShowAllTabs(v => !v)}
                                             >
-                                                {showAllTabs ? '▴ less' : `▾ ${tabs.length - 4} more`}
+                                                {showAllTabs ? '▴ less' : `▾ ${tabs.length - 8} more`}
                                             </button>
                                         )}
                                     </div>
                                     <div className="context-row context-row--grid">
-                                        {tabs.slice(0, showAllTabs ? tabs.length : 4).map((item, i) => {
+                                        {tabs.slice(0, showAllTabs ? tabs.length : 8).map((item, i) => {
                                             const itemIndex = flatIndex++;
                                             return (
                                                 <ContextItem
@@ -1550,25 +1563,49 @@ export function GlobalSpotlight() {
                 {/* Workspaces Section */}
                 {!query.trim() && !commandMode && (
                     <div className="spotlight-pins">
-                        <div className="spotlight-pins-header">
-                            <span className="spotlight-pins-title">Workspaces</span>
-                        </div>
                         {workspaces.length > 0 && (
-                            <div className="ws-tabs-row">
-                                {workspaces.map(ws => (
+                            <div className="spotlight-pins-header">
+                                <span className="spotlight-pins-title">Workspaces</span>
+                                <div className="ws-dropdown" ref={wsDropdownRef}>
                                     <button
-                                        key={ws.id}
-                                        className={`ws-tab ${expandedWorkspaceId === ws.id ? 'active' : ''}`}
-                                        onClick={() => setExpandedWorkspaceId(ws.id)}
-                                        title={ws.name}
+                                        className={`ws-dropdown-trigger ${wsDropdownOpen ? 'open' : ''}`}
+                                        onClick={() => setWsDropdownOpen(v => !v)}
                                     >
-                                        <FontAwesomeIcon icon={getWorkspaceIcon(ws.name)} className="ws-tab-icon" />
-                                        <span className="ws-tab-name">{ws.name}</span>
-                                        {((ws.urls || []).length + (ws.apps || []).length) > 0 && (
-                                            <span className="ws-tab-count">{(ws.urls || []).length + (ws.apps || []).length}</span>
-                                        )}
+                                        {expandedWorkspaceId
+                                            ? (() => {
+                                                const ws = workspaces.find(w => w.id === expandedWorkspaceId);
+                                                const count = ws ? (ws.urls || []).length + (ws.apps || []).length : 0;
+                                                return <><FontAwesomeIcon icon={getWorkspaceIcon(ws?.name || '')} className="ws-dd-icon" /><span>{ws?.name}</span>{count > 0 && <span className="ws-dd-count">{count}</span>}</>;
+                                            })()
+                                            : <span className="ws-dd-placeholder">Select…</span>
+                                        }
+                                        <svg className="ws-dd-chevron" width="8" height="5" viewBox="0 0 8 5" fill="none"><path d="M1 1l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                                     </button>
-                                ))}
+                                    {wsDropdownOpen && (
+                                        <div className="ws-dropdown-menu">
+                                            <button
+                                                className={`ws-dropdown-item ${!expandedWorkspaceId ? 'active' : ''}`}
+                                                onClick={() => { setExpandedWorkspaceId(null); setWsDropdownOpen(false); }}
+                                            >
+                                                <span className="ws-dd-placeholder">None</span>
+                                            </button>
+                                            {workspaces.map(ws => {
+                                                const count = (ws.urls || []).length + (ws.apps || []).length;
+                                                return (
+                                                    <button
+                                                        key={ws.id}
+                                                        className={`ws-dropdown-item ${expandedWorkspaceId === ws.id ? 'active' : ''}`}
+                                                        onClick={() => { setExpandedWorkspaceId(ws.id); setWsDropdownOpen(false); }}
+                                                    >
+                                                        <FontAwesomeIcon icon={getWorkspaceIcon(ws.name)} className="ws-dd-icon" />
+                                                        <span>{ws.name}</span>
+                                                        {count > 0 && <span className="ws-dd-count">{count}</span>}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
 

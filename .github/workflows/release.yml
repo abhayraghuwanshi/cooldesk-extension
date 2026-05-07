@@ -74,16 +74,6 @@ jobs:
           shared-key: ${{ matrix.target }}
           cache-on-failure: true
 
-      - name: Build sidecar binaries (macOS)
-        if: runner.os == 'macOS'
-        working-directory: src-tauri
-        run: |
-          cargo build --release --bin matcher --target ${{ matrix.target }}
-          cargo build --release --bin AppScannerMac --target ${{ matrix.target }}
-          cp target/${{ matrix.target }}/release/matcher bin/AppMatcher-${{ matrix.target }}
-          cp target/${{ matrix.target }}/release/AppScannerMac bin/AppScanner-${{ matrix.target }}
-          chmod +x bin/AppMatcher-${{ matrix.target }} bin/AppScanner-${{ matrix.target }}
-
       - name: Install frontend dependencies
         run: npm install
 
@@ -92,7 +82,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_CD }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
@@ -146,21 +136,6 @@ jobs:
           file "$MAIN_BIN" | grep -q "Mach-O" || (echo "ERROR: not a valid Mach-O binary" && exit 1)
           echo "==> Main binary OK"
 
-          SCANNER=/tmp/CoolDesk-test.app/Contents/MacOS/AppScanner
-          [ -x "$SCANNER" ] || (echo "ERROR: AppScanner not executable" && exit 1)
-          "$SCANNER" | python3 -c "
-          import sys, json
-          d = json.load(sys.stdin)
-          installed = len(d.get('installed', []))
-          assert installed > 0, 'Expected at least some installed apps'
-          print(f'AppScanner OK: {installed} installed apps')
-          "
-
-          MATCHER=/tmp/CoolDesk-test.app/Contents/MacOS/AppMatcher
-          [ -x "$MATCHER" ] || (echo "ERROR: AppMatcher not executable" && exit 1)
-          file "$MATCHER" | grep -q "Mach-O" || (echo "ERROR: AppMatcher not a valid Mach-O binary" && exit 1)
-          echo "==> AppMatcher OK"
-
           open /tmp/CoolDesk-test.app
           for i in $(seq 1 10); do
             if pgrep -f "CoolDesk-test" > /dev/null || pgrep -f "cooldesk" > /dev/null; then
@@ -192,7 +167,7 @@ jobs:
         if: github.event_name == 'push'
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_CD }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
@@ -233,7 +208,7 @@ jobs:
         if: github.event_name == 'push' && runner.os == 'Windows'
         shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_CD }}
         run: |
           if (-not "${{ secrets.WINDOWS_CERT_PFX_BASE64 }}") {
             Write-Host "No cert — skipping re-upload"
@@ -255,14 +230,14 @@ jobs:
 
       - name: List release assets
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_CD }}
           TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name'
 
       - name: Generate latest.json for auto-updater
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_CD }}
           TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: |

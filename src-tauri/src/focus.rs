@@ -301,6 +301,36 @@ mod platform {
         }
     }
 
+    /// Check whether a window lives on the current virtual desktop.
+    /// Returns true as a safe default if the COM query fails.
+    fn is_window_on_current_desktop(hwnd: HWND) -> bool {
+        use windows::Win32::System::Com::{
+            CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
+        };
+        use windows::Win32::UI::Shell::IVirtualDesktopManager;
+        use windows::core::GUID;
+
+        // CLSID_VirtualDesktopManager = {AA509086-5CA9-4C25-8F95-589D3C07B48A}
+        const CLSID_VDM: GUID = GUID {
+            data1: 0xaa509086,
+            data2: 0x5ca9,
+            data3: 0x4c25,
+            data4: [0x8f, 0x95, 0x58, 0x9d, 0x3c, 0x07, 0xb4, 0x8a],
+        };
+
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            let mgr: windows::core::Result<IVirtualDesktopManager> =
+                CoCreateInstance(&CLSID_VDM, None, CLSCTX_ALL);
+            match mgr {
+                Ok(m) => m.IsWindowOnCurrentVirtualDesktop(hwnd)
+                    .map(|b| b.as_bool())
+                    .unwrap_or(true),
+                Err(_) => true,
+            }
+        }
+    }
+
     fn focus_window_aggressive(hwnd: HWND, target_pid: Option<u32>) -> bool {
         let hwnd = normalize_focus_hwnd(hwnd);
         unsafe {
@@ -313,44 +343,30 @@ mod platform {
                 let _ = ShowWindow(hwnd, SW_RESTORE);
             }
 
-            // SwitchToThisWindow handles cross-virtual-desktop switching without
-            // AttachThreadInput (which caused "Default IME not responding" errors).
-            // Use fAltTab=FALSE for direct app activation (launcher-style).
-            // fAltTab=TRUE is for the Alt+Tab switcher and can cause WinUI/WinAppSDK
-            // apps (e.g. Windows Terminal) to race-lose focus after the 50ms check.
+            // Detect virtual desktop to tune sleep duration only.
+            // SwitchToThisWindow is always called — it works for both same-desktop
+            // and cross-desktop. Never skip it: if COM detection fails and returns
+            // true (same desktop), cross-desktop windows would get no focus attempt.
+            let on_current_desktop = is_window_on_current_desktop(hwnd);
+            log::info!("[Focus] hwnd={:?} on_current_desktop={}", hwnd.0, on_current_desktop);
+
+            // AllowSetForegroundWindow(ASFW_ANY) was pre-called from hide_spotlight,
+            // so the subsequent SetForegroundWindow will succeed without the old
+            // SendInput(VK_MENU) workaround (which was unreliable from a bg thread).
+            // fAltTab=FALSE = direct launcher-style activation (not Alt+Tab switcher).
             SwitchToThisWindow(hwnd, false);
 
-            // Brief delay so the desktop switch can complete
-            std::thread::sleep(std::time::Duration::from_millis(50));
-
-            // Bypass Windows foreground lock using SendInput (not deprecated keybd_event).
-            // Simulating a key event convinces Windows to grant SetForegroundWindow permission
-            // without merging thread input queues (safe for IME).
-            use windows::Win32::UI::Input::KeyboardAndMouse::{
-                SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_MENU,
-            };
-            let inputs = [
-                INPUT { r#type: INPUT_KEYBOARD, Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
-                    ki: KEYBDINPUT { wVk: VK_MENU, wScan: 0, dwFlags: Default::default(), time: 0, dwExtraInfo: 0 }
-                }},
-                INPUT { r#type: INPUT_KEYBOARD, Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
-                    ki: KEYBDINPUT { wVk: VK_MENU, wScan: 0, dwFlags: KEYEVENTF_KEYUP, time: 0, dwExtraInfo: 0 }
-                }},
-            ];
-            SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
+            // Longer sleep for cross-desktop to allow the desktop animation to finish.
+            let switch_sleep_ms = if on_current_desktop { 50 } else { 150 };
+            std::thread::sleep(std::time::Duration::from_millis(switch_sleep_ms));
 
             let _ = BringWindowToTop(hwnd);
             let _ = SetForegroundWindow(hwnd);
             let _ = ShowWindow(hwnd, SW_SHOW);
 
-            // 100ms gives WinUI/WinAppSDK apps (e.g. Windows Terminal) enough time
-            // to finish their internal activation before we verify — avoids a
-            // false-positive success=true that was clearing before the user saw it.
             std::thread::sleep(std::time::Duration::from_millis(100));
             let mut focused = foreground_matches_target(hwnd, target_pid);
 
-            // One retry for apps (like Windows Terminal) whose WinUI activation
-            // temporarily steals focus back during the first attempt.
             if !focused {
                 let _ = SetForegroundWindow(hwnd);
                 std::thread::sleep(std::time::Duration::from_millis(80));
@@ -362,14 +378,8 @@ mod platform {
             GetWindowThreadProcessId(after_foreground, Some(&mut after_pid));
 
             log::info!(
-                "[Focus] target_hwnd={:?} target_pid={:?} before_hwnd={:?} before_pid={} after_hwnd={:?} after_pid={} success={}",
-                hwnd.0,
-                target_pid,
-                before_foreground.0,
-                before_pid,
-                after_foreground.0,
-                after_pid,
-                focused
+                "[Focus] target_hwnd={:?} target_pid={:?} cross_desktop={} before_pid={} after_pid={} success={}",
+                hwnd.0, target_pid, !on_current_desktop, before_pid, after_pid, focused
             );
 
             focused
@@ -415,6 +425,9 @@ mod platform {
         // Method 2: Try by app name if provided
         if let Some(name) = process_name {
             let app_name = name.trim_end_matches(".app").trim_end_matches(".exe");
+            // Strip " to prevent breaking out of the AppleScript string literal.
+            // App names never legitimately contain double-quotes.
+            let app_name = app_name.replace('"', "");
             let script = format!(
                 r#"tell application "{}" to activate"#,
                 app_name
@@ -596,10 +609,9 @@ pub fn find_hwnd_by_bounds(process_name: &str, x: i32, y: i32, width: i32, heigh
         y: i32,
         w: i32,
         h: i32,
+        tolerance: i32,
         result: Option<isize>,
     }
-
-    let mut ctx = SearchCtx { pids, x, y, w: width, h: height, result: None };
 
     unsafe extern "system" fn callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
         let ctx = &mut *(lparam.0 as *mut SearchCtx);
@@ -638,23 +650,37 @@ pub fn find_hwnd_by_bounds(process_name: &str, x: i32, y: i32, width: i32, heigh
         let log_w    = ((rect.right  - rect.left) as f64 / scale).round() as i32;
         let log_h    = ((rect.bottom - rect.top)  as f64 / scale).round() as i32;
 
-        const TOLERANCE: i32 = 20;
-        if (log_left - ctx.x).abs() <= TOLERANCE
-            && (log_top - ctx.y).abs() <= TOLERANCE
-            && (log_w - ctx.w).abs() <= TOLERANCE
-            && (log_h - ctx.h).abs() <= TOLERANCE
+        let t = ctx.tolerance;
+        if (log_left - ctx.x).abs() <= t
+            && (log_top - ctx.y).abs() <= t
+            && (log_w - ctx.w).abs() <= t
+            && (log_h - ctx.h).abs() <= t
         {
             ctx.result = Some(hwnd.0 as isize);
-            return BOOL(0);
+            return BOOL(0); // stop enumeration
         }
         BOOL(1)
     }
 
-    unsafe {
-        let _ = EnumWindows(Some(callback), LPARAM(&mut ctx as *mut SearchCtx as isize));
+    // Pass 1: tight tolerance (20px) — avoids matching a neighbouring window
+    let mut ctx = SearchCtx { pids: pids.clone(), x, y, w: width, h: height, tolerance: 20, result: None };
+    unsafe { let _ = EnumWindows(Some(callback), LPARAM(&mut ctx as *mut SearchCtx as isize)); }
+
+    if ctx.result.is_some() {
+        log::info!("[Focus] find_hwnd_by_bounds: matched '{}' at ({},{} {}x{}) with tight tolerance", process_name, x, y, width, height);
+        return ctx.result;
     }
 
-    ctx.result
+    // Pass 2: relaxed tolerance (50px) — handles fractional DPI and slight window drift
+    let mut ctx2 = SearchCtx { pids, x, y, w: width, h: height, tolerance: 50, result: None };
+    unsafe { let _ = EnumWindows(Some(callback), LPARAM(&mut ctx2 as *mut SearchCtx as isize)); }
+
+    if ctx2.result.is_some() {
+        log::info!("[Focus] find_hwnd_by_bounds: matched '{}' at ({},{} {}x{}) with relaxed tolerance", process_name, x, y, width, height);
+    } else {
+        log::warn!("[Focus] find_hwnd_by_bounds: no match for '{}' at ({},{} {}x{})", process_name, x, y, width, height);
+    }
+    ctx2.result
 }
 
 #[cfg(not(target_os = "windows"))]

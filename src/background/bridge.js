@@ -237,17 +237,13 @@ function startHostActionWS() {
 
         if (msg && msg.type === 'jump-to-tab') {
           const { tabId, url, deviceId, browser } = msg.payload || {};
-          // If the message targets a specific device, ignore if it's not us
           if (deviceId && myDeviceId && deviceId !== myDeviceId) return;
-          // If the message targets a specific browser, ignore if it's not us.
-          // This prevents Chrome and Edge both racing to handle the same jump.
           if (browser) {
             const isEdge = navigator.userAgent.includes('Edg/');
             const myBrowser = isEdge ? 'edge' : 'chrome';
             if (browser !== myBrowser) return;
           }
           if (!tabId && !url) return;
-          // Deduplicate: skip if we already handled this jump recently
           const jumpKey = `${tabId}:${url || ''}`;
           if (wasJumpRecentlyHandled(jumpKey)) return;
           try {
@@ -259,7 +255,6 @@ function startHostActionWS() {
                 const candidate = await chrome.tabs.get(tabId);
                 if (url && candidate?.url) {
                   if (candidate.url.split('?')[0] === url.split('?')[0]) tab = candidate;
-                  // else: tabId exists but points to different page — wrong browser
                 } else {
                   tab = candidate;
                 }
@@ -277,12 +272,15 @@ function startHostActionWS() {
               }
             }
 
-            if (!tab) return; // tab not in this browser
+            if (!tab) return;
 
-            markJumpHandled(jumpKey); // mark before focus so HTTP poll skips it
+            markJumpHandled(jumpKey);
             await chrome.tabs.update(tab.id, { active: true });
             if (tab.windowId) {
-              await chrome.windows.update(tab.windowId, { focused: true });
+              // chrome.windows.update focuses the window on the same desktop.
+              // For cross-desktop windows this is a no-op; the native focus path
+              // (request-native-focus → SwitchToThisWindow) handles that case.
+              try { await chrome.windows.update(tab.windowId, { focused: true }); } catch { }
               try {
                 const win = await chrome.windows.get(tab.windowId);
                 const isEdge = navigator.userAgent.includes('Edg/');
@@ -291,13 +289,31 @@ function startHostActionWS() {
                     type: 'request-native-focus',
                     payload: {
                       browser: isEdge ? 'msedge' : 'chrome',
-                      bounds: { left: win.left, top: win.top, width: win.width, height: win.height }
+                      bounds: { left: win.left, top: win.top, width: win.width, height: win.height },
+                      tabId: tab.id,
                     }
                   }));
                 }
               } catch { }
             }
           } catch { }
+        }
+
+        // After Rust completes the OS-level focus (SwitchToThisWindow + SetForegroundWindow),
+        // it sends native-focus-done. We re-activate the tab here because Chrome may have
+        // restored its previously-focused tab when the window was dragged across desktops.
+        if (msg && msg.type === 'native-focus-done') {
+          const { tabId: confirmedTabId, browser } = msg.payload || {};
+          if (browser) {
+            const isEdge = navigator.userAgent.includes('Edg/');
+            const myBrowser = isEdge ? 'edge' : 'chrome';
+            if (browser !== myBrowser) return;
+          }
+          if (confirmedTabId) {
+            try {
+              await chrome.tabs.update(confirmedTabId, { active: true });
+            } catch { /* tab closed between jump and ack — safe to ignore */ }
+          }
         }
       } catch { /* ignore malformed frames */ }
     };
@@ -378,8 +394,9 @@ async function pollOnceForJumpNext() {
     markJumpHandled(jumpKey);
     await chrome.tabs.update(tab.id, { active: true });
     if (tab.windowId) {
-      await chrome.windows.update(tab.windowId, { focused: true });
-      try { await requestNativeFocus(tab.windowId); } catch { }
+      try { await chrome.windows.update(tab.windowId, { focused: true }); } catch { }
+      // Pass tab.id so native-focus-done can re-activate the correct tab
+      try { await requestNativeFocus(tab.windowId, tab.id); } catch { }
     }
   } catch { /* sidecar unreachable */ }
 }
@@ -423,7 +440,8 @@ async function openOrFocusApp() {
 
 // Send request-native-focus to sidecar so Tauri can focus the window at OS level.
 // This handles virtual desktop switching which chrome.windows.update cannot do.
-export async function requestNativeFocus(windowId) {
+// Pass tabId so the sidecar can send native-focus-done back for tab re-activation.
+export async function requestNativeFocus(windowId, tabId = null) {
   try {
     const win = await chrome.windows.get(windowId);
     const isEdge = typeof navigator !== 'undefined' && navigator.userAgent?.includes('Edg/');
@@ -433,7 +451,8 @@ export async function requestNativeFocus(windowId) {
         type: 'request-native-focus',
         payload: {
           browser,
-          bounds: { left: win.left, top: win.top, width: win.width, height: win.height }
+          bounds: { left: win.left, top: win.top, width: win.width, height: win.height },
+          tabId,
         }
       }));
     }

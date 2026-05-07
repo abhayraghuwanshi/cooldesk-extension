@@ -6,8 +6,6 @@
 
 import {
     faBox,
-    faChevronDown,
-    faChevronUp,
     faCode,
     faComments,
     faDesktop,
@@ -26,7 +24,7 @@ import {
     faWallet
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { categorizeApp, STANDARD_CATEGORIES } from '../../services/appCategorizationService.js';
 import { runningAppsService } from '../../services/runningAppsService.js';
 
@@ -73,154 +71,69 @@ const CATEGORY_COLORS = {
 function CategorySection({ category, apps, onLaunch }) {
     const icon = CATEGORY_FA_ICONS[category] || faBox;
     const colorClass = CATEGORY_COLORS[category] || 'brown';
-    const iconsContainerRef = useRef(null);
-    const [visibleCount, setVisibleCount] = useState(5); // Start conservative
-    const [showAll, setShowAll] = useState(false);
-
-    // Calculate how many icons fit in the container (matching WorkspaceCard logic)
-    useEffect(() => {
-        const calculateVisible = () => {
-            if (!iconsContainerRef.current) return;
-            const container = iconsContainerRef.current;
-            let containerWidth = container.offsetWidth;
-
-            // Account for padding
-            const computedStyle = window.getComputedStyle(container);
-            containerWidth -= (parseFloat(computedStyle.paddingLeft || '0') + parseFloat(computedStyle.paddingRight || '0'));
-
-            if (containerWidth <= 0) return;
-
-            // Icon size + gap (matching CSS: calc(var(--font-5xl) * 1.5) ≈ 48px + 12px gap)
-            const iconWidth = 48;
-            const gap = 12;
-            const expandBtnWidth = 48; // Reserve space for expand button
-
-            const availableWidth = containerWidth - expandBtnWidth;
-            const count = Math.max(2, Math.floor((availableWidth + gap) / (iconWidth + gap)));
-
-            setVisibleCount(count);
-        };
-
-        // Initial calculation after render
-        setTimeout(calculateVisible, 50);
-
-        const observer = new ResizeObserver(calculateVisible);
-        if (iconsContainerRef.current) {
-            observer.observe(iconsContainerRef.current);
-        }
-        return () => observer.disconnect();
-    }, []);
-
-    const hasMore = apps.length > visibleCount;
-    const displayApps = showAll ? apps : apps.slice(0, hasMore ? visibleCount : apps.length);
 
     return (
-        <div
-            className={`cooldesk-workspace-card compact`}
-            style={{ position: 'relative' }}
-        >
-            <div className="compact-card-inner" style={{ alignItems: showAll ? 'flex-start' : 'center' }}>
-                {/* Category Icon */}
-                <div className={`compact-workspace-icon workspace-icon ${colorClass}`}>
-                    <FontAwesomeIcon icon={icon} />
-                </div>
-
-                {/* Category Info */}
-                <div className="compact-workspace-info" style={{ marginTop: showAll ? '12px' : '0' }}>
-                    <div className="compact-workspace-name">{category}</div>
-                    <div className="compact-workspace-count">
-                        <span>{apps.length} App{apps.length !== 1 ? 's' : ''}</span>
+        <div className="cooldesk-workspace-card compact" style={{ position: 'relative' }}>
+            <div className="compact-card-inner" style={{ alignItems: 'center' }}>
+                {/* Category icon — mirrors WorkspaceCard compact stack */}
+                <div className="compact-workspace-stack">
+                    <div className={`compact-workspace-icon workspace-icon ${colorClass}`}>
+                        <FontAwesomeIcon icon={icon} />
                     </div>
+                    <div className="compact-workspace-label">{category}</div>
                 </div>
 
-                {/* App Icons */}
-                <div
-                    ref={iconsContainerRef}
-                    className="compact-icons-container"
-                    style={{
-                        flexWrap: showAll ? 'wrap' : 'nowrap',
-                        overflow: showAll ? 'visible' : 'hidden',
-                        minWidth: 0,
-                        flex: 1
-                    }}
-                >
-                    {displayApps.map((app, idx) => (
-                        <div
-                            key={app.id || idx}
-                            className="compact-url-icon compact-app-icon"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onLaunch?.(app);
-                            }}
-                            title={app.name}
-                            style={{
-                                border: '1px solid rgba(255, 255, 255, 0.08)',
-                                background: 'rgba(255, 255, 255, 0.05)',
-                                position: 'relative'
-                            }}
-                        >
-                            {app.isRunning && (
-                                <span style={{
-                                    position: 'absolute',
-                                    bottom: '2px',
-                                    right: '2px',
-                                    width: '6px',
-                                    height: '6px',
-                                    borderRadius: '50%',
-                                    background: '#22c55e',
-                                    boxShadow: '0 0 4px rgba(34,197,94,0.7)',
-                                    pointerEvents: 'none'
-                                }} />
-                            )}
-                            {app.icon ? (
-                                <img
-                                    src={app.icon}
-                                    alt=""
-                                    style={{ width: '24px', height: '24px', objectFit: 'contain', borderRadius: '4px' }}
-                                    onError={(e) => {
-                                        e.target.style.display = 'none';
-                                        e.target.nextSibling.style.display = 'flex';
-                                    }}
-                                />
-                            ) : null}
+                {/* Scrollable icon row — identical to WorkspaceCard compact icons */}
+                <div className="compact-icons-scroll" onClick={(e) => e.stopPropagation()}>
+                    <div className="compact-icons-container">
+                        {apps.map((app, idx) => (
                             <div
-                                className="letter-avatar"
+                                key={app.id || idx}
+                                className="compact-url-icon compact-app-icon"
+                                onClick={(e) => { e.stopPropagation(); onLaunch?.(app); }}
+                                title={app.name}
                                 style={{
-                                    display: app.icon ? 'none' : 'flex',
-                                    background: app.type === 'web' ? '#3B82F6' : '#8B5CF6',
-                                    width: '24px',
-                                    height: '24px',
-                                    borderRadius: '4px',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    fontSize: '12px',
-                                    fontWeight: 600,
-                                    color: '#fff'
+                                    border: '1px solid rgba(255,255,255,0.08)',
+                                    background: 'rgba(255,255,255,0.05)',
+                                    position: 'relative',
                                 }}
                             >
-                                {app.name?.charAt(0)?.toUpperCase() || '?'}
+                                {app.isRunning && (
+                                    <span style={{
+                                        position: 'absolute', bottom: 2, right: 2,
+                                        width: 6, height: 6, borderRadius: '50%',
+                                        background: '#22c55e',
+                                        boxShadow: '0 0 4px rgba(34,197,94,0.7)',
+                                        pointerEvents: 'none',
+                                    }} />
+                                )}
+                                {app.icon ? (
+                                    <img
+                                        src={app.icon}
+                                        alt=""
+                                        style={{ width: 24, height: 24, objectFit: 'contain', borderRadius: 4 }}
+                                        onError={(e) => {
+                                            e.target.style.display = 'none';
+                                            e.target.nextSibling.style.display = 'flex';
+                                        }}
+                                    />
+                                ) : null}
+                                <div
+                                    className="letter-avatar"
+                                    style={{
+                                        display: app.icon ? 'none' : 'flex',
+                                        background: '#8B5CF6',
+                                        width: 24, height: 24, borderRadius: 4,
+                                        alignItems: 'center', justifyContent: 'center',
+                                        fontSize: 12, fontWeight: 600, color: '#fff',
+                                    }}
+                                >
+                                    {app.name?.charAt(0)?.toUpperCase() || '?'}
+                                </div>
                             </div>
-                        </div>
-                    ))}
-                </div>
-
-                {/* Expand/Collapse Button - Outside overflow container */}
-                {(hasMore || showAll) && (
-                    <div
-                        className="compact-more-btn"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            setShowAll(!showAll);
-                        }}
-                        title={showAll ? 'Collapse' : `Show all ${apps.length} apps`}
-                        style={{
-                            flexShrink: 0,
-                            marginLeft: '8px'
-                        }}
-                    >
-                        <FontAwesomeIcon icon={showAll ? faChevronUp : faChevronDown} style={{ fontSize: '16px' }} />
+                        ))}
                     </div>
-                )}
+                </div>
             </div>
         </div>
     );

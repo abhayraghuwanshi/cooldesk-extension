@@ -19,6 +19,8 @@ let isConnected = false;
 let pendingRequests = new Map();
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 3;
+// Shared promise so concurrent connect() calls await the same handshake
+let connectingPromise = null;
 
 // ==========================================
 // CONNECTION
@@ -31,6 +33,12 @@ const MAX_RECONNECT_ATTEMPTS = 3;
 export async function connect() {
     if (isConnected && ws?.readyState === WebSocket.OPEN) {
         return true;
+    }
+    // If a connection attempt is already in flight, wait for it instead of
+    // opening a second socket. This prevents multiple WS connections when
+    // connect() is called concurrently from different components.
+    if (connectingPromise) {
+        return connectingPromise;
     }
 
     // First check if sidecar is running via HTTP health check
@@ -48,7 +56,14 @@ export async function connect() {
         return false;
     }
 
-    return new Promise((resolve) => {
+    // Close any stale socket before opening a new one
+    if (ws && ws.readyState !== WebSocket.CLOSED) {
+        ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null;
+        ws.close();
+        ws = null;
+    }
+
+    connectingPromise = new Promise((resolve) => {
         try {
             ws = new WebSocket(SIDECAR_WS_URL);
 
@@ -56,6 +71,7 @@ export async function connect() {
                 console.log('[LocalAI] Connected to Electron');
                 isConnected = true;
                 reconnectAttempts = 0;
+                connectingPromise = null;
                 // Identify this client to the sidecar
                 try { ws.send(JSON.stringify({ type: 'identify', client: 'localAI' })); } catch { }
                 resolve(true);
@@ -73,12 +89,14 @@ export async function connect() {
             ws.onclose = () => {
                 console.log('[LocalAI] Disconnected from Electron');
                 isConnected = false;
+                connectingPromise = null;
                 ws = null;
             };
 
             ws.onerror = (error) => {
                 console.warn('[LocalAI] WebSocket error:', error);
                 isConnected = false;
+                connectingPromise = null;
                 resolve(false);
             };
 
@@ -86,15 +104,18 @@ export async function connect() {
             setTimeout(() => {
                 if (!isConnected) {
                     ws?.close();
+                    connectingPromise = null;
                     resolve(false);
                 }
             }, 5000);
 
         } catch (error) {
             console.warn('[LocalAI] Connection error:', error);
+            connectingPromise = null;
             resolve(false);
         }
     });
+    return connectingPromise;
 }
 
 /**
@@ -102,6 +123,12 @@ export async function connect() {
  */
 function handleMessage(data) {
     const { type, payload } = data;
+
+    // The server broadcasts sync messages (request-tabs, sync-state, activity-updated, etc.)
+    // to every WS client including this one. Silently ignore anything that isn't an LLM
+    // response — these have no requestId and don't start with 'llm-'.
+    const isLlmMessage = type?.startsWith('llm-') || payload?.requestId;
+    if (!isLlmMessage) return;
 
     console.log('[LocalAI] Received message:', type, payload?.requestId);
 

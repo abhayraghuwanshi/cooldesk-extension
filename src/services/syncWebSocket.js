@@ -194,8 +194,14 @@ class SyncWebSocket {
                 this.emit('sync-complete', { timestamp });
                 break;
             case 'jump-to-tab':
-                // Handled exclusively by bridge.js (has deviceId guard + URL fallback).
-                // Do not handle here to avoid duplicate focus across multiple WS connections.
+                this.handleJumpToTab(payload).catch(() => {});
+                break;
+            case 'native-focus-done':
+                // Rust native focus completed — re-activate the tab so Chrome shows it
+                // (Chrome may have restored its last-focused tab during the desktop switch).
+                if (payload?.tabId && typeof chrome !== 'undefined' && chrome.tabs?.update) {
+                    chrome.tabs.update(payload.tabId, { active: true }).catch(() => {});
+                }
                 break;
             default:
                 console.log('[SyncWS] Unknown message type:', type);
@@ -346,19 +352,20 @@ class SyncWebSocket {
         // Only handle in browser extension context (not Electron)
         if (typeof chrome !== 'undefined' && chrome.tabs?.update) {
             try {
-                // Quick check if tab exists (fast fail for cross-browser broadcasts)
+                // Fast fail for cross-browser broadcasts: tab won't exist in the wrong browser
                 const tab = await chrome.tabs.get(tabId);
                 if (!tab) return;
 
                 const targetWindowId = windowId || tab.windowId;
 
-                // Activate tab and focus window
-                await Promise.all([
-                    chrome.tabs.update(tabId, { active: true }),
-                    targetWindowId && chrome.windows?.update
-                        ? chrome.windows.update(targetWindowId, { focused: true })
-                        : Promise.resolve()
-                ]);
+                // Activate the tab (required)
+                await chrome.tabs.update(tabId, { active: true });
+
+                // Focus the window — best effort, silently ignored cross-desktop
+                // (Rust SwitchToThisWindow handles the actual desktop switch)
+                if (targetWindowId && chrome.windows?.update) {
+                    try { await chrome.windows.update(targetWindowId, { focused: true }); } catch { }
+                }
 
                 // Get window bounds so Tauri can find the exact HWND (handles multiple browser windows)
                 let bounds = null;
@@ -366,15 +373,16 @@ class SyncWebSocket {
                     try {
                         const win = await chrome.windows.get(targetWindowId);
                         if (win) bounds = { left: win.left, top: win.top, width: win.width, height: win.height };
-                    } catch (_) {}
+                    } catch { }
                 }
 
-                // Tell sidecar to do native focus — bounds let it pick the correct OS window
+                // Tell sidecar to do native OS focus — bounds let it find the correct window HWND.
+                // tabId is included so Rust sends native-focus-done back, triggering tab re-activation.
                 this.send('request-native-focus', { browser: browserExeName, tabId, bounds });
 
                 console.log(`[SyncWS][${browserName}] Jumped to tab:`, tabId);
             } catch (e) {
-                // Silent fail for cross-browser tab IDs
+                // Silent fail for cross-browser tab IDs (expected when both Chrome+Edge receive the jump)
                 if (!e.message?.includes('No tab with id')) {
                     console.warn(`[SyncWS][${browserName}] Jump failed:`, e.message);
                 }
