@@ -32,7 +32,13 @@
       "Bash(cmd /c \"C:\\\\Windows\\\\Microsoft.NET\\\\Framework64\\\\v4.0.30319\\\\csc.exe /r:System.Drawing.dll /r:System.Windows.Forms.dll /out:C:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\scripts\\\\AppScannerTest.exe C:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\scripts\\\\AppScanner.cs\")",
       "Bash(powershell -ExecutionPolicy Bypass -File /c/Users/raghu/projects/extension/scripts/build-appscanner.ps1 2>&1)",
       "Bash(powershell -ExecutionPolicy Bypass -File scripts/build-appscanner.ps1)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\src-tauri\\\\src\\\\bin\\\\matcher.rs\" -Force)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\src-tauri\\\\bin\\\\AppScanner-x86_64-pc-windows-msvc.exe\" -Force)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\src-tauri\\\\bin\\\\AppMatcher-x86_64-pc-windows-msvc.exe\" -Force)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\src-tauri\\\\bin\\\\AppScanner-aarch64-apple-darwin\" -Force)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\src-tauri\\\\bin\\\\AppMatcher-aarch64-apple-darwin\" -Force)",
+      "PowerShell(cargo check *)"
     ],
     "deny": [],
     "ask": [],

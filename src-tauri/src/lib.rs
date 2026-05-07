@@ -1,5 +1,4 @@
 use tauri::{Manager, Emitter};
-use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tauri::tray::TrayIconBuilder;
 use tauri::menu::{Menu, MenuItem};
@@ -8,15 +7,28 @@ mod sidecar;
 mod system;
 mod focus;
 mod categorize;
+mod scanner;
+mod matcher;
 
 use system::RunningApp;
 
-// Global cache of the last AppMatcher output.
+// Global cache of the last scanner output.
 // Written by get_running_apps(), read by the sidecar /search endpoint.
 lazy_static::lazy_static! {
     pub static ref APP_CACHE: Arc<RwLock<Vec<serde_json::Value>>> =
         Arc::new(RwLock::new(Vec::new()));
+
+    // Timestamp of the last completed scan. Guards against concurrent scan storms.
+    static ref LAST_SCAN: Arc<RwLock<Option<std::time::Instant>>> =
+        Arc::new(RwLock::new(None));
+
+    // Mutex that ensures only one scan runs at a time.
+    static ref SCAN_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::new(());
 }
+
+// Minimum seconds between full rescans. Concurrent callers within this window
+// get the cached result immediately.
+const SCAN_CACHE_SECS: u64 = 10;
 
 
 #[tauri::command]
@@ -25,60 +37,59 @@ async fn get_focused_app() -> Option<RunningApp> {
 }
 
 #[tauri::command]
-async fn get_running_apps(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+async fn get_running_apps(_app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    #[cfg(not(target_os = "windows"))]
+    return Ok(serde_json::json!([]));
+
+    #[cfg(target_os = "windows")]
     {
-        let _ = &app;
-        return Ok(serde_json::json!([]));
-    }
+        // Return cached result if a scan completed within the last SCAN_CACHE_SECS seconds.
+        // This prevents scan storms when the frontend calls this command many times at once.
+        let cache_fresh = LAST_SCAN.read().ok().and_then(|t| *t).map(|t| {
+            t.elapsed().as_secs() < SCAN_CACHE_SECS
+        }).unwrap_or(false);
 
-    #[cfg(any(target_os = "windows", target_os = "macos"))]
-    {
-        use tauri_plugin_shell::ShellExt;
-
-        // 1. Run AppScanner to get all windows and installed apps
-        // Use .sidecar() so Tauri resolves the registered external binary by triple-suffix
-        // (.command() only searches PATH and fails on macOS where cwd is not in PATH)
-        let scan_output = app.shell().sidecar("AppScanner")
-            .map_err(|e| format!("AppScanner sidecar not found: {}", e))?
-            .args(["--debug"])
-            .output()
-            .await
-            .map_err(|e| format!("AppScanner failed: {}", e))?;
-
-        if !scan_output.status.success() {
-            return Err(format!("AppScanner failed: {}", String::from_utf8_lossy(&scan_output.stderr)));
+        if cache_fresh {
+            if let Ok(cache) = APP_CACHE.read() {
+                if !cache.is_empty() {
+                    return Ok(serde_json::Value::Array(cache.clone()));
+                }
+            }
         }
 
-        // 2. Write scan data to a temporary file
-        let temp_dir = std::env::temp_dir();
-        let scan_file = temp_dir.join(format!("cooldesk_scan_{}.json", std::process::id()));
-        std::fs::write(&scan_file, &scan_output.stdout).map_err(|e| format!("Failed to write temp file: {}", e))?;
+        // Serialize concurrent scans: only one runs at a time, others wait and
+        // then return the fresh cache result populated by the winning scan.
+        let _guard = SCAN_LOCK.lock().await;
 
-        // 3. Run AppMatcher with the temp file as input
-        let match_output = app.shell().sidecar("AppMatcher")
-            .map_err(|e| format!("AppMatcher sidecar not found: {}", e))?
-            .args(["--input", scan_file.to_string_lossy().as_ref()])
-            .output()
-            .await
-            .map_err(|e| format!("AppMatcher failed: {}", e))?;
+        // Re-check after acquiring the lock — a concurrent scan may have just finished.
+        let cache_fresh = LAST_SCAN.read().ok().and_then(|t| *t).map(|t| {
+            t.elapsed().as_secs() < SCAN_CACHE_SECS
+        }).unwrap_or(false);
 
-        // Clean up temp file
-        let _ = std::fs::remove_file(&scan_file);
-
-        if !match_output.status.success() {
-            let stderr = String::from_utf8_lossy(&match_output.stderr);
-            return Err(format!("AppMatcher failed: {}", stderr));
+        if cache_fresh {
+            if let Ok(cache) = APP_CACHE.read() {
+                if !cache.is_empty() {
+                    return Ok(serde_json::Value::Array(cache.clone()));
+                }
+            }
         }
 
-        let stdout_str = String::from_utf8_lossy(&match_output.stdout);
-        let parsed: serde_json::Value = serde_json::from_str(&stdout_str)
-            .map_err(|e| format!("Failed to parse matcher JSON: {}", e))?;
+        // Run the scan in-process: no sidecar EXEs spawned.
+        let scan_output = tokio::task::spawn_blocking(|| scanner::scan_apps())
+            .await
+            .map_err(|e| format!("scan_apps panicked: {}", e))?;
 
-        // Populate global cache so the /search HTTP endpoint can use full installed+running data
+        let entries = matcher::match_apps(scan_output);
+
+        let parsed = serde_json::to_value(&entries)
+            .map_err(|e| format!("Failed to serialize app entries: {}", e))?;
+
         if let Some(arr) = parsed.as_array() {
             if let Ok(mut cache) = APP_CACHE.write() {
                 *cache = arr.clone();
+            }
+            if let Ok(mut ts) = LAST_SCAN.write() {
+                *ts = Some(std::time::Instant::now());
             }
         }
 
