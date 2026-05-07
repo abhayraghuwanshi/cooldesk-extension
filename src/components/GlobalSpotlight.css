@@ -874,6 +874,143 @@ html, body {
 /* ============================================
    WORKSPACE TAB SWITCHER
    ============================================ */
+.ws-dropdown {
+  position: relative;
+}
+
+.ws-dropdown-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px 3px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+  max-width: 180px;
+}
+
+.ws-dropdown-trigger:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.ws-dropdown-trigger.open {
+  background: rgba(139, 92, 246, 0.12);
+  border-color: rgba(139, 92, 246, 0.35);
+  color: #c4b5fd;
+}
+
+.ws-dd-chevron {
+  opacity: 0.45;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.ws-dropdown-trigger.open .ws-dd-chevron {
+  transform: rotate(180deg);
+  opacity: 0.7;
+}
+
+.ws-dd-icon {
+  font-size: 10px;
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
+.ws-dd-count {
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.ws-dropdown-trigger.open .ws-dd-count {
+  background: rgba(139, 92, 246, 0.2);
+  color: rgba(196, 181, 253, 0.65);
+}
+
+.ws-dd-placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.ws-dropdown-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  top: auto;
+  right: 0;
+  min-width: 160px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #1c1c2e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  animation: ws-menu-in 0.1s ease;
+}
+
+.ws-dropdown-menu::-webkit-scrollbar {
+  width: 4px;
+}
+
+.ws-dropdown-menu::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+
+@keyframes ws-menu-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ws-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 7px 10px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s ease;
+}
+
+.ws-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.ws-dropdown-item.active {
+  background: rgba(139, 92, 246, 0.12);
+  color: #c4b5fd;
+}
+
+.ws-dropdown-item .ws-dd-icon { opacity: 0.8; }
+.ws-dropdown-item.active .ws-dd-icon { opacity: 1; }
+.ws-dropdown-item .ws-dd-count {
+  margin-left: auto;
+}
+.ws-dropdown-item.active .ws-dd-count {
+  background: rgba(139, 92, 246, 0.2);
+  color: rgba(196, 181, 253, 0.65);
+}
+
 .ws-tabs-row {
   display: flex;
   flex-wrap: nowrap;

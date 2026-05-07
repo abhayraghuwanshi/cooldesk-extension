@@ -268,15 +268,15 @@ import {
   handleGetTimeSeriesStats,
   initializeActivity
 } from './activity.js';
+import { requestNativeFocus } from './bridge.js';
 import { initializeData } from './data.js';
-import { openOrFocusUrlInChrome, requestNativeFocus } from './bridge.js';
 // import { initializeProjectContext } from './projectContext.js'; // DISABLED - depends on ML modules
 import { CommandParser } from '../services/commandParser.js';
 import { cleanupBadUrls, listenForPromotionAlarm, runPromotion, schedulePromotion } from '../utils/promotionService.js';
 // import '../utils/realTimeCategorizor.js'; // REMOVED
+import { nameTask } from '../services/localAIService.js';
 import { scheduleDailySummary } from '../services/memory/dailySummaryGenerator.js';
 import { NanoAIService } from '../services/nanoAIService.js';
-import { nameTask } from '../services/localAIService.js';
 import { syncOrchestrator } from '../services/syncOrchestrator.js';
 import { forceIndexRebuild, initializeSearchIndexer } from './searchIndexer.js';
 import { handleGetTabActivity } from './tabCleanup.js';
@@ -2583,7 +2583,7 @@ async function main() {
           await chrome.tabs.update(tab.id, { active: true });
           if (tab.windowId) {
             await chrome.windows.update(tab.windowId, { focused: true });
-            requestNativeFocus(tab.windowId).catch(() => {});
+            requestNativeFocus(tab.windowId).catch(() => { });
           }
           sendResponse({ success: true });
         } catch (e) {
