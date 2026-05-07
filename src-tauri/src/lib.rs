@@ -185,8 +185,18 @@ fn toggle_spotlight(app: tauri::AppHandle) {
 
 #[tauri::command]
 fn hide_spotlight(app: tauri::AppHandle) {
+    // Grant any process foreground permission BEFORE hiding our window.
+    // The spotlight owns the foreground right now; once we hide it Windows
+    // revokes our foreground lock and subsequent SetForegroundWindow calls
+    // from the sidecar would be denied (causing the taskbar-blink symptom).
+    // AllowSetForegroundWindow(ASFW_ANY) pre-authorises the focus transfer.
+    #[cfg(target_os = "windows")]
+    unsafe {
+        use windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow;
+        let _ = AllowSetForegroundWindow(u32::MAX); // ASFW_ANY = 0xFFFFFFFF
+    }
     if let Some(window) = app.get_webview_window("spotlight") {
-        window.hide().unwrap();
+        let _ = window.hide();
     }
 }
 

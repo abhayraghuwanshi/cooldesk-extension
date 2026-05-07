@@ -666,9 +666,12 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
                     .and_then(|v| v.as_str())
                     .unwrap_or("unknown")
                     .to_string();
-                log::info!("[Sidecar] Native focus requested for: {}", browser);
+                // tabId is forwarded so we can send native-focus-done back to the extension,
+                // which re-activates the correct tab after the OS focus completes.
+                let tab_id = payload.get("tabId").and_then(|v| v.as_i64());
 
-                // Extract window bounds from payload for precise HWND targeting
+                log::info!("[Sidecar] Native focus requested for: {} tabId={:?}", browser, tab_id);
+
                 let bx = payload.get("bounds").and_then(|b| b.get("left")).and_then(|v| v.as_i64()).map(|v| v as i32);
                 let by = payload.get("bounds").and_then(|b| b.get("top")).and_then(|v| v.as_i64()).map(|v| v as i32);
                 let bw = payload.get("bounds").and_then(|b| b.get("width")).and_then(|v| v.as_i64()).map(|v| v as i32);
@@ -682,14 +685,39 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
 
                 if let Some(hwnd) = hwnd {
                     log::info!("[Sidecar] Found HWND {} for {}, focusing directly", hwnd, browser);
-                    tokio::task::spawn_blocking(move || {
-                        if let Err(e) = crate::focus::focus_window_by_hwnd(hwnd) {
-                            log::warn!("[Sidecar] HWND focus failed for {}: {}", browser, e);
+                    let state_clone = Arc::clone(&state);
+                    // Run focus in a blocking thread, then send ack so the extension
+                    // re-activates the correct tab after the OS focus completes.
+                    tokio::spawn(async move {
+                        let result = tokio::task::spawn_blocking(move || {
+                            crate::focus::focus_window_by_hwnd(hwnd)
+                        }).await;
+
+                        match result {
+                            Ok(Ok(())) => {
+                                log::info!("[Sidecar] Native focus succeeded for {}", browser);
+                                state_clone.broadcast("native-focus-done", serde_json::json!({
+                                    "browser": browser,
+                                    "tabId": tab_id,
+                                }));
+                            }
+                            Ok(Err(e)) => {
+                                log::warn!("[Sidecar] Native focus failed for {}: {}", browser, e);
+                            }
+                            Err(e) => {
+                                log::warn!("[Sidecar] spawn_blocking panicked for {}: {}", browser, e);
+                            }
                         }
                     });
                 } else {
-                    // Fallback: broadcast to Tauri frontend shim (handles macOS/Linux or missing bounds)
-                    state.broadcast("native-focus", payload);
+                    // Fallback: no HWND found via bounds (non-Windows, missing bounds, or
+                    // window position changed). Broadcast to Tauri frontend shim which
+                    // focuses by process name. Also include tabId for the shim path.
+                    log::warn!("[Sidecar] No HWND found for {}, falling back to name-based focus", browser);
+                    state.broadcast("native-focus", serde_json::json!({
+                        "browser": browser,
+                        "tabId": tab_id,
+                    }));
                 }
             }
         }

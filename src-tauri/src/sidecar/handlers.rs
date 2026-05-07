@@ -1040,7 +1040,8 @@ pub async fn cmd_jump_to_tab(
     State(state): State<Arc<AppState>>,
     Json(req): Json<JumpToTabRequest>,
 ) -> Result<Json<SuccessResponse>, (StatusCode, Json<ErrorResponse>)> {
-    log::info!("[Sidecar] Broadcasting jump-to-tab: {}", req.tab_id);
+    log::info!("[Sidecar] Broadcasting jump-to-tab: tabId={} browser={:?} deviceId={:?} url={:?}",
+        req.tab_id, req.browser, req.device_id, req.url);
 
     let payload = serde_json::json!({
         "tabId": req.tab_id,
@@ -1072,6 +1073,13 @@ pub async fn cmd_jump_next(
     State(state): State<Arc<AppState>>,
 ) -> Json<serde_json::Value> {
     let action = state.pending_jumps.lock().ok().and_then(|mut q| q.pop_front());
+    if let Some(ref a) = action {
+        log::info!("[Sidecar] HTTP poll dequeued jump: tabId={} browser={:?} deviceId={:?}",
+            a.get("tabId").and_then(|v| v.as_i64()).unwrap_or(-1),
+            a.get("browser").and_then(|v| v.as_str()),
+            a.get("deviceId").and_then(|v| v.as_str()),
+        );
+    }
     Json(serde_json::json!({ "action": action }))
 }
 
