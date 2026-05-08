@@ -1,9 +1,11 @@
-import { faBrain, faClock, faDesktop, faSync, faTasks, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
+import { faBrain, faClock, faDesktop, faSync, faTasks, faToggleOff, faToggleOn, faWifi } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { recordFeedbackEvent } from '../../services/feedbackService.js';
 import { getHostTabs } from '../../services/extensionApi.js';
 import { syncOrchestrator } from '../../services/syncOrchestrator.js';
+import { syncWebSocket } from '../../services/syncWebSocket.js';
+import { isHostSyncEnabled } from '../../services/syncConfig.js';
 import { runningAppsService } from '../../services/runningAppsService.js';
 import { enrichRunningAppsWithIcons, getBaseDomainFromUrl } from '../../utils/helpers.js';
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
@@ -74,6 +76,11 @@ export function TabManagement() {
   const [taskViewEnabled, setTaskViewEnabled] = useState(false);
   const [tasks, setTasks] = useState([]);
   const [activeTaskId, setActiveTaskId] = useState(null);
+
+  // WebSocket connection state (for sync indicator)
+  const [wsConnected, setWsConnected] = useState(() => syncWebSocket.isConnected());
+  // True when tabs come from remote sidecar (not live chrome.tabs API)
+  const isRemoteTabMode = !window.electronAPI && !(typeof chrome !== 'undefined' && chrome?.tabs?.query);
 
   // Load auto-group, smart sort, and task view state on mount
   useEffect(() => {
@@ -230,6 +237,29 @@ export function TabManagement() {
     () => debounce(() => refreshTabs(), 300),
     [refreshTabs]
   );
+
+  // Subscribe to WebSocket connection events (must be after refreshTabs is defined)
+  useEffect(() => {
+    if (!isHostSyncEnabled()) return;
+
+    const checkConnection = () => setWsConnected(syncWebSocket.isConnected());
+
+    // Check immediately and poll every 2s to catch state we may have missed
+    checkConnection();
+    const poll = setInterval(checkConnection, 2000);
+
+    const unsubConnect = syncWebSocket.on('connected', () => {
+      setWsConnected(true);
+      refreshTabs();
+    });
+    const unsubDisconnect = syncWebSocket.on('disconnected', () => setWsConnected(false));
+
+    return () => {
+      clearInterval(poll);
+      unsubConnect?.();
+      unsubDisconnect?.();
+    };
+  }, [refreshTabs]);
 
   // Initial load and subscription setup - runs once on mount
   useEffect(() => {
@@ -716,6 +746,7 @@ export function TabManagement() {
         justifyContent: 'space-between'
       }}>
         <div style={{ display: 'flex', gap: '8px' }}>
+
           <button
             onClick={async () => {
               const newState = !isFocusMode;
@@ -915,7 +946,74 @@ export function TabManagement() {
             <span style={{ pointerEvents: 'none' }}>Tasks</span>
           </button> */}
         </div>
+
+        {/* WS Connection Status Indicator */}
+        {isHostSyncEnabled() && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '5px 10px',
+            borderRadius: '8px',
+            background: wsConnected
+              ? 'rgba(34, 197, 94, 0.1)'
+              : 'rgba(100, 116, 139, 0.1)',
+            border: `1px solid ${wsConnected ? 'rgba(34, 197, 94, 0.25)' : 'rgba(100, 116, 139, 0.2)'}`,
+            fontSize: 'var(--font-xs, 11px)',
+            fontWeight: 500,
+            color: wsConnected ? '#4ADE80' : '#64748B',
+            userSelect: 'none'
+          }}
+            title={wsConnected ? 'Sync connected — tabs are live' : 'Sync disconnected — tabs may be outdated'}
+          >
+            <div style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: wsConnected ? '#22C55E' : '#64748B',
+              boxShadow: wsConnected ? '0 0 6px #22C55E' : 'none',
+              flexShrink: 0
+            }} />
+            <FontAwesomeIcon icon={faWifi} style={{ fontSize: '10px', opacity: 0.8 }} />
+            <span>{wsConnected ? 'Synced' : 'Offline'}</span>
+          </div>
+        )}
       </div>
+
+      {/* Stale tabs warning — shown when sync is down in remote-tab mode */}
+      {isHostSyncEnabled() && !wsConnected && isRemoteTabMode && tabs.length > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '8px',
+          padding: '7px 12px',
+          marginTop: '6px',
+          background: 'rgba(234, 179, 8, 0.08)',
+          border: '1px solid rgba(234, 179, 8, 0.2)',
+          borderRadius: '8px',
+          fontSize: 'var(--font-xs, 11px)',
+          color: '#CA8A04'
+        }}>
+          <span>Browser sync disconnected — tabs may be outdated</span>
+          <button
+            onClick={() => refreshTabs()}
+            style={{
+              background: 'rgba(234, 179, 8, 0.15)',
+              border: '1px solid rgba(234, 179, 8, 0.3)',
+              borderRadius: '6px',
+              padding: '3px 10px',
+              color: '#CA8A04',
+              cursor: 'pointer',
+              fontSize: 'var(--font-xs, 11px)',
+              fontWeight: 600,
+              whiteSpace: 'nowrap'
+            }}
+          >
+            Refresh
+          </button>
+        </div>
+      )}
 
       <div style={{
         flex: 1,

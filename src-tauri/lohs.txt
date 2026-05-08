@@ -1,0 +1,174 @@
+=== Logging started: 08-05-2026  14:03:08 ===
+Action start 14:03:08: INSTALL.
+Action start 14:03:08: FindRelatedProducts.
+Action ended 14:03:08: FindRelatedProducts. Return value 1.
+Action start 14:03:08: AppSearch.
+Action ended 14:03:08: AppSearch. Return value 1.
+Action start 14:03:08: ValidateProductID.
+Action ended 14:03:08: ValidateProductID. Return value 1.
+Action start 14:03:08: CostInitialize.
+Action ended 14:03:08: CostInitialize. Return value 1.
+Action start 14:03:08: FileCost.
+Action ended 14:03:08: FileCost. Return value 1.
+Action start 14:03:08: CostFinalize.
+Action ended 14:03:08: CostFinalize. Return value 1.
+Action start 14:03:08: SetARPINSTALLLOCATION.
+Action ended 14:03:08: SetARPINSTALLLOCATION. Return value 1.
+Action start 14:03:08: MigrateFeatureStates.
+Action ended 14:03:08: MigrateFeatureStates. Return value 0.
+Action start 14:03:08: InstallValidate.
+Action ended 14:03:08: InstallValidate. Return value 1.
+Action start 14:03:08: SetARPNOMODIFY.
+Action ended 14:03:08: SetARPNOMODIFY. Return value 1.
+Action start 14:03:08: InstallInitialize.
+Action ended 14:03:08: InstallInitialize. Return value 1.
+Action start 14:03:08: RemoveExistingProducts.
+Action ended 14:03:08: RemoveExistingProducts. Return value 1.
+Action start 14:03:08: ProcessComponents.
+Action ended 14:03:08: ProcessComponents. Return value 1.
+Action start 14:03:08: UnpublishFeatures.
+Action ended 14:03:08: UnpublishFeatures. Return value 1.
+Action start 14:03:08: RemoveRegistryValues.
+Action ended 14:03:08: RemoveRegistryValues. Return value 1.
+Action start 14:03:08: RemoveFiles.
+Action ended 14:03:08: RemoveFiles. Return value 1.
+Action start 14:03:08: InstallFiles.
+Action ended 14:03:08: InstallFiles. Return value 1.
+Action start 14:03:08: CreateShortcuts.
+Action ended 14:03:08: CreateShortcuts. Return value 1.
+Action start 14:03:08: WriteRegistryValues.
+Action ended 14:03:08: WriteRegistryValues. Return value 1.
+Action start 14:03:08: RegisterUser.
+Action ended 14:03:08: RegisterUser. Return value 1.
+Action start 14:03:08: RegisterProduct.
+Action ended 14:03:08: RegisterProduct. Return value 1.
+Action start 14:03:08: PublishFeatures.
+Action ended 14:03:08: PublishFeatures. Return value 1.
+Action start 14:03:08: PublishProduct.
+Action ended 14:03:08: PublishProduct. Return value 1.
+Action start 14:03:08: InstallFinalize.
+MSI (s) (54:8C) [14:03:08:779]: Product: CoolDesk -- Error 1925. You do not have sufficient privileges to complete this installation for all users of the machine.  Log on as administrator and then retry this installation.
+
+Error 1925. You do not have sufficient privileges to complete this installation for all users of the machine.  Log on as administrator and then retry this installation.
+Action ended 14:03:08: InstallFinalize. Return value 3.
+Action ended 14:03:08: INSTALL. Return value 3.
+Property(S): UpgradeCode = {2228EF21-1320-5AB6-89DE-377326D765B8}
+Property(S): INSTALLDIR = C:\Program Files\CoolDesk\
+Property(S): WVRTINSTALLED = 147.0.3912.98
+Property(S): WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1
+Property(S): DesktopFolder = C:\Users\Public\Desktop\
+Property(S): ApplicationProgramsFolder = C:\ProgramData\Microsoft\Windows\Start Menu\Programs\CoolDesk\
+Property(S): WIXUI_INSTALLDIR = INSTALLDIR
+Property(S): WixUIRMOption = UseRM
+Property(S): ALLUSERS = 1
+Property(S): ARPNOMODIFY = 1
+Property(S): ARPNOREPAIR = yes
+Property(S): ARPINSTALLLOCATION = C:\Program Files\CoolDesk\
+Property(S): TARGETDIR = C:\
+Property(S): ProgramFiles64Folder = C:\Program Files\
+Property(S): ProgramMenuFolder = C:\ProgramData\Microsoft\Windows\Start Menu\Programs\
+Property(S): SourceDir = C:\Users\raghu\Downloads\
+Property(S): REINSTALLMODE = amus
+Property(S): ARPPRODUCTICON = ProductIcon
+Property(S): ARPURLINFOABOUT = https://github.com/abhayraghuwanshi/cooldesk-extension
+Property(S): ARPHELPLINK = https://github.com/abhayraghuwanshi/cooldesk-extension
+Property(S): ARPURLUPDATEINFO = https://github.com/abhayraghuwanshi/cooldesk-extension
+Property(S): WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT = Launch CoolDesk
+Property(S): Manufacturer = CoolDesk
+Property(S): ProductCode = {E5FD3442-9771-417A-A3BD-CCC24F17F784}
+Property(S): ProductLanguage = 1033
+Property(S): ProductName = CoolDesk
+Property(S): ProductVersion = 1.2.3
+Property(S): DefaultUIFont = WixUI_Font_Normal
+Property(S): WixUI_Mode = InstallDir
+Property(S): ErrorDialog = ErrorDlg
+Property(S): SecureCustomProperties = ARPNOREPAIR;AUTOLAUNCHAPP;LAUNCHAPPARGS;WIX_UPGRADE_DETECTED
+Property(S): MsiLogFileLocation = C:\Users\raghu\Downloads\install.log
+Property(S): PackageCode = {0BD2DAA3-DA9B-49F8-96A7-ADD6A4A846E6}
+Property(S): ProductState = -1
+Property(S): PackagecodeChanging = 1
+Property(S): REBOOT = ReallySuppress
+Property(S): CURRENTDIRECTORY = C:\Users\raghu\Downloads
+Property(S): CLIENTUILEVEL = 3
+Property(S): CLIENTPROCESSID = 23444
+Property(S): VersionDatabase = 450
+Property(S): VersionMsi = 5.00
+Property(S): VersionNT = 603
+Property(S): VersionNT64 = 603
+Property(S): WindowsBuild = 9600
+Property(S): ServicePackLevel = 0
+Property(S): ServicePackLevelMinor = 0
+Property(S): MsiNTProductType = 1
+Property(S): MsiNTSuitePersonal = 1
+Property(S): WindowsFolder = C:\WINDOWS\
+Property(S): WindowsVolume = C:\
+Property(S): System64Folder = C:\WINDOWS\system32\
+Property(S): SystemFolder = C:\WINDOWS\SysWOW64\
+Property(S): RemoteAdminTS = 1
+Property(S): TempFolder = C:\Users\raghu\AppData\Local\Temp\
+Property(S): ProgramFilesFolder = C:\Program Files (x86)\
+Property(S): CommonFilesFolder = C:\Program Files (x86)\Common Files\
+Property(S): CommonFiles64Folder = C:\Program Files\Common Files\
+Property(S): AppDataFolder = C:\Users\raghu\AppData\Roaming\
+Property(S): FavoritesFolder = C:\Users\raghu\Favorites\
+Property(S): NetHoodFolder = C:\Users\raghu\AppData\Roaming\Microsoft\Windows\Network Shortcuts\
+Property(S): PersonalFolder = C:\Users\raghu\OneDrive\Documents\
+Property(S): PrintHoodFolder = C:\Users\raghu\AppData\Roaming\Microsoft\Windows\Printer Shortcuts\
+Property(S): RecentFolder = C:\Users\raghu\AppData\Roaming\Microsoft\Windows\Recent\
+Property(S): SendToFolder = C:\Users\raghu\AppData\Roaming\Microsoft\Windows\SendTo\
+Property(S): TemplateFolder = C:\ProgramData\Microsoft\Windows\Templates\
+Property(S): CommonAppDataFolder = C:\ProgramData\
+Property(S): LocalAppDataFolder = C:\Users\raghu\AppData\Local\
+Property(S): MyPicturesFolder = C:\Users\raghu\OneDrive\Pictures\
+Property(S): AdminToolsFolder = C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\
+Property(S): StartupFolder = C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup\
+Property(S): StartMenuFolder = C:\ProgramData\Microsoft\Windows\Start Menu\
+Property(S): FontsFolder = C:\WINDOWS\Fonts\
+Property(S): GPTSupport = 1
+Property(S): OLEAdvtSupport = 1
+Property(S): ShellAdvtSupport = 1
+Property(S): MsiAMD64 = 25
+Property(S): Msix64 = 25
+Property(S): Intel = 25
+Property(S): PhysicalMemory = 15629
+Property(S): VirtualMemory = 24883
+Property(S): LogonUser = raghu
+Property(S): UserSID = S-1-5-21-4183389818-558484215-3394072214-1001
+Property(S): UserLanguageID = 16393
+Property(S): ComputerName = ABHAY
+Property(S): SystemLanguageID = 1033
+Property(S): ScreenX = 1024
+Property(S): ScreenY = 768
+Property(S): CaptionHeight = 23
+Property(S): BorderTop = 1
+Property(S): BorderSide = 1
+Property(S): TextHeight = 16
+Property(S): TextInternalLeading = 3
+Property(S): ColorBits = 32
+Property(S): TTCSupport = 1
+Property(S): Time = 14:03:08
+Property(S): Date = 08-05-2026
+Property(S): MsiNetAssemblySupport = 4.8.9221.0
+Property(S): MsiWin32AssemblySupport = 6.3.26100.8328
+Property(S): RedirectedDllSupport = 2
+Property(S): USERNAME = raghuwanshi.abhay405@gmail.com
+Property(S): DATABASE = C:\WINDOWS\Installer\1be80d.msi
+Property(S): OriginalDatabase = C:\Users\raghu\Downloads\CoolDesk_1.2.3_x64_en-US.msi
+Property(S): UILevel = 2
+Property(S): ACTION = INSTALL
+Property(S): ROOTDRIVE = C:\
+Property(S): CostingComplete = 1
+Property(S): OutOfDiskSpace = 0
+Property(S): OutOfNoRbDiskSpace = 0
+Property(S): PrimaryVolumeSpaceAvailable = 0
+Property(S): PrimaryVolumeSpaceRequired = 0
+Property(S): PrimaryVolumeSpaceRemaining = 0
+Property(S): INSTALLLEVEL = 1
+Property(S): SOURCEDIR = C:\Users\raghu\Downloads\
+Property(S): SourcedirProduct = {E5FD3442-9771-417A-A3BD-CCC24F17F784}
+Property(S): ProductToBeRegistered = 1
+MSI (s) (54:8C) [14:03:08:820]: Product: CoolDesk -- Installation failed.
+
+MSI (s) (54:8C) [14:03:08:820]: Windows Installer installed the product. Product Name: CoolDesk. Product Version: 1.2.3. Product Language: 1033. Manufacturer: CoolDesk. Installation success or error status: 1603.
+
+=== Logging stopped: 08-05-2026  14:03:08 ===

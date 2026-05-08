@@ -67,7 +67,7 @@
       "digestAlgorithm": "sha256",
       "timestampUrl": "http://timestamp.digicert.com",
       "webviewInstallMode": {
-        "type": "offlineInstaller"
+        "type": "skip"
       },
       "nsis": {
         "displayLanguageSelector": false,

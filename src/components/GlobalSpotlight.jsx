@@ -3,6 +3,8 @@ import { faBriefcase, faCalculator, faChartLine, faCloud, faCode, faCog, faComme
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { storageGet, storageSet } from '../services/extensionApi';
+import { syncWebSocket } from '../services/syncWebSocket';
+import { isHostSyncEnabled } from '../services/syncConfig';
 import { recordSearchSelection } from '../services/feedbackService';
 import * as LocalAI from '../services/localAIService';
 import { runningAppsService } from '../services/runningAppsService';
@@ -198,6 +200,9 @@ export function GlobalSpotlight() {
         try { return localStorage.getItem('spotlight_ws_id') || null; } catch { return null; }
     });
 
+    // WebSocket connection state
+    const [wsConnected, setWsConnected] = useState(() => syncWebSocket.isConnected());
+
     // AI/Model command states
     const [commandMode, setCommandMode] = useState(null); // null, 'ai', 'model'
     const [aiMessages, setAiMessages] = useState([]);
@@ -330,7 +335,16 @@ export function GlobalSpotlight() {
         };
     }, []);
 
-
+    // WebSocket connection status subscription
+    useEffect(() => {
+        if (!isHostSyncEnabled()) return;
+        const checkConnection = () => setWsConnected(syncWebSocket.isConnected());
+        checkConnection();
+        const poll = setInterval(checkConnection, 2000);
+        const unsubConnect = syncWebSocket.on('connected', () => setWsConnected(true));
+        const unsubDisconnect = syncWebSocket.on('disconnected', () => setWsConnected(false));
+        return () => { clearInterval(poll); unsubConnect?.(); unsubDisconnect?.(); };
+    }, []);
 
     // Load Recommendations - Shows frequently used apps and active tabs when Spotlight opens
     const loadContextItems = useCallback(async () => {
@@ -1377,7 +1391,35 @@ export function GlobalSpotlight() {
                         spellCheck={false}
                     />
                     {loading && <div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.2)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>}
-                    {/* 
+                    {/* WS connection indicator */}
+                    {isHostSyncEnabled() && (
+                        <div
+                            title={wsConnected ? 'App sync connected — tabs are live' : 'App sync disconnected — tabs may be outdated'}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                background: wsConnected ? 'rgba(34, 197, 94, 0.1)' : 'rgba(100, 116, 139, 0.1)',
+                                border: `1px solid ${wsConnected ? 'rgba(34, 197, 94, 0.25)' : 'rgba(100, 116, 139, 0.2)'}`,
+                                fontSize: '10px',
+                                color: wsConnected ? '#4ADE80' : '#64748B',
+                                userSelect: 'none',
+                                flexShrink: 0
+                            }}
+                        >
+                            <div style={{
+                                width: '5px',
+                                height: '5px',
+                                borderRadius: '50%',
+                                background: wsConnected ? '#22C55E' : '#64748B',
+                                boxShadow: wsConnected ? '0 0 5px #22C55E' : 'none'
+                            }} />
+                            <span>{wsConnected ? 'Synced' : 'Offline'}</span>
+                        </div>
+                    )}
+                    {/*
                     <button
                         className={`spotlight-deep-btn ${deepSearch ? 'active' : ''}`}
                         onClick={() => setDeepSearch(!deepSearch)}
@@ -1522,6 +1564,24 @@ export function GlobalSpotlight() {
                                             );
                                         })}
                                     </div>
+                                </div>
+                            )}
+                            {/* Stale tabs warning in Spotlight */}
+                            {isHostSyncEnabled() && !wsConnected && tabs.length > 0 && (
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    padding: '5px 10px',
+                                    marginBottom: '4px',
+                                    borderRadius: '6px',
+                                    background: 'rgba(234, 179, 8, 0.08)',
+                                    border: '1px solid rgba(234, 179, 8, 0.2)',
+                                    fontSize: '10px',
+                                    color: '#CA8A04'
+                                }}>
+                                    <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#CA8A04', flexShrink: 0 }} />
+                                    <span>Sync disconnected — tab list may be outdated</span>
                                 </div>
                             )}
                             {/* Tabs Row */}
