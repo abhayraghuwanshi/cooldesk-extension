@@ -297,7 +297,7 @@
   width: 32px;
   height: 32px;
   opacity: 1 !important;
-  font-size: var(--font-xl);
+  font-size: var(--font-xl, 14px);
   background: rgba(139, 92, 246, 0.3);
   box-shadow: 0 0 15px rgba(139, 92, 246, 0.4);
 }
@@ -305,7 +305,7 @@
 .face-indicator:hover .face-dot {
   width: 44px;
   height: 44px;
-  font-size: var(--font-2xl);
+  font-size: var(--font-2xl, 18px);
   opacity: 0.6;
 }
 
@@ -320,7 +320,7 @@
 .face-indicator:hover .face-dot.active {
   width: 44px;
   height: 44px;
-  font-size: var(--font-2xl);
+  font-size: var(--font-2xl, 18px);
   background: rgba(139, 92, 246, 0.45);
   transform: scale(1.15) translateY(-4px);
 }

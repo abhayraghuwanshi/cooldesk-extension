@@ -68,6 +68,19 @@
   --background-primary: #121218;
   --text-primary: #e5e7eb;
   --border-color: rgba(255, 255, 255, 0.1);
+
+  /* Font scale defaults (overridden by fontUtils.js applyBaseFontSize at runtime).
+     These prevent icons/text from rendering at browser-default sizes before JS runs. */
+  --font-xs: 10px;
+  --font-sm: 12px;
+  --font-md: 13px;
+  --font-base: 13px;
+  --font-lg: 16px;
+  --font-xl: 14px;
+  --font-2xl: 18px;
+  --font-3xl: 22px;
+  --font-4xl: 29px;
+  --font-5xl: 39px;
 }
 
 /* Main Theme Class */

@@ -1223,9 +1223,7 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
     <div style={{
       display: 'flex',
       flexDirection: 'column',
-      flex: isFullScreen ? undefined : 1,
-      height: isFullScreen ? '100%' : undefined,
-      minHeight: 0,
+      height: '100%',
       position: isFullScreen ? 'fixed' : 'relative',
       top: isFullScreen ? 0 : 'auto',
       left: isFullScreen ? 0 : 'auto',

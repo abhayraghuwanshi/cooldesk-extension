@@ -13,8 +13,10 @@ import './styles/theme.css';
 import './styles/themes/components-vars.css';
 import './styles/wallpaper-enhancements.css';
 
-// FontAwesome - minimal icons only
-import { library } from '@fortawesome/fontawesome-svg-core';
+// FontAwesome: import CSS statically so it's in the bundle, not injected by JS at runtime
+import '@fortawesome/fontawesome-svg-core/styles.css';
+import { config, library } from '@fortawesome/fontawesome-svg-core';
+config.autoAddCss = false;
 import { faGear, faGlobe, faPlus } from '@fortawesome/free-solid-svg-icons';
 
 // Core services (lightweight)

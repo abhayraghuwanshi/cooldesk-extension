@@ -13,8 +13,10 @@ import './styles/theme.css';
 import './styles/themes/components-vars.css';
 import './styles/wallpaper-enhancements.css';
 
-// Add icons to the library
-import { library } from '@fortawesome/fontawesome-svg-core';
+// FontAwesome: import CSS statically so it's in the bundle, not injected by JS at runtime
+import '@fortawesome/fontawesome-svg-core/styles.css';
+import { config, library } from '@fortawesome/fontawesome-svg-core';
+config.autoAddCss = false; // Disable JS-based CSS injection — we import it above
 import { faBroom, faClone, faGear, faGlobe, faHistory, faPlus, faRotateRight, faThumbtack, faTrash, faTriangleExclamation, faUndo } from '@fortawesome/free-solid-svg-icons';
 import { CoolDeskContainer } from './components/cooldesk/CoolDeskContainer';
 import categoryManager from './data/categories';
@@ -110,7 +112,13 @@ export default function App() {
   const activeSectionTimeoutRef = useRef(null)
   const sharedClientRef = useRef(null)
   const [windowWidth, setWindowWidth] = useState(window.innerWidth)
-  const [fontSize, setFontSize] = useState('medium')
+  const [fontSize, setFontSize] = useState(() => {
+    try {
+      return initializeFontSize(); // Runs synchronously before first render
+    } catch {
+      return 'medium';
+    }
+  })
 
   // Wallpaper settings
   const [wallpaperEnabled, setWallpaperEnabled] = useState(() => {
@@ -1055,10 +1063,6 @@ export default function App() {
           const newThemeClass = `bg-${themeToApply}`;
           body.classList.add(newThemeClass);
           setThemeClass(newThemeClass);
-
-          // Initialize font settings (size and family) using utility
-          const initialFontSize = initializeFontSize();
-          setFontSize(initialFontSize);
 
         } catch (e) {
           console.warn('Failed to apply saved preferences:', e);
