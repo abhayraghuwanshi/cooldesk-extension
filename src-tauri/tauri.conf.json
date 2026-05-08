@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "CoolDesk",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "identifier": "com.cooldesk.desktop",
   "build": {
     "frontendDist": "../dist-tauri",
@@ -66,6 +66,9 @@
     "windows": {
       "digestAlgorithm": "sha256",
       "timestampUrl": "http://timestamp.digicert.com",
+      "webviewInstallMode": {
+        "type": "offlineInstaller"
+      },
       "nsis": {
         "displayLanguageSelector": false,
         "installMode": "currentUser"
