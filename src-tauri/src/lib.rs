@@ -242,18 +242,19 @@ async fn launch_app(path: String) -> Result<(), String> {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         // Try direct spawn first (fastest, works for normal .exe paths).
-        // Fall back to ShellExecute via cmd /c start for Store apps (WindowsApps),
-        // .lnk shortcuts, and anything else direct spawn can't handle.
+        // Try direct spawn first; fall back to ShellExecuteW for .lnk shortcuts
+        // and Store apps that can't be launched via CreateProcess directly.
         let direct_ok = std::process::Command::new(&path)
             .creation_flags(CREATE_NO_WINDOW)
             .spawn()
             .is_ok();
         if !direct_ok {
-            std::process::Command::new("cmd")
-                .args(["/c", "start", "", &path])
-                .creation_flags(CREATE_NO_WINDOW)
-                .spawn()
-                .map_err(|e| format!("launch failed: {e}"))?;
+            use windows::Win32::UI::Shell::ShellExecuteW;
+            use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+            use windows::core::HSTRING;
+            let path_w = HSTRING::from(path.as_str());
+            let open_w = HSTRING::from("open");
+            unsafe { ShellExecuteW(None, &open_w, &path_w, None, None, SW_SHOWNORMAL); }
         }
     }
     #[cfg(target_os = "macos")]
