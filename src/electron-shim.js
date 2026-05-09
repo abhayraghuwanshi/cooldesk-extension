@@ -241,9 +241,7 @@ const electronAPI = {
     },
 
     openExternal: async (url) => {
-        // Use Tauri shell open
-        const { open } = await import('@tauri-apps/plugin-shell');
-        return open(url);
+        return invoke('open_url', { url });
     },
 
     // ==========================================

@@ -282,6 +282,26 @@ async fn launch_app(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn open_url(url: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::UI::Shell::ShellExecuteW;
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        use windows::core::HSTRING;
+        let url_w = HSTRING::from(url.as_str());
+        let open_w = HSTRING::from("open");
+        unsafe {
+            ShellExecuteW(None, &open_w, &url_w, None, None, SW_SHOWNORMAL);
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        open::that(&url).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// Launch an app with arguments (e.g., VSCode with a folder path)
 #[tauri::command]
 async fn launch_app_with_args(app: String, args: Vec<String>) -> Result<(), String> {
@@ -289,14 +309,8 @@ async fn launch_app_with_args(app: String, args: Vec<String>) -> Result<(), Stri
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
-        let mut cmd = std::process::Command::new("powershell");
-        cmd.arg("-WindowStyle").arg("Hidden").arg("-Command");
-
-        let mut script = format!("& '{}'", app.replace("'", "''"));
-        for arg in &args {
-            script.push_str(&format!(" '{}'", arg.replace("'", "''")));
-        }
-        cmd.arg(script)
+        std::process::Command::new(&app)
+            .args(&args)
             .creation_flags(CREATE_NO_WINDOW)
             .spawn()
             .map_err(|e| e.to_string())?;
@@ -366,6 +380,29 @@ pub struct SearchFileResult {
     pub date: String,
 }
 
+fn search_dir_recursive(dir: &std::path::Path, query: &str, results: &mut Vec<SearchFileResult>, depth: u32) {
+    if depth == 0 || results.len() >= 15 { return; }
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        if results.len() >= 15 { break; }
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_lowercase();
+        if name.contains(query) && path.is_file() {
+            let date_str = std::fs::metadata(&path)
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .map(|t| {
+                    let dt: chrono::DateTime<chrono::Local> = t.into();
+                    dt.format("%Y-%m-%d %H:%M").to_string()
+                })
+                .unwrap_or_default();
+            results.push(SearchFileResult { path: path.to_string_lossy().into_owned(), date: date_str });
+        } else if path.is_dir() {
+            search_dir_recursive(&path, query, results, depth - 1);
+        }
+    }
+}
+
 /// Search user files (Downloads, Documents, Desktop) cross-platform
 #[tauri::command]
 async fn search_files(query: String) -> Result<Vec<SearchFileResult>, String> {
@@ -410,68 +447,13 @@ async fn search_files(query: String) -> Result<Vec<SearchFileResult>, String> {
     
     #[cfg(target_os = "windows")]
     {
-        let mut ps_script = String::from("$con = New-Object -ComObject ADODB.Connection; ");
-        ps_script.push_str("$con.Open(\"Provider=Search.CollatorDSO;Extended Properties='Application=Windows';\"); ");
-        
-        let mut folder_conditions = Vec::new();
+        let query_lower = query.to_lowercase();
+        let mut final_results: Vec<SearchFileResult> = Vec::new();
         for target in &targets {
-            // e.g. C:\Users\Raghu\Downloads
-            let path_str = target.to_string_lossy().replace("'", "''");
-            folder_conditions.push(format!("System.ItemFolderPathDisplay LIKE '{}%'", path_str));
+            search_dir_recursive(target, &query_lower, &mut final_results, 3);
+            if final_results.len() >= 15 { break; }
         }
-        
-        // As a fallback, include basic %Downloads% wildcard
-        if folder_conditions.is_empty() {
-            folder_conditions.push("System.ItemFolderPathDisplay LIKE '%Downloads%'".into());
-            folder_conditions.push("System.ItemFolderPathDisplay LIKE '%Documents%'".into());
-            folder_conditions.push("System.ItemFolderPathDisplay LIKE '%Desktop%'".into());
-        }
-        
-        let folder_clause = format!("({})", folder_conditions.join(" OR "));
-        // Escape both ' (SQL string delimiter) and " (PowerShell string delimiter).
-        // The SQL is embedded inside a double-quoted PowerShell string, so an unescaped
-        // " would break out of it and allow arbitrary PowerShell injection.
-        let query_sanitized = query.replace('"', "\\\"").replace("'", "''");
-        
-        // SQL query for Windows Search using valid CONTAINS syntax
-        let sql = format!(
-            "SELECT TOP 15 System.ItemPathDisplay FROM SystemIndex WHERE CONTAINS(System.FileName, '\"\"*{}*\"\"') AND {}",
-            query_sanitized, folder_clause
-        );
-        
-        ps_script.push_str(&format!("$rs = $con.Execute(\"{}\"); ", sql));
-        ps_script.push_str("while($rs -ne $null -and -not $rs.EOF) { Write-Output $rs.Fields.Item('System.ItemPathDisplay').Value; $rs.MoveNext(); }");
-        
-        #[cfg(target_os = "windows")]
-        let output = {
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-            std::process::Command::new("powershell")
-                .arg("-NoProfile")
-                .arg("-Command")
-                .arg(&ps_script)
-                .creation_flags(CREATE_NO_WINDOW)
-                .output()
-                .map_err(|e| e.to_string())?
-        };
-            
-        let output_str = String::from_utf8_lossy(&output.stdout);
-        let results: Vec<String> = output_str.lines()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
-            
-        let mut final_results = Vec::new();
-        for path in results {
-            let mut date_str = String::new();
-            if let Ok(metadata) = std::fs::metadata(&path) {
-                if let Ok(modified) = metadata.modified() {
-                    let datetime: chrono::DateTime<chrono::Local> = modified.into();
-                    date_str = datetime.format("%Y-%m-%d %H:%M").to_string();
-                }
-            }
-            final_results.push(SearchFileResult { path, date: date_str });
-        }
+        final_results.truncate(15);
         return Ok(final_results);
     }
     
@@ -492,7 +474,6 @@ pub fn run() {
             let _ = window.set_focus();
         }
     }))
-    .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_process::init())
@@ -506,6 +487,7 @@ pub fn run() {
         set_spotlight_shortcut,
         launch_app,
         launch_app_with_args,
+        open_url,
         open_folder,
         search_files,
         get_focused_app
