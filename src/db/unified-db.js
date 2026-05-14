@@ -6,7 +6,7 @@
 // Single database configuration
 export const DB_CONFIG = {
     NAME: 'cooldesk-unified-db',
-    VERSION: 11, // Added APPS store for unified local+web app list with categories
+    VERSION: 15, // v15: repair installs that reached v14 without workspace_todos
     STORES: {
         WORKSPACES: 'workspaces',
         WORKSPACE_URLS: 'workspace_urls',
@@ -23,8 +23,38 @@ export const DB_CONFIG = {
         SETTINGS: 'settings', // Application settings
         DASHBOARD: 'dashboard', // Dashboard layout/widgets
         METADATA: 'metadata', // For tracking migrations, health, etc.
-        APPS: 'apps' // Unified local + web apps with categories
+        APPS: 'apps', // Unified local + web apps with categories
+        WORKSPACE_TODOS: 'workspace_todos' // Per-workspace task items
     }
+}
+
+function createIndexes(store, indexes = [], logPrefix = '[Migration]') {
+    indexes.forEach(indexDef => {
+        if (store.indexNames.contains(indexDef.name)) {
+            return
+        }
+
+        store.createIndex(indexDef.name, indexDef.keyPath, indexDef.options)
+        console.log(`${logPrefix} Created index: ${indexDef.name}`)
+    })
+}
+
+function ensureObjectStore(db, storeName, logPrefix = '[Migration]') {
+    const schema = SCHEMAS[storeName]
+
+    if (!schema) {
+        throw new Error(`Missing schema for object store: ${storeName}`)
+    }
+
+    if (!db.objectStoreNames.contains(storeName)) {
+        console.log(`${logPrefix} Creating missing store: ${storeName}`)
+        const store = db.createObjectStore(storeName, { keyPath: schema.keyPath })
+        createIndexes(store, schema.indexes, logPrefix)
+        return store
+    }
+
+    console.log(`${logPrefix} Store already exists: ${storeName}`)
+    return null
 }
 
 // Schema definitions for each store
@@ -73,7 +103,16 @@ export const SCHEMAS = {
             { name: 'by_createdAt', keyPath: 'createdAt', options: { unique: false } },
             { name: 'by_updatedAt', keyPath: 'updatedAt', options: { unique: false } },
             { name: 'by_title', keyPath: 'title', options: { unique: false } },
-            { name: 'by_tags', keyPath: 'tags', options: { unique: false, multiEntry: true } }
+            { name: 'by_tags', keyPath: 'tags', options: { unique: false, multiEntry: true } },
+            { name: 'by_workspaceId', keyPath: 'workspaceId', options: { unique: false } }
+        ]
+    },
+
+    [DB_CONFIG.STORES.WORKSPACE_TODOS]: {
+        keyPath: 'id',
+        indexes: [
+            { name: 'by_workspaceId', keyPath: 'workspaceId', options: { unique: false } },
+            { name: 'by_createdAt', keyPath: 'createdAt', options: { unique: false } }
         ]
     },
 
@@ -539,6 +578,175 @@ export const MIGRATIONS = {
                 description: 'Database schema version'
             })
         }
+    },
+
+    12: {
+        description: 'Add workspace_todos store and workspaceId index on notes',
+        up: (db, transaction) => {
+            console.log('[Migration v12] Adding workspace_todos store and notes.by_workspaceId index...')
+
+            // New workspace_todos store
+            if (!db.objectStoreNames.contains(DB_CONFIG.STORES.WORKSPACE_TODOS)) {
+                const store = db.createObjectStore(DB_CONFIG.STORES.WORKSPACE_TODOS, { keyPath: 'id' })
+                store.createIndex('by_workspaceId', 'workspaceId', { unique: false })
+                store.createIndex('by_createdAt', 'createdAt', { unique: false })
+                console.log('[Migration v12] workspace_todos store created')
+            }
+
+            // Add by_workspaceId index to existing notes store (non-destructive)
+            try {
+                const notesStore = transaction.objectStore(DB_CONFIG.STORES.NOTES)
+                if (!notesStore.indexNames.contains('by_workspaceId')) {
+                    notesStore.createIndex('by_workspaceId', 'workspaceId', { unique: false })
+                    console.log('[Migration v12] notes.by_workspaceId index created')
+                }
+            } catch (err) {
+                console.warn('[Migration v12] Could not add notes index:', err)
+            }
+
+            const metadataStore = transaction.objectStore(DB_CONFIG.STORES.METADATA)
+            metadataStore.put({
+                key: 'schema_version',
+                value: 12,
+                type: 'system',
+                timestamp: Date.now(),
+                description: 'Database schema version'
+            })
+        }
+    },
+
+    13: {
+        description: 'Ensure workspace_todos store and notes.by_workspaceId index exist (fix for v12)',
+        up: (db, transaction) => {
+            console.log('[Migration v13] Verifying workspace_todos store and notes index...')
+
+            // Ensure workspace_todos store exists
+            if (!db.objectStoreNames.contains(DB_CONFIG.STORES.WORKSPACE_TODOS)) {
+                try {
+                    const store = db.createObjectStore(DB_CONFIG.STORES.WORKSPACE_TODOS, { keyPath: 'id' })
+                    store.createIndex('by_workspaceId', 'workspaceId', { unique: false })
+                    store.createIndex('by_createdAt', 'createdAt', { unique: false })
+                    console.log('[Migration v13] workspace_todos store created (v12 was missing)')
+                } catch (err) {
+                    console.error('[Migration v13] Failed to create workspace_todos store:', err)
+                }
+            } else {
+                console.log('[Migration v13] workspace_todos store already exists')
+            }
+
+            // Ensure notes.by_workspaceId index exists
+            try {
+                const notesStore = transaction.objectStore(DB_CONFIG.STORES.NOTES)
+                if (!notesStore.indexNames.contains('by_workspaceId')) {
+                    notesStore.createIndex('by_workspaceId', 'workspaceId', { unique: false })
+                    console.log('[Migration v13] notes.by_workspaceId index created (v12 was missing)')
+                } else {
+                    console.log('[Migration v13] notes.by_workspaceId index already exists')
+                }
+            } catch (err) {
+                console.warn('[Migration v13] Could not add notes index:', err)
+            }
+
+            const metadataStore = transaction.objectStore(DB_CONFIG.STORES.METADATA)
+            metadataStore.put({
+                key: 'schema_version',
+                value: 13,
+                type: 'system',
+                timestamp: Date.now(),
+                description: 'Database schema version'
+            })
+        }
+    },
+
+    14: {
+        description: 'AGGRESSIVE force-create workspace_todos store',
+        up: (db, transaction) => {
+            console.log('[Migration v14] FORCE-CREATING workspace_todos store...')
+            console.log('[Migration v14] Existing stores:', Array.from(db.objectStoreNames))
+
+            // Use hardcoded string to eliminate any possibility of undefined constant
+            const STORE_NAME = 'workspace_todos'
+
+            // Always try to create, swallow "already exists" error
+            try {
+                const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' })
+                store.createIndex('by_workspaceId', 'workspaceId', { unique: false })
+                store.createIndex('by_createdAt', 'createdAt', { unique: false })
+                console.log('[Migration v14] ✓ workspace_todos store CREATED')
+            } catch (err) {
+                if (err.name === 'ConstraintError' || err.message?.includes('already exists')) {
+                    console.log('[Migration v14] workspace_todos store already exists — that\'s fine')
+                } else {
+                    console.error('[Migration v14] ✗ Failed to create workspace_todos:', err)
+                }
+            }
+
+            // Also force-add the notes index
+            try {
+                const notesStore = transaction.objectStore('notes')
+                try {
+                    notesStore.createIndex('by_workspaceId', 'workspaceId', { unique: false })
+                    console.log('[Migration v14] ✓ notes.by_workspaceId index CREATED')
+                } catch (e) {
+                    if (e.name === 'ConstraintError' || e.message?.includes('already exists')) {
+                        console.log('[Migration v14] notes.by_workspaceId index already exists')
+                    } else {
+                        console.error('[Migration v14] ✗ Failed to add notes index:', e)
+                    }
+                }
+            } catch (err) {
+                console.warn('[Migration v14] Could not access notes store:', err)
+            }
+
+            console.log('[Migration v14] After migration, stores:', Array.from(db.objectStoreNames))
+
+            try {
+                const metadataStore = transaction.objectStore('metadata')
+                metadataStore.put({
+                    key: 'schema_version',
+                    value: 14,
+                    type: 'system',
+                    timestamp: Date.now(),
+                    description: 'Database schema version'
+                })
+            } catch (e) {
+                console.warn('[Migration v14] Could not update metadata:', e)
+            }
+        }
+    },
+
+    15: {
+        description: 'Repair missing workspace_todos store for databases already at v14',
+        up: (db, transaction) => {
+            console.log('[Migration v15] Repairing workspace_todos schema...')
+            console.log('[Migration v15] Existing stores:', Array.from(db.objectStoreNames))
+
+            ensureObjectStore(db, DB_CONFIG.STORES.WORKSPACE_TODOS, '[Migration v15]')
+
+            const todoSchema = SCHEMAS[DB_CONFIG.STORES.WORKSPACE_TODOS]
+            const todoStore = transaction.objectStore(DB_CONFIG.STORES.WORKSPACE_TODOS)
+            createIndexes(todoStore, todoSchema.indexes, '[Migration v15]')
+
+            try {
+                const notesStore = transaction.objectStore(DB_CONFIG.STORES.NOTES)
+                createIndexes(notesStore, [
+                    { name: 'by_workspaceId', keyPath: 'workspaceId', options: { unique: false } }
+                ], '[Migration v15]')
+            } catch (err) {
+                console.warn('[Migration v15] Could not verify notes.by_workspaceId index:', err)
+            }
+
+            const metadataStore = transaction.objectStore(DB_CONFIG.STORES.METADATA)
+            metadataStore.put({
+                key: 'schema_version',
+                value: 15,
+                type: 'system',
+                timestamp: Date.now(),
+                description: 'Database schema version'
+            })
+
+            console.log('[Migration v15] After repair, stores:', Array.from(db.objectStoreNames))
+        }
     }
 }
 
@@ -628,6 +836,9 @@ async function openUnifiedDB() {
         request.onsuccess = (event) => {
             const db = event.target.result
             console.log('[Unified DB] Successfully opened database')
+            console.log('[Unified DB] DB version:', db.version, '| Stores:', Array.from(db.objectStoreNames))
+            const hasTodos = db.objectStoreNames.contains('workspace_todos')
+            console.log(`[Unified DB] workspace_todos store: ${hasTodos ? '✓ EXISTS' : '✗ MISSING'}`)
 
             // Handle unexpected closure
             db.onclose = () => {

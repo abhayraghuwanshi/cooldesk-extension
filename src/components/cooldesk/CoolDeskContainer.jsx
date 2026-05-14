@@ -341,7 +341,7 @@ export function CoolDeskContainer({
   useEffect(() => {
     const handleGlobalClick = (e) => {
       // If clicking inside a workspace card, do nothing (let internal handler work)
-      if (e.target.closest('.workspace-card') || e.target.closest('.workspace-popup-menu')) {
+      if (e.target.closest('.cooldesk-workspace-card') || e.target.closest('.workspace-popup-menu')) {
         return;
       }
       // If clicking outside, close

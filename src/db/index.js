@@ -64,7 +64,10 @@ export {
     // Workspace operations
     listWorkspaces, listWorkspaceUrls, putActivityRow,
     // Activity & Time Tracking operations
-    putActivityTimeSeriesEvent, saveDailyMemory, saveDashboard, saveNote, saveScrapedChat, saveScrapingConfig, saveSettings, saveUIState, saveUrlNote, saveWorkspace, subscribeDailyNotesChanges, subscribePinsChanges, subscribeSettingsChanges, subscribeWorkspaceChanges, updateItemWorkspace, updateWorkspaceGridType, upsertNote, upsertPing, upsertUrl
+    putActivityTimeSeriesEvent, saveDailyMemory, saveDashboard, saveNote, saveScrapedChat, saveScrapingConfig, saveSettings, saveUIState, saveUrlNote, saveWorkspace, subscribeDailyNotesChanges, subscribePinsChanges, subscribeSettingsChanges, subscribeWorkspaceChanges, updateItemWorkspace, updateWorkspaceGridType, upsertNote, upsertPing, upsertUrl,
+    // Workspace context panel
+    listWorkspaceNotes, saveWorkspaceNote,
+    listWorkspaceTodos, saveWorkspaceTodo, deleteWorkspaceTodo
 } from './unified-api.js'
 
 // Export error handling utilities

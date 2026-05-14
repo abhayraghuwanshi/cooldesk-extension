@@ -1313,6 +1313,106 @@ export const deleteNote = withErrorHandling(async (noteId) => {
  */
 export const upsertNote = saveNote
 
+// ===== WORKSPACE NOTES OPERATIONS =====
+
+/**
+ * List notes associated with a specific workspace (via workspaceId field).
+ */
+export const listWorkspaceNotes = withErrorHandling(async (workspaceId) => {
+    if (!workspaceId) return []
+    const db = await getUnifiedDB()
+    const tx = db.transaction(DB_CONFIG.STORES.NOTES, 'readonly')
+    const store = tx.objectStore(DB_CONFIG.STORES.NOTES)
+
+    // Graceful degradation: if the migration hasn't run yet and the index
+    // doesn't exist, fall back to a full-scan + filter (safe, just slower).
+    if (!store.indexNames.contains('by_workspaceId')) {
+        const allRequest = store.getAll()
+        const all = await new Promise((resolve, reject) => {
+            allRequest.onsuccess = () => resolve(allRequest.result || [])
+            allRequest.onerror = () => reject(allRequest.error)
+        })
+        return all
+            .filter(n => n.workspaceId === workspaceId)
+            .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+    }
+
+    const index = store.index('by_workspaceId')
+    const request = index.getAll(workspaceId)
+    const results = await new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result || [])
+        request.onerror = () => reject(request.error)
+    })
+    return results.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+}, {
+    operation: 'listWorkspaceNotes',
+    severity: ErrorSeverity.LOW,
+    strategy: ErrorStrategy.FALLBACK,
+    fallbackFunction: () => []
+})
+
+/**
+ * Save a workspace-linked note. Passes through saveNote so limits/notifications apply.
+ */
+export const saveWorkspaceNote = async (note) => saveNote(note)
+
+// ===== WORKSPACE TODOS OPERATIONS =====
+
+/**
+ * List all todos for a workspace, ordered by creation time.
+ */
+export const listWorkspaceTodos = withErrorHandling(async (workspaceId) => {
+    if (!workspaceId) return []
+    const db = await getUnifiedDB()
+    // Store may not exist yet if migration v12 hasn't run
+    if (!db.objectStoreNames.contains(DB_CONFIG.STORES.WORKSPACE_TODOS)) return []
+    const tx = db.transaction(DB_CONFIG.STORES.WORKSPACE_TODOS, 'readonly')
+    const store = tx.objectStore(DB_CONFIG.STORES.WORKSPACE_TODOS)
+    const index = store.index('by_workspaceId')
+    const request = index.getAll(workspaceId)
+    const results = await new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result || [])
+        request.onerror = () => reject(request.error)
+    })
+    return results.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+}, {
+    operation: 'listWorkspaceTodos',
+    severity: ErrorSeverity.LOW,
+    strategy: ErrorStrategy.FALLBACK,
+    fallbackFunction: () => []
+})
+
+/**
+ * Save or update a workspace todo.
+ */
+export const saveWorkspaceTodo = withErrorHandling(async (todo) => {
+    const db = await getUnifiedDB()
+    if (!db.objectStoreNames.contains(DB_CONFIG.STORES.WORKSPACE_TODOS)) return todo
+    const tx = db.transaction(DB_CONFIG.STORES.WORKSPACE_TODOS, 'readwrite')
+    const store = tx.objectStore(DB_CONFIG.STORES.WORKSPACE_TODOS)
+    const record = { ...todo, updatedAt: Date.now() }
+    return new Promise((resolve, reject) => {
+        const req = store.put(record)
+        req.onsuccess = () => resolve(record)
+        req.onerror = () => reject(req.error)
+    })
+}, { operation: 'saveWorkspaceTodo', severity: ErrorSeverity.MEDIUM })
+
+/**
+ * Delete a workspace todo by id.
+ */
+export const deleteWorkspaceTodo = withErrorHandling(async (id) => {
+    const db = await getUnifiedDB()
+    if (!db.objectStoreNames.contains(DB_CONFIG.STORES.WORKSPACE_TODOS)) return true
+    const tx = db.transaction(DB_CONFIG.STORES.WORKSPACE_TODOS, 'readwrite')
+    const store = tx.objectStore(DB_CONFIG.STORES.WORKSPACE_TODOS)
+    return new Promise((resolve, reject) => {
+        const req = store.delete(id)
+        req.onsuccess = () => resolve(true)
+        req.onerror = () => reject(req.error)
+    })
+}, { operation: 'deleteWorkspaceTodo', severity: ErrorSeverity.MEDIUM })
+
 /**
  * List pins (legacy compatibility)
  */
