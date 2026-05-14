@@ -6,8 +6,8 @@ import { clearWorkspaceSuggestions } from '../../services/appCategorizationServi
 import '../../styles/cooldesk.css';
 import { defaultFontFamily } from '../../utils/fontUtils';
 import { ShareToTeamModal } from '../popups/ShareToTeamModal';
-import { WorkspaceCard } from './WorkspaceCard';
 import { AppGrid } from './AppGrid';
+import { WorkspaceCard } from './WorkspaceCard';
 
 // Debounce utility
 function debounce(func, wait) {
@@ -102,6 +102,17 @@ export function WorkspaceList({
     const [isPending, startTransition] = useTransition();
     // Track which workspace app banners have been dismissed in this session
     const [dismissedBanners, setDismissedBanners] = useState(new Set());
+
+    // Context panel visibility state for controlling card rendering
+    const [contextPanelState, setContextPanelState] = useState({
+        isExpanded: false,
+        hasUserResized: false,
+        cardHeight: null,
+        PANEL_MIN_HEIGHT: 150,
+        contextPanelVisible: false,
+        compact: false,
+        isActive: false
+    });
 
     const handleDismissAppBanner = useCallback((workspaceName) => {
         setDismissedBanners(prev => new Set([...prev, workspaceName]));
@@ -592,6 +603,10 @@ export function WorkspaceList({
                                             onPin={() => onTogglePin && onTogglePin(workspace.name)}
                                             onDelete={handleDeleteWorkspace}
                                             onAddUrl={onAddUrl}
+                                            contextPanelVisible={contextPanelState.contextPanelVisible}
+                                            cardHeight={contextPanelState.cardHeight}
+                                            PANEL_MIN_HEIGHT={contextPanelState.PANEL_MIN_HEIGHT}
+                                            hasUserResized={contextPanelState.hasUserResized}
                                         />
                                     ))}
                                 </div>
@@ -661,6 +676,10 @@ export function WorkspaceList({
                                             onDelete={handleDeleteWorkspace}
                                             onAddUrl={onAddUrl}
                                             deferAnalytics={index > 3}
+                                            contextPanelVisible={contextPanelState.contextPanelVisible}
+                                            cardHeight={contextPanelState.cardHeight}
+                                            PANEL_MIN_HEIGHT={contextPanelState.PANEL_MIN_HEIGHT}
+                                            hasUserResized={contextPanelState.hasUserResized}
                                         />
                                     ))}
                                 </div>

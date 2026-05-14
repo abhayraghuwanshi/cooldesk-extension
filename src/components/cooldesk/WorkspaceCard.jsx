@@ -9,7 +9,6 @@ import {
   faCloud,
   faCode,
   faDesktop,
-  faExternalLinkAlt,
   faFileLines,
   faFilm,
   faFlask,
@@ -116,11 +115,11 @@ const openUrl = (url, workspaceName, title) => {
     action: 'accepted',
     suggestionContent: url,
     contextWorkspace: workspaceName
-  }).catch(() => {});
+  }).catch(() => { });
 
   // Also record URL-workspace association for pattern learning
   if (workspaceName) {
-    recordUrlWorkspace(url, title || url, workspaceName).catch(() => {});
+    recordUrlWorkspace(url, title || url, workspaceName).catch(() => { });
   }
 
   // Prefer chrome.tabs.create for extensions (more reliable, no popup blocker)
@@ -136,7 +135,7 @@ const openUrl = (url, workspaceName, title) => {
 };
 
 // Memoized WorkspaceCard to prevent unnecessary re-renders
-export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, isPinned = false, onPin, onDelete, onAddUrl, onUrlAction, deferAnalytics = false, ...rest }) {
+export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, isPinned = false, onPin, onDelete, onAddUrl, onUrlAction, deferAnalytics = false, contextPanelVisible = false, cardHeight = null, PANEL_MIN_HEIGHT = 150, hasUserResized = false, ...rest }) {
   if (!workspace) return null;
 
   const [popoverState, setPopoverState] = useState({ index: null, rect: null });
@@ -144,6 +143,9 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   const [showDrafts, setShowDrafts] = useState(false);
   const [contextMenu, setContextMenu] = useState(null); // { x, y }
   const activePopover = popoverState.index;
+
+  // Determine if context should be visible based on height and visibility flag
+  const shouldShowContext = contextPanelVisible && (cardHeight === null || cardHeight > PANEL_MIN_HEIGHT);
 
   const { name, urls = [], apps = [], description, icon = 'folder' } = workspace;
   const urlCount = urls.length;
@@ -563,10 +565,27 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
       style={{ position: 'relative' }}
       {...rest}
     >
-      {compact ? (
-        /* macOS Dock-Style List View - Using CSS Classes */
-        <div className="compact-card-inner" style={{ alignItems: 'center' }}>
-          {/* Workspace Icon + Name stacked (iOS app style) */}
+      {!shouldShowContext ? (
+        /* Placeholder when context panel is hidden */
+        <div style={{ 
+          opacity: 0.5, 
+          textAlign: 'center', 
+          padding: '20px',
+          color: 'rgba(148, 163, 184, 0.5)'
+        }}>
+          <FontAwesomeIcon icon={faFolderOpen} style={{ fontSize: '24px', marginBottom: '8px', cursor: 'pointer' }} />
+          <div style={{ fontSize: '12px', marginBottom: '8px' }}>Content hidden</div>
+          <div style={{ fontSize: '10px', color: 'rgba(148, 163, 184, 0.4)' }}>
+            Height: {cardHeight || 'auto'} / Min: {PANEL_MIN_HEIGHT}
+          </div>
+        </div>
+      ) : (
+        /* Content is visible - now check if compact or grid view */
+        <>
+          {compact ? (
+            /* macOS Dock-Style List View - Using CSS Classes */
+            <div className="compact-card-inner" style={{ alignItems: 'center' }}>
+           {/* Workspace Icon + Name stacked (iOS app style) */}
           <div className="compact-workspace-stack">
             <div className={`compact-workspace-icon workspace-icon ${urls.length > 0 ? 'folder-collage' : colorClass}`}>
               {urls.length === 0 ? (
@@ -716,8 +735,8 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
           )}
 
         </div>
-      ) : (
-        /* Original Grid View */
+          ) : (
+            /* Original Grid View */
         <>
           <div className="workspace-card-header">
             <div className={`workspace-icon ${colorClass}`}>
@@ -980,8 +999,8 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                                 action: 'accepted',
                                 suggestionContent: urlObj.url,
                                 contextWorkspace: name
-                              }).catch(() => {});
-                              recordUrlWorkspace(urlObj.url, urlObj.title || urlObj.url, name).catch(() => {});
+                              }).catch(() => { });
+                              recordUrlWorkspace(urlObj.url, urlObj.title || urlObj.url, name).catch(() => { });
                               onUrlAction('promote', urlObj, workspace);
                             }}
                             style={{
@@ -1006,7 +1025,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                                 action: 'rejected',
                                 suggestionContent: urlObj.url,
                                 contextWorkspace: name
-                              }).catch(() => {});
+                              }).catch(() => { });
                               onUrlAction('dismiss', urlObj, workspace);
                             }}
                             style={{
@@ -1023,6 +1042,8 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                 </ul>
               )}
             </div>
+          )}
+          </>
           )}
         </>
       )}
