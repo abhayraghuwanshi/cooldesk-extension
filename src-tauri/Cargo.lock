@@ -76,47 +76,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f0e0fee31ef5ed1ba1316088939cea399010ed7731dba877ed44aeb407a75ea"
 
 [[package]]
-name = "app"
-version = "1.2.3"
-dependencies = [
- "async-stream",
- "async-trait",
- "axum",
- "base64 0.22.1",
- "chrono",
- "core-graphics 0.23.2",
- "dirs 5.0.1",
- "encoding_rs",
- "futures-util",
- "image",
- "lazy_static",
- "log",
- "rand 0.8.5",
- "reqwest 0.12.28",
- "rig-core",
- "serde",
- "serde_json",
- "sysinfo",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-log",
- "tauri-plugin-process",
- "tauri-plugin-single-instance",
- "tauri-plugin-updater",
- "tempfile",
- "tokio",
- "tokio-util",
- "tower-http 0.5.2",
- "tracing",
- "url",
- "urlencoding",
- "uuid",
- "windows 0.58.0",
-]
-
-[[package]]
 name = "arbitrary"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -721,6 +680,47 @@ checksum = "4ddef33a339a91ea89fb53151bd0a4689cfce27055c291dfa69945475d22c747"
 dependencies = [
  "time",
  "version_check",
+]
+
+[[package]]
+name = "cooldesk"
+version = "1.2.4"
+dependencies = [
+ "async-stream",
+ "async-trait",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "core-graphics 0.23.2",
+ "dirs 5.0.1",
+ "encoding_rs",
+ "futures-util",
+ "image",
+ "lazy_static",
+ "log",
+ "rand 0.8.5",
+ "reqwest 0.12.28",
+ "rig-core",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-log",
+ "tauri-plugin-process",
+ "tauri-plugin-single-instance",
+ "tauri-plugin-updater",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tower-http 0.5.2",
+ "tracing",
+ "url",
+ "urlencoding",
+ "uuid",
+ "windows 0.58.0",
 ]
 
 [[package]]
