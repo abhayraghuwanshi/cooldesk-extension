@@ -5314,14 +5314,55 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   background: rgba(248, 113, 113, 0.1);
 }
 
+/* "+ New" pill in the notes header — sits to the right of the section title */
+.wcp-notes-new-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px 4px 8px;
+  border-radius: 7px;
+  background: color-mix(in srgb, #a78bfa 10%, transparent);
+  border: 1px solid color-mix(in srgb, #a78bfa 22%, transparent);
+  color: #c4b5fd;
+  font-family: inherit;
+  font-size: var(--font-xs, 10px);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+.wcp-notes-new-btn:hover {
+  background: color-mix(in srgb, #a78bfa 20%, transparent);
+  border-color: color-mix(in srgb, #a78bfa 45%, transparent);
+  color: #ddd6fe;
+  transform: translateY(-1px);
+}
+.wcp-notes-new-btn:focus-visible {
+  outline: none;
+  border-color: rgba(167, 139, 250, 0.6);
+  box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.18);
+}
+.wcp-notes-new-btn > svg { font-size: 9px; opacity: 0.9; }
+
 .wcp-notes-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+  align-content: start;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
+}
+/* Empty-state CTA spans both columns */
+.wcp-notes-list > .wcp-notes-empty {
+  grid-column: 1 / -1;
+}
+/* Fall back to single column on very narrow rails (when the rail stacks
+   below the status/todos in the responsive breakpoint) */
+@media (max-width: 720px) {
+  .wcp-notes-list { grid-template-columns: 1fr; }
 }
 .wcp-notes-list::-webkit-scrollbar { width: 6px; }
 .wcp-notes-list::-webkit-scrollbar-thumb {
@@ -5335,11 +5376,21 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   align-items: center;
   gap: 8px;
   padding: 32px 16px;
+  width: 100%;
+  background: transparent;
   border: 1px dashed rgba(167, 139, 250, 0.18);
   border-radius: 12px;
   color: rgba(148, 163, 184, 0.7);
+  font-family: inherit;
   font-size: var(--font-sm, 12px);
   text-align: center;
+  cursor: pointer;
+  transition: border-color 200ms ease, color 200ms ease, background 200ms ease;
+}
+.wcp-notes-empty:hover {
+  border-color: rgba(167, 139, 250, 0.4);
+  color: #d8b4fe;
+  background: radial-gradient(120% 100% at 50% 0%, rgba(167, 139, 250, 0.08), transparent 70%);
 }
 .wcp-notes-empty-glyph {
   font-family: 'ui-serif', Georgia, serif;
@@ -5431,13 +5482,19 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   word-break: break-word;
 }
 
-/* Discreet trash icon — top-right corner, fades in on hover only */
-.wcp-note-card-del {
+/* Action cluster (pin + trash) — top-right corner of each card */
+.wcp-note-card-actions {
   position: absolute;
   top: 6px;
   right: 6px;
-  width: 20px;
-  height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.wcp-note-card-pin,
+.wcp-note-card-del {
+  width: 22px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -5451,10 +5508,32 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   transform: scale(0.85);
   transition: opacity 160ms ease, transform 160ms ease, color 140ms ease, background 140ms ease;
 }
+.wcp-note-card:hover .wcp-note-card-pin,
 .wcp-note-card:hover .wcp-note-card-del {
   opacity: 1;
   transform: scale(1);
 }
+
+/* Pinned state — pin stays visible even off-hover so it acts as a marker */
+.wcp-note-card-pin.is-pinned {
+  opacity: 1;
+  transform: scale(1) rotate(-20deg);
+  color: #fbbf24;
+}
+.wcp-note-card-pin:hover {
+  color: #fde047;
+  background: rgba(251, 191, 36, 0.12);
+}
+.wcp-note-card-pin.is-pinned:hover {
+  /* rotate back upright on hover to hint at "unpin" action */
+  transform: scale(1) rotate(0deg);
+  background: rgba(251, 191, 36, 0.18);
+}
+.wcp-note-card-pin:focus-visible {
+  opacity: 1;
+  outline: 1px solid rgba(251, 191, 36, 0.4);
+}
+
 .wcp-note-card-del:hover {
   color: #fca5a5;
   background: rgba(248, 113, 113, 0.1);
@@ -5463,6 +5542,22 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   opacity: 1;
   transform: scale(1);
   outline: 1px solid rgba(248, 113, 113, 0.4);
+}
+
+/* Subtle amber glow on pinned cards so they read as "sticky" at a glance */
+.wcp-note-card.is-pinned {
+  background:
+    radial-gradient(180% 100% at 100% 0%, rgba(251, 191, 36, 0.08), transparent 50%),
+    radial-gradient(180% 100% at 0% 0%, rgba(167, 139, 250, 0.05), transparent 55%),
+    linear-gradient(165deg, rgba(28, 36, 56, 0.55) 0%, rgba(12, 18, 32, 0.45) 100%);
+  border-color: rgba(251, 191, 36, 0.16);
+}
+.wcp-note-card.is-pinned:hover {
+  background:
+    radial-gradient(180% 100% at 100% 0%, rgba(251, 191, 36, 0.14), transparent 55%),
+    radial-gradient(180% 100% at 0% 0%, rgba(167, 139, 250, 0.1), transparent 60%),
+    linear-gradient(165deg, rgba(38, 48, 72, 0.68) 0%, rgba(18, 26, 44, 0.6) 100%);
+  border-color: rgba(251, 191, 36, 0.3);
 }
 
 .wcp-note-new {

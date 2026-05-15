@@ -920,10 +920,6 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         console.log('[CoolSearch] Voice: Go to team');
         if (onNavigate) onNavigate('team');
       },
-      'go to notes': () => {
-        console.log('[CoolSearch] Voice: Go to notes');
-        if (onNavigate) onNavigate('notes');
-      },
       // Tab switching - MUST come before general search commands
       'switch to tab :num': async (num) => {
         await commandProcessorRef.current.processVoiceCommand(`switch to tab ${num}`);
@@ -1295,7 +1291,6 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         // Only available in desktop app mode
         if (isDesktopApp) {
           const navigationMap = {
-            '/notes': 'notes',
             '/workspace': 'workspace',
             '/chat': 'chat',
             '/tabs': 'tabs',
@@ -1305,7 +1300,6 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
 
           const ALIAS_MAP = {
             '/o': 'overview',
-            '/n': 'notes',
             '/w': 'workspace',
             '/c': 'chat',
             '/t': 'tabs',
@@ -1574,7 +1568,6 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       // Navigation Priority: Check for core navigation matches first (Desktop App Only)
       if (isDesktopApp) {
         const navigationMap = {
-          '/notes': 'notes',
           '/workspace': 'workspace',
           '/chat': 'chat',
           '/tabs': 'tabs',

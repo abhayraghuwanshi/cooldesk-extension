@@ -20,8 +20,8 @@
 
 .workspace-faces {
   display: flex;
-  width: 400%;
-  /* 4 faces */
+  width: 300%;
+  /* 3 faces: workspace · tabs · team */
   flex: 1;
   height: 100%;
   min-height: 0;
@@ -38,8 +38,8 @@
 }
 
 .workspace-face {
-  flex: 0 0 25%;
-  width: 25%;
+  flex: 0 0 33.3333%;
+  width: 33.3333%;
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;

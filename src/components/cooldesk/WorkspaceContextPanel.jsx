@@ -1,6 +1,6 @@
-import { faArrowLeft, faBolt, faCompass, faPause, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faArrowLeft, faBolt, faCompass, faPause, faPlus, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   deleteNote,
   deleteWorkspaceTodo,
@@ -169,6 +169,24 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
     setActiveNote(null);
   }, [activeNote, noteTitle, noteContent, persistNote]);
 
+  const handleTogglePin = useCallback((note) => {
+    // Don't touch updatedAt — pin/unpin shouldn't disturb chronological position
+    const { _isNew, ...rest } = note;
+    const updated = { ...rest, pinned: !note.pinned };
+    setNotes(prev => prev.map(n => n.id === note.id ? updated : n));
+    saveWorkspaceNote(updated)
+      .catch(err => console.error('[WorkspaceContextPanel] toggle pin failed:', err));
+  }, []);
+
+  // Pinned first, then by updatedAt desc
+  const sortedNotes = useMemo(() => {
+    return [...notes].sort((a, b) => {
+      const pinDiff = (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+      if (pinDiff !== 0) return pinDiff;
+      return (b.updatedAt || 0) - (a.updatedAt || 0);
+    });
+  }, [notes]);
+
   const handleDeleteNote = useCallback((noteId) => {
     setNotes(prev => prev.filter(n => n.id !== noteId));
     if (activeNote?.id === noteId) {
@@ -284,6 +302,18 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
             {!activeNote && notes.length > 0 && (
               <span className="wcp-section-count">{notes.length}</span>
             )}
+            {!activeNote && (
+              <button
+                type="button"
+                className="wcp-notes-new-btn"
+                onClick={newNote}
+                title="New note"
+                aria-label="New note"
+              >
+                <FontAwesomeIcon icon={faPlus} />
+                <span>New</span>
+              </button>
+            )}
             {activeNote && (
               <div className="wcp-notes-actions">
                 {!activeNote._isNew && (
@@ -324,19 +354,19 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
           ) : (
             <div className="wcp-notes-list">
               {notes.length === 0 ? (
-                <div className="wcp-notes-empty">
+                <button type="button" className="wcp-notes-empty" onClick={newNote}>
                   <span className="wcp-notes-empty-glyph">✎</span>
                   <span className="wcp-notes-empty-text">
                     Nothing here yet. Start your first note.
                   </span>
-                </div>
+                </button>
               ) : (
-                notes.map(note => {
+                sortedNotes.map(note => {
                   const preview = stripHtml(note.text);
                   return (
                     <div
                       key={note.id}
-                      className="wcp-note-card"
+                      className={`wcp-note-card${note.pinned ? ' is-pinned' : ''}`}
                       onClick={() => openNote(note)}
                       role="button"
                       tabIndex={0}
@@ -351,23 +381,31 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
                       {preview && (
                         <span className="wcp-note-card-preview">{preview}</span>
                       )}
-                      <button
-                        type="button"
-                        className="wcp-note-card-del"
-                        onClick={(e) => { e.stopPropagation(); handleDeleteNote(note.id); }}
-                        aria-label="Delete note"
-                        title="Delete note"
-                      >
-                        <FontAwesomeIcon icon={faTrash} />
-                      </button>
+                      <div className="wcp-note-card-actions">
+                        <button
+                          type="button"
+                          className={`wcp-note-card-pin${note.pinned ? ' is-pinned' : ''}`}
+                          onClick={(e) => { e.stopPropagation(); handleTogglePin(note); }}
+                          aria-label={note.pinned ? 'Unpin note' : 'Pin note'}
+                          aria-pressed={!!note.pinned}
+                          title={note.pinned ? 'Unpin' : 'Pin'}
+                        >
+                          <FontAwesomeIcon icon={faThumbtack} />
+                        </button>
+                        <button
+                          type="button"
+                          className="wcp-note-card-del"
+                          onClick={(e) => { e.stopPropagation(); handleDeleteNote(note.id); }}
+                          aria-label="Delete note"
+                          title="Delete note"
+                        >
+                          <FontAwesomeIcon icon={faTrash} />
+                        </button>
+                      </div>
                     </div>
                   );
                 })
               )}
-              <button type="button" className="wcp-note-new" onClick={newNote}>
-                <span className="wcp-note-new-plus">+</span>
-                <span>New note</span>
-              </button>
             </div>
           )}
         </section>

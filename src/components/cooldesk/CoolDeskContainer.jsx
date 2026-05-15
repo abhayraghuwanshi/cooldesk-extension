@@ -21,7 +21,6 @@ const WorkspaceList = lazy(() => import('./WorkspaceList').then(m => ({ default:
 
 // Lazy load heavy components
 const ChatContext = lazy(() => import('../spatial/ChatContext').then(m => ({ default: m.ChatContext })));
-const NotesCanvas = lazy(() => import('../spatial/NotesCanvas').then(m => ({ default: m.NotesCanvas })));
 const TeamView = lazy(() => import('../spatial/TeamView')); // Default export
 const TabManagement = lazy(() => import('./TabManagement').then(m => ({ default: m.TabManagement })));
 
@@ -111,7 +110,12 @@ export function CoolDeskContainer({
   const [currentWorkspace, setCurrentWorkspace] = useState(null);
   const [workspacePage, setWorkspacePage] = useState(0);
   const [activeFace, setActiveFace] = useState(() => {
-    return localStorage.getItem('cooldesk-active-face') || (isDesktopApp ? 'workspace' : 'overview');
+    const stored = localStorage.getItem('cooldesk-active-face');
+    const fallback = isDesktopApp ? 'workspace' : 'overview';
+    // 'notes' face was removed (notes are now embedded in workspace cards) — migrate any
+    // leftover persisted value so the app doesn't boot into an empty/broken state.
+    if (stored === 'notes') return fallback;
+    return stored || fallback;
   });
 
   // Add Modal State
@@ -414,7 +418,6 @@ export function CoolDeskContainer({
 
     // Map navigation commands to face names
     const faceMap = {
-      'notes': 'notes',
       'workspace': 'workspace',
       'chat': 'chat',
       'tabs': 'tabs',
@@ -436,10 +439,10 @@ export function CoolDeskContainer({
   const [visitedFaces, setVisitedFaces] = useState(() => {
     // Initialize with current face (usually 'overview')
     const initial = new Set(['overview']);
-    // Check which one is active and add it
     try {
       const active = localStorage.getItem('cooldesk-active-face') || 'overview';
-      initial.add(active);
+      // 'notes' face was removed — don't treat it as a visited face anymore
+      if (active !== 'notes') initial.add(active);
     } catch { }
     return initial;
   });
@@ -460,28 +463,13 @@ export function CoolDeskContainer({
     }
   }, [activeFace, visitedFaces]);
 
-  // Warmup other faces after idle (optional, 4s delay)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setVisitedFaces(prev => {
-        // Preload commonly used faces if not already there
-        if (prev.has('notes') && prev.has('team')) return prev;
-        const next = new Set(prev);
-        // Speculatively load notes after user is settled
-        // next.add('notes'); 
-        return next;
-      });
-    }, 4000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Lazy Initialize P2P Sync (only if Notes or Team is visited)
+  // Lazy Initialize P2P Sync (only if Team is visited)
   const [p2pInitialized, setP2pInitialized] = useState(false);
   useEffect(() => {
     if (p2pInitialized) return;
 
     // Check if we need P2P
-    const needsP2P = visitedFaces.has('notes') || visitedFaces.has('team');
+    const needsP2P = visitedFaces.has('team');
 
     if (needsP2P) {
       console.log('[CoolDesk] Initializing P2P Service (Lazy)...');
@@ -620,23 +608,12 @@ export function CoolDeskContainer({
           </Face>
         )}
 
-        {/* Face 5: Team (Further Right) - Desktop App Only */}
+        {/* Face 3: Team (Right-most) - Desktop App Only */}
         {isDesktopApp && (
           <Face index="team">
             {shouldRenderFace('team') && (
               <Suspense fallback={null}>
                 <TeamView />
-              </Suspense>
-            )}
-          </Face>
-        )}
-
-        {/* Face 6: Notes (Far Right) - Desktop App Only */}
-        {isDesktopApp && (
-          <Face index="notes">
-            {shouldRenderFace('notes') && (
-              <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-500">Loading Notes...</div>}>
-                <NotesCanvas workspaceId={currentWorkspace?.id} />
               </Suspense>
             )}
           </Face>

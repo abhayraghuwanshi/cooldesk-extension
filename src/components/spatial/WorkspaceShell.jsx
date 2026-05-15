@@ -1,4 +1,4 @@
-import { faFolder, faGear, faStickyNote, faTh, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faFolder, faGear, faTh, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { teamManager } from '../../services/p2p/teamManager';
@@ -12,8 +12,10 @@ import '../../styles/spatial.css';
  * - Workspace (left) - workspace details, management, and ChatContext
  * - Overview (center) - main workspace grid
  * - Tabs (right) - tab management
- * - Team (further right) - P2P shared items
- * - Notes (far right) - deep focus writing
+ * - Team (right-most) - P2P shared items
+ *
+ * Workspace notes are embedded in each WorkspaceCard's context panel,
+ * so the dedicated Notes face was removed.
  */
 // Create context for face state management to avoid prop drilling
 const WorkspaceFaceContext = React.createContext({ currentFace: 'overview', isDesktopApp: false });
@@ -87,7 +89,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
     if (face === currentFace) return;
 
     // Smart Travel: Dynamic duration based on distance
-    const faces = isDesktopApp ? ['workspace', 'tabs', 'team', 'notes'] : ['overview'];
+    const faces = isDesktopApp ? ['workspace', 'tabs', 'team'] : ['overview'];
     const currentIndex = faces.indexOf(currentFace);
     const targetIndex = faces.indexOf(face);
     const distance = Math.abs(targetIndex - currentIndex);
@@ -134,7 +136,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
         console.log('[WorkspaceShell] Spatial Nav triggered:', e.key);
         e.preventDefault();
 
-        const faces = isDesktopApp ? ['workspace', 'tabs', 'team', 'notes'] : ['overview'];
+        const faces = isDesktopApp ? ['workspace', 'tabs', 'team'] : ['overview'];
         const currentIndex = faces.indexOf(currentFace);
 
         if (currentIndex === -1) {
@@ -153,10 +155,10 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
         }
       }
 
-      if (modifierPressed && ['1', '2', '3', '4'].includes(e.key)) {
+      if (modifierPressed && ['1', '2', '3'].includes(e.key)) {
         e.preventDefault();
         const faceMap = {
-          '1': 'workspace', '2': 'tabs', '3': 'team', '4': 'notes'
+          '1': 'workspace', '2': 'tabs', '3': 'team'
         };
         navigateToFace(faceMap[e.key]);
       }
@@ -164,10 +166,6 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
       if (e.key === 'Escape') {
         if (isInput) {
           e.target.blur();
-          return;
-        }
-        // In Notes view, Escape should not navigate away (allow it for local UI like modals)
-        if (currentFace === 'notes') {
           return;
         }
 
@@ -245,7 +243,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
       if (Math.abs(state.accumulator) > THRESHOLD) {
         if (e.cancelable) e.preventDefault();
 
-        const faces = isDesktopApp ? ['workspace', 'tabs', 'team', 'notes'] : ['overview'];
+        const faces = isDesktopApp ? ['workspace', 'tabs', 'team'] : ['overview'];
         const currentIndex = faces.indexOf(currentFace);
 
         let switched = false;
@@ -275,12 +273,11 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
       return 'translateX(0)';
     }
 
-    // Desktop app: 4 faces, each taking 25% of the 400% container
+    // Desktop app: 3 faces, each taking 33.3333% of the 300% container
     const transforms = {
       'workspace': 'translateX(0)',
-      'tabs': 'translateX(-25%)',
-      'team': 'translateX(-50%)',
-      'notes': 'translateX(-75%)'
+      'tabs': 'translateX(-33.3333%)',
+      'team': 'translateX(-66.6667%)'
     };
     return transforms[currentFace] || transforms.workspace;
   }, [currentFace, isDesktopApp]);
@@ -327,15 +324,6 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
             >
               <FontAwesomeIcon icon={faUsers} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
             </button>
-            <button
-              className={`face-dot ${currentFace === 'notes' ? 'active' : ''}`}
-              onClick={() => navigateToFace('notes')}
-              onMouseEnter={() => setHoveredFace('notes')}
-              title="Notes (Ctrl + 4)"
-              data-onboarding="nav-notes"
-            >
-              <FontAwesomeIcon icon={faStickyNote} className="face-icon" />
-            </button>
             {onOpenSettings && (
               <button
                 className="face-dot"
@@ -357,7 +345,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
             transform,
             willChange: 'transform',
             // In extension mode: single face takes 100% width
-            // In desktop mode: 6 faces at 600% total width (handled by CSS)
+            // In desktop mode: 3 faces at 300% total width (handled by CSS)
             ...(isDesktopApp ? {} : { width: '100%' })
           }}
         >

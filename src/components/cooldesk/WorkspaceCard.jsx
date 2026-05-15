@@ -9,7 +9,6 @@ import {
   faCloud,
   faCode,
   faDesktop,
-  faExternalLinkAlt,
   faFileLines,
   faFilm,
   faFlask,
@@ -123,11 +122,11 @@ const openUrl = (url, workspaceName, title) => {
     action: 'accepted',
     suggestionContent: url,
     contextWorkspace: workspaceName
-  }).catch(() => {});
+  }).catch(() => { });
 
   // Also record URL-workspace association for pattern learning
   if (workspaceName) {
-    recordUrlWorkspace(url, title || url, workspaceName).catch(() => {});
+    recordUrlWorkspace(url, title || url, workspaceName).catch(() => { });
   }
 
   // Prefer chrome.tabs.create for extensions (more reliable, no popup blocker)
@@ -185,18 +184,6 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   const urlCount = urls.length;
   const appCount = apps.length;
   const totalCount = urlCount + appCount;
-
-  useEffect(() => {
-    console.log('[WorkspaceCard]', name, {
-      isExpanded,
-      hasUserResized,
-      cardHeight,
-      PANEL_MIN_HEIGHT,
-      contextPanelVisible,
-      compact,
-      isActive,
-    });
-  }, [name, isExpanded, hasUserResized, cardHeight, contextPanelVisible, compact, isActive]);
 
   const colorClass = ICON_COLORS[Math.abs(name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % ICON_COLORS.length];
   const normalizedName = name.toLowerCase().trim();
@@ -637,12 +624,12 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
 
   const cardStyle = cardHeight !== null
     ? {
-        position: 'relative',
-        height: cardHeight,
-        maxHeight: 'none',
-        overflow: 'hidden',
-        transition: isDragging ? 'none' : undefined,
-      }
+      position: 'relative',
+      height: cardHeight,
+      maxHeight: 'none',
+      overflow: 'hidden',
+      transition: isDragging ? 'none' : undefined,
+    }
     : { position: 'relative' }; // CSS class controls height (compact auto)
 
   return (
@@ -757,12 +744,12 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                 const isEditor = isEditorApp(app);
                 const appColor = isEditor ? '#38bdf8'
                   : app.appType === 'folder' ? '#facc15'
-                  : app.appType === 'file' ? '#94a3b8'
-                  : '#8b5cf6';
+                    : app.appType === 'file' ? '#94a3b8'
+                      : '#8b5cf6';
                 const appIcon = isEditor ? faCode
                   : app.appType === 'folder' ? faFolderOpen
-                  : app.appType === 'file' ? faFileLines
-                  : faDesktop;
+                    : app.appType === 'file' ? faFileLines
+                      : faDesktop;
                 return (
                   <div
                     key={`app-${idx}`}
@@ -799,11 +786,11 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
               if (contextPanelVisible) {
                 // Expanded: categorized rows with name pills so folders/apps/files are distinguishable
                 const ROWS = [
-                  { key: 'links',    label: 'Links',   icon: faLink,       accent: '#60a5fa', items: groupedItems, render: renderLinkIcon },
-                  { key: 'editors',  label: 'Editors', icon: faCode,       accent: '#38bdf8', items: editorApps,   render: renderAppIcon },
-                  { key: 'apps',     label: 'Apps',    icon: faDesktop,    accent: '#8b5cf6', items: desktopApps,  render: renderAppIcon },
-                  { key: 'folders',  label: 'Folders', icon: faFolderOpen, accent: '#facc15', items: folderApps,   render: renderAppIcon },
-                  { key: 'files',    label: 'Files',   icon: faFileLines,  accent: '#94a3b8', items: fileApps,     render: renderAppIcon },
+                  { key: 'links', label: 'Links', icon: faLink, accent: '#60a5fa', items: groupedItems, render: renderLinkIcon },
+                  { key: 'editors', label: 'Editors', icon: faCode, accent: '#38bdf8', items: editorApps, render: renderAppIcon },
+                  { key: 'apps', label: 'Apps', icon: faDesktop, accent: '#8b5cf6', items: desktopApps, render: renderAppIcon },
+                  { key: 'folders', label: 'Folders', icon: faFolderOpen, accent: '#facc15', items: folderApps, render: renderAppIcon },
+                  { key: 'files', label: 'Files', icon: faFileLines, accent: '#94a3b8', items: fileApps, render: renderAppIcon },
                 ].filter(row => row.items.length > 0);
 
                 return (
@@ -1107,8 +1094,8 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                                 action: 'accepted',
                                 suggestionContent: urlObj.url,
                                 contextWorkspace: name
-                              }).catch(() => {});
-                              recordUrlWorkspace(urlObj.url, urlObj.title || urlObj.url, name).catch(() => {});
+                              }).catch(() => { });
+                              recordUrlWorkspace(urlObj.url, urlObj.title || urlObj.url, name).catch(() => { });
                               onUrlAction('promote', urlObj, workspace);
                             }}
                             style={{
@@ -1133,7 +1120,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                                 action: 'rejected',
                                 suggestionContent: urlObj.url,
                                 contextWorkspace: name
-                              }).catch(() => {});
+                              }).catch(() => { });
                               onUrlAction('dismiss', urlObj, workspace);
                             }}
                             style={{

@@ -209,6 +209,10 @@ export const VALIDATION_SCHEMAS = {
         workspaceId: {
             [ValidationRules.TYPE]: 'string',
             [ValidationRules.MAX_LENGTH]: 100
+        },
+        // Pin to top of workspace notes list
+        pinned: {
+            [ValidationRules.TYPE]: 'boolean'
         }
     },
 
