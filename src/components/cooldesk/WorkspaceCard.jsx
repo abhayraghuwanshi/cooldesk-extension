@@ -6,9 +6,6 @@ import {
   faCheckCircle,
   faChevronDown,
   faChevronUp,
-  faPen,
-  faArrowLeft,
-  faCircle,
   faCloud,
   faCode,
   faDesktop,
@@ -48,28 +45,15 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  deleteWorkspaceTodo,
   getUrlAnalytics,
-  listWorkspaceNotes,
-  listWorkspaceTodos,
-  saveWorkspace,
-  saveWorkspaceNote,
-  saveWorkspaceTodo,
 } from '../../db/index.js';
 import { recordFeedbackEvent, recordUrlWorkspace } from '../../services/feedbackService.js';
 import { getBaseDomainFromUrl, getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
 import { GroupedLinksPopover } from './GroupedLinksPopover.jsx';
 import { UrlAnalyticsPopover } from './UrlAnalyticsPopover.jsx';
+import { WorkspaceContextPanel } from './WorkspaceContextPanel.jsx';
 
 const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
-
-const formatAge = (ts) => {
-  const d = Date.now() - ts;
-  if (d < 60_000) return 'just now';
-  if (d < 3_600_000) return `${Math.floor(d / 60_000)}m ago`;
-  if (d < 86_400_000) return `${Math.floor(d / 3_600_000)}h ago`;
-  return `${Math.floor(d / 86_400_000)}d ago`;
-};
 
 const ICON_MAP = {
   folder: faFolder,
@@ -192,22 +176,6 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   const contextPanelVisible =
     isExpanded ||
     (hasUserResized && cardHeight !== null && cardHeight >= PANEL_MIN_HEIGHT);
-
-  // Status
-  const [localStatus, setLocalStatus] = useState(workspace.status || null);
-
-  // Todos
-  const [todos, setTodos] = useState([]);
-  const [todosLoaded, setTodosLoaded] = useState(false);
-  const [newTodoText, setNewTodoText] = useState('');
-
-  // Notes
-  const [wsNotes, setWsNotes] = useState([]);
-  const [notesLoaded, setNotesLoaded] = useState(false);
-  const [activeWsNote, setActiveWsNote] = useState(null); // null=list; object=editing
-  const [noteTitle, setNoteTitle] = useState('');
-  const [noteContent, setNoteContent] = useState('');
-  const noteSaveTimer = useRef(null);
 
   const { name, urls = [], apps = [], description, icon = 'folder' } = workspace;
   const urlCount = urls.length;
@@ -601,6 +569,8 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
 
   const regularApps = useMemo(() => apps.filter(app => !['folder', 'file'].includes(app.appType?.toLowerCase())), [apps]);
   const folderFileApps = useMemo(() => apps.filter(app => ['folder', 'file'].includes(app.appType?.toLowerCase())), [apps]);
+  const folderApps = useMemo(() => apps.filter(app => app.appType?.toLowerCase() === 'folder'), [apps]);
+  const fileApps = useMemo(() => apps.filter(app => app.appType?.toLowerCase() === 'file'), [apps]);
 
   const handleCardClick = () => {
     onClick?.(workspace);
@@ -650,113 +620,6 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     window.addEventListener('mouseup', onUp);
   }, [cardHeight]);
 
-  // ── Load panel data when it becomes visible ───────────────────────────────
-  useEffect(() => {
-    if (!contextPanelVisible || !workspace.id) return;
-    if (!todosLoaded) {
-      listWorkspaceTodos(workspace.id)
-        .then(data => { setTodos(data?.data || data || []); setTodosLoaded(true); })
-        .catch(() => setTodosLoaded(true));
-    }
-    if (!notesLoaded) {
-      listWorkspaceNotes(workspace.id)
-        .then(data => { setWsNotes(data?.data || data || []); setNotesLoaded(true); })
-        .catch(() => setNotesLoaded(true));
-    }
-  }, [contextPanelVisible, workspace.id, todosLoaded, notesLoaded]);
-
-  // ── Status handler ────────────────────────────────────────────────────────
-  const handleStatusChange = useCallback((status) => {
-    setLocalStatus(status);
-    saveWorkspace({ ...workspace, status, updatedAt: Date.now() }).catch(() => {});
-  }, [workspace]);
-
-  // ── Todo handlers ─────────────────────────────────────────────────────────
-  const handleAddTodo = useCallback(async (text) => {
-    if (!text.trim() || !workspace.id) return;
-    const todo = {
-      id: `todo_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      workspaceId: workspace.id,
-      text: text.trim(),
-      done: false,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-    setTodos(prev => [...prev, todo]);
-    setNewTodoText('');
-    await saveWorkspaceTodo(todo).catch(() => {});
-  }, [workspace.id]);
-
-  const handleToggleTodo = useCallback(async (id) => {
-    setTodos(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
-    const todo = todos.find(t => t.id === id);
-    if (todo) await saveWorkspaceTodo({ ...todo, done: !todo.done }).catch(() => {});
-  }, [todos]);
-
-  const handleDeleteTodo = useCallback(async (id) => {
-    setTodos(prev => prev.filter(t => t.id !== id));
-    await deleteWorkspaceTodo(id).catch(() => {});
-  }, []);
-
-  // ── Note handlers ─────────────────────────────────────────────────────────
-  const handleOpenNote = useCallback((note) => {
-    setActiveWsNote(note);
-    setNoteTitle(note.title || '');
-    setNoteContent(note.text || '');
-  }, []);
-
-  const handleNewNote = useCallback(() => {
-    const blank = {
-      id: `wsnote_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      workspaceId: workspace.id,
-      title: '',
-      text: '',
-      folder: name,
-      type: 'richtext',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      _isNew: true,
-    };
-    setActiveWsNote(blank);
-    setNoteTitle('');
-    setNoteContent('');
-  }, [workspace.id, name]);
-
-  const persistNote = useCallback(async (note, title, text) => {
-    if (!title.trim() && !text.trim()) return;
-    const updated = {
-      ...note,
-      title: title.trim() || 'Untitled',
-      text,
-      updatedAt: Date.now(),
-      _isNew: undefined,
-    };
-    await saveWorkspaceNote(updated).catch(() => {});
-    setWsNotes(prev => {
-      const idx = prev.findIndex(n => n.id === updated.id);
-      return idx >= 0 ? prev.map(n => n.id === updated.id ? updated : n) : [updated, ...prev];
-    });
-    setActiveWsNote(updated);
-  }, []);
-
-  // Debounced auto-save for note content changes
-  const handleNoteChange = useCallback((field, value) => {
-    if (field === 'title') setNoteTitle(value);
-    else setNoteContent(value);
-
-    clearTimeout(noteSaveTimer.current);
-    noteSaveTimer.current = setTimeout(() => {
-      const title = field === 'title' ? value : noteTitle;
-      const text = field === 'text' ? value : noteContent;
-      if (activeWsNote) persistNote(activeWsNote, title, text);
-    }, 800);
-  }, [activeWsNote, noteTitle, noteContent, persistNote]);
-
-  const handleNoteBack = useCallback(() => {
-    if (activeWsNote) persistNote(activeWsNote, noteTitle, noteContent);
-    setActiveWsNote(null);
-  }, [activeWsNote, noteTitle, noteContent, persistNote]);
-
   // ── Show fewer links in compact mode, unless expanded ────────────────────
   const activeUrls = sortedUrls.filter(u => u.status !== 'draft');
   const draftUrls = sortedUrls.filter(u => u.status === 'draft');
@@ -784,7 +647,10 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     >
       {compact ? (
         /* macOS Dock-Style List View - Using CSS Classes */
-        <div className="compact-card-inner" style={{ alignItems: 'center' }}>
+        <div
+          className="compact-card-inner"
+          style={{ alignItems: contextPanelVisible ? 'flex-start' : 'center' }}
+        >
           {/* Workspace Icon + Name stacked (iOS app style) */}
           <div className="compact-workspace-stack">
             <div className={`compact-workspace-icon workspace-icon ${urls.length > 0 ? 'folder-collage' : colorClass}`}>
@@ -825,18 +691,21 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
             <div className="compact-workspace-label">{name}</div>
           </div>
 
-          {/* URL Favicons - Grouped, resizable scroll like a text editor */}
+          {/* URL Favicons + Apps. Single-row when collapsed; categorized rows when expanded. */}
           <div className="compact-icons-scroll" onClick={(e) => e.stopPropagation()}>
-            <div className="compact-icons-container">
-              {groupedItems.map((item, idx) => {
+            {(() => {
+              const CUSTOM_EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'rubymine', 'fleet', 'zed'];
+
+              const renderLinkIcon = (item, idx, showLabel = false) => {
                 const isGroup = item.type === 'group';
                 const url = isGroup ? item.primaryUrl : item.url;
                 const faviconUrl = getFaviconUrl(url, 20);
-
+                const avatar = getLetterAvatar(url);
+                const displayName = isGroup ? null : (item.title || formatDomainName(item.url));
                 return (
                   <div
-                    key={idx}
-                    className={isGroup ? 'compact-url-group' : 'compact-url-icon'}
+                    key={`link-${idx}`}
+                    className={`${isGroup ? 'compact-url-group' : 'compact-url-icon'}${showLabel && !isGroup ? ' is-labeled' : ''}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       if (isGroup) {
@@ -846,57 +715,51 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                         openUrl(item.url, name, item.title);
                       }
                     }}
-                    title={isGroup ? `${item.label} (${item.urls.length}) - ${item.subLabel || item.domain}` : (item.title || formatDomainName(item.url))}
+                    title={isGroup ? `${item.label} (${item.urls.length}) - ${item.subLabel || item.domain}` : displayName}
                   >
-                    {(() => {
-                      const avatar = getLetterAvatar(url);
-                      return (
-                        <>
-                          {faviconUrl ? (
-                            <img
-                              src={faviconUrl}
-                              alt=""
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'flex';
-                              }}
-                            />
-                          ) : null}
-                          <div
-                            className="letter-avatar"
-                            style={{
-                              display: faviconUrl ? 'none' : 'flex',
-                              background: avatar.color
-                            }}
-                          >
-                            {avatar.letter}
-                          </div>
-                        </>
-                      );
-                    })()}
-
-                    {/* Pill Text Content */}
+                    {faviconUrl ? (
+                      <img
+                        src={faviconUrl}
+                        alt=""
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'flex';
+                        }}
+                      />
+                    ) : null}
+                    <div
+                      className="letter-avatar"
+                      style={{ display: faviconUrl ? 'none' : 'flex', background: avatar.color }}
+                    >
+                      {avatar.letter}
+                    </div>
                     {isGroup && (
                       <div className="compact-group-text">
                         <div className="compact-group-label">{item.label}</div>
                         <div className="compact-group-count">{item.urls.length}</div>
                       </div>
                     )}
+                    {showLabel && !isGroup && (
+                      <span className="compact-icon-label">{displayName}</span>
+                    )}
                   </div>
                 );
-              })}
+              };
 
-              {/* App Icons */}
-              {apps.map((app, idx) => {
-                const CUSTOM_EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'rubymine', 'fleet', 'zed'];
+              const renderAppIcon = (app, idx, showLabel = false) => {
                 const isEditor = CUSTOM_EDITORS.includes(app.appType?.toLowerCase());
-                const appColor = isEditor ? '#38bdf8' : app.appType === 'folder' ? '#facc15' : app.appType === 'file' ? '#94a3b8' : '#8b5cf6';
-                const appIcon = isEditor ? faCode : app.appType === 'folder' ? faFolderOpen : app.appType === 'file' ? faFileLines : faDesktop;
-
+                const appColor = isEditor ? '#38bdf8'
+                  : app.appType === 'folder' ? '#facc15'
+                  : app.appType === 'file' ? '#94a3b8'
+                  : '#8b5cf6';
+                const appIcon = isEditor ? faCode
+                  : app.appType === 'folder' ? faFolderOpen
+                  : app.appType === 'file' ? faFileLines
+                  : faDesktop;
                 return (
                   <div
                     key={`app-${idx}`}
-                    className="compact-url-icon compact-app-icon"
+                    className={`compact-url-icon compact-app-icon${showLabel ? ' is-labeled' : ''}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       if (!app.path || !window.electronAPI) return;
@@ -911,7 +774,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                         window.electronAPI.launchApp(app.path);
                       }
                     }}
-                    title={app.name}
+                    title={app.path || app.name}
                     style={{ border: `1px solid ${appColor}55`, background: `${appColor}12` }}
                   >
                     {app.icon ? (
@@ -919,10 +782,48 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                     ) : (
                       <FontAwesomeIcon icon={appIcon} style={{ color: appColor, fontSize: '18px' }} />
                     )}
+                    {showLabel && (
+                      <span className="compact-icon-label" style={{ color: appColor }}>{app.name}</span>
+                    )}
                   </div>
                 );
-              })}
-            </div>
+              };
+
+              if (contextPanelVisible) {
+                // Expanded: categorized rows with name pills so folders/apps/files are distinguishable
+                const ROWS = [
+                  { key: 'links',    label: 'Links',   icon: faLink,       accent: '#60a5fa', items: groupedItems, render: renderLinkIcon },
+                  { key: 'apps',     label: 'Apps',    icon: faDesktop,    accent: '#8b5cf6', items: regularApps,  render: renderAppIcon },
+                  { key: 'folders',  label: 'Folders', icon: faFolderOpen, accent: '#facc15', items: folderApps,   render: renderAppIcon },
+                  { key: 'files',    label: 'Files',   icon: faFileLines,  accent: '#94a3b8', items: fileApps,     render: renderAppIcon },
+                ].filter(row => row.items.length > 0);
+
+                return (
+                  <div className="compact-icons-rows">
+                    {ROWS.map(row => (
+                      <div key={row.key} className="compact-icons-row" style={{ '--row-accent': row.accent }}>
+                        <div className="compact-icons-row-label">
+                          <FontAwesomeIcon icon={row.icon} />
+                          <span>{row.label}</span>
+                          <span className="compact-icons-row-count">{row.items.length}</span>
+                        </div>
+                        <div className="compact-icons-container">
+                          {row.items.map((item, idx) => row.render(item, idx, true))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+
+              // Collapsed: single combined row, icon-only (original behavior)
+              return (
+                <div className="compact-icons-container">
+                  {groupedItems.map((item, idx) => renderLinkIcon(item, idx, false))}
+                  {apps.map((app, idx) => renderAppIcon(app, idx, false))}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Render Group Popover if Active */}
@@ -1248,123 +1149,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
 
       {/* ── Context panel: status + todos + notes ───────────────────────── */}
       {contextPanelVisible && (
-        <div className="workspace-context-panel" onClick={e => e.stopPropagation()}>
-
-          {/* Status row */}
-          <div className="wcp-section">
-            <div className="wcp-label">Status</div>
-            <div className="wcp-status-row">
-              {[
-                { key: 'active',   label: 'Active',    color: '#22c55e' },
-                { key: 'planning', label: 'Planning',  color: '#60a5fa' },
-                { key: 'on-hold',  label: 'On Hold',   color: '#f59e0b' },
-              ].map(({ key, label, color }) => (
-                <button
-                  key={key}
-                  className={`wcp-status-chip ${localStatus === key ? 'is-active' : ''}`}
-                  style={{ '--status-color': color }}
-                  onClick={() => handleStatusChange(localStatus === key ? null : key)}
-                  type="button"
-                >
-                  <FontAwesomeIcon icon={faCircle} style={{ fontSize: 6, marginRight: 5 }} />
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Todos section */}
-          <div className="wcp-section">
-            <div className="wcp-label">Next Up</div>
-            <div className="wcp-todos">
-              {todos.map(todo => (
-                <div key={todo.id} className={`wcp-todo-row ${todo.done ? 'is-done' : ''}`}>
-                  <button
-                    type="button"
-                    className="wcp-todo-check"
-                    onClick={() => handleToggleTodo(todo.id)}
-                    aria-label={todo.done ? 'Mark undone' : 'Mark done'}
-                  >
-                    {todo.done ? '✓' : ''}
-                  </button>
-                  <span className="wcp-todo-text">{todo.text}</span>
-                  <button
-                    type="button"
-                    className="wcp-todo-del"
-                    onClick={() => handleDeleteTodo(todo.id)}
-                    aria-label="Delete"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-              <div className="wcp-todo-add">
-                <input
-                  className="wcp-todo-input"
-                  placeholder="Add a task…"
-                  value={newTodoText}
-                  onChange={e => setNewTodoText(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleAddTodo(newTodoText); }}
-                />
-                <button
-                  type="button"
-                  className="wcp-todo-add-btn"
-                  onClick={() => handleAddTodo(newTodoText)}
-                  disabled={!newTodoText.trim()}
-                >+</button>
-              </div>
-            </div>
-          </div>
-
-          {/* Notes section */}
-          <div className="wcp-section wcp-notes-section">
-            <div className="wcp-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span>Notes</span>
-              {activeWsNote && (
-                <button type="button" className="wcp-notes-back" onClick={handleNoteBack}>
-                  <FontAwesomeIcon icon={faArrowLeft} /> Back
-                </button>
-              )}
-            </div>
-
-            {activeWsNote ? (
-              <div className="wcp-note-editor">
-                <input
-                  className="wcp-note-title"
-                  placeholder="Title…"
-                  value={noteTitle}
-                  onChange={e => handleNoteChange('title', e.target.value)}
-                />
-                <textarea
-                  className="wcp-note-body"
-                  placeholder="Write something…"
-                  value={noteContent}
-                  onChange={e => handleNoteChange('text', e.target.value)}
-                  rows={5}
-                />
-              </div>
-            ) : (
-              <div className="wcp-notes-list">
-                {wsNotes.map(note => (
-                  <div
-                    key={note.id}
-                    className="wcp-note-row"
-                    onClick={() => handleOpenNote(note)}
-                  >
-                    <FontAwesomeIcon icon={faPen} style={{ fontSize: 9, opacity: 0.5, marginRight: 6 }} />
-                    <span className="wcp-note-title-text">{note.title || 'Untitled'}</span>
-                    <span className="wcp-note-age">
-                      {note.updatedAt ? formatAge(note.updatedAt) : ''}
-                    </span>
-                  </div>
-                ))}
-                <button type="button" className="wcp-note-new" onClick={handleNewNote}>
-                  + Quick note
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        <WorkspaceContextPanel workspace={workspace} />
       )}
 
       {/* Resize handle — shown on all workspace cards */}
