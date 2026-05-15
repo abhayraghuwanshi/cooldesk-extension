@@ -91,6 +91,10 @@ export const VALIDATION_SCHEMAS = {
         },
         context: {
             [ValidationRules.TYPE]: 'object'
+        },
+        status: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.ENUM]: ['active', 'planning', 'on-hold']
         }
     },
 
@@ -200,6 +204,11 @@ export const VALIDATION_SCHEMAS = {
         urlTitle: {
             [ValidationRules.TYPE]: 'string',
             [ValidationRules.MAX_LENGTH]: 500
+        },
+        // Workspace linkage (used by listWorkspaceNotes via by_workspaceId index)
+        workspaceId: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 100
         }
     },
 

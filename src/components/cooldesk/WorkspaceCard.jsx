@@ -55,6 +55,10 @@ import { WorkspaceContextPanel } from './WorkspaceContextPanel.jsx';
 
 const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
 
+// Editor-style apps that launch with a folder/file argument (`code .`, `cursor .`)
+const CUSTOM_EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'rubymine', 'fleet', 'zed'];
+const isEditorApp = (app) => CUSTOM_EDITORS.includes(app?.appType?.toLowerCase());
+
 const ICON_MAP = {
   folder: faFolder,
   'folder-open': faFolderOpen,
@@ -569,6 +573,11 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
 
   const regularApps = useMemo(() => apps.filter(app => !['folder', 'file'].includes(app.appType?.toLowerCase())), [apps]);
   const folderFileApps = useMemo(() => apps.filter(app => ['folder', 'file'].includes(app.appType?.toLowerCase())), [apps]);
+  const editorApps = useMemo(() => apps.filter(isEditorApp), [apps]);
+  const desktopApps = useMemo(() => apps.filter(app => {
+    const t = app.appType?.toLowerCase();
+    return t !== 'folder' && t !== 'file' && !isEditorApp(app);
+  }), [apps]);
   const folderApps = useMemo(() => apps.filter(app => app.appType?.toLowerCase() === 'folder'), [apps]);
   const fileApps = useMemo(() => apps.filter(app => app.appType?.toLowerCase() === 'file'), [apps]);
 
@@ -694,8 +703,6 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
           {/* URL Favicons + Apps. Single-row when collapsed; categorized rows when expanded. */}
           <div className="compact-icons-scroll" onClick={(e) => e.stopPropagation()}>
             {(() => {
-              const CUSTOM_EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'rubymine', 'fleet', 'zed'];
-
               const renderLinkIcon = (item, idx, showLabel = false) => {
                 const isGroup = item.type === 'group';
                 const url = isGroup ? item.primaryUrl : item.url;
@@ -747,7 +754,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
               };
 
               const renderAppIcon = (app, idx, showLabel = false) => {
-                const isEditor = CUSTOM_EDITORS.includes(app.appType?.toLowerCase());
+                const isEditor = isEditorApp(app);
                 const appColor = isEditor ? '#38bdf8'
                   : app.appType === 'folder' ? '#facc15'
                   : app.appType === 'file' ? '#94a3b8'
@@ -793,7 +800,8 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                 // Expanded: categorized rows with name pills so folders/apps/files are distinguishable
                 const ROWS = [
                   { key: 'links',    label: 'Links',   icon: faLink,       accent: '#60a5fa', items: groupedItems, render: renderLinkIcon },
-                  { key: 'apps',     label: 'Apps',    icon: faDesktop,    accent: '#8b5cf6', items: regularApps,  render: renderAppIcon },
+                  { key: 'editors',  label: 'Editors', icon: faCode,       accent: '#38bdf8', items: editorApps,   render: renderAppIcon },
+                  { key: 'apps',     label: 'Apps',    icon: faDesktop,    accent: '#8b5cf6', items: desktopApps,  render: renderAppIcon },
                   { key: 'folders',  label: 'Folders', icon: faFolderOpen, accent: '#facc15', items: folderApps,   render: renderAppIcon },
                   { key: 'files',    label: 'Files',   icon: faFileLines,  accent: '#94a3b8', items: fileApps,     render: renderAppIcon },
                 ].filter(row => row.items.length > 0);
@@ -940,8 +948,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                 {regularApps.map((app, idx) => {
-                  const CUSTOM_EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'rubymine', 'fleet', 'zed'];
-                  const isEditor = CUSTOM_EDITORS.includes(app.appType?.toLowerCase());
+                  const isEditor = isEditorApp(app);
                   const appColor = isEditor ? '#38bdf8' : '#8b5cf6';
                   const appIcon = isEditor ? faCode : faDesktop;
                   return (

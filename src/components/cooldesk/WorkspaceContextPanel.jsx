@@ -1,4 +1,4 @@
-import { faArrowLeft, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faArrowLeft, faBolt, faCompass, faPause, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -13,9 +13,9 @@ import {
 import TiptapEditor from '../spatial/editor/TiptapEditor';
 
 const STATUS_OPTIONS = [
-  { key: 'active',   label: 'Active',   color: '#22c55e' },
-  { key: 'planning', label: 'Planning', color: '#60a5fa' },
-  { key: 'on-hold',  label: 'On Hold',  color: '#f59e0b' },
+  { key: 'active',   label: 'Active',   color: '#22c55e', icon: faBolt },
+  { key: 'planning', label: 'Planning', color: '#60a5fa', icon: faCompass },
+  { key: 'on-hold',  label: 'On Hold',  color: '#f59e0b', icon: faPause },
 ];
 
 const formatAge = (ts) => {
@@ -71,7 +71,8 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
   // ── Status ──────────────────────────────────────────────────────────────
   const handleStatusChange = useCallback((next) => {
     setStatus(next);
-    saveWorkspace({ ...workspace, status: next, updatedAt: Date.now() }).catch(() => {});
+    saveWorkspace({ ...workspace, status: next, updatedAt: Date.now() })
+      .catch(err => console.error('[WorkspaceContextPanel] saveWorkspace failed:', err));
   }, [workspace]);
 
   // ── Todos ───────────────────────────────────────────────────────────────
@@ -130,20 +131,23 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
 
   const persistNote = useCallback((note, title, text) => {
     if (!title.trim() && !stripHtml(text)) return;
+    // Strip UI-only flags before persisting (schema is strict; unknown fields fail)
+    const { _isNew, ...rest } = note;
     const updated = {
-      ...note,
+      ...rest,
       title: title.trim() || 'Untitled',
       text,
       updatedAt: Date.now(),
-      _isNew: undefined,
     };
-    saveWorkspaceNote(updated).catch(() => {});
+    saveWorkspaceNote(updated)
+      .catch(err => console.error('[WorkspaceContextPanel] saveWorkspaceNote failed:', err));
     setNotes(prev => {
       const idx = prev.findIndex(n => n.id === updated.id);
       return idx >= 0
         ? prev.map(n => n.id === updated.id ? updated : n)
         : [updated, ...prev];
     });
+    // Keep the editor open on the saved note (preserve _isNew=false implicitly)
     setActiveNote(updated);
   }, []);
 
@@ -188,19 +192,21 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
               <span className="wcp-section-bar" aria-hidden="true" />
               <h4 className="wcp-section-title">Status</h4>
             </header>
-            <div className="wcp-status-track" role="radiogroup" aria-label="Workspace status">
-              {STATUS_OPTIONS.map(({ key, label, color }) => (
+            <div className="wcp-status-grid" role="radiogroup" aria-label="Workspace status">
+              {STATUS_OPTIONS.map(({ key, label, color, icon }) => (
                 <button
                   key={key}
                   type="button"
                   role="radio"
                   aria-checked={status === key}
-                  className={`wcp-status-seg ${status === key ? 'is-active' : ''}`}
+                  className={`wcp-status-card ${status === key ? 'is-active' : ''}`}
                   style={{ '--seg-color': color }}
                   onClick={() => handleStatusChange(status === key ? null : key)}
                 >
-                  <span className="wcp-status-dot" aria-hidden="true" />
-                  {label}
+                  <span className="wcp-status-card-icon" aria-hidden="true">
+                    <FontAwesomeIcon icon={icon} />
+                  </span>
+                  <span className="wcp-status-card-label">{label}</span>
                 </button>
               ))}
             </div>
@@ -336,10 +342,12 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
                       tabIndex={0}
                       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNote(note); } }}
                     >
-                      <span className="wcp-note-card-title">
-                        {note.title || 'Untitled'}
-                      </span>
-                      <span className="wcp-note-card-age">{formatAge(note.updatedAt)}</span>
+                      <div className="wcp-note-card-row">
+                        <span className="wcp-note-card-title">
+                          {note.title || 'Untitled'}
+                        </span>
+                        <span className="wcp-note-card-age">{formatAge(note.updatedAt)}</span>
+                      </div>
                       {preview && (
                         <span className="wcp-note-card-preview">{preview}</span>
                       )}
