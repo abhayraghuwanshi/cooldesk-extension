@@ -141,6 +141,8 @@ const openUrl = (url, workspaceName, title) => {
   }
 };
 
+const isExtension = typeof chrome !== 'undefined' && !!chrome.runtime?.id;
+
 // Memoized WorkspaceCard to prevent unnecessary re-renders
 export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, isPinned = false, onPin, onDelete, onAddUrl, onUrlAction, deferAnalytics = false, ...rest }) {
   if (!workspace) return null;
@@ -1141,18 +1143,19 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
         </>
       )}
 
-      {/* ── Context panel: status + todos + notes ───────────────────────── */}
-      {contextPanelVisible && (
+      {/* ── Context panel + resize handle — App only, not in extension ─── */}
+      {!isExtension && contextPanelVisible && (
         <WorkspaceContextPanel workspace={workspace} />
       )}
 
-      {/* Resize handle — shown on all workspace cards */}
-      <div
-        className="workspace-resize-handle"
-        onMouseDown={handleResizeMouseDown}
-        onClick={e => e.stopPropagation()}
-        title="Drag to expand — reveals status, tasks & notes"
-      />
+      {!isExtension && (
+        <div
+          className="workspace-resize-handle"
+          onMouseDown={handleResizeMouseDown}
+          onClick={e => e.stopPropagation()}
+          title="Drag to expand — reveals status, tasks & notes"
+        />
+      )}
 
       {/* Right-click context menu — rendered via portal to escape backdrop-filter stacking context */}
       {contextMenu && createPortal(
