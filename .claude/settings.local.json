@@ -39,7 +39,9 @@
       "Bash(Remove-Item \"C:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\src-tauri\\\\bin\\\\AppScanner-aarch64-apple-darwin\" -Force)",
       "Bash(Remove-Item \"C:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\src-tauri\\\\bin\\\\AppMatcher-aarch64-apple-darwin\" -Force)",
       "PowerShell(cargo check *)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\raghu\\\\projects\\\\extension\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)"
     ],
     "deny": [],
     "ask": [],
