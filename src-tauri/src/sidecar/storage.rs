@@ -3,8 +3,6 @@
 use crate::sidecar::data::SyncData;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 
 /// Get the data directory path
 pub fn get_data_dir() -> PathBuf {
@@ -76,13 +74,6 @@ pub fn save_data(data: &SyncData) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Async save with error logging
-pub async fn save_data_async(data: Arc<RwLock<SyncData>>) {
-    let data_guard = data.read().await;
-    if let Err(e) = save_data(&data_guard) {
-        log::warn!("[Sidecar] Failed to save sync data: {}", e);
-    }
-}
 
 /// Simple hash for change detection (mirrors Node.js implementation)
 pub fn simple_hash(data: &str) -> String {

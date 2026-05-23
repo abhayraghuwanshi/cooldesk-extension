@@ -187,10 +187,6 @@ const EDITOR_NAME_PATTERNS: &[&str] = &[
     "intellij idea", "webstorm", "pycharm", "goland",
 ];
 
-const MEDIA_APP_PATTERNS: &[&str] = &[
-    "spotify", "music", "vlc", "foobar", "winamp", "tidal", "deezer",
-    "youtube music", "apple music", "soundcloud",
-];
 
 /// Extract the open project name from an editor's window title.
 /// VS Code format: "filename — project — Visual Studio Code"

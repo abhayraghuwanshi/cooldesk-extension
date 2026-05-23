@@ -13,6 +13,7 @@ pub struct FeedbackStore {
     data_dir: PathBuf,
 }
 
+#[allow(dead_code)]
 impl FeedbackStore {
     /// Create new store with data directory
     pub fn new(data_dir: PathBuf) -> Self {

@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import * as LocalAIService from '../../../services/localAIService';
+import { classifyAppsToWorkspaces } from '../../../services/appCategorizationService';
 import { safeGetHostname } from '../../../utils/helpers';
 
 // Resolve the best available chat function: cloud → local → null
@@ -364,8 +365,7 @@ Return JSON with indices from the list above:
       const chatFn = await resolveChatFn();
       if (!chatFn) return {};
 
-      const { classifyAppsToWorkspaces: classify } = await import('../../../services/appCategorizationService');
-      return await classify(installedApps, targetWorkspaces, chatFn);
+      return await classifyAppsToWorkspaces(installedApps, targetWorkspaces, chatFn);
     } catch (err) {
       console.error('[useAISuggestions] classifyAppsToWorkspaces error:', err);
       return {};

@@ -5,7 +5,7 @@ import logo from '../../../logo-2.png';
 import { addUrlToWorkspace, deleteWorkspace, saveWorkspace } from '../../db/unified-api';
 import { isElectronApp } from '../../services/environmentDetector';
 import { runningAppsService } from '../../services/runningAppsService';
-import { getPendingSuggestions } from '../../services/appCategorizationService';
+import { getPendingSuggestions, runSeedingIfNeeded } from '../../services/appCategorizationService';
 import '../../styles/cooldesk.css';
 import '../../styles/global-add.css';
 import '../../styles/spatial.css';
@@ -65,9 +65,8 @@ export function CoolDeskContainer({
     let cancelled = false;
     (async () => {
       try {
-        const [LocalAI, { runSeedingIfNeeded }] = await Promise.all([
+        const [LocalAI] = await Promise.all([
           import('../../services/localAIService'),
-          import('../../services/appCategorizationService')
         ]);
         const available = await LocalAI.isAvailable();
         if (cancelled || !available) return;

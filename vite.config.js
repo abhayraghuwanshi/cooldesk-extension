@@ -67,6 +67,7 @@ export default defineConfig(({ mode }) => {
         minify: !process.env.TAURI_ENV_DEBUG ? "esbuild" : false,
         sourcemap: !!process.env.TAURI_ENV_DEBUG,
         outDir: 'dist-tauri',
+        chunkSizeWarningLimit: 1000,
         rollupOptions: {
           input: {
             main: resolve(__dirname, 'index.html'),

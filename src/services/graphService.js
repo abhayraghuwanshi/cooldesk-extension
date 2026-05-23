@@ -1,28 +1,45 @@
-const SIDECAR_URL = 'http://127.0.0.1:4545';
+const SIDECAR_URL = 'http://localhost:4545';
 const FETCH_TIMEOUT_MS = 5000;
 const CACHE_TTL_MS = 30_000;
 
 let _cache = null;
 let _cacheTs = 0;
 
+// AbortSignal.timeout / AbortSignal.any are Chrome 103/116+ — WebView2 may be older
+function makeTimeoutSignal(ms) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(new DOMException('TimeoutError', 'TimeoutError')), ms);
+  ctrl.signal.addEventListener('abort', () => clearTimeout(id), { once: true });
+  return ctrl.signal;
+}
+
+function combineSignals(signals) {
+  const ctrl = new AbortController();
+  for (const sig of signals) {
+    if (sig.aborted) { ctrl.abort(sig.reason); return ctrl.signal; }
+    sig.addEventListener('abort', () => ctrl.abort(sig.reason), { once: true });
+  }
+  return ctrl.signal;
+}
+
 export async function fetchGraph(forceRefresh = false, signal = null) {
   const now = Date.now();
   if (!forceRefresh && _cache && now - _cacheTs < CACHE_TTL_MS) return _cache;
 
-  // Combine caller's AbortSignal with the internal timeout signal
-  const timeoutSignal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  const timeoutSignal = makeTimeoutSignal(FETCH_TIMEOUT_MS);
   const combinedSignal = signal
-    ? AbortSignal.any([signal, timeoutSignal])
+    ? combineSignals([signal, timeoutSignal])
     : timeoutSignal;
 
   try {
     const res = await fetch(`${SIDECAR_URL}/graph`, { signal: combinedSignal });
-    if (!res.ok) return null;
+    if (!res.ok) { console.warn('[graphService] /graph responded', res.status); return null; }
     _cache = await res.json();
     _cacheTs = now;
     return _cache;
   } catch (err) {
-    if (err.name === 'AbortError') throw err; // re-throw so caller can detect abort
+    if (err.name === 'AbortError') throw err;
+    console.warn('[graphService] fetchGraph failed:', err?.message ?? err);
     return null;
   }
 }

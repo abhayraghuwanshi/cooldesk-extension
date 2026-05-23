@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { p2pStorage } from '../../services/p2p/storageService';
 import { userProfileService } from '../../services/p2p/userProfileService';
+import { teamManager } from '../../services/p2p/teamManager';
 
 export function ManageMembersModal({ isOpen, onClose, teamId }) {
     const [members, setMembers] = useState([]);
@@ -54,7 +55,6 @@ export function ManageMembersModal({ isOpen, onClose, teamId }) {
         if (member.isAdmin) return; // Admins are always writers
 
         // Get our local keys to sign the permission
-        const { teamManager } = await import('../../services/p2p/teamManager');
         const team = teamManager.getTeam(teamId);
 
         await p2pStorage.toggleMemberWriterStatus(teamId, member.key, {

@@ -274,13 +274,6 @@ impl Categorizer {
     }
 }
 
-/// Batch categorize multiple apps
-pub fn categorize_apps(apps: &[(String, String)]) -> HashMap<String, AppCategory> {
-    let mut categorizer = Categorizer::new();
-    apps.iter()
-        .map(|(name, path)| (path.clone(), categorizer.categorize(name, path)))
-        .collect()
-}
 
 #[cfg(test)]
 mod tests {

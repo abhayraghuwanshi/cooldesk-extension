@@ -161,6 +161,7 @@ pub struct SuggestionStats {
     pub last_updated: i64,
 }
 
+#[allow(dead_code)]
 impl SuggestionStats {
     /// Acceptance rate (accepted / total)
     pub fn acceptance_rate(&self) -> f64 {

@@ -1,4 +1,5 @@
 import { WebrtcProvider } from 'y-webrtc';
+import { Awareness } from 'y-protocols/awareness';
 import { p2pStorage } from './storageService';
 import { tabCoordinator } from './tabCoordinator';
 import { teamManager } from './teamManager';
@@ -206,7 +207,6 @@ class P2PSyncService {
             console.log(`[P2P Sync] Using encryption key:`, encryptionKey ? '***' + encryptionKey.slice(-4) : 'NONE');
 
             // Create awareness before provider to avoid timing issues
-            const { Awareness } = await import('y-protocols/awareness');
             const awareness = new Awareness(ydoc);
             console.log(`[P2P Sync] Awareness created for team ${teamId}, clientID:`, awareness.clientID);
 

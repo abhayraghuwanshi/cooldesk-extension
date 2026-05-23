@@ -2,6 +2,7 @@ import { faCheck, faTimes, faUserCheck, faUserPlus } from '@fortawesome/free-sol
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { teamManager } from '../../services/p2p/teamManager';
 
 export function PendingRequestsModal({ isOpen, onClose, teamId, requests = [], onRequestProcessed }) {
     const [processingRequest, setProcessingRequest] = useState(null);
@@ -15,7 +16,6 @@ export function PendingRequestsModal({ isOpen, onClose, teamId, requests = [], o
             const role = selectedRoles[request.id] || 'viewer';
 
             // Get team data
-            const { teamManager } = await import('../../services/p2p/teamManager');
             const team = teamManager.getTeam(teamId);
 
             if (!team) {

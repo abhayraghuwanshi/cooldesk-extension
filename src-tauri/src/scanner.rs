@@ -137,16 +137,6 @@ mod windows_impl {
         false
     }
 
-    fn should_skip_exe_name(name: &str) -> bool {
-        if name.is_empty() {
-            return true;
-        }
-        let lower = name.to_lowercase();
-        lower.contains("unins") || lower.contains("setup") || lower.contains("update")
-            || lower.contains("updater") || lower.contains("crash") || lower.contains("helper")
-            || lower.contains("svc") || lower.ends_with("service") || lower.contains("daemon")
-            || lower.contains("agent") || (lower.contains("launcher") && lower.contains("helper"))
-    }
 
     fn should_skip_path(path: &str) -> bool {
         if path.is_empty() {
@@ -238,7 +228,7 @@ mod windows_impl {
         s.to_string()
     }
 
-    fn regex_strip_suffix(s: &str, _pattern: &str) -> Option<String> {
+    fn regex_strip_suffix(_s: &str, _pattern: &str) -> Option<String> {
         // Lightweight hand-rolled replacements for the patterns we need,
         // avoiding a full regex dependency.
         None // fallback: not stripping (handled by caller's specific logic above)

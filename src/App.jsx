@@ -26,6 +26,7 @@ import { useOnboarding } from './hooks/useOnboarding';
 import { useSync } from './hooks/useSync';
 import { hasRuntime, onMessage, sendMessage, storageGet, storageRemove, storageSet } from './services/extensionApi';
 import { createSharedWorkspaceClient } from './services/sharedWorkspaceService.js';
+import { teamManager } from './services/p2p/teamManager';
 import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
 import GenericUrlParser from './utils/GenericUrlParser';
 import { getFaviconUrl } from './utils/helpers';
@@ -838,7 +839,6 @@ export default function App() {
 
             // Dynamically import dependencies only when needed
             const { cryptoUtils } = await import('./services/p2p/cryptoUtils');
-            const { teamManager } = await import('./services/p2p/teamManager');
 
             // Decrypt
             const payload = cryptoUtils.decryptWithPin(inviteParam, pin);

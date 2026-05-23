@@ -249,30 +249,6 @@ unsafe extern "system" fn enum_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
     BOOL(1)
 }
 
-#[cfg(target_os = "windows")]
-pub fn get_taskbar_windows() -> HashMap<u32, String> {
-    let mut data = EnumData { windows: Vec::new() };
-
-    unsafe {
-        let _ = EnumWindows(
-            Some(enum_callback),
-            LPARAM(&mut data as *mut EnumData as isize),
-        );
-    }
-
-    let mut result: HashMap<u32, String> = HashMap::new();
-    for win in data.windows {
-        result
-            .entry(win.pid)
-            .and_modify(|existing| {
-                if win.title.len() > existing.len() {
-                    *existing = win.title.clone();
-                }
-            })
-            .or_insert(win.title);
-    }
-    result
-}
 
 #[cfg(target_os = "windows")]
 pub fn get_foreground_window_pid() -> Option<u32> {

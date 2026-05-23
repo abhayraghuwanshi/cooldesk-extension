@@ -94,14 +94,6 @@ Category:"#,
         .unwrap_or_else(|| categories.first().cloned().unwrap_or_else(|| "Unknown".to_string())))
 }
 
-/// Answer a question about content
-pub async fn answer_question(question: &str, content: &str) -> Result<String, String> {
-    let prompt = format!(
-        "Based on the following content, answer the question.\n\nContent:\n{}\n\nQuestion: {}\n\nAnswer:",
-        content, question
-    );
-    super::inference::chat(&prompt).await
-}
 
 /// Group browsing items or project ideas into smart workspace categories
 /// Returns JSON with groups and suggestions
@@ -274,59 +266,3 @@ JSON:"#,
     super::inference::chat(&prompt).await
 }
 
-/// Group workspaces with feedback-enhanced suggestions
-/// Uses learned URL affinities and patterns to improve grouping
-pub async fn group_workspaces_with_feedback(
-    items: &str,
-    context: &str,
-    url_affinities: Option<&[(String, String, f64)]>,
-    workspace_suggestions: Option<&[(String, f64)]>,
-) -> Result<String, String> {
-    // Build enhanced context with learned patterns
-    let mut enhanced_context = context.to_string();
-
-    // Add learned affinities hint
-    if let Some(affinities) = url_affinities {
-        if !affinities.is_empty() {
-            let affinity_hints: Vec<String> = affinities
-                .iter()
-                .filter(|(_, _, score)| *score > 0.5)
-                .take(5)
-                .map(|(u1, u2, score)| {
-                    format!("- {} and {} are often grouped together (score: {:.2})",
-                        extract_domain(u1), extract_domain(u2), score)
-                })
-                .collect();
-
-            if !affinity_hints.is_empty() {
-                enhanced_context.push_str("\n\nLearned URL patterns:\n");
-                enhanced_context.push_str(&affinity_hints.join("\n"));
-            }
-        }
-    }
-
-    // Add workspace suggestion hints
-    if let Some(suggestions) = workspace_suggestions {
-        if !suggestions.is_empty() {
-            let suggestion_hints: Vec<String> = suggestions
-                .iter()
-                .take(3)
-                .map(|(name, score)| format!("- \"{}\" (confidence: {:.2})", name, score))
-                .collect();
-
-            enhanced_context.push_str("\n\nSuggested workspace names based on history:\n");
-            enhanced_context.push_str(&suggestion_hints.join("\n"));
-        }
-    }
-
-    // Call the regular grouping with enhanced context
-    group_workspaces(items, &enhanced_context, None).await
-}
-
-/// Helper to extract domain from URL for display
-fn extract_domain(url: &str) -> String {
-    url::Url::parse(url)
-        .ok()
-        .and_then(|u| u.host_str().map(|h| h.to_string()))
-        .unwrap_or_else(|| url.to_string())
-}

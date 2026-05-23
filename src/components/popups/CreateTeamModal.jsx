@@ -141,7 +141,6 @@ export function CreateTeamModal({ isOpen, onClose, initialTeamName = '', initial
 
                     // Auto-join the team with the provided secret
                     // IMPORTANT: Set createdByMe: false since we're joining, not creating
-                    const { teamManager } = await import('../../services/p2p/teamManager');
                     const team = await teamManager.addTeam(approval.teamName, approval.teamSecret, { createdByMe: false });
 
                     // Initialize storage and register ourselves as a member with our role

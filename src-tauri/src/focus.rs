@@ -39,6 +39,7 @@
 //! ```
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum FocusError {
     WindowNotFound,
     PlatformNotSupported,

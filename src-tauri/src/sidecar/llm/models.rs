@@ -5,8 +5,6 @@ use std::time::Instant;
 use tokio::sync::Mutex;
 use std::sync::Arc;
 
-/// Idle timeout before auto-unloading model (5 minutes)
-const IDLE_TIMEOUT_SECS: u64 = 300;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -64,39 +62,6 @@ pub fn get_models_dir() -> PathBuf {
     path
 }
 
-pub async fn initialize_llm() -> Result<(), String> {
-    let mut state = GLOBAL_LLM_STATE.lock().await;
-    state.status.models_dir = get_models_dir().to_string_lossy().to_string();
-    state.status.initialized = true;
-
-    // Start idle checker background task
-    tokio::spawn(idle_unload_checker());
-
-    Ok(())
-}
-
-/// Background task that unloads the model after idle timeout
-async fn idle_unload_checker() {
-    loop {
-        tokio::time::sleep(tokio::time::Duration::from_secs(60)).await; // Check every minute
-
-        let should_unload = {
-            let state = GLOBAL_LLM_STATE.lock().await;
-            if !state.status.model_loaded {
-                false
-            } else if let Some(last_used) = state.last_used {
-                last_used.elapsed().as_secs() > IDLE_TIMEOUT_SECS
-            } else {
-                false
-            }
-        };
-
-        if should_unload {
-            log::info!("[LLM] Auto-unloading model after {} seconds of inactivity", IDLE_TIMEOUT_SECS);
-            let _ = unload_model().await;
-        }
-    }
-}
 
 pub async fn get_available_models() -> Result<Vec<ModelInfo>, String> {
     let models_dir = get_models_dir();
@@ -303,36 +268,4 @@ pub async fn unload_model() -> Result<(), String> {
     Ok(())
 }
 
-/// Auto-load the first available downloaded model (called before chat)
-pub async fn ensure_model_loaded() -> Result<(), String> {
-    // Check if already loaded
-    {
-        let state = GLOBAL_LLM_STATE.lock().await;
-        if state.status.model_loaded {
-            return Ok(());
-        }
-        if state.status.is_loading {
-            return Err("Model is currently loading".to_string());
-        }
-    }
-
-    // Find first downloaded model
-    let models = get_available_models().await?;
-    let downloaded_model = models.iter().find(|m| m.downloaded);
-
-    match downloaded_model {
-        Some(model) => {
-            log::info!("[LLM] Auto-loading model: {}", model.filename);
-            // Use 0 GPU layers by default for compatibility
-            load_model(&model.filename, 0).await
-        }
-        None => Err("No model downloaded. Please download a model first.".to_string()),
-    }
-}
-
-/// Update last_used timestamp (call after each successful inference)
-pub async fn touch_last_used() {
-    let mut state = GLOBAL_LLM_STATE.lock().await;
-    state.last_used = Some(Instant::now());
-}
 

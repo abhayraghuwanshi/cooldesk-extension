@@ -1,6 +1,7 @@
 //! Reward calculation for reinforcement learning
 //!
 //! Implements Thompson Sampling-inspired reward signals for ranking suggestions.
+#![allow(dead_code)]
 
 use super::types::*;
 use std::collections::HashMap;
