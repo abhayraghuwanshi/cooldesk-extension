@@ -1,6 +1,13 @@
 import { faCog, faDatabase, faPalette, faRocket } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
+
+const isTauri = typeof window !== 'undefined' && !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+async function tauriInvoke(cmd, args) {
+  if (!isTauri) return null;
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke(cmd, args);
+}
 import { DB_CONFIG, getUnifiedDB, listWorkspaces, saveSettings, saveWorkspace } from '../../db';
 import { useSync } from '../../hooks/useSync';
 import { getSyncStatus } from '../../services/conditionalSync';
@@ -59,6 +66,8 @@ export function SettingsModal({
 
   const [spotlightShortcut, setSpotlightShortcut] = useState('Alt+K');
   const [isRecordingShortcut, setIsRecordingShortcut] = useState(false);
+
+  const [autostartEnabled, setAutostartEnabled] = useState(false);
 
   const [unsplashApiKey, setUnsplashApiKey] = useState('');
   const [autoGroupEnabled, setAutoGroupEnabled] = useState(false);
@@ -142,6 +151,12 @@ export function SettingsModal({
       storageGet(['autoGroupEnabled']).then((result) => {
         setAutoGroupEnabled(result?.autoGroupEnabled || false);
       });
+
+      if (isTauri) {
+        tauriInvoke('plugin:autostart|is-enabled').then((enabled) => {
+          setAutostartEnabled(!!enabled);
+        }).catch(() => {});
+      }
 
       try {
         if (window.electronAPI?.getSettings) {
@@ -324,6 +339,15 @@ export function SettingsModal({
       setAutoGroupEnabled(enabled);
       sendMessage({ type: 'TOGGLE_AUTO_GROUP', enabled }).catch(() => {});
     } catch { setError('Failed to toggle auto-group'); }
+  };
+
+  const handleAutostartToggle = async (enabled) => {
+    try {
+      await tauriInvoke(enabled ? 'plugin:autostart|enable' : 'plugin:autostart|disable');
+      setAutostartEnabled(enabled);
+    } catch (e) {
+      setError('Failed to update launch at login setting');
+    }
   };
 
   const handleUnsplashApiKeyChange = async (apiKey) => {
@@ -623,6 +647,15 @@ export function SettingsModal({
                         <div style={{ fontSize: 12, opacity: 0.5, marginTop: 2 }}>Track tabs to auto-categorize URLs into workspaces</div>
                       </div>
                     </label>
+                    {isTauri && (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 14, background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer' }}>
+                        <Toggle checked={autostartEnabled} onChange={handleAutostartToggle} accentColor="#22c55e" />
+                        <div>
+                          <div style={{ fontWeight: 500, fontSize: 14 }}>Launch at Login</div>
+                          <div style={{ fontSize: 12, opacity: 0.5, marginTop: 2 }}>Start CoolDesk automatically when you log in</div>
+                        </div>
+                      </label>
+                    )}
                   </div>
                 </section>
 

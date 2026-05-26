@@ -1,6 +1,6 @@
 [package]
 name = "cooldesk"
-version = "1.2.6"
+version = "1.2.7"
 description = "AI-powered desktop workspace manager"
 authors = ["CoolDesk"]
 license = ""
@@ -59,6 +59,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-single-instance = "2.4.0"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+tauri-plugin-autostart = "2"
 
 [dev-dependencies]
 tempfile = "3.10"

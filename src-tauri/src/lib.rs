@@ -310,11 +310,23 @@ async fn launch_app_with_args(app: String, args: Vec<String>) -> Result<(), Stri
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
-        std::process::Command::new(&app)
+        // Try direct spawn first; editor CLIs (cursor, code, windsurf) are often
+        // only in the user PATH, which Tauri's process may not inherit. Fall back
+        // to `cmd /c` so the shell resolves PATH correctly.
+        let direct_ok = std::process::Command::new(&app)
             .args(&args)
             .creation_flags(CREATE_NO_WINDOW)
             .spawn()
-            .map_err(|e| e.to_string())?;
+            .is_ok();
+        if !direct_ok {
+            std::process::Command::new("cmd")
+                .arg("/c")
+                .arg(&app)
+                .args(&args)
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .map_err(|e| format!("Failed to launch '{}' via cmd /c: {}", app, e))?;
+        }
     }
     #[cfg(target_os = "macos")]
     {
@@ -478,6 +490,7 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_process::init())
+    .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
     .invoke_handler(tauri::generate_handler![
         get_running_apps,
         get_installed_apps,
