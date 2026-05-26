@@ -124,6 +124,25 @@ let hostWsReconnectTimer = null;
 let hostWsReconnectDelay = 1500; // starts at 1.5s, doubles up to max
 const HOST_WS_RECONNECT_MAX = 60000; // 60s
 
+async function pushCurrentTabs() {
+  try {
+    const allTabs = await chrome.tabs.query({});
+    const isEdge = navigator.userAgent.includes('Edg/');
+    const browser = isEdge ? 'edge' : 'chrome';
+    const tabs = allTabs.map(t => ({
+      id: t.id,
+      url: t.url || '',
+      title: t.title || '',
+      favIconUrl: t.favIconUrl || null,
+      windowId: t.windowId,
+      browser,
+    }));
+    if (hostWs && hostWs.readyState === WebSocket.OPEN) {
+      hostWs.send(JSON.stringify({ type: 'push-tabs', payload: { deviceId: myDeviceId, tabs } }));
+    }
+  } catch { /* service worker may lack tabs permission briefly */ }
+}
+
 // HTTP polling fallback (reduced frequency for better performance)
 let hostPollTimer = null;
 const HOST_POLL_INTERVAL_MS = 2000; // Increased from 500ms to reduce CPU usage
@@ -190,6 +209,8 @@ function startHostActionWS() {
       ensureHostPolling(false);
       // Identify this client to the sidecar
       try { hostWs.send(JSON.stringify({ type: 'identify', client: 'bridge', deviceId: myDeviceId })); } catch { }
+      // Push fresh tabs immediately — don't wait for the 30s request-tabs poll
+      pushCurrentTabs().catch(() => {});
       // Drain any actions queued while offline
       drainQueuedActionsOnConnect().catch(() => { });
     };
@@ -211,28 +232,7 @@ function startHostActionWS() {
         }
 
         if (msg && msg.type === 'request-tabs') {
-          // Sidecar is asking for a fresh snapshot of all open tabs in this browser.
-          // Respond via push-tabs so stale entries in the sidecar are overwritten.
-          try {
-            const allTabs = await chrome.tabs.query({});
-            const isEdge = navigator.userAgent.includes('Edg/');
-            const browser = isEdge ? 'edge' : 'chrome';
-            const tabs = allTabs.map(t => ({
-              id: t.id,
-              url: t.url || '',
-              title: t.title || '',
-              favIconUrl: t.favIconUrl || null,
-              windowId: t.windowId,
-              _deviceId: myDeviceId,
-              browser,
-            }));
-            if (hostWs && hostWs.readyState === WebSocket.OPEN) {
-              hostWs.send(JSON.stringify({
-                type: 'push-tabs',
-                payload: { deviceId: myDeviceId, tabs },
-              }));
-            }
-          } catch { /* service worker may lack tabs permission briefly */ }
+          pushCurrentTabs().catch(() => {});
         }
 
         if (msg && msg.type === 'jump-to-tab') {

@@ -399,14 +399,37 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
 
     log::info!("[Sidecar] WebSocket client disconnected: {}", client_id);
 
-    // Only clean up the client_to_device mapping on disconnect — do NOT clear tabs.
-    // Chrome service workers frequently suspend and resume, triggering spurious disconnect
-    // events. Clearing tabs on disconnect would cause the Tauri app to briefly see 0 tabs
-    // every time the service worker sleeps. The extension always pushes fresh tabs on
-    // reconnect, so stale entries in device_tabs_map are overwritten automatically.
-    {
+    // Remove client mapping and note which device it belonged to.
+    let device_id = {
         let mut data = state.sync_data.write().await;
-        data.client_to_device.remove(&client_id);
+        data.client_to_device.remove(&client_id)
+    };
+
+    // Schedule deferred tab cleanup. Chrome service workers suspend/resume in ~2s,
+    // so we wait 90s before clearing — that window absorbs spurious disconnects while
+    // still clearing genuinely offline devices.
+    if let Some(device_id) = device_id {
+        let cleanup_state = state.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(90)).await;
+            // Only clear if no client has reconnected for this device
+            let should_clear = {
+                let data = cleanup_state.sync_data.read().await;
+                !data.client_to_device.values().any(|v| v == &device_id)
+            };
+            if should_clear {
+                let mut data = cleanup_state.sync_data.write().await;
+                // Re-check under write lock to avoid a race with a reconnecting client
+                if !data.client_to_device.values().any(|v| v == &device_id) {
+                    data.device_tabs_map.remove(&device_id);
+                    data.tabs = recompute_aggregated_tabs(&data.device_tabs_map);
+                    let payload = serde_json::to_value(&data.tabs).unwrap_or_default();
+                    drop(data);
+                    log::info!("[Sidecar] Cleared tabs for offline device: {}", device_id);
+                    cleanup_state.save_and_broadcast("tabs", payload).await;
+                }
+            }
+        });
     }
 }
 
