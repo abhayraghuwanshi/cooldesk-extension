@@ -52,6 +52,7 @@ base64 = "0.22"
 encoding_rs = "0.8.35"
 async-trait = "0.1"
 urlencoding = "2.1"
+open = "5"
 
 # Feedback/RL dependencies
 uuid = { version = "1.0", features = ["v4"] }
