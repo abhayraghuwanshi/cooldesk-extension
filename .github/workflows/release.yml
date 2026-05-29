@@ -113,6 +113,12 @@ jobs:
             }
           Remove-Item $certPath
 
+      - name: Repack DMG with fix script (test only, macOS)
+        if: github.event_name == 'workflow_dispatch' && runner.os == 'macOS'
+        run: |
+          chmod +x scripts/repack-mac-dmg.sh
+          bash scripts/repack-mac-dmg.sh ${{ matrix.target }}
+
       - name: Test installation (macOS)
         if: github.event_name == 'workflow_dispatch' && runner.os == 'macOS'
         run: |
@@ -177,6 +183,16 @@ jobs:
           args: --target ${{ matrix.target }} ${{ matrix.bundle_args }}
           updaterJsonKeepUniversal: true
           updaterJsonPreferNsis: true
+
+      - name: Repack DMG with fix script (macOS)
+        if: github.event_name == 'push' && runner.os == 'macOS'
+        run: |
+          chmod +x scripts/repack-mac-dmg.sh
+          bash scripts/repack-mac-dmg.sh ${{ matrix.target }}
+          DMG=$(find src-tauri/target/${{ matrix.target }}/release/bundle/dmg -name "*.dmg" | head -1)
+          gh release upload ${{ github.ref_name }} "$DMG" --clobber --repo ${{ github.repository }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_CD }}
 
       # Sign the built artifacts and re-upload to replace unsigned ones
       - name: Sign artifacts (Windows)
