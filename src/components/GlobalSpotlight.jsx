@@ -1391,8 +1391,8 @@ export function GlobalSpotlight() {
                         spellCheck={false}
                     />
                     {loading && <div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.2)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>}
-                    {/* WS connection indicator */}
-                    {isHostSyncEnabled() && (
+                    {/* WS connection indicator — only meaningful in extension (desktop uses IPC, not WS) */}
+                    {isHostSyncEnabled() && !window.electronAPI && !(window.__TAURI__ || window.__TAURI_INTERNALS__) && (
                         <div
                             title={wsConnected ? 'App sync connected — tabs are live' : 'App sync disconnected — tabs may be outdated'}
                             style={{
@@ -1567,23 +1567,6 @@ export function GlobalSpotlight() {
                                 </div>
                             )}
                             {/* Stale tabs warning in Spotlight */}
-                            {isHostSyncEnabled() && !wsConnected && tabs.length > 0 && (
-                                <div style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    padding: '5px 10px',
-                                    marginBottom: '4px',
-                                    borderRadius: '6px',
-                                    background: 'rgba(234, 179, 8, 0.08)',
-                                    border: '1px solid rgba(234, 179, 8, 0.2)',
-                                    fontSize: '10px',
-                                    color: '#CA8A04'
-                                }}>
-                                    <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#CA8A04', flexShrink: 0 }} />
-                                    <span>Sync disconnected — tab list may be outdated</span>
-                                </div>
-                            )}
                             {/* Tabs Row */}
                             {tabs.length > 0 && (
                                 <div className="context-section">
