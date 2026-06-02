@@ -199,6 +199,16 @@ export function CoolDeskContainer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [aiManagerState.isOpen, handleOpenAIManager]);
 
+  // Onboarding navigation via custom event (face names: workspace, tabs, team, overview)
+  useEffect(() => {
+    const handler = (e) => {
+      const face = e.detail?.face;
+      if (face) handleFaceChange(face);
+    };
+    window.addEventListener('cooldesk-navigate', handler);
+    return () => window.removeEventListener('cooldesk-navigate', handler);
+  }, []);
+
   // Tab management state
   const [tabs, setTabs] = useState([]);
   const [tabsLoading, setTabsLoading] = useState(true);

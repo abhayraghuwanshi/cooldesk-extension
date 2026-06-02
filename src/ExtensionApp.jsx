@@ -5,6 +5,7 @@
 import React, { Suspense, useEffect, useState } from 'react';
 
 import './App.css';
+import './components/onboarding/OnboardingTour.css';
 import './search.css';
 import './styles/bento-layout.css';
 import './styles/components.css';
@@ -23,13 +24,16 @@ import { faGear, faGlobe, faPlus } from '@fortawesome/free-solid-svg-icons';
 import { addUrlToWorkspace, getSettings as getSettingsDB, listWorkspaces, saveSettings as saveSettingsDB, saveWorkspace, subscribeWorkspaceChanges } from './db/index.js';
 import { sendMessage, storageGet } from './services/extensionApi';
 import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
+import { seedDefaultWorkspaces } from './utils/defaultWorkspaces.js';
 import { getFaviconUrl } from './utils/helpers';
+import { useOnboarding } from './hooks/useOnboarding';
 
 // Extension-only components
 import { OverviewDashboard } from './components/cooldesk/OverviewDashboard';
 
-// Lazy load settings (not needed immediately)
+// Lazy load heavy components
 const SettingsModal = React.lazy(() => import('./components/popups/SettingsModal').then(module => ({ default: module.SettingsModal })));
+const OnboardingTour = React.lazy(() => import('./components/onboarding/OnboardingTour').then(module => ({ default: module.OnboardingTour })));
 
 library.add(faPlus, faGear, faGlobe);
 
@@ -65,6 +69,7 @@ class ErrorBoundary extends React.Component {
 }
 
 export default function ExtensionApp() {
+  const { shouldShowOnboarding, isManualStart, completeOnboarding, skipOnboarding, startOnboarding } = useOnboarding();
   const [savedWorkspaces, setSavedWorkspaces] = useState([]);
   const [settings, setSettings] = useState({ geminiApiKey: '', modelName: '', visitCountThreshold: '', historyDays: '' });
   const [showSettings, setShowSettings] = useState(false);
@@ -99,14 +104,14 @@ export default function ExtensionApp() {
       const saved = localStorage.getItem('wallpaperEnabled');
       return saved === 'true';
     } catch {
-      return true;
+      return false;
     }
   });
   const [wallpaperUrl, setWallpaperUrl] = useState(() => {
     try {
-      return localStorage.getItem('wallpaperUrl') || 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1920&q=80';
+      return localStorage.getItem('wallpaperUrl') || 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1920&q=80';
     } catch {
-      return 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1920&q=80';
+      return 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1920&q=80';
     }
   });
   const [wallpaperOpacity, setWallpaperOpacity] = useState(() => {
@@ -144,16 +149,16 @@ export default function ExtensionApp() {
     sessionStorage.setItem('wallpaperSessionActive', 'true');
 
     const curatedWallpapers = [
-      'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=3840&q=90&fm=jpg',
-      'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=3840&q=90&fm=jpg',
+      'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=3840&q=90&fm=jpg',
       'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=3840&q=90&fm=jpg',
       'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=3840&q=90&fm=jpg',
-      'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=3840&q=90&fm=jpg',
-      'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=3840&q=90&fm=jpg',
-      'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=3840&q=90&fm=jpg',
+      'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=3840&q=90&fm=jpg',
       'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=3840&q=90&fm=jpg',
-      'https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=3840&q=90&fm=jpg',
-      'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=3840&q=90&fm=jpg'
+      'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=3840&q=90&fm=jpg',
+      'https://images.unsplash.com/photo-1448375240586-882707db888b?w=3840&q=90&fm=jpg',
+      'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=3840&q=90&fm=jpg',
+      'https://images.unsplash.com/photo-1557683316-973673baf926?w=3840&q=90&fm=jpg',
+      'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?w=3840&q=90&fm=jpg',
     ];
 
     // Always use the curated list — these URLs get browser-cached after first load,
@@ -198,6 +203,13 @@ export default function ExtensionApp() {
               workspaces = refreshed?.success ? refreshed.data : [];
             }
           } catch { }
+        }
+        if (!Array.isArray(workspaces) || workspaces.length === 0) {
+          const seeded = await seedDefaultWorkspaces();
+          if (seeded) {
+            const seededResult = await listWorkspaces();
+            workspaces = seededResult?.success ? seededResult.data : [];
+          }
         }
         setSavedWorkspaces(Array.isArray(workspaces) ? workspaces : []);
       } catch (e) {
@@ -335,6 +347,7 @@ export default function ExtensionApp() {
               }}
               fontSize={fontSize}
               onFontSizeChange={handleFontSizeChange}
+              onStartOnboarding={startOnboarding}
               wallpaperEnabled={wallpaperEnabled}
               wallpaperUrl={wallpaperUrl}
               wallpaperOpacity={wallpaperOpacity}
@@ -355,6 +368,17 @@ export default function ExtensionApp() {
                 setWallpaperAutoRotate(v);
                 localStorage.setItem('wallpaperAutoRotate', String(v));
               }}
+            />
+          </Suspense>
+        )}
+
+        {/* Onboarding Tour */}
+        {shouldShowOnboarding && (
+          <Suspense fallback={null}>
+            <OnboardingTour
+              onComplete={completeOnboarding}
+              onSkip={skipOnboarding}
+              autoPlay={!isManualStart}
             />
           </Suspense>
         )}

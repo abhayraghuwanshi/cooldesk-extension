@@ -12,23 +12,28 @@ const TypewriterText = ({ text, speed = 30, onComplete }) => {
     setDisplayedText('');
     setIsComplete(false);
     let index = 0;
+    let intervalId = null;
 
-    // Initial pause for dramatic effect
     const startDelay = setTimeout(() => {
-      const interval = setInterval(() => {
+      intervalId = setInterval(() => {
         if (index < text.length) {
-          setDisplayedText((prev) => prev + text.charAt(index));
+          // Capture the char now — don't rely on `index` inside the functional update
+          // because React may call the updater after `index` has already incremented.
+          const char = text.charAt(index);
           index++;
+          setDisplayedText(prev => prev + char);
         } else {
-          clearInterval(interval);
+          clearInterval(intervalId);
           setIsComplete(true);
           if (onComplete) onComplete();
         }
       }, speed);
-      return () => clearInterval(interval);
     }, 400);
 
-    return () => clearTimeout(startDelay);
+    return () => {
+      clearTimeout(startDelay);
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [text, speed]);
 
   return (
@@ -43,80 +48,81 @@ const ONBOARDING_STEPS = [
   {
     id: 'welcome',
     title: 'Welcome to CoolDesk',
-    description: 'Your browser\'s command center. Let me show you around...',
+    description: "Your browser's command center — tabs, notes, workspaces, and focus tools in one place. We've pre-loaded two demo workspaces so you can see how it works right away.",
     target: null,
     position: 'center',
-    action: 'navigate:3', // overview
-    duration: 3500,
+    action: 'navigate:workspace',
+    duration: 4500,
     emoji: '🚀'
   },
   {
-    id: 'overview',
-    title: 'Your Dashboard',
-    description: 'This is home base. Quick access to workspaces, notes, focus timer, and your activity feed—all at a glance.',
-    target: '.overview-dashboard-grid',
-    position: 'center',
-    action: 'navigate:3', // overview
-    duration: 4500,
-    emoji: '🏠'
-  },
-  {
     id: 'workspaces',
-    title: 'Workspaces',
-    description: 'Save your browser sessions. One click restores all your tabs exactly where you left off. Never lose your flow again.',
+    title: 'Smart Workspaces',
+    description: "Check out the Development workspace — it already has GitHub, MDN, npm, and Stack Overflow saved. Click it to open everything at once, or add your own URLs by dragging tabs in.",
     target: null,
     position: 'center',
-    action: 'navigate:2', // workspace
-    duration: 4500,
+    action: 'navigate:workspace',
+    duration: 5500,
     emoji: '📁'
   },
   {
+    id: 'expand-workspace',
+    title: 'Expanding a Workspace',
+    description: "Click any card to expand it and see all its saved URLs, notes, and actions. Watch — opening the first workspace now.",
+    target: '.cooldesk-workspace-card',
+    position: 'center',
+    action: 'click:.cooldesk-workspace-card',
+    duration: 4500,
+    emoji: '📂'
+  },
+  {
     id: 'tabs',
-    title: 'Tab Management',
-    description: 'All your open tabs, organized. Find duplicates, group by domain, search instantly. Tame the tab chaos.',
+    title: 'Tab Control',
+    description: "See every open tab in one clean list. Search by title or URL, group tabs by domain with one click, spot duplicates, and save the whole session into a new workspace — without losing anything.",
     target: null,
     position: 'center',
-    action: 'navigate:4', // tabs
-    duration: 4500,
+    action: 'navigate:tabs',
+    duration: 5000,
     emoji: '🗂️'
-  },
-  {
-    id: 'team',
-    title: 'Team Sharing',
-    description: 'Share resources with your team via encrypted P2P. No cloud servers—direct, secure collaboration.',
-    target: null,
-    position: 'center',
-    action: 'navigate:5', // team
-    duration: 4500,
-    emoji: '👥'
-  },
-  {
-    id: 'notes',
-    title: 'Quick Notes',
-    description: 'Capture thoughts instantly. Your notes sync across sessions and stay right where you need them.',
-    target: null,
-    position: 'center',
-    action: 'navigate:6', // notes
-    duration: 4500,
-    emoji: '📝'
   },
   {
     id: 'search',
     title: 'Command Center',
-    description: 'Press Ctrl+K anywhere to search everything. Type "/" for quick commands. This is your superpower.',
+    description: "Press Ctrl+K to instantly search across tabs, workspaces, history, bookmarks, and installed apps — all from one box, no mouse needed. This is your fastest path to anything.",
     target: '.cooldesk-search-container',
     position: 'bottom',
-    action: 'navigate:3', // back to overview
-    duration: 4500,
+    action: 'navigate:workspace',
+    duration: 5000,
     emoji: '⚡'
   },
   {
-    id: 'ready',
-    title: 'You\'re Ready!',
-    description: 'That\'s it! Ctrl+K is your gateway. Now go make something awesome.',
+    id: 'notes',
+    title: 'Contextual Notes',
+    description: "Notes attach to workspace cards — expand any workspace card and you'll find its notes panel. No separate app needed.",
     target: null,
     position: 'center',
-    duration: 3500,
+    action: 'navigate:workspace',
+    duration: 4500,
+    emoji: '📝'
+  },
+  {
+    id: 'team',
+    title: 'Share with Your Team',
+    description: "Send workspace links and resources directly to teammates via encrypted P2P — no cloud account, no upload. Works across browsers on the same network.",
+    target: null,
+    position: 'center',
+    action: 'navigate:team',
+    duration: 4500,
+    emoji: '👥'
+  },
+  {
+    id: 'ready',
+    title: "You're All Set!",
+    description: "Open the Design Resources workspace to explore, or press Ctrl+K and type anything to search. Add your first real project by saving your current tabs as a workspace.",
+    target: null,
+    position: 'center',
+    action: 'navigate:workspace',
+    duration: 4000,
     emoji: '✨'
   }
 ];
@@ -173,13 +179,13 @@ const FakeCursor = ({ target }) => {
   );
 };
 
-export function OnboardingTour({ onComplete, onSkip }) {
+export function OnboardingTour({ onComplete, onSkip, autoPlay = true }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [isVisible, setIsVisible] = useState(true);
   const [showSpotlight, setShowSpotlight] = useState(false);
 
   // Auto-play state
-  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const [isAutoPlaying, setIsAutoPlaying] = useState(autoPlay);
   const [isTypingComplete, setIsTypingComplete] = useState(false);
   const [isActionRunning, setIsActionRunning] = useState(false);
   const [showTransition, setShowTransition] = useState(false);
@@ -275,14 +281,11 @@ export function OnboardingTour({ onComplete, onSkip }) {
         const extra = parts[2]; // For type command text
 
         if (type === 'navigate') {
-          const event = new KeyboardEvent('keydown', {
-            key: payload,
-            code: `Digit${payload}`,
-            ctrlKey: true,
-            metaKey: true,
-            bubbles: true
-          });
-          window.dispatchEvent(event);
+          window.dispatchEvent(new CustomEvent('cooldesk-navigate', { detail: { face: payload } }));
+        } else if (type === 'click') {
+          await new Promise(r => setTimeout(r, 700));
+          const el = document.querySelector(payload);
+          if (el) el.click();
         } else if (type === 'focus') {
           setTimeout(() => {
             const el = document.querySelector(payload);

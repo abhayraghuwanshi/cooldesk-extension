@@ -3,7 +3,6 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useRef, useState } from 'react'
 import { DB_CONFIG, getUnifiedDB } from '../../db/index.js'
 import { storageGet, storageRemove, storageSet } from '../../services/extensionApi'
-import './ExportData.css'
 
 
 export default function ExportData() {
@@ -246,129 +245,77 @@ export default function ExportData() {
         }
     }
 
-    return (
-        <div className="export-data-container">
-            <div className="export-header">
-                <h2>Export / Import Data</h2>
-                <p className="export-subtitle">Backup and restore your workspaces, activities, notes, and AI chats</p>
-            </div>
+    const isError = message.includes('failed') || message.includes('Failed')
 
-            <div className="export-actions">
-                <button className="export-btn primary" onClick={exportAll} disabled={busy}>
-                    <span className="btn-icon"><FontAwesomeIcon icon={faFileExport} /></span>
-                    {busy ? 'Working...' : 'Export JSON'}
-                </button>
-                <button className="export-btn secondary" onClick={onChooseFile} disabled={busy}>
-                    <span className="btn-icon"><FontAwesomeIcon icon={faFileImport} /></span>
-                    Import JSON
-                </button>
-                <label className="replace-mode-toggle">
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '11px 14px',
+                background: 'rgba(255,255,255,0.03)',
+                borderRadius: 12,
+                border: '1px solid rgba(255,255,255,0.06)',
+            }}>
+                <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: '#e5e7eb' }}>Export / Import</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
+                        Download or restore all your data as JSON
+                    </div>
+                </div>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'rgba(255,255,255,0.4)', cursor: 'pointer', marginRight: 4 }}>
                     <input
                         type="checkbox"
                         checked={replaceMode}
-                        onChange={(e) => setReplaceMode(e.target.checked)}
+                        onChange={e => setReplaceMode(e.target.checked)}
+                        style={{ accentColor: '#ef4444', width: 13, height: 13 }}
                     />
-                    <span>Replace existing data</span>
+                    Replace
                 </label>
-                <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="application/json"
-                    onChange={onFileSelected}
-                    style={{ display: 'none' }}
-                />
+
+                <button
+                    onClick={onChooseFile}
+                    disabled={busy}
+                    style={{
+                        padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+                        border: '1px solid rgba(255,255,255,0.12)',
+                        background: 'rgba(255,255,255,0.06)', color: '#cbd5e1',
+                        cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.4 : 1,
+                    }}
+                >
+                    <FontAwesomeIcon icon={faFileImport} style={{ marginRight: 4 }} />
+                    Import
+                </button>
+
+                <button
+                    onClick={exportAll}
+                    disabled={busy}
+                    style={{
+                        padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+                        border: '1px solid rgba(59,130,246,0.3)',
+                        background: 'rgba(59,130,246,0.15)', color: '#60a5fa',
+                        cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.4 : 1,
+                    }}
+                >
+                    <FontAwesomeIcon icon={faFileExport} style={{ marginRight: 4 }} />
+                    {busy ? 'Working…' : 'Export'}
+                </button>
+
+                <input ref={fileInputRef} type="file" accept="application/json" onChange={onFileSelected} style={{ display: 'none' }} />
             </div>
 
             {message && (
-                <div className={`export-status ${message.includes('failed') ? 'error' : 'success'}`}>
-                    <span className="status-icon">
-                        <FontAwesomeIcon icon={message.includes('failed') ? faTimesCircle : faCheckCircle} />
-                    </span>
-                    <span>{message}</span>
+                <div style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '7px 12px', borderRadius: 8, fontSize: 11,
+                    background: isError ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)',
+                    color: isError ? '#f87171' : '#4ade80',
+                    border: `1px solid ${isError ? 'rgba(239,68,68,0.2)' : 'rgba(34,197,94,0.2)'}`,
+                }}>
+                    <FontAwesomeIcon icon={isError ? faTimesCircle : faCheckCircle} />
+                    {message}
                 </div>
             )}
-
-            {details && (
-                <div className="export-summary-container">
-                    <div className="summary-section-title">
-                        <h3>Export Summary</h3>
-                    </div>
-
-                    <div className="stats-hero-grid">
-                        <div className="stat-card primary">
-                            <div className="stat-icon"><FontAwesomeIcon icon={faComments} /></div>
-                            <div className="stat-info">
-                                <div className="stat-value">{details.scrapedChats || 0}</div>
-                                <div className="stat-label">AI Chats</div>
-                            </div>
-                        </div>
-
-                        <div className="stat-card accent">
-                            <div className="stat-icon"><FontAwesomeIcon icon={faThumbtack} /></div>
-                            <div className="stat-info">
-                                <div className="stat-value">{details.storageLocal?.pinnedWorkspaces || 0}</div>
-                                <div className="stat-label">Pinned</div>
-                            </div>
-                        </div>
-
-                        <div className="stat-card success">
-                            <div className="stat-icon"><FontAwesomeIcon icon={faRobot} /></div>
-                            <div className="stat-info">
-                                <div className="stat-value">{details.storageLocal?.scrapingRules || details.scrapingRules || 0}</div>
-                                <div className="stat-label">Rules</div>
-                            </div>
-                        </div>
-
-                        <div className="stat-card warning">
-                            <div className="stat-icon"><FontAwesomeIcon icon={faNoteSticky} /></div>
-                            <div className="stat-info">
-                                <div className="stat-value">{details.storageLocal?.dailyNotesDays || 0}</div>
-                                <div className="stat-label">Daily Notes</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="meta-stats-row">
-                        {(details.storageLocal?.viewMode || details.viewMode) && (
-                            <div className="meta-stat">
-                                <span className="meta-icon"><FontAwesomeIcon icon={faEye} /></span>
-                                <span className="meta-label">View Mode:</span>
-                                <span className="meta-value">{details.storageLocal?.viewMode || details.viewMode}</span>
-                            </div>
-                        )}
-                        {details.displaySettings && (
-                            <div className="meta-stat">
-                                <span className="meta-icon"><FontAwesomeIcon icon={faCog} /></span>
-                                <span className="meta-label">Display Settings:</span>
-                                <span className="meta-value">{details.displaySettings}</span>
-                            </div>
-                        )}
-                    </div>
-
-                    {details.counts && (
-                        <div className="stores-section">
-                            <h4>Database Content</h4>
-                            <div className="stores-grid">
-                                {Object.entries(details.counts).map(([store, count]) => (
-                                    <div key={store} className="store-pill">
-                                        <span className="store-name">{store}</span>
-                                        <span className="store-count">{count}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            <div className="export-includes">
-                <div className="includes-label">Included Data:</div>
-                <div className="includes-tags">
-                    {storeNames.map(name => (
-                        <span key={name} className="data-tag">{name}</span>
-                    ))}
-                </div>
-            </div>
         </div>
     )
 }

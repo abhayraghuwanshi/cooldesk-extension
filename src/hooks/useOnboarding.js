@@ -9,6 +9,7 @@ const ONBOARDING_VERSION = '1.0';
  */
 export function useOnboarding() {
   const [shouldShowOnboarding, setShouldShowOnboarding] = useState(false);
+  const [isManualStart, setIsManualStart] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -36,12 +37,14 @@ export function useOnboarding() {
       localStorage.setItem(ONBOARDING_KEY, 'true');
       localStorage.setItem(`${ONBOARDING_KEY}_version`, ONBOARDING_VERSION);
       setShouldShowOnboarding(false);
+      setIsManualStart(false);
     } catch (error) {
       console.error('[Onboarding] Failed to save completion:', error);
     }
   };
 
   const skipOnboarding = () => {
+    setIsManualStart(false);
     completeOnboarding();
   };
 
@@ -56,11 +59,13 @@ export function useOnboarding() {
   };
 
   const startOnboarding = () => {
+    setIsManualStart(true);
     setShouldShowOnboarding(true);
   };
 
   return {
     shouldShowOnboarding,
+    isManualStart,
     isLoading,
     completeOnboarding,
     skipOnboarding,

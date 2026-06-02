@@ -1,4 +1,4 @@
-import { faCog, faDatabase, faPalette, faRocket } from '@fortawesome/free-solid-svg-icons';
+import { faCog, faDatabase, faPalette, faRocket, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 
@@ -75,10 +75,10 @@ export function SettingsModal({
   const isDesktopApp = isElectronApp();
 
   const TABS = [
-    { id: 'general',    label: 'General',    icon: faCog      },
-    { id: 'appearance', label: 'Appearance', icon: faPalette  },
-    { id: 'sync-data',  label: 'Sync & Data', icon: faDatabase },
-    { id: 'local-ai',   label: 'Local AI',   icon: faRocket   },
+    { id: 'general',    label: 'General',    icon: faCog     },
+    { id: 'appearance', label: 'Appearance', icon: faPalette },
+    { id: 'local-ai',   label: 'Local AI',   icon: faRocket  },
+    ...(isDesktopApp ? [{ id: 'team', label: 'Team', icon: faUsers }] : []),
   ];
 
   const themes = [
@@ -129,10 +129,19 @@ export function SettingsModal({
       loadSettingsSync();
       loadLocalWorkspaces();
 
-      try {
-        const manifest = chrome.runtime?.getManifest ? chrome.runtime.getManifest() : { version: 'Electron' };
-        setExtensionVersion(manifest.version);
-      } catch { }
+      (async () => {
+        try {
+          if (isTauri) {
+            const { getVersion } = await import('@tauri-apps/api/app');
+            setExtensionVersion(await getVersion());
+          } else if (window.electronAPI?.getVersion) {
+            const v = await window.electronAPI.getVersion();
+            if (v) setExtensionVersion(v);
+          } else if (chrome.runtime?.getManifest) {
+            setExtensionVersion(chrome.runtime.getManifest().version);
+          }
+        } catch { }
+      })();
 
       storageGet(['autoUpdateEnabled']).then((result) => {
         setAutoUpdateEnabled(result?.autoUpdateEnabled !== false);
@@ -207,7 +216,6 @@ export function SettingsModal({
   };
 
   const handleShortcutKeyDown = (e) => {
-    if (!isRecordingShortcut) return;
     e.preventDefault();
     e.stopPropagation();
     if (e.key === 'Escape') { setIsRecordingShortcut(false); return; }
@@ -222,6 +230,13 @@ export function SettingsModal({
     void updateSpotlightShortcut(parts.join('+') || 'Alt+K');
     setIsRecordingShortcut(false);
   };
+
+  // Capture keystrokes globally while recording — no div focus needed
+  useEffect(() => {
+    if (!isRecordingShortcut) return;
+    window.addEventListener('keydown', handleShortcutKeyDown, true);
+    return () => window.removeEventListener('keydown', handleShortcutKeyDown, true);
+  }, [isRecordingShortcut]);
 
   useEffect(() => {
     if (!show) return;
@@ -444,6 +459,52 @@ export function SettingsModal({
 
   const Divider = () => <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '8px 0' }} />;
 
+  const Card = ({ children }) => (
+    <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+      {children}
+    </div>
+  );
+
+  const SettingRow = ({ label, hint, right, onClick, last, style }) => (
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px',
+        borderBottom: last ? 'none' : '1px solid rgba(255,255,255,0.05)',
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'background 0.15s',
+        ...style
+      }}
+      onMouseEnter={e => { if (onClick) e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 500, color: '#e5e7eb' }}>{label}</div>
+        {hint && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{hint}</div>}
+      </div>
+      {right && <div style={{ flexShrink: 0 }} onClick={e => e.stopPropagation()}>{right}</div>}
+    </div>
+  );
+
+  const SmallBtn = ({ children, onClick, disabled, accent }) => (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+        border: accent ? 'none' : '1px solid rgba(255,255,255,0.12)',
+        background: accent ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.06)',
+        color: accent ? '#60a5fa' : '#cbd5e1',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.4 : 1,
+        whiteSpace: 'nowrap',
+        transition: 'background 0.15s'
+      }}
+    >
+      {children}
+    </button>
+  );
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
   if (!show) return null;
@@ -585,128 +646,180 @@ export function SettingsModal({
 
             {/* ── GENERAL ─────────────────────────────────────────────────────── */}
             {activeTabId === 'general' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
+                {/* Spotlight — desktop only */}
                 {isDesktopApp && (
                   <section>
-                    <SectionHeader title="Spotlight Shortcut" description="Global hotkey to open the Spotlight launcher." />
-                    <div style={{ padding: 16, background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.04)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        <div
-                          tabIndex={0}
-                          onKeyDown={handleShortcutKeyDown}
-                          onClick={(e) => { e.currentTarget.focus(); setIsRecordingShortcut(true); }}
-                          style={{
-                            padding: '7px 10px', borderRadius: 8, cursor: 'pointer',
-                            border: isRecordingShortcut ? '1px solid rgba(96,165,250,0.9)' : '1px solid rgba(255,255,255,0.12)',
-                            background: 'rgba(15,23,42,0.9)', color: '#e5e7eb', fontSize: 13,
-                            display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 32
-                          }}
-                        >
-                          {(spotlightShortcut || 'Alt+K').split('+').map((part) => (
-                            <span key={part} style={{
-                              padding: '2px 7px', borderRadius: 5,
-                              background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(148,163,184,0.6)', fontSize: 12
-                            }}>{part}</span>
-                          ))}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setIsRecordingShortcut(prev => !prev)}
-                          style={{
-                            padding: '6px 10px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
-                            border: '1px solid rgba(148,163,184,0.6)',
-                            background: isRecordingShortcut ? 'rgba(37,99,235,0.2)' : 'rgba(15,23,42,0.9)',
-                            color: '#e5e7eb'
-                          }}
-                        >
-                          {isRecordingShortcut ? 'Stop' : 'Change'}
-                        </button>
-                      </div>
-                      <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.8)' }}>
-                        {isRecordingShortcut ? 'Press your new shortcut now (Esc to cancel).' : 'Click "Change" then press your preferred key combination.'}
-                      </div>
-                    </div>
+                    <SectionHeader title="Spotlight Shortcut" />
+                    <Card>
+                      <SettingRow
+                        label="Hotkey"
+                        hint={isRecordingShortcut ? 'Press your new key combination now…' : 'Global shortcut to open Spotlight'}
+                        right={
+                          isRecordingShortcut ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <div style={{
+                                padding: '4px 12px', borderRadius: 6, fontSize: 11,
+                                border: '1px solid rgba(96,165,250,0.6)',
+                                background: 'rgba(59,130,246,0.1)', color: '#93c5fd',
+                                animation: 'pulse 1.2s ease-in-out infinite'
+                              }}>
+                                Waiting for keys…
+                              </div>
+                              <SmallBtn onClick={() => setIsRecordingShortcut(false)}>Cancel</SmallBtn>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                {(spotlightShortcut || 'Alt+K').split('+').map(part => (
+                                  <span key={part} style={{
+                                    padding: '2px 6px', borderRadius: 4, fontSize: 11,
+                                    background: 'rgba(255,255,255,0.06)',
+                                    border: '1px solid rgba(255,255,255,0.14)',
+                                    color: '#e5e7eb'
+                                  }}>{part}</span>
+                                ))}
+                              </div>
+                              <SmallBtn onClick={() => setIsRecordingShortcut(true)}>Change</SmallBtn>
+                            </div>
+                          )
+                        }
+                        last
+                      />
+                    </Card>
                   </section>
                 )}
 
+                {/* Behaviour */}
                 <section>
                   <SectionHeader title="Behaviour" />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 14, background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer' }}>
-                      <Toggle checked={autoGroupEnabled} onChange={handleToggleAutoGroup} accentColor="#22c55e" />
-                      <div>
-                        <div style={{ fontWeight: 500, fontSize: 14 }}>Auto-Group Tabs by Domain</div>
-                        <div style={{ fontSize: 12, opacity: 0.5, marginTop: 2 }}>Group tabs from the same site together automatically</div>
-                      </div>
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 14, background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer' }}>
-                      <Toggle checked={sessionTrackingEnabled} onChange={handleToggleSessionTracking} />
-                      <div>
-                        <div style={{ fontWeight: 500, fontSize: 14 }}>Session Tracking</div>
-                        <div style={{ fontSize: 12, opacity: 0.5, marginTop: 2 }}>Track tabs to auto-categorize URLs into workspaces</div>
-                      </div>
-                    </label>
+                  <Card>
+                    <SettingRow
+                      label="Auto-Group Tabs"
+                      hint="Group tabs from the same domain together"
+                      right={<Toggle checked={autoGroupEnabled} onChange={handleToggleAutoGroup} accentColor="#22c55e" />}
+                      onClick={() => handleToggleAutoGroup(!autoGroupEnabled)}
+                    />
+                    <SettingRow
+                      label="Session Tracking"
+                      hint="Auto-categorize visited URLs into workspaces"
+                      right={<Toggle checked={sessionTrackingEnabled} onChange={handleToggleSessionTracking} />}
+                      onClick={() => handleToggleSessionTracking(!sessionTrackingEnabled)}
+                      last={!isTauri}
+                    />
                     {isTauri && (
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 14, background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer' }}>
-                        <Toggle checked={autostartEnabled} onChange={handleAutostartToggle} accentColor="#22c55e" />
-                        <div>
-                          <div style={{ fontWeight: 500, fontSize: 14 }}>Launch at Login</div>
-                          <div style={{ fontSize: 12, opacity: 0.5, marginTop: 2 }}>Start CoolDesk automatically when you log in</div>
-                        </div>
-                      </label>
+                      <SettingRow
+                        label="Launch at Login"
+                        hint="Start CoolDesk automatically on login"
+                        right={<Toggle checked={autostartEnabled} onChange={handleAutostartToggle} accentColor="#22c55e" />}
+                        onClick={() => handleAutostartToggle(!autostartEnabled)}
+                        last
+                      />
                     )}
+                  </Card>
+                </section>
+
+                {/* Sync */}
+                <section>
+                  <SectionHeader title="Sync" />
+                  <Card>
+                    <SettingRow
+                      label="Desktop Sync"
+                      hint="Connect to the CoolDesk desktop app on port 4545"
+                      right={<Toggle checked={hostSyncEnabled} onChange={handleToggleHostSync} />}
+                      onClick={() => handleToggleHostSync(!hostSyncEnabled)}
+                    />
+                    <SettingRow
+                      label={
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          Status
+                          <span style={{
+                            width: 6, height: 6, borderRadius: '50%', display: 'inline-block',
+                            background: !hostSyncEnabled ? '#475569' : syncStatus?.hostAvailable ? '#4ade80' : syncStatus?.hostAvailable === false ? '#ef4444' : '#fbbf24'
+                          }} />
+                        </span>
+                      }
+                      hint={!hostSyncEnabled ? 'Sync disabled' : syncStatus?.hostAvailable ? 'App connected' : syncStatus?.hostAvailable === false ? 'App not found — is it running?' : 'Checking…'}
+                      right={
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {hostSyncEnabled && !syncStatus?.hostAvailable && (
+                            <SmallBtn onClick={loadSettingsSync}>Retry</SmallBtn>
+                          )}
+                          <SmallBtn
+                            onClick={triggerSync}
+                            disabled={globalSyncStatus === 'syncing' || !syncStatus?.hostAvailable}
+                            accent
+                          >
+                            <FontAwesomeIcon icon={faDatabase} spin={globalSyncStatus === 'syncing'} style={{ marginRight: 4 }} />
+                            {globalSyncStatus === 'syncing' ? 'Syncing…' : globalLastSyncTime ? `Synced ${new Date(globalLastSyncTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Sync Now'}
+                          </SmallBtn>
+                        </div>
+                      }
+                      last
+                    />
+                  </Card>
+                </section>
+
+                {/* Data */}
+                <section>
+                  <SectionHeader title="Data" />
+                  <Card>
+                    <SettingRow
+                      label="Backup"
+                      hint={lastBackupTime ? `Last backup ${new Date(lastBackupTime).toLocaleDateString()}` : 'Download a snapshot of all your data'}
+                      last
+                      right={
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Toggle checked={autoBackupEnabled} onChange={handleToggleAutoBackup} />
+                          {autoBackupEnabled && (
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              {['daily', 'weekly', 'monthly'].map(f => (
+                                <button key={f} onClick={() => handleBackupFrequencyChange(f)} style={{
+                                  padding: '2px 7px', borderRadius: 4, fontSize: 10, fontWeight: 500,
+                                  border: backupFrequency === f ? '1px solid #3b82f6' : '1px solid rgba(255,255,255,0.1)',
+                                  background: backupFrequency === f ? 'rgba(59,130,246,0.2)' : 'transparent',
+                                  color: backupFrequency === f ? '#60a5fa' : 'rgba(255,255,255,0.4)',
+                                  cursor: 'pointer', textTransform: 'capitalize'
+                                }}>{f}</button>
+                              ))}
+                            </div>
+                          )}
+                          <SmallBtn onClick={performManualBackup} disabled={backupInProgress}>
+                            {backupInProgress ? '…' : 'Backup Now'}
+                          </SmallBtn>
+                        </div>
+                      }
+                    />
+                  </Card>
+                  <div style={{ marginTop: 8 }}>
+                    <ExportData />
                   </div>
                 </section>
 
+                {/* Updates */}
                 <section>
                   <SectionHeader title="Updates" />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <Row>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 500, fontSize: 14 }}>Current Version</div>
-                        <div style={{ fontSize: 12, opacity: 0.5, marginTop: 2 }}>v{extensionVersion}</div>
-                      </div>
-                      {updateAvailable && (
-                        <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 99, background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid currentColor' }}>
-                          Update Available
-                        </span>
-                      )}
-                    </Row>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 14, background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer' }}>
-                      <Toggle checked={autoUpdateEnabled} onChange={handleToggleAutoUpdate} />
-                      <div>
-                        <div style={{ fontWeight: 500, fontSize: 14 }}>Auto-Update</div>
-                        <div style={{ fontSize: 12, opacity: 0.5, marginTop: 2 }}>Automatically install updates when available</div>
-                      </div>
-                    </label>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button
-                        onClick={handleCheckForUpdates}
-                        style={{
-                          flex: 1, padding: '10px 16px', borderRadius: 10,
-                          border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)',
-                          color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s'
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-                      >
-                        Check for Updates
-                      </button>
-                      {updateAvailable && (
-                        <button
-                          onClick={handleInstallUpdate}
-                          style={{
-                            flex: 1, padding: '10px 16px', borderRadius: 10, border: 'none',
-                            background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-                            color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer'
-                          }}
-                        >
-                          Install Update
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                  <Card>
+                    <SettingRow
+                      label={<span>Version <span style={{ opacity: 0.45, fontWeight: 400 }}>v{extensionVersion}</span></span>}
+                      hint={updateAvailable ? 'A new version is ready' : 'You are up to date'}
+                      right={
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          {updateAvailable && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid currentColor' }}>New</span>}
+                          <SmallBtn onClick={handleCheckForUpdates}>Check</SmallBtn>
+                          {updateAvailable && <SmallBtn accent onClick={handleInstallUpdate}>Install</SmallBtn>}
+                        </div>
+                      }
+                    />
+                    <SettingRow
+                      label="Auto-Update"
+                      hint="Install updates automatically in the background"
+                      right={<Toggle checked={autoUpdateEnabled} onChange={handleToggleAutoUpdate} />}
+                      onClick={() => handleToggleAutoUpdate(!autoUpdateEnabled)}
+                      last
+                    />
+                  </Card>
                 </section>
 
               </div>
@@ -734,157 +847,24 @@ export function SettingsModal({
               />
             )}
 
-            {/* ── SYNC & DATA ──────────────────────────────────────────────────── */}
-            {activeTabId === 'sync-data' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
-
-                <section>
-                  <SectionHeader title="Desktop Sync" description="Sync browser data with the CoolDesk desktop app over WebSocket (port 4545)." />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 14, background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer' }}>
-                      <Toggle checked={hostSyncEnabled} onChange={handleToggleHostSync} />
-                      <div>
-                        <div style={{ fontWeight: 500, fontSize: 14 }}>Enable Host Sync</div>
-                        <div style={{ fontSize: 12, opacity: 0.5, marginTop: 2 }}>Connect to desktop app</div>
-                      </div>
-                    </label>
-
-                    <Row style={{ opacity: hostSyncEnabled ? 1 : 0.4 }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 500, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-                          Connection
-                          <span style={{
-                            width: 7, height: 7, borderRadius: '50%', display: 'inline-block',
-                            background: !hostSyncEnabled ? '#64748b' : syncStatus?.hostAvailable ? '#4ade80' : (syncStatus?.hostAvailable === false ? '#ef4444' : '#fbbf24'),
-                          }} />
-                        </div>
-                        <div style={{ fontSize: 12, opacity: 0.5, marginTop: 2 }}>
-                          {!hostSyncEnabled ? 'Disabled'
-                            : syncStatus?.hostAvailable ? 'Connected'
-                            : syncStatus?.hostAvailable === false ? 'Disconnected — is the app running?'
-                            : 'Checking...'}
-                        </div>
-                      </div>
-                      {hostSyncEnabled && !syncStatus?.hostAvailable && (
-                        <button onClick={loadSettingsSync} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.08)', color: '#fff', border: 'none', cursor: 'pointer' }}>
-                          Retry
-                        </button>
-                      )}
-                    </Row>
-
-                    <Row>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 500, fontSize: 14 }}>Force Sync</div>
-                        <div style={{ fontSize: 12, opacity: 0.5, marginTop: 2 }}>
-                          {globalSyncStatus === 'syncing' ? 'Syncing...' : globalLastSyncTime ? `Last synced ${new Date(globalLastSyncTime).toLocaleTimeString()}` : 'Trigger a full sync now'}
-                        </div>
-                      </div>
-                      <button
-                        onClick={triggerSync}
-                        disabled={globalSyncStatus === 'syncing' || !syncStatus?.hostAvailable}
-                        style={{
-                          fontSize: 12, padding: '6px 12px', borderRadius: 8,
-                          background: 'rgba(59,130,246,0.15)', color: '#60a5fa',
-                          border: '1px solid rgba(59,130,246,0.3)', cursor: 'pointer',
-                          opacity: (globalSyncStatus === 'syncing' || !syncStatus?.hostAvailable) ? 0.4 : 1
-                        }}
-                      >
-                        <FontAwesomeIcon icon={faDatabase} spin={globalSyncStatus === 'syncing'} style={{ marginRight: 6 }} />
-                        {globalSyncStatus === 'syncing' ? 'Syncing...' : 'Sync Now'}
-                      </button>
-                    </Row>
-                  </div>
-                </section>
-
-                <Divider />
-
-                <section>
-                  <SectionHeader title="Auto-Backup" description="Automatically download a backup file on a schedule." />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {lastBackupTime && (
-                      <Row>
-                        <div>
-                          <div style={{ fontWeight: 500, fontSize: 14 }}>Last Backup</div>
-                          <div style={{ fontSize: 12, opacity: 0.5, marginTop: 2 }}>{new Date(lastBackupTime).toLocaleString()}</div>
-                        </div>
-                      </Row>
-                    )}
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 14, background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer' }}>
-                      <Toggle checked={autoBackupEnabled} onChange={handleToggleAutoBackup} />
-                      <div>
-                        <div style={{ fontWeight: 500, fontSize: 14 }}>Auto-Backup</div>
-                        <div style={{ fontSize: 12, opacity: 0.5, marginTop: 2 }}>Automatically backup on a schedule</div>
-                      </div>
-                    </label>
-                    {autoBackupEnabled && (
-                      <div style={{ padding: 14, background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.04)' }}>
-                        <div style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.5)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Frequency</div>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          {['daily', 'weekly', 'monthly'].map(freq => (
-                            <button key={freq} onClick={() => handleBackupFrequencyChange(freq)} style={{
-                              flex: 1, padding: '7px', borderRadius: 8, fontSize: 12, fontWeight: 500,
-                              border: backupFrequency === freq ? '1px solid #3b82f6' : '1px solid rgba(255,255,255,0.1)',
-                              background: backupFrequency === freq ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.04)',
-                              color: backupFrequency === freq ? '#60a5fa' : '#fff',
-                              cursor: 'pointer', textTransform: 'capitalize'
-                            }}>{freq}</button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    <button
-                      onClick={performManualBackup} disabled={backupInProgress}
-                      style={{
-                        padding: '10px 16px', borderRadius: 10,
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        background: backupInProgress ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.04)',
-                        color: backupInProgress ? '#9ca3af' : '#fff',
-                        fontSize: 13, fontWeight: 500, cursor: backupInProgress ? 'not-allowed' : 'pointer', transition: 'all 0.15s'
-                      }}
-                      onMouseEnter={e => { if (!backupInProgress) e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
-                      onMouseLeave={e => { if (!backupInProgress) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
-                    >
-                      {backupInProgress ? 'Backing up...' : 'Backup Now'}
-                    </button>
-                  </div>
-                </section>
-
-                <Divider />
-
-                <section>
-                  <SectionHeader title="Workspace Cleanup" />
-                  <WorkspaceCleanupSettings />
-                </section>
-
-                <Divider />
-
-                <section>
-                  <SectionHeader title="Export Data" description="Export your notes, history, and settings." />
-                  <ExportData />
-                </section>
-
-              </div>
-            )}
 
             {/* ── LOCAL AI ────────────────────────────────────────────────────── */}
             {activeTabId === 'local-ai' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
-
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                 <section>
-                  <SectionHeader title="AI Models" description="Configure on-device AI for categorization, summarization, and smart features." />
+                  <SectionHeader title="AI Models" description="On-device AI for categorization, summarization, and smart features." />
                   <AIModelsTab />
                 </section>
+              </div>
+            )}
 
-                {isDesktopApp && (
-                  <>
-                    <Divider />
-                    <section>
-                      <SectionHeader title="Teams (P2P)" description="Peer-to-peer collaboration features." />
-                      <TeamsTab />
-                    </section>
-                  </>
-                )}
-
+            {/* ── TEAM ─────────────────────────────────────────────────────────── */}
+            {activeTabId === 'team' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <section>
+                  <SectionHeader title="Team (P2P)" description="Share workspaces and resources directly with teammates over encrypted peer-to-peer." />
+                  <TeamsTab />
+                </section>
               </div>
             )}
 

@@ -41,7 +41,9 @@
       "PowerShell(cargo check *)",
       "WebSearch",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\raghu\\\\projects\\\\extension\" -Recurse -Directory)",
-      "Bash(Select-Object -ExpandProperty FullName)"
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(dir C:Usersraghuprojectsextension *)",
+      "Bash(npx tsc *)"
     ],
     "deny": [],
     "ask": [],
