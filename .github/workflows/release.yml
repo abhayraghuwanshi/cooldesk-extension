@@ -338,3 +338,38 @@ jobs:
 
           echo "Uploaded to R2 — available at:"
           echo "https://pub-c48321b20c8942d1ad52781d27b6b607.r2.dev/CoolDesk-setup.msi"
+
+  winget:
+    needs: [publish]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify final installer hashes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_CD }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          ASSETS=$(gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets')
+
+          NSIS_URL=$(echo "$ASSETS" | jq -r '.[] | select(.name | endswith("-setup.exe")) | .browserDownloadUrl' | head -1)
+          MSI_URL=$(echo "$ASSETS" | jq -r '.[] | select(.name | endswith("_en-US.msi")) | .browserDownloadUrl' | head -1)
+
+          echo "==> Hashing final signed artifacts from release URLs"
+          if [ -n "$NSIS_URL" ]; then
+            curl -sL "$NSIS_URL" -o installer.exe
+            echo "NSIS SHA256: $(sha256sum installer.exe | cut -d' ' -f1 | tr '[:lower:]' '[:upper:]')"
+            echo "NSIS URL:    $NSIS_URL"
+          fi
+          if [ -n "$MSI_URL" ]; then
+            curl -sL "$MSI_URL" -o installer.msi
+            echo "MSI  SHA256: $(sha256sum installer.msi | cut -d' ' -f1 | tr '[:lower:]' '[:upper:]')"
+            echo "MSI  URL:    $MSI_URL"
+          fi
+
+      - name: Submit to winget-pkgs
+        uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: CoolDesk.CoolDesk
+          installers-regex: '(setup\.exe|en-US\.msi)$'
+          token: ${{ secrets.WINGET_TOKEN }}
