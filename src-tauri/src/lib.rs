@@ -37,6 +37,11 @@ async fn get_focused_app() -> Option<RunningApp> {
 }
 
 #[tauri::command]
+fn get_app_version(app: tauri::AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
+#[tauri::command]
 async fn get_running_apps(_app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     #[cfg(not(target_os = "windows"))]
     return Ok(serde_json::json!([]));
@@ -504,7 +509,8 @@ pub fn run() {
         open_url,
         open_folder,
         search_files,
-        get_focused_app
+        get_focused_app,
+        get_app_version
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

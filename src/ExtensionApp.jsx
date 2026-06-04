@@ -21,11 +21,9 @@ config.autoAddCss = false;
 import { faGear, faGlobe, faPlus } from '@fortawesome/free-solid-svg-icons';
 
 // Core services (lightweight)
-import { addUrlToWorkspace, getSettings as getSettingsDB, listWorkspaces, saveSettings as saveSettingsDB, saveWorkspace, subscribeWorkspaceChanges } from './db/index.js';
-import { sendMessage, storageGet } from './services/extensionApi';
+import { getSettings as getSettingsDB, saveSettings as saveSettingsDB } from './db/index.js';
+import { sendMessage } from './services/extensionApi';
 import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
-import { seedDefaultWorkspaces } from './utils/defaultWorkspaces.js';
-import { getFaviconUrl } from './utils/helpers';
 import { useOnboarding } from './hooks/useOnboarding';
 
 // Extension-only components
@@ -70,7 +68,6 @@ class ErrorBoundary extends React.Component {
 
 export default function ExtensionApp() {
   const { shouldShowOnboarding, isManualStart, completeOnboarding, skipOnboarding, startOnboarding } = useOnboarding();
-  const [savedWorkspaces, setSavedWorkspaces] = useState([]);
   const [settings, setSettings] = useState({ geminiApiKey: '', modelName: '', visitCountThreshold: '', historyDays: '' });
   const [showSettings, setShowSettings] = useState(false);
   const [themeClass, setThemeClass] = useState(() => {
@@ -170,9 +167,8 @@ export default function ExtensionApp() {
     try { localStorage.setItem('wallpaperUrl', nextWallpaper); } catch { }
   }, []);
 
-  // Initialize theme and load workspaces
+  // Load settings
   useEffect(() => {
-    // Load settings
     (async () => {
       const s = await getSettingsDB();
       const { geminiApiKey, modelName, visitCountThreshold, historyDays } = s || {};
@@ -183,116 +179,11 @@ export default function ExtensionApp() {
         historyDays: Number.isFinite(historyDays) ? String(historyDays) : ''
       });
     })();
-
-    // Load workspaces
-    (async () => {
-      try {
-        const result = await listWorkspaces();
-        let workspaces = result?.success ? result.data : [];
-
-        // Migration from chrome.storage if needed
-        if (!Array.isArray(workspaces) || workspaces.length === 0) {
-          try {
-            const legacy = await storageGet(['workspaces']);
-            const legacyList = Array.isArray(legacy?.workspaces) ? legacy.workspaces : [];
-            if (legacyList.length) {
-              for (const w of legacyList) {
-                try { await saveWorkspace(w); } catch { }
-              }
-              const refreshed = await listWorkspaces();
-              workspaces = refreshed?.success ? refreshed.data : [];
-            }
-          } catch { }
-        }
-        if (!Array.isArray(workspaces) || workspaces.length === 0) {
-          const seeded = await seedDefaultWorkspaces();
-          if (seeded) {
-            const seededResult = await listWorkspaces();
-            workspaces = seededResult?.success ? seededResult.data : [];
-          }
-        }
-        setSavedWorkspaces(Array.isArray(workspaces) ? workspaces : []);
-      } catch (e) {
-        console.error('Failed to load workspaces:', e);
-      }
-    })();
-
-    // Subscribe to workspace changes
-    const unsubscribe = subscribeWorkspaceChanges(async () => {
-      try {
-        const result = await listWorkspaces();
-        const workspaces = result?.success ? result.data : [];
-        setSavedWorkspaces(Array.isArray(workspaces) ? workspaces : []);
-      } catch (e) {
-        console.error('Failed to refresh workspaces:', e);
-      }
-    });
-
-    return () => unsubscribe && unsubscribe();
   }, []);
 
-  // Handle font size change
   const handleFontSizeChange = (size) => {
     setAndSaveFontSize(size);
     setFontSize(size);
-  };
-
-  // Handle workspace click - open all URLs
-  const handleWorkspaceClick = (workspace) => {
-    if (workspace.urls && Array.isArray(workspace.urls)) {
-      workspace.urls.forEach((urlObj) => {
-        if (urlObj.url) {
-          window.open(urlObj.url, '_blank');
-        }
-      });
-    }
-  };
-
-  // Handle creating a new workspace
-  const handleCreateWorkspace = async (workspaceData) => {
-    if (!workspaceData?.name) return null;
-
-    const newId = `ws_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const newWorkspace = {
-      id: newId,
-      name: workspaceData.name,
-      icon: workspaceData.icon || 'folder',
-      description: '',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      urls: workspaceData.urls || [],
-      gridType: 'ItemGrid'
-    };
-
-    try {
-      await saveWorkspace(newWorkspace);
-      const refreshed = await listWorkspaces();
-      if (refreshed?.success) {
-        setSavedWorkspaces(refreshed.data);
-      }
-      return newWorkspace;
-    } catch (err) {
-      console.error('Failed to create workspace:', err);
-      return null;
-    }
-  };
-
-  // Handle adding URL to workspace
-  const handleAddUrlToWorkspace = async (workspaceId, urlData) => {
-    try {
-      await addUrlToWorkspace(urlData.url, workspaceId, {
-        title: urlData.title || urlData.url,
-        favicon: urlData.favicon || getFaviconUrl(urlData.url),
-        addedAt: Date.now()
-      });
-      // Refresh workspaces
-      const refreshed = await listWorkspaces();
-      if (refreshed?.success) {
-        setSavedWorkspaces(refreshed.data);
-      }
-    } catch (err) {
-      console.error('Failed to add URL to workspace:', err);
-    }
   };
 
   return (
@@ -305,13 +196,7 @@ export default function ExtensionApp() {
       }}>
         <div className="cooldesk-container">
           {/* Main Content - Overview Only */}
-          <OverviewDashboard
-            savedWorkspaces={savedWorkspaces}
-            onWorkspaceClick={handleWorkspaceClick}
-            activeWorkspaceId={null}
-            expandedWorkspaceId={null}
-            pinnedWorkspaces={[]}
-          />
+          <OverviewDashboard />
         </div>
 
         {/* Global Add Button */}

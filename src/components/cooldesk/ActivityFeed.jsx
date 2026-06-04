@@ -244,6 +244,7 @@ export function ActivityFeed() {
         }
 
         // 2. Fetch Active Tabs
+        const openTabUrls = new Set();
         try {
             if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) {
                 const tabs = await chrome.tabs.query({ currentWindow: true });
@@ -253,10 +254,8 @@ export function ActivityFeed() {
                         let hostname = 'Browser Tab';
                         try {
                             if (tab.url) hostname = new URL(tab.url).hostname;
-                        } catch (e) {
-                            // Invalid URL, keep default
-                        }
-
+                        } catch (e) { }
+                        openTabUrls.add(tab.url);
                         return {
                             id: `tab_${tab.id}`,
                             title: tab.title || 'Untitled Tab',
@@ -271,6 +270,32 @@ export function ActivityFeed() {
             }
         } catch (e) {
             console.error('Failed to load tabs', e);
+        }
+
+        // 3. Fetch Recent Browsing History (last 4 hours, skip already-open tabs)
+        try {
+            if (typeof chrome !== 'undefined' && chrome.history?.search) {
+                const since = Date.now() - 4 * 60 * 60 * 1000;
+                const historyItems = await chrome.history.search({ text: '', startTime: since, maxResults: 150 });
+                for (const item of historyItems) {
+                    if (!item.url || openTabUrls.has(item.url)) continue;
+                    if (item.url.startsWith('chrome://') || item.url.startsWith('chrome-extension://')) continue;
+                    try {
+                        const hostname = new URL(item.url).hostname.replace('www.', '');
+                        items.push({
+                            id: `hist_${item.id || item.url}`,
+                            title: item.title || hostname,
+                            url: item.url,
+                            timestamp: item.lastVisitTime || Date.now(),
+                            type: 'recent',
+                            subtitle: hostname,
+                            visitCount: item.visitCount || 1,
+                        });
+                    } catch { /* ignore invalid URLs */ }
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load history', e);
         }
 
         // 3. Fetch Calendar Events
@@ -521,14 +546,14 @@ export function ActivityFeed() {
     const groupedFeedItems = useMemo(() => {
         const filtered = feedItems.filter(item => {
             if (activeTab === 'all') return true;
-            if (activeTab === 'tabs') return item.type === 'tab';
+            if (activeTab === 'tabs') return item.type === 'tab' || item.type === 'recent';
             if (activeTab === 'apps') return item.type === 'app';
             return false;
         });
 
         // Separate items by type
         const chats = filtered.filter(item => item.type === 'chat');
-        const tabs = filtered.filter(item => item.type === 'tab');
+        const tabs = filtered.filter(item => item.type === 'tab' || item.type === 'recent');
         // Apps only available in desktop mode
         const apps = isDesktopApp ? filtered.filter(item => item.type === 'app') : [];
 
@@ -918,7 +943,7 @@ export function ActivityFeed() {
                                     }
                                 }}
                             >
-                                {tab === 'all' ? 'All Activity' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                {tab === 'all' ? 'All Activity' : tab === 'tabs' ? 'Browsing' : tab.charAt(0).toUpperCase() + tab.slice(1)}
                             </button>
                         ))}
                     </div>
@@ -1827,10 +1852,11 @@ export function ActivityFeed() {
                                     );
                                 }
 
-                                // Handle single items (chats, single tabs, calendar, single apps)
+                                // Handle single items (chats, single tabs, recent history, calendar, single apps)
                                 const isChat = item.type === 'chat';
                                 const isCalendar = item.type === 'calendar';
                                 const isApp = item.type === 'app';
+                                const isRecent = item.type === 'recent';
                                 const icon = isChat
                                     ? '💬'
                                     : isCalendar ? '📅'
@@ -1948,6 +1974,19 @@ export function ActivityFeed() {
                                                     textTransform: 'uppercase'
                                                 }}>
                                                     App
+                                                </div>
+                                            ) : isRecent ? (
+                                                <div style={{
+                                                    fontSize: 'var(--font-xs)',
+                                                    fontWeight: 600,
+                                                    color: '#64748B',
+                                                    background: 'rgba(100, 116, 139, 0.1)',
+                                                    border: '1px solid rgba(100, 116, 139, 0.2)',
+                                                    padding: '2px 6px',
+                                                    borderRadius: '4px',
+                                                    textTransform: 'uppercase',
+                                                }}>
+                                                    Recent
                                                 </div>
                                             ) : (
                                                 <div style={{

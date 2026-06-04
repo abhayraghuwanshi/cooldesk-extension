@@ -444,32 +444,26 @@ export function ResumeWorkWidget() {
             className={`resume-widget ${expanded ? 'expanded' : ''}`}
             style={{ '--theme-color': themeColor }}
         >
-            {/* Compact Header Row */}
+            {/* Header */}
             <div className="rw-header">
                 <div className="rw-title-row">
                     <span className="rw-icon" style={{ background: primaryConfig?.gradient || 'linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%)' }}>
                         <FontAwesomeIcon icon={faBolt} />
                     </span>
-                    <span className="rw-title">Resume</span>
-                    <span className="rw-time">{lastSession.timeAgo}</span>
-                    {lastSession.formattedTotalDuration && (
-                        <span className="rw-duration">{lastSession.formattedTotalDuration}</span>
-                    )}
-                    {/* Inline category pills */}
-                    {lastSession.topCategories?.slice(0, 2).map(cat => {
-                        const config = CATEGORY_CONFIG[cat];
-                        if (!config) return null;
-                        return (
-                            <span key={cat} className="rw-cat" style={{ color: config.color }}>
-                                <FontAwesomeIcon icon={config.icon} />
-                            </span>
-                        );
-                    })}
+                    <div>
+                        <div className="rw-title">Continue where you left off</div>
+                        <div className="rw-meta">
+                            {lastSession.timeAgo}
+                            {lastSession.formattedTotalDuration && (
+                                <span> · {lastSession.formattedTotalDuration}</span>
+                            )}
+                        </div>
+                    </div>
                 </div>
                 <div className="rw-actions">
                     <button className="rw-btn-continue" onClick={handleContinue}>
-                        Continue
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        Open
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                             <polyline points="9 18 15 12 9 6" />
                         </svg>
                     </button>
@@ -477,21 +471,19 @@ export function ResumeWorkWidget() {
                 </div>
             </div>
 
-            {/* Compact URL Grid */}
+            {/* URL List */}
             <div className="rw-urls">
                 {visibleUrls.map((item, index) => {
                     let domain = '';
                     try { domain = new URL(item.url).hostname.replace(/^www\./, ''); } catch { }
-                    const catConfig = item.category ? CATEGORY_CONFIG[item.category] : null;
                     const context = item.aiDescription || item.context || null;
-                    const workspaces = workspaceMap.get(item.url) || [];
 
                     return (
                         <div
                             key={index}
                             className="rw-url"
                             onClick={() => chrome.tabs.create({ url: item.url, active: false })}
-                            title={`${domain}${context ? ` - ${context}` : ''}`}
+                            title={`${domain}${context ? ` — ${context}` : ''}`}
                         >
                             <img
                                 src={`https://www.google.com/s2/favicons?domain=${domain}&sz=32`}
@@ -503,15 +495,8 @@ export function ResumeWorkWidget() {
                                 <span className="rw-domain">{domain}</span>
                                 {context && <span className="rw-context">{context}</span>}
                             </div>
-                            <div className="rw-url-meta">
-                                {item.formattedDuration && (
-                                    <span className="rw-url-time">{item.formattedDuration}</span>
-                                )}
-                                {catConfig && <span className="rw-url-cat"><FontAwesomeIcon icon={catConfig.icon} /></span>}
-                                {item.isRecurring && <span className="rw-star"><FontAwesomeIcon icon={faStar} /></span>}
-                            </div>
-                            {workspaces.length > 0 && (
-                                <span className="rw-ws" title={workspaces[0].name}><FontAwesomeIcon icon={faFolder} /></span>
+                            {item.formattedDuration && (
+                                <span className="rw-url-time">{item.formattedDuration}</span>
                             )}
                         </div>
                     );
@@ -522,7 +507,6 @@ export function ResumeWorkWidget() {
                         +{remainingCount} more
                     </button>
                 )}
-
                 {expanded && lastSession.allUrls.length > 6 && (
                     <button className="rw-more" onClick={() => setExpanded(false)}>
                         Show less
@@ -530,7 +514,6 @@ export function ResumeWorkWidget() {
                 )}
             </div>
 
-            {/* AI Summary - after URLs so it never pushes the URL list down */}
             {aiSummary && (
                 <div className="rw-ai">
                     <span className="rw-ai-icon"><FontAwesomeIcon icon={faMagic} /></span>
@@ -541,66 +524,55 @@ export function ResumeWorkWidget() {
             <style jsx>{`
                 .resume-widget {
                     --theme-color: #8B5CF6;
-                    background: rgba(20, 20, 28, 0.6);
+                    background: rgba(15, 20, 30, 0.7);
                     backdrop-filter: blur(16px);
-                    border: 1px solid rgba(255, 255, 255, 0.05);
+                    border: 1px solid rgba(255, 255, 255, 0.08);
+                    border-top: 2px solid var(--theme-color);
                     border-radius: 14px;
-                    padding: 12px 14px;
+                    padding: 14px 16px;
                     color: #fff;
-                    margin-bottom: 20px;
                     display: flex;
                     flex-direction: column;
-                    gap: 12px;
-                    transition: all 0.2s ease;
+                    gap: 10px;
                 }
 
                 .rw-header {
                     display: flex;
                     justify-content: space-between;
                     align-items: center;
-                    gap: 8px;
+                    gap: 10px;
                 }
 
                 .rw-title-row {
                     display: flex;
                     align-items: center;
-                    gap: 6px;
-                    flex-wrap: wrap;
+                    gap: 10px;
+                    min-width: 0;
                 }
 
                 .rw-icon {
-                    width: 22px;
-                    height: 22px;
-                    border-radius: 6px;
+                    width: 28px;
+                    height: 28px;
+                    border-radius: 8px;
                     display: flex;
                     align-items: center;
                     justify-content: center;
                     font-size: 13px;
                     flex-shrink: 0;
-                    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
                 }
 
                 .rw-title {
-                    font-size: 14px;
+                    font-size: 13px;
                     font-weight: 600;
-                    color: #fff;
+                    color: #f1f5f9;
+                    white-space: nowrap;
                 }
 
-                .rw-time, .rw-duration {
-                    font-size: 12px;
-                    color: rgba(255, 255, 255, 0.5);
-                    font-weight: 500;
-                }
-
-                .rw-cat {
-                    font-size: 12px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    background: rgba(255, 255, 255, 0.05);
-                    padding: 2px 6px;
-                    border-radius: 4px;
-                    border: 1px solid rgba(255,255,255,0.05);
+                .rw-meta {
+                    font-size: 11px;
+                    color: rgba(148, 163, 184, 0.7);
+                    margin-top: 1px;
                 }
 
                 .rw-actions {
@@ -615,91 +587,82 @@ export function ResumeWorkWidget() {
                     align-items: center;
                     gap: 4px;
                     padding: 5px 12px;
-                    background: #fff;
-                    color: #000;
+                    background: var(--theme-color);
+                    color: #fff;
                     border: none;
-                    border-radius: 6px;
+                    border-radius: 8px;
                     font-size: 12px;
                     font-weight: 600;
                     cursor: pointer;
                     transition: all 0.2s ease;
+                    opacity: 0.9;
                 }
-                
+
                 .rw-btn-continue:hover {
-                    background: #f0f0f0;
+                    opacity: 1;
                     transform: translateY(-1px);
-                    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2);
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
                 }
-                
+
                 .rw-btn-close {
-                    width: 24px;
-                    height: 24px;
+                    width: 26px;
+                    height: 26px;
                     border-radius: 6px;
                     background: rgba(255,255,255,0.05);
-                    border: 1px solid rgba(255,255,255,0.05);
-                    color: rgba(255,255,255,0.6);
+                    border: 1px solid rgba(255,255,255,0.08);
+                    color: rgba(255,255,255,0.4);
                     display: flex;
                     align-items: center;
                     justify-content: center;
                     cursor: pointer;
                     font-size: 16px;
                     transition: all 0.2s;
+                    line-height: 1;
                 }
-                
+
                 .rw-btn-close:hover {
                     background: rgba(255,255,255,0.1);
                     color: #fff;
                 }
 
-                .rw-ai {
-                    font-size: 12px;
-                    color: rgba(255,255,255,0.7);
-                    background: rgba(139, 92, 246, 0.08);
-                    border: 1px dashed rgba(139, 92, 246, 0.2);
-                    padding: 8px 12px;
-                    border-radius: 8px;
-                    display: flex;
-                    align-items: flex-start;
-                    gap: 8px;
-                    line-height: 1.4;
-                }
-
                 .rw-urls {
                     display: flex;
                     flex-direction: column;
-                    gap: 4px;
+                    gap: 3px;
                 }
 
                 .rw-url {
                     display: flex;
                     align-items: center;
                     gap: 10px;
-                    padding: 6px 10px;
-                    background: rgba(255, 255, 255, 0.02);
-                    border: 1px solid rgba(255, 255, 255, 0.03);
+                    padding: 8px 10px;
+                    background: rgba(255, 255, 255, 0.04);
+                    border: 1px solid rgba(255, 255, 255, 0.07);
                     border-radius: 8px;
                     cursor: pointer;
-                    transition: all 0.2s ease;
+                    transition: all 0.15s ease;
                 }
-                
+
                 .rw-url:hover {
-                    background: rgba(255, 255, 255, 0.06);
-                    border-color: rgba(255, 255, 255, 0.08);
-                    transform: translateX(2px);
+                    background: rgba(255, 255, 255, 0.08);
+                    border-color: rgba(255, 255, 255, 0.12);
+                    border-left-color: var(--theme-color);
+                    border-left-width: 2px;
                 }
 
                 .rw-favicon {
-                    width: 16px;
-                    height: 16px;
+                    width: 18px;
+                    height: 18px;
                     border-radius: 4px;
+                    flex-shrink: 0;
                 }
 
                 .rw-url-info {
                     flex: 1;
                     min-width: 0;
                     display: flex;
-                    align-items: center;
-                    gap: 8px;
+                    flex-direction: column;
+                    gap: 1px;
                 }
 
                 .rw-domain {
@@ -712,77 +675,49 @@ export function ResumeWorkWidget() {
                 }
 
                 .rw-context {
-                    font-size: 12px;
-                    color: rgba(255, 255, 255, 0.4);
+                    font-size: 11px;
+                    color: rgba(148, 163, 184, 0.6);
                     white-space: nowrap;
                     overflow: hidden;
                     text-overflow: ellipsis;
                 }
 
-                .rw-url-meta {
-                    display: flex;
-                    align-items: center;
-                    gap: 6px;
-                    flex-shrink: 0;
-                    font-size: 12px;
-                }
-
                 .rw-url-time {
-                    color: rgba(255,255,255,0.4);
+                    color: rgba(148, 163, 184, 0.5);
                     font-size: 11px;
-                    background: rgba(255,255,255,0.05);
-                    padding: 2px 6px;
-                    border-radius: 4px;
-                }
-
-                .rw-url-cat {
-                    font-size: 12px;
-                }
-
-                .rw-ws {
-                    font-size: 12px;
-                    opacity: 0.8;
-                }
-
-                .rw-star {
-                    color: #FBBF24;
-                    font-size: 12px;
+                    flex-shrink: 0;
                 }
 
                 .rw-more {
                     background: transparent;
                     border: 1px dashed rgba(255, 255, 255, 0.1);
-                    color: rgba(255, 255, 255, 0.5);
+                    color: rgba(255, 255, 255, 0.4);
                     padding: 6px;
                     border-radius: 8px;
                     font-size: 11px;
                     cursor: pointer;
                     margin-top: 2px;
                     transition: all 0.2s;
-                }
-                
-                .rw-more:hover {
-                    background: rgba(255, 255, 255, 0.05);
-                    color: #fff;
-                }
-                
-                .resume-work-widget.loading {
-                    min-height: 80px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
+                    width: 100%;
                 }
 
-                .spinner {
-                    width: 20px;
-                    height: 20px;
-                    border: 2px solid rgba(255, 255, 255, 0.1);
-                    border-top-color: var(--theme-color);
-                    border-radius: 50%;
-                    animation: spin 0.8s linear infinite;
+                .rw-more:hover {
+                    background: rgba(255, 255, 255, 0.05);
+                    color: rgba(255,255,255,0.8);
+                    border-color: rgba(255,255,255,0.2);
                 }
-                @keyframes spin {
-                    to { transform: rotate(360deg); }
+
+                .rw-ai {
+                    font-size: 12px;
+                    color: rgba(255,255,255,0.65);
+                    background: rgba(139, 92, 246, 0.08);
+                    border: 1px solid rgba(139, 92, 246, 0.2);
+                    padding: 8px 12px;
+                    border-radius: 8px;
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 8px;
+                    line-height: 1.5;
                 }
             `}</style>
         </div>

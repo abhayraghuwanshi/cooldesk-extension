@@ -132,12 +132,12 @@ export function SettingsModal({
       (async () => {
         try {
           if (isTauri) {
-            const { getVersion } = await import('@tauri-apps/api/app');
-            setExtensionVersion(await getVersion());
+            const v = await tauriInvoke('get_app_version');
+            if (v) setExtensionVersion(v);
           } else if (window.electronAPI?.getVersion) {
             const v = await window.electronAPI.getVersion();
             if (v) setExtensionVersion(v);
-          } else if (chrome.runtime?.getManifest) {
+          } else if (typeof chrome !== 'undefined' && chrome.runtime?.getManifest) {
             setExtensionVersion(chrome.runtime.getManifest().version);
           }
         } catch { }
