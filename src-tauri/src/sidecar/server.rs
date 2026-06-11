@@ -19,7 +19,42 @@ use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 
 const PORT: u16 = 4545;
-const WS_MAX_PAYLOAD: usize = 100 * 1024 * 1024; // 100MB
+// Max size of a single inbound WebSocket message. Real sync payloads are batched
+// JSON (notes/urls/tabs as arrays) and stay well under this; the cap bounds the
+// memory a single frame can force the server to allocate.
+const WS_MAX_PAYLOAD: usize = 32 * 1024 * 1024; // 32MB
+
+// Concurrency + rate limits to bound local DoS. Legitimate clients are a handful
+// (the extension service worker + the Tauri webview), so these ceilings are far
+// above normal use and only trip on an abusive flood.
+const WS_MAX_CONNS: usize = 64;
+const WS_MAX_MSGS_PER_SEC: u32 = 100;
+
+static WS_CONN_COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// RAII guard for the active-connection count. Acquiring fails when the ceiling
+/// is reached; the count is always released on drop, so a failed/closed upgrade
+/// can never leak a slot.
+struct WsConnGuard;
+
+impl WsConnGuard {
+    fn try_acquire() -> Option<Self> {
+        use std::sync::atomic::Ordering;
+        let prev = WS_CONN_COUNT.fetch_add(1, Ordering::SeqCst);
+        if prev >= WS_MAX_CONNS {
+            WS_CONN_COUNT.fetch_sub(1, Ordering::SeqCst);
+            None
+        } else {
+            Some(WsConnGuard)
+        }
+    }
+}
+
+impl Drop for WsConnGuard {
+    fn drop(&mut self) {
+        WS_CONN_COUNT.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
 
 /// Start the sidecar server
 pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -335,6 +370,19 @@ async fn ws_handler(
 
 /// Handle individual WebSocket connection
 async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
+    // Bound concurrent connections. The guard lives for the whole handler (held
+    // across the select! below) and releases the slot on drop.
+    let _conn_guard = match WsConnGuard::try_acquire() {
+        Some(g) => g,
+        None => {
+            log::warn!(
+                "[Sidecar] WebSocket connection limit ({}) reached — rejecting new client",
+                WS_MAX_CONNS
+            );
+            return;
+        }
+    };
+
     let client_id = format!(
         "client-{}-{}",
         chrono::Utc::now().timestamp_millis(),
@@ -384,8 +432,27 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
     let state_clone = state.clone();
     let client_id_for_recv = client_id.clone();
     let mut recv_task = tokio::spawn(async move {
+        // Simple per-connection inbound rate limit: a fixed-window counter that
+        // resets every second. Legit clients batch their pushes and stay far
+        // below the ceiling; only a flood is throttled, and excess is dropped
+        // rather than closing the socket so a normal client is never disconnected.
+        let mut window_start = std::time::Instant::now();
+        let mut msgs_this_window: u32 = 0;
+
         while let Some(Ok(msg)) = receiver.next().await {
             if let Message::Text(text) = msg {
+                if window_start.elapsed() >= std::time::Duration::from_secs(1) {
+                    window_start = std::time::Instant::now();
+                    msgs_this_window = 0;
+                }
+                msgs_this_window += 1;
+                if msgs_this_window > WS_MAX_MSGS_PER_SEC {
+                    log::warn!(
+                        "[Sidecar] Inbound rate limit ({}/s) exceeded for {} — dropping message",
+                        WS_MAX_MSGS_PER_SEC, client_id_for_recv
+                    );
+                    continue;
+                }
                 handle_ws_message(&state_clone, &client_id_for_recv, &text).await;
             }
         }
