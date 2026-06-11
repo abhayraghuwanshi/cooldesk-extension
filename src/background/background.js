@@ -769,6 +769,23 @@ async function main() {
       return true; // Keep channel open for async response
     }
 
+    // Handle merge duplicate groups command
+    if (msg?.type === 'MERGE_DUPLICATE_GROUPS') {
+      console.log('[Background] Merge duplicate groups command received');
+
+      (async () => {
+        try {
+          const result = await mergeDuplicateGroups();
+          sendResponse(result);
+        } catch (error) {
+          console.error('[Background] Merge duplicates error:', error);
+          sendResponse({ success: false, error: error.message });
+        }
+      })();
+
+      return true; // Keep channel open for async response
+    }
+
     // Handle toggle auto-group
     if (msg?.type === 'TOGGLE_AUTO_GROUP') {
       console.log('[Background] Toggle auto-group command received:', msg.enabled);
@@ -779,7 +796,8 @@ async function main() {
           await chrome.storage.local.set({ autoGroupEnabled: msg.enabled });
 
           if (msg.enabled) {
-            // Group all existing tabs
+            // Group all existing tabs, consolidating any duplicates first
+            await mergeDuplicateGroups();
             const result = await autoGroupTabsByDomain();
             sendResponse({ success: true, enabled: true, ...result });
           } else {
@@ -2859,6 +2877,72 @@ function getGroupColorForDomain(domain) {
   return GROUP_COLORS[hash % GROUP_COLORS.length];
 }
 
+// Determine the canonical (most common) domain of a group's current tabs
+async function getGroupDomain(groupId) {
+  try {
+    const tabsInGroup = await chrome.tabs.query({ groupId });
+    const counts = {};
+    for (const tab of tabsInGroup) {
+      const d = getDomainFromUrl(tab.url);
+      if (d) counts[d] = (counts[d] || 0) + 1;
+    }
+    let best = null, max = 0;
+    for (const [d, c] of Object.entries(counts)) {
+      if (c > max) { max = c; best = d; }
+    }
+    return best;
+  } catch {
+    return null;
+  }
+}
+
+// Find an existing group in a window that represents this domain.
+// Matches a group whose title equals the domain, OR an untitled group
+// whose tabs resolve to the domain (handles titles Chrome hasn't persisted).
+// Deliberately does NOT match custom-titled groups (e.g. "Claude (MCP)").
+async function findGroupForDomain(windowId, domain) {
+  const groups = await chrome.tabGroups.query({ windowId });
+  for (const g of groups) {
+    const title = (g.title || '').trim();
+    if (title === domain) return g.id;
+    if (!title) {
+      const d = await getGroupDomain(g.id);
+      if (d === domain) return g.id;
+    }
+  }
+  return null;
+}
+
+// A group is "auto-managed" if it's untitled or its title matches the canonical
+// domain of its tabs (i.e. we created it). Custom-titled groups (e.g. "Claude (MCP)")
+// belong to the user or another extension — never pull tabs out of those.
+async function isAutoManagedGroup(groupId) {
+  try {
+    const g = await chrome.tabGroups.get(groupId);
+    const title = (g.title || '').trim();
+    if (!title) return true;
+    const domain = await getGroupDomain(groupId);
+    return title === domain;
+  } catch {
+    return false;
+  }
+}
+
+// Serialize group operations per (windowId, domain) so concurrent tab events
+// can't each create a duplicate group for the same domain (race condition fix).
+const groupLocks = new Map();
+function withDomainLock(windowId, domain, fn) {
+  const key = `${windowId}_${domain}`;
+  const prev = groupLocks.get(key) || Promise.resolve();
+  const run = prev.then(fn, fn); // run regardless of prior success/failure
+  groupLocks.set(key, run);
+  // Clean up once this is the tail of the chain to avoid unbounded growth
+  run.finally(() => {
+    if (groupLocks.get(key) === run) groupLocks.delete(key);
+  });
+  return run;
+}
+
 // Store group titles ourselves since Chrome API doesn't persist them reliably
 // Maps: domain -> { title, color, tabUrls[] } for re-applying after restart
 async function saveGroupTitleMapping(domain, title, color, tabUrls) {
@@ -2998,39 +3082,30 @@ async function autoGroupTabsByDomain() {
     for (const group of Object.values(domainGroups)) {
       if (group.tabIds.length < 2) continue; // Only group if 2+ tabs
 
-      try {
-        // Check if a group already exists for this domain
-        const existingGroups = await chrome.tabGroups.query({
-          windowId: group.windowId
-        });
+      await withDomainLock(group.windowId, group.domain, async () => {
+        try {
+          // Reuse an existing group for this domain if one exists
+          const targetGroupId = await findGroupForDomain(group.windowId, group.domain);
 
-        let targetGroupId = null;
-        for (const existingGroup of existingGroups) {
-          if (existingGroup.title === group.domain) {
-            targetGroupId = existingGroup.id;
-            break;
+          if (targetGroupId) {
+            await chrome.tabs.group({
+              tabIds: group.tabIds,
+              groupId: targetGroupId
+            });
+          } else {
+            // Create new group with title (uses delay to ensure Chrome persists)
+            await createTabGroupWithTitle(
+              group.tabIds,
+              group.domain || 'Tabs',
+              getGroupColorForDomain(group.domain)
+            );
           }
-        }
 
-        if (targetGroupId) {
-          // Add tabs to existing group
-          await chrome.tabs.group({
-            tabIds: group.tabIds,
-            groupId: targetGroupId
-          });
-        } else {
-          // Create new group with title (uses delay to ensure Chrome persists)
-          await createTabGroupWithTitle(
-            group.tabIds,
-            group.domain || 'Tabs',
-            getGroupColorForDomain(group.domain)
-          );
+          console.log(`[TabGroups] Grouped ${group.tabIds.length} tabs for ${group.domain}`);
+        } catch (error) {
+          console.error(`[TabGroups] Failed to group ${group.domain}:`, error);
         }
-
-        console.log(`[TabGroups] Grouped ${group.tabIds.length} tabs for ${group.domain}`);
-      } catch (error) {
-        console.error(`[TabGroups] Failed to group ${group.domain}:`, error);
-      }
+      });
     }
 
     return { success: true, grouped: Object.keys(domainGroups).length };
@@ -3055,6 +3130,71 @@ async function ungroupAllTabs() {
     return { success: true, ungrouped: groupedTabs.length };
   } catch (error) {
     console.error('[TabGroups] Ungroup failed:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Merge duplicate groups: consolidate groups that represent the same domain
+// (or share an identical custom title) into the oldest group in each window.
+// Cleans up duplicates that have already accumulated.
+async function mergeDuplicateGroups() {
+  try {
+    const windows = await chrome.windows.getAll();
+    let merged = 0;
+    console.log(`[TabGroups][merge] Starting merge scan across ${windows.length} window(s)`);
+
+    for (const win of windows) {
+      const groups = await chrome.tabGroups.query({ windowId: win.id });
+      console.log(`[TabGroups][merge] Window ${win.id}: ${groups.length} group(s):`,
+        groups.map(g => `#${g.id} "${g.title}"`).join(', ') || '(none)');
+
+      // Bucket groups by an effective key: custom title if present, else domain
+      const buckets = {};
+      for (const g of groups) {
+        const title = (g.title || '').trim();
+        const domain = await getGroupDomain(g.id);
+        const key = title || domain;
+        console.log(`[TabGroups][merge] Group #${g.id} title="${title}" domain="${domain}" → key="${key}"`);
+        if (!key) continue; // untitled + undeterminable domain → leave alone
+        (buckets[key] ||= []).push({ group: g, domain });
+      }
+
+      for (const [key, entries] of Object.entries(buckets)) {
+        if (entries.length < 2) continue;
+        console.log(`[TabGroups][merge] Duplicate key "${key}": ${entries.length} groups → merging into oldest`);
+
+        // Keep the oldest group (smallest id); merge the rest into it
+        entries.sort((a, b) => a.group.id - b.group.id);
+        const keep = entries[0];
+
+        for (const { group: g } of entries.slice(1)) {
+          try {
+            const tabs = await chrome.tabs.query({ groupId: g.id });
+            const tabIds = tabs.map(t => t.id);
+            console.log(`[TabGroups][merge] Moving ${tabIds.length} tab(s) from group #${g.id} into #${keep.group.id}`);
+            if (tabIds.length > 0) {
+              await chrome.tabs.group({ tabIds, groupId: keep.group.id });
+            }
+            merged++;
+          } catch (e) {
+            console.error(`[TabGroups] Failed merging group ${g.id} into ${keep.group.id}:`, e.message);
+          }
+        }
+
+        // Make sure the surviving group has a clean title/color
+        try {
+          await chrome.tabGroups.update(keep.group.id, {
+            title: (keep.group.title || '').trim() || keep.domain || key,
+            color: keep.group.color || getGroupColorForDomain(keep.domain || key)
+          });
+        } catch { /* non-fatal */ }
+      }
+    }
+
+    console.log(`[TabGroups] Merged ${merged} duplicate group(s)`);
+    return { success: true, merged };
+  } catch (error) {
+    console.error('[TabGroups] Merge duplicates failed:', error);
     return { success: false, error: error.message };
   }
 }
@@ -3124,11 +3264,40 @@ chrome.storage.local.get(['autoGroupEnabled'], async (result) => {
   // Then fix any remaining unnamed groups
   await fixUnnamedGroups();
 
+  // Consolidate any duplicate groups that have accumulated across sessions
+  await mergeDuplicateGroups();
+
   // If enabled on startup, group existing ungrouped tabs
   if (autoGroupEnabled) {
     autoGroupTabsByDomain();
   }
 });
+
+// Debounced auto-merge: whenever groups change, consolidate duplicates after a
+// quiet period. Catches duplicates created mid-session by session restore,
+// window drags, or other extensions — sources the startup merge can't see.
+let mergeDebounceTimer = null;
+let mergeInProgress = false;
+function scheduleMergeDuplicates(group) {
+  if (!autoGroupEnabled || mergeInProgress) {
+    console.log(`[TabGroups][merge] Skipping scheduled merge (autoGroupEnabled=${autoGroupEnabled}, mergeInProgress=${mergeInProgress})`);
+    return;
+  }
+  console.log(`[TabGroups][merge] Group event (id=${group?.id}, title="${group?.title}") — merge scheduled in 2s`);
+  if (mergeDebounceTimer) clearTimeout(mergeDebounceTimer);
+  mergeDebounceTimer = setTimeout(async () => {
+    mergeDebounceTimer = null;
+    if (mergeInProgress) return;
+    mergeInProgress = true;
+    try {
+      await mergeDuplicateGroups();
+    } finally {
+      mergeInProgress = false;
+    }
+  }, 2000);
+}
+chrome.tabGroups.onCreated.addListener(scheduleMergeDuplicates);
+chrome.tabGroups.onUpdated.addListener(scheduleMergeDuplicates);
 
 // Listen for tab creation and updates to auto-group
 chrome.tabs.onCreated.addListener(async (tab) => {
@@ -3141,39 +3310,40 @@ chrome.tabs.onCreated.addListener(async (tab) => {
       const domain = getDomainFromUrl(updatedTab.url);
       if (!domain) return;
 
-      // Find existing group for this domain
-      const existingGroups = await chrome.tabGroups.query({
-        windowId: updatedTab.windowId
+      await withDomainLock(updatedTab.windowId, domain, async () => {
+        // Skip if Chrome already grouped it elsewhere in the meantime
+        const current = await chrome.tabs.get(updatedTab.id).catch(() => null);
+        if (!current) return;
+
+        const targetGroupId = await findGroupForDomain(current.windowId, domain);
+
+        // Leave tabs that live in a custom-titled group alone (e.g. a tab opened
+        // from inside "Claude (MCP)" inherits that group — don't steal it)
+        if (current.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE &&
+            current.groupId !== targetGroupId &&
+            !(await isAutoManagedGroup(current.groupId))) {
+          return;
+        }
+
+        if (targetGroupId) {
+          if (current.groupId !== targetGroupId) {
+            await chrome.tabs.group({ tabIds: [current.id], groupId: targetGroupId });
+          }
+        } else {
+          // Only create a group if there's another UNGROUPED same-domain tab to
+          // join it — never rip same-domain tabs out of existing groups
+          const allTabs = await chrome.tabs.query({ windowId: current.windowId });
+          const sameDomainTabs = allTabs.filter(t => {
+            return t.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE &&
+              getDomainFromUrl(t.url) === domain && t.id !== current.id;
+          });
+
+          if (sameDomainTabs.length > 0) {
+            const tabIds = [current.id, ...sameDomainTabs.map(t => t.id)];
+            await createTabGroupWithTitle(tabIds, domain || 'Tabs', getGroupColorForDomain(domain));
+          }
+        }
       });
-
-      let targetGroupId = null;
-      for (const group of existingGroups) {
-        if (group.title === domain) {
-          targetGroupId = group.id;
-          break;
-        }
-      }
-
-      if (targetGroupId) {
-        // Add to existing group
-        await chrome.tabs.group({
-          tabIds: [updatedTab.id],
-          groupId: targetGroupId
-        });
-      } else {
-        // Check if there are other tabs with same domain
-        const allTabs = await chrome.tabs.query({ windowId: updatedTab.windowId });
-        const sameDomainTabs = allTabs.filter(t => {
-          const tDomain = getDomainFromUrl(t.url);
-          return tDomain === domain && t.id !== updatedTab.id;
-        });
-
-        if (sameDomainTabs.length > 0) {
-          // Create new group with this tab and others (uses delay to ensure Chrome persists)
-          const tabIds = [updatedTab.id, ...sameDomainTabs.map(t => t.id)];
-          await createTabGroupWithTitle(tabIds, domain || 'Tabs', getGroupColorForDomain(domain));
-        }
-      }
     } catch (error) {
       console.error('[TabGroups] Auto-group on create failed:', error);
     }
@@ -3188,39 +3358,36 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     const domain = getDomainFromUrl(tab.url);
     if (!domain) return;
 
-    // Find existing group for this domain
-    const existingGroups = await chrome.tabGroups.query({
-      windowId: tab.windowId
+    await withDomainLock(tab.windowId, domain, async () => {
+      const current = await chrome.tabs.get(tabId).catch(() => null);
+      if (!current) return;
+
+      const targetGroupId = await findGroupForDomain(current.windowId, domain);
+
+      // Don't yank tabs out of custom-titled groups on navigation
+      if (current.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE &&
+          current.groupId !== targetGroupId &&
+          !(await isAutoManagedGroup(current.groupId))) {
+        return;
+      }
+
+      if (targetGroupId && current.groupId !== targetGroupId) {
+        // Move to correct group
+        await chrome.tabs.group({ tabIds: [tabId], groupId: targetGroupId });
+      } else if (!targetGroupId && current.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE) {
+        // Only create a group if there's another UNGROUPED same-domain tab to join it
+        const allTabs = await chrome.tabs.query({ windowId: current.windowId });
+        const sameDomainTabs = allTabs.filter(t => {
+          return t.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE &&
+            getDomainFromUrl(t.url) === domain && t.id !== tabId;
+        });
+
+        if (sameDomainTabs.length > 0) {
+          const tabIds = [tabId, ...sameDomainTabs.map(t => t.id)];
+          await createTabGroupWithTitle(tabIds, domain || 'Tabs', getGroupColorForDomain(domain));
+        }
+      }
     });
-
-    let targetGroupId = null;
-    for (const group of existingGroups) {
-      if (group.title === domain) {
-        targetGroupId = group.id;
-        break;
-      }
-    }
-
-    if (targetGroupId && tab.groupId !== targetGroupId) {
-      // Move to correct group
-      await chrome.tabs.group({
-        tabIds: [tabId],
-        groupId: targetGroupId
-      });
-    } else if (!targetGroupId && tab.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE) {
-      // Check if there are other tabs with same domain
-      const allTabs = await chrome.tabs.query({ windowId: tab.windowId });
-      const sameDomainTabs = allTabs.filter(t => {
-        const tDomain = getDomainFromUrl(t.url);
-        return tDomain === domain && t.id !== tabId;
-      });
-
-      if (sameDomainTabs.length > 0) {
-        // Create new group (uses delay to ensure Chrome persists)
-        const tabIds = [tabId, ...sameDomainTabs.map(t => t.id)];
-        await createTabGroupWithTitle(tabIds, domain || 'Tabs', getGroupColorForDomain(domain));
-      }
-    }
   } catch (error) {
     console.error('[TabGroups] Auto-group on update failed:', error);
   }

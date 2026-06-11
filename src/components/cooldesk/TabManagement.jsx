@@ -1,4 +1,4 @@
-import { faBrain, faClock, faDesktop, faSync, faTasks, faToggleOff, faToggleOn, faWifi } from '@fortawesome/free-solid-svg-icons';
+import { faBrain, faClock, faDesktop, faLayerGroup, faSync, faTasks, faToggleOff, faToggleOn, faWifi } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { recordFeedbackEvent } from '../../services/feedbackService.js';
@@ -876,6 +876,46 @@ export function TabManagement() {
               style={{ pointerEvents: 'none' }}
             />
             <span style={{ pointerEvents: 'none' }}>Auto Group</span>
+          </button>
+          <button
+            onClick={() => {
+              console.log('[TabManagement] Merge duplicate groups requested');
+              chrome.runtime.sendMessage({ type: 'MERGE_DUPLICATE_GROUPS' })
+                .then(res => console.log('[TabManagement] Merge result:', res))
+                .catch(() => {/* ignore errors */ });
+            }}
+            style={{
+              background: 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))',
+              border: '1px solid rgba(100, 116, 139, 0.3)',
+              borderRadius: '8px',
+              padding: '6px 12px',
+              color: '#94A3B8',
+              cursor: 'pointer',
+              fontSize: 'var(--font-sm, 12px)',
+              fontWeight: 600,
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(135deg, rgba(100, 116, 139, 0.3), rgba(71, 85, 105, 0.25))';
+              e.currentTarget.style.borderColor = 'rgba(100, 116, 139, 0.5)';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))';
+              e.currentTarget.style.borderColor = 'rgba(100, 116, 139, 0.3)';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+            title="Merge duplicate tab groups (consolidate groups with the same domain)"
+          >
+            <FontAwesomeIcon
+              icon={faLayerGroup}
+              size="lg"
+              style={{ pointerEvents: 'none' }}
+            />
+            <span style={{ pointerEvents: 'none' }}>Merge Dupes</span>
           </button>
           {/* <button
             onClick={() => {
