@@ -336,6 +336,7 @@ async function searchAppsFromBackend(query, maxResults = 20) {
         path: app.path,
         pid: app.pid || undefined,
         hwnd: app.hwnd || undefined,
+        tabIndex: app.tabIndex,
         description,
         type: 'app',
         isRunning: !!app.isRunning,

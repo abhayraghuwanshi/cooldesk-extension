@@ -19,6 +19,7 @@ import { config, library } from '@fortawesome/fontawesome-svg-core';
 config.autoAddCss = false; // Disable JS-based CSS injection — we import it above
 import { faBroom, faClone, faGear, faGlobe, faHistory, faPlus, faRotateRight, faThumbtack, faTrash, faTriangleExclamation, faUndo } from '@fortawesome/free-solid-svg-icons';
 import { CoolDeskContainer } from './components/cooldesk/CoolDeskContainer';
+import { UpdateBanner } from './components/UpdateBanner';
 import categoryManager from './data/categories';
 import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, getWorkspace, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges } from './db/index.js';
 import { useDashboardData } from './hooks/useDashboardData';
@@ -1351,6 +1352,7 @@ export default function App() {
       '--card-spacing': '16px',
       position: 'relative'
     }}>
+      <UpdateBanner />
       {/* Cooldesk UI */}
       <CoolDeskContainer
         savedWorkspaces={savedWorkspaces}

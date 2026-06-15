@@ -42,6 +42,79 @@ fn get_app_version(app: tauri::AppHandle) -> String {
     app.package_info().version.to_string()
 }
 
+#[derive(serde::Serialize)]
+struct UpdateInfo {
+    current: String,
+    latest: String,
+    has_update: bool,
+    notes_url: String,
+}
+
+/// Detection only: compares the running version against the latest GitHub
+/// release tag. The actual update is performed by `run_winget_upgrade` so we
+/// never silently overwrite a winget-managed install.
+#[tauri::command]
+async fn check_winget_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
+    let current = app.package_info().version.to_string();
+
+    let resp = reqwest::Client::new()
+        .get("https://api.github.com/repos/abhayraghuwanshi/cooldesk-extension/releases/latest")
+        .header("User-Agent", "CoolDesk")
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let latest = resp["tag_name"]
+        .as_str()
+        .unwrap_or("")
+        .trim_start_matches('v')
+        .to_string();
+
+    let has_update = match (
+        semver::Version::parse(&current),
+        semver::Version::parse(&latest),
+    ) {
+        (Ok(c), Ok(l)) => l > c,
+        _ => false,
+    };
+
+    Ok(UpdateInfo {
+        current,
+        latest,
+        has_update,
+        notes_url: resp["html_url"].as_str().unwrap_or("").to_string(),
+    })
+}
+
+/// Launches `winget upgrade` for this package in a new console window so the
+/// user can see progress. winget replaces the app and relaunches it.
+#[tauri::command]
+fn run_winget_upgrade() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        std::process::Command::new("winget")
+            .args([
+                "upgrade",
+                "--id",
+                "cool-products.CoolDesk",
+                "-e",
+                "--accept-package-agreements",
+                "--accept-source-agreements",
+            ])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        Err("winget is only available on Windows".to_string())
+    }
+}
+
 #[tauri::command]
 async fn get_running_apps(_app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     #[cfg(not(target_os = "windows"))]
@@ -572,7 +645,9 @@ pub fn run() {
         open_folder,
         search_files,
         get_focused_app,
-        get_app_version
+        get_app_version,
+        check_winget_update,
+        run_winget_upgrade
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

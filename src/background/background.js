@@ -303,6 +303,36 @@ import {
 // Initialize Search Indexer (Background Service)
 initializeSearchIndexer(); // Re-enabled for spotlight search
 
+// ── MV3-resilient tab sync heartbeat ──────────────────────────────────────
+// The periodic setInterval tab sync (in syncOrchestrator) dies when the MV3
+// service worker is suspended, so tabs only re-sync when a tab event happens to
+// wake the worker — the "only updates on change" symptom. chrome.alarms fire
+// even when the worker is asleep and wake it, guaranteeing the host gets a fresh
+// tab list. 30s is the MV3 minimum (periodInMinutes: 0.5) and matches the
+// sidecar's own request-tabs poll cadence.
+//
+// Registered synchronously at top level (before main()'s awaits) so the listener
+// is present when an alarm wakes a cold worker — otherwise that waking event is
+// dropped.
+const TAB_SYNC_ALARM = 'cooldesk-tab-sync';
+chrome.alarms.get(TAB_SYNC_ALARM, (existing) => {
+  // Only create if absent. Re-creating on every worker wake resets the countdown
+  // and could starve the alarm when other events wake us more often than 30s.
+  if (!existing) chrome.alarms.create(TAB_SYNC_ALARM, { periodInMinutes: 0.5 });
+});
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== TAB_SYNC_ALARM) return;
+  console.log('[Background] tab-sync alarm fired → forcing tab push');
+  // Force the push: this is a reliability heartbeat, so it should always refresh
+  // the host's copy even when the local diff is unchanged (the host may have lost
+  // state, or another device's push recomputed the aggregate). syncLocalTabs
+  // self-gates on host-sync + extension context and falls back to HTTP if the
+  // worker just woke and the WS isn't reconnected yet.
+  syncOrchestrator.syncLocalTabs(true).catch((e) =>
+    console.warn('[Background] tab-sync alarm push failed:', e)
+  );
+});
+
 // Initialize CommandExecutor for shared use
 // MOVED TO main() function to avoid top-level execution errors
 // const commandExecutor = new CommandExecutor((feedback) => {

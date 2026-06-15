@@ -530,6 +530,13 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
             state.broadcast("sync-state", serde_json::to_value(&sync_state).unwrap_or_default());
         }
 
+        "request-tabs" => {
+            // Client-initiated full refresh: ask every connected browser to
+            // re-report its current tabs (same message the 30s poll broadcasts).
+            // Each extension responds with "push-tabs", clearing stale entries.
+            state.broadcast("request-tabs", serde_json::json!({}));
+        }
+
         "push-workspaces" => {
             if let Some(payload) = msg.payload {
                 if let Ok(workspaces) = serde_json::from_value::<Vec<Workspace>>(payload) {

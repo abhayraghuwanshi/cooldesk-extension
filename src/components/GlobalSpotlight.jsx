@@ -1252,6 +1252,14 @@ export function GlobalSpotlight() {
                     return;
                 }
 
+                // Tab entry (Windows Terminal / File Explorer): focus the
+                // specific tab via UIA, not just the host window.
+                if (item.tabIndex != null && item.hwnd && window.electronAPI.focusAppTab) {
+                    console.log('[Spotlight] Focusing tab:', item.title, 'hwnd:', item.hwnd, 'index:', item.tabIndex);
+                    await window.electronAPI.focusAppTab(item.hwnd, item.tabIndex, item.title);
+                    return;
+                }
+
                 // Check if app is running (use PID from search result if available)
                 if (item.isRunning && item.pid) {
                     // App is running - focus specific window by HWND if available, else by PID

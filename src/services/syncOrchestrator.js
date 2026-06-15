@@ -677,7 +677,10 @@ class SyncOrchestrator {
 
             if (cleanTabs.length > 0) {
                 console.log(`[SyncOrchestrator] Pushing ${cleanTabs.length} tabs to server${force ? ' (forced)' : ''}`);
-                await this.pushChanges('tabs', cleanTabs);
+                // Forward `force` so a forced sync (initial load, alarm heartbeat)
+                // bypasses pushChanges' own hasDataChanged() skip, not just the
+                // count/url check above.
+                await this.pushChanges('tabs', cleanTabs, { force });
             } else {
                 console.log('[SyncOrchestrator] syncLocalTabs: no valid tabs to sync');
             }

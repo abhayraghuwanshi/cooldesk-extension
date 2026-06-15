@@ -1,6 +1,6 @@
 [package]
 name = "cooldesk"
-version = "1.2.7"
+version = "1.2.8"
 description = "AI-powered desktop workspace manager"
 authors = ["CoolDesk"]
 license = ""
@@ -53,6 +53,7 @@ encoding_rs = "0.8.35"
 async-trait = "0.1"
 urlencoding = "2.1"
 open = "5"
+semver = "1"
 
 # Feedback/RL dependencies
 uuid = { version = "1.0", features = ["v4"] }

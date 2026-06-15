@@ -58,6 +58,8 @@ export function SettingsModal({
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(true);
   const [extensionVersion, setExtensionVersion] = useState('');
+  const [latestVersion, setLatestVersion] = useState('');
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
 
   const [autoBackupEnabled, setAutoBackupEnabled] = useState(false);
   const [backupFrequency, setBackupFrequency] = useState('weekly');
@@ -321,6 +323,24 @@ export function SettingsModal({
   };
 
   const handleCheckForUpdates = async () => {
+    // Desktop (Tauri/winget): compare against the latest GitHub release.
+    if (isTauri) {
+      setCheckingUpdate(true);
+      try {
+        const info = await tauriInvoke('check_winget_update');
+        if (info?.has_update) {
+          setUpdateAvailable(true);
+          setLatestVersion(info.latest);
+          setError(`Update available: v${info.latest}`);
+        } else {
+          setUpdateAvailable(false);
+          setError('You are running the latest version');
+        }
+      } catch { setError('Update check failed'); }
+      finally { setCheckingUpdate(false); }
+      return;
+    }
+    // Chrome extension build.
     if (!chrome.runtime?.requestUpdateCheck) { setError('Update check not available in this environment'); return; }
     try {
       const { status, version } = await chrome.runtime.requestUpdateCheck();
@@ -330,7 +350,15 @@ export function SettingsModal({
     } catch { setError('Update check failed'); }
   };
 
-  const handleInstallUpdate = () => { if (chrome.runtime?.reload) chrome.runtime.reload(); };
+  const handleInstallUpdate = async () => {
+    // Desktop: hand off to winget; it replaces the app and relaunches.
+    if (isTauri) {
+      try { await tauriInvoke('run_winget_upgrade'); }
+      catch { setError('Could not launch winget upgrade'); }
+      return;
+    }
+    if (chrome.runtime?.reload) chrome.runtime.reload();
+  };
 
   const handleToggleAutoBackup = async (enabled) => {
     try {
@@ -803,12 +831,12 @@ export function SettingsModal({
                   <Card>
                     <SettingRow
                       label={<span>Version <span style={{ opacity: 0.45, fontWeight: 400 }}>v{extensionVersion}</span></span>}
-                      hint={updateAvailable ? 'A new version is ready' : 'You are up to date'}
+                      hint={updateAvailable ? (latestVersion ? `v${latestVersion} is available` : 'A new version is ready') : 'You are up to date'}
                       right={
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                           {updateAvailable && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid currentColor' }}>New</span>}
-                          <SmallBtn onClick={handleCheckForUpdates}>Check</SmallBtn>
-                          {updateAvailable && <SmallBtn accent onClick={handleInstallUpdate}>Install</SmallBtn>}
+                          <SmallBtn onClick={handleCheckForUpdates} disabled={checkingUpdate}>{checkingUpdate ? 'Checking…' : 'Check'}</SmallBtn>
+                          {updateAvailable && <SmallBtn accent onClick={handleInstallUpdate}>{isTauri ? 'Update' : 'Install'}</SmallBtn>}
                         </div>
                       }
                     />

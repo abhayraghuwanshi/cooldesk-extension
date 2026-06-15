@@ -445,6 +445,25 @@ const electronAPI = {
         }
     },
 
+    // Focus a specific tab within a window (Windows Terminal, File Explorer)
+    // via UI Automation, then bring the window forward. Prefers title (stable
+    // across tab reordering); index is a fallback.
+    focusAppTab: async (hwnd, index, title) => {
+        console.log('[TauriShim] focusAppTab called - hwnd:', hwnd, 'index:', index, 'title:', title);
+        try {
+            const result = await invoke('focus_window_tab', {
+                hwnd,
+                index: index ?? null,
+                title: title ?? null,
+            });
+            console.log('[TauriShim] focusAppTab result:', result);
+            return result;
+        } catch (e) {
+            console.error('[TauriShim] Failed to focus app tab:', e);
+            throw e;
+        }
+    },
+
     closeApp: async (pid, hwnd) => {
         console.log('[TauriShim] closeApp called - pid:', pid, 'hwnd:', hwnd);
         try {
