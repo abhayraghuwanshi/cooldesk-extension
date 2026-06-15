@@ -284,6 +284,33 @@ html, body {
   box-shadow: 0 0 4px #22c55e;
 }
 
+/* Close (×) button - revealed on hover so pills stay compact */
+.context-item .context-close {
+  margin-left: auto;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: all 0.1s ease;
+}
+
+.context-item:hover .context-close,
+.context-item.pin-selected .context-close {
+  opacity: 1;
+}
+
+.context-item .context-close:hover {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.18);
+}
+
 /* ============================================
    PINNED QUICK ACCESS
    ============================================ */

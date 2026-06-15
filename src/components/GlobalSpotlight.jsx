@@ -217,6 +217,11 @@ export function GlobalSpotlight() {
     // Track when results were displayed (for response time feedback)
     const resultsDisplayedAtRef = useRef(null);
 
+    // Tabs the user just closed. Filtered out of context reloads until the close
+    // propagates to the source tab list, so the optimistic removal doesn't flicker
+    // back when a reload (timer or tabs-synced event) fires before propagation.
+    const pendingClosedTabsRef = useRef(new Set());
+
     // Close workspace dropdown when clicking outside
     useEffect(() => {
         if (!wsDropdownOpen) return;
@@ -544,7 +549,18 @@ export function GlobalSpotlight() {
             console.log('[Spotlight] Processing tabs, raw count:', safeTabs.length);
             console.log('[Spotlight] Raw tabs data:', JSON.stringify(safeTabs.slice(0, 3), null, 2));
 
-            const afterUrlFilter = safeTabs.filter(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('edge://') && !t.url.startsWith('about:'));
+            // Drop tabs the user just closed (optimistic) until the close lands in
+            // the source list; prune tombstones once their tab is actually gone.
+            const tabKey = (t) => `${t._deviceId || ''}:${t.tabId || t.id}`;
+            const pendingClosed = pendingClosedTabsRef.current;
+            if (pendingClosed.size) {
+                const presentKeys = new Set(safeTabs.map(tabKey));
+                for (const k of [...pendingClosed]) if (!presentKeys.has(k)) pendingClosed.delete(k);
+            }
+
+            const afterUrlFilter = safeTabs
+                .filter(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('edge://') && !t.url.startsWith('about:'))
+                .filter(t => !pendingClosed.has(tabKey(t)));
             console.log('[Spotlight] After URL filter:', afterUrlFilter.length);
 
             const relevantTabs = afterUrlFilter
@@ -1332,6 +1348,50 @@ export function GlobalSpotlight() {
         }
     };
 
+    // Close a running app or browser tab directly from its context pill.
+    // Keeps the spotlight open (unlike handleSelect) so the user can close several.
+    const handleContextClose = useCallback(async (item, e) => {
+        if (e) e.stopPropagation();
+        if (!item) return;
+
+        // Optimistically drop the pill for instant feedback; re-sync shortly after
+        setContextItems(prev => prev.filter(it => it !== item));
+
+        try {
+            if (item.type === 'tab') {
+                const tabId = item.tabId || item.id;
+                // Tombstone so reloads don't flicker the pill back before the close lands
+                pendingClosedTabsRef.current.add(`${item._deviceId || ''}:${tabId}`);
+                const closeMsg = {
+                    type: 'CLOSE_TAB',
+                    tabId,
+                    url: item.url,
+                    _deviceId: item._deviceId,
+                    browser: item.browser,
+                };
+                // Mirror handleSelect/JUMP_TO_TAB: in the desktop window `chrome` is a
+                // polyfill that forwards to the Tauri shim; in the real extension it
+                // reaches background.js. Both handle CLOSE_TAB.
+                if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+                    chrome.runtime.sendMessage(closeMsg);
+                } else if (window.electronAPI?.sendMessage) {
+                    window.electronAPI.sendMessage(closeMsg);
+                }
+            } else if (item.type === 'app') {
+                // Only running apps can be closed; need a pid (or hwnd) to target them
+                if (item.isRunning && (item.pid || item.hwnd) && window.electronAPI?.closeApp) {
+                    await window.electronAPI.closeApp(item.pid || 0, item.hwnd);
+                    trackAppUsage(item.name);
+                }
+            }
+        } catch (err) {
+            console.warn('[Spotlight] Failed to close item:', err);
+        }
+
+        // Reconcile with real state once the OS/tab list has updated
+        setTimeout(() => loadContextItems(), 500);
+    }, [loadContextItems]);
+
     const handleClose = useCallback(() => {
         setQuery('');
         setResults([]);
@@ -1559,6 +1619,7 @@ export function GlobalSpotlight() {
                                                     isSelected={itemIndex === selectedPinIndex}
                                                     onSelect={handleSelect}
                                                     onHover={setSelectedPinIndex}
+                                                    onClose={handleContextClose}
                                                     getAppIcon={getAppIcon}
                                                 />
                                             );
@@ -1592,6 +1653,7 @@ export function GlobalSpotlight() {
                                                     isSelected={itemIndex === selectedPinIndex}
                                                     onSelect={handleSelect}
                                                     onHover={setSelectedPinIndex}
+                                                    onClose={handleContextClose}
                                                     getAppIcon={getAppIcon}
                                                 />
                                             );
@@ -1602,6 +1664,30 @@ export function GlobalSpotlight() {
                         </div>
                     );
                 })()}
+
+                {/* Pinned Items Section */}
+                {!query.trim() && !commandMode && pinnedItems.length > 0 && (
+                    <div className="spotlight-pins">
+                        <div className="spotlight-pins-header">
+                            <span className="spotlight-pins-title">Pinned</span>
+                            <span className="spotlight-pins-hint">⌫ to remove</span>
+                        </div>
+                        <div className="spotlight-pins-grid">
+                            {pinnedItems.map((pin, i) => (
+                                <PinItem
+                                    key={`pin-${i}`}
+                                    pin={pin}
+                                    index={i}
+                                    isSelected={i === selectedPinIndex}
+                                    onSelect={handleSelect}
+                                    onHover={setSelectedPinIndex}
+                                    onRemove={removePin}
+                                    getAppIcon={getAppIcon}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* Workspaces Section */}
                 {!query.trim() && !commandMode && (
@@ -1946,9 +2032,10 @@ const PinItem = memo(function PinItem({ pin, index, isSelected, onSelect, onHove
 });
 
 // Memoized Context Item - compact version for grouped display
-const ContextItem = memo(function ContextItem({ item, index, isSelected, onSelect, onHover, getAppIcon }) {
+const ContextItem = memo(function ContextItem({ item, index, isSelected, onSelect, onHover, onClose, getAppIcon }) {
     const handleClick = useCallback(() => onSelect(item), [item, onSelect]);
     const handleMouseEnter = useCallback(() => onHover(index), [index, onHover]);
+    const handleClose = useCallback((e) => onClose?.(item, e), [item, onClose]);
     const handleIconError = useCallback((e) => {
         e.target.style.display = 'none';
     }, []);
@@ -1956,6 +2043,8 @@ const ContextItem = memo(function ContextItem({ item, index, isSelected, onSelec
     const isApp = item.type === 'app';
     const isRunning = isApp && item.isRunning;
     const appContext = isApp ? getRunningAppContext(item) : null;
+    // Tabs are always closable; apps only when running (an installed app isn't "open")
+    const canClose = !isApp || isRunning;
 
     return (
         <div
@@ -1984,6 +2073,17 @@ const ContextItem = memo(function ContextItem({ item, index, isSelected, onSelec
                 {isApp ? (appContext || item.name || item.title) : (item.title || 'Tab')}
             </span>
             {isRunning && <span className="running-dot" />}
+            {canClose && (
+                <span
+                    className="context-close"
+                    onClick={handleClose}
+                    title={isApp ? 'Close app' : 'Close tab'}
+                    role="button"
+                    aria-label={isApp ? 'Close app' : 'Close tab'}
+                >
+                    ×
+                </span>
+            )}
         </div>
     );
 });

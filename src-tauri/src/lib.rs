@@ -124,6 +124,16 @@ async fn focus_window(_app: tauri::AppHandle, pid: u32, name: Option<String>, hw
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command(rename_all = "snake_case")]
+async fn close_app(_app: tauri::AppHandle, pid: u32, hwnd: Option<i64>) -> Result<(), String> {
+    // Gracefully close the app's window(s) via WM_CLOSE (lets it prompt to save).
+    let hwnd_opt = hwnd.filter(|&h| h != 0).map(|h| h as isize);
+    let pid_opt = if pid != 0 { Some(pid) } else { None };
+
+    focus::close_window(hwnd_opt, pid_opt)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn toggle_spotlight(app: tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("spotlight") {
@@ -246,20 +256,39 @@ async fn launch_app(path: String) -> Result<(), String> {
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
-        // Try direct spawn first (fastest, works for normal .exe paths).
-        // Try direct spawn first; fall back to ShellExecuteW for .lnk shortcuts
-        // and Store apps that can't be launched via CreateProcess directly.
-        let direct_ok = std::process::Command::new(&path)
-            .creation_flags(CREATE_NO_WINDOW)
-            .spawn()
-            .is_ok();
+
+        // Launch with the working directory set to the exe's own folder. Many apps
+        // (OBS, portable apps, some games) resolve resources relative to the cwd —
+        // OBS fails with "Failed to find locale/en-US.ini" otherwise. This mirrors
+        // the "Start in" field that Start Menu shortcuts set.
+        let work_dir = std::path::Path::new(&path).parent();
+
+        // Try direct spawn first (fastest, works for normal .exe paths);
+        // fall back to ShellExecuteW for .lnk shortcuts and Store apps that
+        // can't be launched via CreateProcess directly.
+        let mut cmd = std::process::Command::new(&path);
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        if let Some(dir) = work_dir.filter(|d| !d.as_os_str().is_empty()) {
+            cmd.current_dir(dir);
+        }
+        let direct_ok = cmd.spawn().is_ok();
         if !direct_ok {
             use windows::Win32::UI::Shell::ShellExecuteW;
             use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
             use windows::core::HSTRING;
             let path_w = HSTRING::from(path.as_str());
             let open_w = HSTRING::from("open");
-            unsafe { ShellExecuteW(None, &open_w, &path_w, None, None, SW_SHOWNORMAL); }
+            // Pass the exe folder as ShellExecute's lpDirectory so the app's cwd is correct.
+            let dir_w = work_dir
+                .filter(|d| !d.as_os_str().is_empty())
+                .and_then(|d| d.to_str())
+                .map(HSTRING::from);
+            unsafe {
+                match &dir_w {
+                    Some(d) => { ShellExecuteW(None, &open_w, &path_w, None, d, SW_SHOWNORMAL); }
+                    None => { ShellExecuteW(None, &open_w, &path_w, None, None, SW_SHOWNORMAL); }
+                }
+            }
         }
     }
     #[cfg(target_os = "macos")]
@@ -501,6 +530,7 @@ pub fn run() {
         get_installed_apps,
         categorize_app,
         focus_window,
+        close_app,
         toggle_spotlight,
         hide_spotlight,
         set_spotlight_shortcut,

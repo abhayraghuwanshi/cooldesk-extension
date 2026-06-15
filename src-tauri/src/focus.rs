@@ -579,6 +579,67 @@ pub fn focus_window(hwnd: Option<isize>, pid: Option<u32>, process_name: Option<
     Err(FocusError::WindowNotFound)
 }
 
+/// Gracefully close the window(s) of a process by posting WM_CLOSE.
+/// Prefers a specific HWND when given; otherwise closes every visible, titled
+/// top-level window owned by `pid`. WM_CLOSE lets the app run its own shutdown
+/// (save prompts etc.) instead of force-killing the process.
+#[cfg(target_os = "windows")]
+pub fn close_window(hwnd: Option<isize>, pid: Option<u32>) -> FocusResult<()> {
+    use windows::Win32::Foundation::{BOOL, HWND, LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowTextLengthW, GetWindowThreadProcessId, IsWindowVisible,
+        PostMessageW, WM_CLOSE,
+    };
+
+    // Fast path: a specific window handle was supplied.
+    if let Some(h) = hwnd.filter(|&h| h != 0) {
+        unsafe {
+            return PostMessageW(HWND(h as *mut _), WM_CLOSE, WPARAM(0), LPARAM(0))
+                .map_err(|e| FocusError::CommandFailed(e.to_string()));
+        }
+    }
+
+    let target_pid = pid.ok_or(FocusError::WindowNotFound)?;
+
+    struct Ctx {
+        target_pid: u32,
+        closed: u32,
+    }
+    let mut ctx = Ctx { target_pid, closed: 0 };
+
+    unsafe extern "system" fn enum_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        let ctx = &mut *(lparam.0 as *mut Ctx);
+        let mut window_pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, Some(&mut window_pid));
+
+        // Mirror the focus path: only visible, titled top-level windows of the
+        // target process — skip invisible helper/renderer windows.
+        if window_pid == ctx.target_pid
+            && IsWindowVisible(hwnd).as_bool()
+            && GetWindowTextLengthW(hwnd) > 0
+        {
+            let _ = PostMessageW(hwnd, WM_CLOSE, WPARAM(0), LPARAM(0));
+            ctx.closed += 1;
+        }
+        BOOL(1) // continue — close all matching top-level windows
+    }
+
+    unsafe {
+        let _ = EnumWindows(Some(enum_callback), LPARAM(&mut ctx as *mut Ctx as isize));
+    }
+
+    if ctx.closed > 0 {
+        Ok(())
+    } else {
+        Err(FocusError::WindowNotFound)
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn close_window(_hwnd: Option<isize>, _pid: Option<u32>) -> FocusResult<()> {
+    Err(FocusError::PlatformNotSupported)
+}
+
 /// Find the OS window handle for a browser window by matching its screen bounds.
 /// Used to target a specific browser window precisely when multiple windows are open.
 /// Returns None on non-Windows platforms or when no match is found.

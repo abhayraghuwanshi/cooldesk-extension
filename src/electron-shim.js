@@ -282,6 +282,17 @@ const electronAPI = {
             return { success: true };
         }
 
+        if (msg?.type === 'CLOSE_TAB') {
+            const { tabId, url, _deviceId: deviceId, browser } = msg;
+            fetch(`${SIDECAR_URL}/cmd/close-tab`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tabId, url, deviceId, browser })
+            }).catch(() => {});
+
+            return { success: true };
+        }
+
         // Handle Workspace commands
         if (msg?.type === 'SEARCH_WORKSPACES') {
             const workspaces = await (await fetch(`${SIDECAR_URL}/workspaces`)).json();
@@ -430,6 +441,18 @@ const electronAPI = {
             return result;
         } catch (e) {
             console.error('[TauriShim] Failed to focus app:', e);
+            throw e;
+        }
+    },
+
+    closeApp: async (pid, hwnd) => {
+        console.log('[TauriShim] closeApp called - pid:', pid, 'hwnd:', hwnd);
+        try {
+            const result = await invoke('close_app', { pid, hwnd: hwnd || null });
+            console.log('[TauriShim] closeApp result:', result);
+            return result;
+        } catch (e) {
+            console.error('[TauriShim] Failed to close app:', e);
             throw e;
         }
     },

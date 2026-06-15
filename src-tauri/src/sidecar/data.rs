@@ -285,6 +285,17 @@ pub struct JumpToTabRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloseTabRequest {
+    pub tab_id: i64,
+    pub url: Option<String>,
+    pub device_id: Option<String>,
+    /// Browser that owns this tab: "chrome", "edge", etc.
+    /// When set, only the matching browser extension handles the close.
+    pub browser: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SuccessResponse {
     pub success: bool,
 }

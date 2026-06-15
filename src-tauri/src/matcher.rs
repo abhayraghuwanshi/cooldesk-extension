@@ -201,6 +201,14 @@ pub fn match_apps(scanner_data: ScannerOutput) -> Vec<AppEntry> {
 
         if matched_idx.is_none() && !app_name_norm.is_empty() {
             'outer: for (i, w) in windows.iter().enumerate() {
+                // Skip shell/container windows: Explorer folder windows are titled
+                // by folder name (e.g. "OBS Studio - File Explorer"), which would
+                // falsely match an unrelated app named after the folder and drag in
+                // all of explorer.exe's windows.
+                let win_exe = w.exe_name.trim_end_matches(".exe").to_lowercase();
+                if win_exe == "explorer" || win_exe == "applicationframehost" {
+                    continue;
+                }
                 for wt in &w.titles {
                     if title_matches_app(&normalize_text(&wt.text), &app_name_norm) {
                         matched_idx = Some(i);

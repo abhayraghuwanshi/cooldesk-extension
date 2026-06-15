@@ -299,6 +299,14 @@ function startHostActionWS() {
           } catch { }
         }
 
+        if (msg && msg.type === 'close-tab') {
+          const { tabId, url, deviceId } = msg.payload || {};
+          // deviceId is unique per browser instance (prefixed with the browser
+          // name) so this routes correctly for any browser — no chrome/edge guard.
+          if (deviceId && myDeviceId && deviceId !== myDeviceId) return;
+          await closeTabByIdOrUrl(tabId, url);
+        }
+
         // After Rust completes the OS-level focus (SwitchToThisWindow + SetForegroundWindow),
         // it sends native-focus-done. We re-activate the tab here because Chrome may have
         // restored its previously-focused tab when the window was dragged across desktops.
@@ -410,6 +418,66 @@ function ensureJumpPolling(active) {
   }
 }
 
+// Resolve a tab from a tabId (with cross-browser URL guard) or URL, then close it.
+// Shared by the WS push and HTTP poll paths so each close happens at most once.
+const recentlyClosedTabs = new Set();
+async function closeTabByIdOrUrl(tabId, url) {
+  const closeKey = `${tabId}:${url || ''}`;
+  if (recentlyClosedTabs.has(closeKey)) return;
+  if (!tabId && !url) return;
+  try {
+    let tab = null;
+    if (tabId) {
+      try {
+        const candidate = await chrome.tabs.get(tabId);
+        if (url && candidate?.url) {
+          if (candidate.url.split('?')[0] === url.split('?')[0]) tab = candidate;
+        } else {
+          tab = candidate;
+        }
+      } catch { /* stale tabId or belongs to another browser */ }
+    }
+    if (!tab && url) {
+      const hostname = (() => { try { return new URL(url).hostname; } catch { return null; } })();
+      if (hostname) {
+        const matches = await chrome.tabs.query({ url: `*://${hostname}/*` });
+        tab = matches.find(t => t.url?.split('?')[0] === url.split('?')[0]) || matches[0] || null;
+      }
+    }
+    if (!tab) return;
+    recentlyClosedTabs.add(closeKey);
+    setTimeout(() => recentlyClosedTabs.delete(closeKey), 5000);
+    await chrome.tabs.remove(tab.id);
+    // Push the updated tab list so the desktop spotlight reflects the close immediately
+    pushCurrentTabs().catch(() => {});
+  } catch { /* tab already gone — safe to ignore */ }
+}
+
+// HTTP fallback: poll /cmd/close-next every 1s to catch closes missed during WS suspension
+async function pollOnceForCloseNext() {
+  if (!isHostSyncEnabled()) return;
+  try {
+    const res = await fetch(`${getHostUrl()}/cmd/close-next`);
+    if (!res.ok) return;
+    const data = await res.json().catch(() => ({}));
+    const action = data?.action;
+    if (!action) return;
+    const { tabId, url, deviceId } = action;
+    // Route by deviceId only — browser-agnostic (works for Brave/Opera/etc.)
+    if (deviceId && myDeviceId && deviceId !== myDeviceId) return;
+    await closeTabByIdOrUrl(tabId, url);
+  } catch { /* sidecar unreachable */ }
+}
+
+let closePollTimer = null;
+function ensureClosePolling(active) {
+  if (active) {
+    if (!closePollTimer) closePollTimer = setInterval(() => { pollOnceForCloseNext().catch(() => {}); }, 1000);
+  } else {
+    if (closePollTimer) { clearInterval(closePollTimer); closePollTimer = null; }
+  }
+}
+
 // Initialize bridge functionality
 export function initializeBridge() {
   // Redirect when a new tab is created with a URL (or pendingUrl)
@@ -430,6 +498,9 @@ export function initializeBridge() {
   // Always poll for pending jump-to-tab actions via HTTP — reliable even when
   // the service worker was suspended and missed the WS push.
   if (isHostSyncEnabled()) ensureJumpPolling(true);
+
+  // Same reliable HTTP fallback for close-tab actions from the desktop spotlight.
+  if (isHostSyncEnabled()) ensureClosePolling(true);
 }
 
 // Placeholder for openOrFocusApp function (would need to be defined based on your app structure)

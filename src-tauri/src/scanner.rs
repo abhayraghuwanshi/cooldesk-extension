@@ -1010,6 +1010,56 @@ mod windows_impl {
         }
     }
 
+    // ── Built-in system apps ──────────────────────────────────────────────────────
+
+    /// Well-known built-in Windows apps that often lack a plain Start Menu shortcut
+    /// on Windows 11 (Microsoft moved them into the virtual "Windows Tools" shell
+    /// folder, which the known-folder scan doesn't expose as a real directory).
+    /// Seeded by fixed path so they stay searchable; skipped when the exe is missing
+    /// or an app with the same display name was already discovered.
+    ///
+    /// Dedup is by *name*, not exe path: e.g. "Anaconda Prompt" resolves to cmd.exe,
+    /// which would otherwise hide "Command Prompt" if we deduped on the shared path.
+    fn builtin_windows_apps(seen_names: &HashSet<String>) -> Vec<InstalledApp> {
+        let windir = std::env::var("SystemRoot")
+            .or_else(|_| std::env::var("windir"))
+            .unwrap_or_else(|_| "C:\\Windows".to_string());
+        let sys32 = format!("{}\\System32", windir);
+
+        // Note: explorer.exe is intentionally NOT seeded — each open Explorer
+        // folder window becomes its own matcher entry, which floods results with
+        // "<folder> - File Explorer" rows that also match unrelated title searches.
+        let candidates: [(&str, String); 2] = [
+            ("Command Prompt", format!("{}\\cmd.exe", sys32)),
+            (
+                "Windows PowerShell",
+                format!("{}\\WindowsPowerShell\\v1.0\\powershell.exe", sys32),
+            ),
+        ];
+
+        let mut out = Vec::new();
+        for (name, path) in candidates {
+            let name_lower = name.to_lowercase();
+            if seen_names.contains(&name_lower)
+                || seen_names.contains(&normalize_app_name(name).to_lowercase())
+            {
+                continue;
+            }
+            if !std::path::Path::new(&path).exists() {
+                continue;
+            }
+            out.push(InstalledApp {
+                id: format!("installed-{}", name),
+                name: name.to_string(),
+                path: path.clone(),
+                source: "builtin".to_string(),
+                category: Some("Windows Tools".to_string()),
+                icon: extract_icon_as_base64(&path),
+            });
+        }
+        out
+    }
+
     // ── Public entry point ────────────────────────────────────────────────────────
 
     pub fn scan_apps_windows() -> ScannerOutput {
@@ -1027,7 +1077,10 @@ mod windows_impl {
         }
 
         let registry = scan_registry(&mut seen_exe_paths, &mut seen_names);
-        let installed = dedup(startmenu, registry);
+        let mut installed = dedup(startmenu, registry);
+        // Seed built-in system apps (cmd, powershell, explorer) that may have no
+        // Start Menu shortcut on Win11, so they remain searchable. Deduped by name.
+        installed.extend(builtin_windows_apps(&seen_names));
         let windows = scan_running();
 
         log::info!(

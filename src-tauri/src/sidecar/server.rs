@@ -270,6 +270,8 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         // Commands
         .route("/cmd/jump-to-tab", post(cmd_jump_to_tab))
         .route("/cmd/jump-next", get(cmd_jump_next))
+        .route("/cmd/close-tab", post(cmd_close_tab))
+        .route("/cmd/close-next", get(cmd_close_next))
         // Full sync
         .route("/sync", post(post_sync))
         // WebSocket

@@ -22,6 +22,9 @@ pub struct AppState {
     /// Pending jump-to-tab actions for HTTP polling fallback.
     /// Extensions poll GET /cmd/jump-next to dequeue and handle them.
     pub pending_jumps: Arc<std::sync::Mutex<VecDeque<serde_json::Value>>>,
+    /// Pending close-tab actions for HTTP polling fallback.
+    /// Extensions poll GET /cmd/close-next to dequeue and handle them.
+    pub pending_closes: Arc<std::sync::Mutex<VecDeque<serde_json::Value>>>,
 }
 
 impl AppState {
@@ -45,6 +48,7 @@ impl AppState {
             change_tracker: Arc::new(RwLock::new(ChangeTracker::new())),
             ws_broadcast,
             pending_jumps: Arc::new(std::sync::Mutex::new(VecDeque::new())),
+            pending_closes: Arc::new(std::sync::Mutex::new(VecDeque::new())),
         }
     }
 
@@ -1071,6 +1075,52 @@ pub async fn cmd_jump_next(
     let action = state.pending_jumps.lock().ok().and_then(|mut q| q.pop_front());
     if let Some(ref a) = action {
         log::info!("[Sidecar] HTTP poll dequeued jump: tabId={} browser={:?} deviceId={:?}",
+            a.get("tabId").and_then(|v| v.as_i64()).unwrap_or(-1),
+            a.get("browser").and_then(|v| v.as_str()),
+            a.get("deviceId").and_then(|v| v.as_str()),
+        );
+    }
+    Json(serde_json::json!({ "action": action }))
+}
+
+pub async fn cmd_close_tab(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<CloseTabRequest>,
+) -> Result<Json<SuccessResponse>, (StatusCode, Json<ErrorResponse>)> {
+    log::info!("[Sidecar] Broadcasting close-tab: tabId={} browser={:?} deviceId={:?} url={:?}",
+        req.tab_id, req.browser, req.device_id, req.url);
+
+    let payload = serde_json::json!({
+        "tabId": req.tab_id,
+        "url": req.url,
+        "deviceId": req.device_id,
+        "browser": req.browser
+    });
+
+    // WS broadcast (fast path — may be missed if service worker is suspended)
+    state.broadcast("close-tab", payload.clone());
+
+    // HTTP queue (reliable fallback — extension polls GET /cmd/close-next at ~1s)
+    if let Ok(mut q) = state.pending_closes.lock() {
+        q.push_back(payload);
+        // Keep at most 10 queued closes to avoid stale buildup
+        while q.len() > 10 {
+            q.pop_front();
+        }
+    }
+
+    Ok(Json(SuccessResponse { success: true }))
+}
+
+/// Poll for the next pending close-tab action.
+/// Extensions call this every ~1s. Returns the action and removes it from the queue.
+/// Returns `{"action": null}` when the queue is empty.
+pub async fn cmd_close_next(
+    State(state): State<Arc<AppState>>,
+) -> Json<serde_json::Value> {
+    let action = state.pending_closes.lock().ok().and_then(|mut q| q.pop_front());
+    if let Some(ref a) = action {
+        log::info!("[Sidecar] HTTP poll dequeued close: tabId={} browser={:?} deviceId={:?}",
             a.get("tabId").and_then(|v| v.as_i64()).unwrap_or(-1),
             a.get("browser").and_then(|v| v.as_str()),
             a.get("deviceId").and_then(|v| v.as_str()),

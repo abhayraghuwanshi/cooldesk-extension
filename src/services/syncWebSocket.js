@@ -3,7 +3,7 @@
  * Handles connection to Electron app's WebSocket server
  */
 
-import { getWebSocketUrl, isHostSyncEnabled } from './syncConfig';
+import { getWebSocketUrl, isHostSyncEnabled, getDeviceId } from './syncConfig';
 
 class SyncWebSocket {
     constructor() {
@@ -195,6 +195,9 @@ class SyncWebSocket {
                 break;
             case 'jump-to-tab':
                 this.handleJumpToTab(payload).catch(() => {});
+                break;
+            case 'close-tab':
+                this.handleCloseTab(payload).catch(() => {});
                 break;
             case 'native-focus-done':
                 // Rust native focus completed — re-activate the tab so Chrome shows it
@@ -389,6 +392,63 @@ class SyncWebSocket {
             }
         } else {
             console.log(`[SyncWS][${browserName}] Not in extension context, skipping`);
+        }
+    }
+
+    /**
+     * Handle close-tab request from the desktop spotlight.
+     * Resolves the tab by id (with cross-browser URL guard) or URL, then removes it.
+     * @param {object} payload - { tabId, url, deviceId, browser }
+     */
+    async handleCloseTab(payload) {
+        const { tabId, url, deviceId } = payload || {};
+
+        // Only handle in browser extension context (not the desktop frontend)
+        if (typeof chrome === 'undefined' || !chrome.tabs?.remove) {
+            console.log('[SyncWS] Not in extension context, skipping close-tab');
+            return;
+        }
+
+        // Route by deviceId — it's unique per browser instance and encodes the
+        // browser as a prefix (e.g. "edge-…", "brave-…"), so this works for any
+        // browser without hardcoding chrome/edge. Only the owning instance acts.
+        if (deviceId) {
+            try {
+                const myDeviceId = await getDeviceId();
+                if (myDeviceId && deviceId !== myDeviceId) return;
+            } catch { /* fall through to tabId/url resolution */ }
+        }
+        if (!tabId && !url) return;
+
+        try {
+            let tab = null;
+            // 1. Fast path: direct tabId lookup with cross-browser URL guard
+            if (tabId) {
+                try {
+                    const candidate = await chrome.tabs.get(tabId);
+                    if (url && candidate?.url) {
+                        if (candidate.url.split('?')[0] === url.split('?')[0]) tab = candidate;
+                    } else {
+                        tab = candidate;
+                    }
+                } catch { /* stale tabId or belongs to another browser */ }
+            }
+            // 2. URL fallback — stale tabId or wrong browser
+            if (!tab && url) {
+                const hostname = (() => { try { return new URL(url).hostname; } catch { return null; } })();
+                if (hostname) {
+                    const matches = await chrome.tabs.query({ url: `*://${hostname}/*` });
+                    tab = matches.find(t => t.url?.split('?')[0] === url.split('?')[0]) || matches[0] || null;
+                }
+            }
+            if (!tab) return;
+
+            await chrome.tabs.remove(tab.id);
+            console.log('[SyncWS] Closed tab:', tab.id);
+        } catch (e) {
+            if (!e.message?.includes('No tab with id')) {
+                console.warn('[SyncWS] Close failed:', e.message);
+            }
         }
     }
 

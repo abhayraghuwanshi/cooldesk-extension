@@ -464,6 +464,27 @@ export function TabManagement() {
 
   const handleTabClose = useCallback(async (tab) => {
     try {
+      // _deviceId identifies the exact browser instance that owns this tab
+      // (prefixed with the browser name, e.g. "edge-…", "brave-…"), so the close
+      // is routed to the right browser regardless of type. browser is a hint only.
+      const closeMsg = {
+        type: 'CLOSE_TAB',
+        tabId: tab.id,
+        url: tab.url,
+        _deviceId: tab._deviceId,
+        browser: tab.browser,
+      };
+
+      // Optimistically drop the tab from the list for instant feedback
+      setTabs(prev => prev.filter(t => !(t.id === tab.id && (t.browser || 'other') === (tab.browser || 'other'))));
+
+      // Desktop (Tauri/Electron): route via sidecar → owning browser extension
+      if (window.electronAPI?.sendMessage) {
+        await window.electronAPI.sendMessage(closeMsg);
+        return;
+      }
+
+      // Real extension context: close the local tab directly
       if (typeof chrome !== 'undefined' && chrome?.tabs?.remove) {
         await chrome.tabs.remove(tab.id);
       }
