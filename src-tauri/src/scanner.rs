@@ -909,11 +909,17 @@ mod windows_impl {
             state.pid_to_desktop_id.entry(pid).or_insert(ds);
         }
 
-        // Collect title (deduplicated)
-        let titles = state.pid_to_titles.entry(pid).or_default();
-        let hwnd_val = hwnd.0 as i64;
-        if !titles.iter().any(|(_, t)| t == &title) {
-            titles.push((hwnd_val, title));
+        // Collect title (deduplicated) — only for VISIBLE windows. Hidden helper
+        // windows (e.g. Windows Terminal's monarch window) aren't valid focus
+        // targets; surfacing them produced phantom entries that focused nothing.
+        // (Minimized windows report visible=true, so they're still included;
+        // other-desktop windows are cloaked and already filtered out above.)
+        if is_visible {
+            let titles = state.pid_to_titles.entry(pid).or_default();
+            let hwnd_val = hwnd.0 as i64;
+            if !titles.iter().any(|(_, t)| t == &title) {
+                titles.push((hwnd_val, title));
+            }
         }
 
         // Track best window state per PID

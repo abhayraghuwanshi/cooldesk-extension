@@ -66,6 +66,11 @@ pub struct AppEntry {
     pub desktop_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    /// Index of the UIA tab this entry represents within its window
+    /// (Windows Terminal / File Explorer). None for normal single-surface apps.
+    #[serde(rename = "tabIndex")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tab_index: Option<usize>,
 }
 
 fn normalize_path(p: &str) -> String {
@@ -147,7 +152,20 @@ fn meaningful_titles<'a>(
         })
         .collect();
     if filtered.is_empty() {
-        titles.iter().max_by_key(|wt| wt.text.len()).into_iter().collect()
+        // No title carries the app/exe name — common for terminals and editors
+        // running arbitrary sessions (e.g. a Windows Terminal window titled by the
+        // active shell). Surface every real window so each stays individually
+        // focusable; collapsing to one made it impossible to switch to a specific
+        // terminal window (focus always landed on the same hwnd).
+        let real: Vec<&WindowTitle> = titles
+            .iter()
+            .filter(|wt| !wt.text.trim().is_empty())
+            .collect();
+        if real.is_empty() {
+            titles.iter().max_by_key(|wt| wt.text.len()).into_iter().collect()
+        } else {
+            real
+        }
     } else {
         filtered
     }
@@ -237,6 +255,7 @@ pub fn match_apps(scanner_data: ScannerOutput) -> Vec<AppEntry> {
                     is_on_current_desktop: false,
                     desktop_id: None,
                     icon: app.icon.clone(),
+                    tab_index: None,
                 });
                 continue;
             }
@@ -269,6 +288,7 @@ pub fn match_apps(scanner_data: ScannerOutput) -> Vec<AppEntry> {
                     is_on_current_desktop: win.is_on_current_desktop,
                     desktop_id: win.desktop_id.clone(),
                     icon: app.icon.clone(),
+                    tab_index: None,
                 });
             } else {
                 for wt in show_titles {
@@ -289,6 +309,7 @@ pub fn match_apps(scanner_data: ScannerOutput) -> Vec<AppEntry> {
                         is_on_current_desktop: win.is_on_current_desktop,
                         desktop_id: win.desktop_id.clone(),
                         icon: app.icon.clone(),
+                        tab_index: None,
                     });
                 }
             }
@@ -310,6 +331,7 @@ pub fn match_apps(scanner_data: ScannerOutput) -> Vec<AppEntry> {
                 is_on_current_desktop: false,
                 desktop_id: None,
                 icon: app.icon.clone(),
+                tab_index: None,
             });
         }
     }
@@ -341,6 +363,7 @@ pub fn match_apps(scanner_data: ScannerOutput) -> Vec<AppEntry> {
                 is_on_current_desktop: w.is_on_current_desktop,
                 desktop_id: w.desktop_id.clone(),
                 icon: None,
+                tab_index: None,
             });
         } else {
             for wt in show_titles {
@@ -361,9 +384,61 @@ pub fn match_apps(scanner_data: ScannerOutput) -> Vec<AppEntry> {
                     is_on_current_desktop: w.is_on_current_desktop,
                     desktop_id: w.desktop_id.clone(),
                     icon: None,
+                    tab_index: None,
                 });
             }
         }
+    }
+
+    // Expand tab-capable windows (Windows Terminal, File Explorer) into one
+    // entry per UIA tab, so each session/folder is independently searchable and
+    // focusable. UIA only runs for the few allowlisted, running, real windows.
+    #[cfg(target_os = "windows")]
+    {
+        let mut expanded: Vec<AppEntry> = Vec::with_capacity(result.len());
+        let mut probed: std::collections::HashSet<i64> = std::collections::HashSet::new();
+        for entry in result {
+            let exe = exe_basename(&entry.path);
+            if entry.is_running
+                && entry.hwnd != 0
+                && (crate::tab_uia::supports_tabs(&exe)
+                    || crate::tab_uia::supports_tabs(&entry.name))
+                && probed.insert(entry.hwnd)
+            {
+                let tabs = crate::tab_uia::list_tabs(entry.hwnd as isize);
+                // Only split when there's genuinely more than one tab; a single
+                // tab adds no value over the existing window entry.
+                if tabs.len() > 1 {
+                    for t in tabs {
+                        if t.title.trim().is_empty() {
+                            continue;
+                        }
+                        expanded.push(AppEntry {
+                            id: format!("{}-tab-{}", entry.id, t.index),
+                            name: entry.name.clone(),
+                            title: t.title.clone(),
+                            titles: entry.titles.clone(),
+                            path: entry.path.clone(),
+                            app_type: entry.app_type.clone(),
+                            source: entry.source.clone(),
+                            category: entry.category.clone(),
+                            is_running: true,
+                            pid: entry.pid,
+                            hwnd: entry.hwnd,
+                            cloaked: entry.cloaked,
+                            is_visible: entry.is_visible,
+                            is_on_current_desktop: entry.is_on_current_desktop,
+                            desktop_id: entry.desktop_id.clone(),
+                            icon: entry.icon.clone(),
+                            tab_index: Some(t.index),
+                        });
+                    }
+                    continue;
+                }
+            }
+            expanded.push(entry);
+        }
+        result = expanded;
     }
 
     log::info!(

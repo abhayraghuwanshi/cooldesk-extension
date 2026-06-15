@@ -646,6 +646,7 @@ pub async fn search_apps(Query(params): Query<SearchQuery>) -> Json<serde_json::
                     "isRunning": true, "isVisible": app["isVisible"],
                     "cloaked": app["cloaked"], "isOnCurrentDesktop": app["isOnCurrentDesktop"],
                     "icon": app["icon"], "source": app["source"],
+                    "tabIndex": app["tabIndex"],
                 }));
             }
 
@@ -687,6 +688,7 @@ pub async fn search_apps(Query(params): Query<SearchQuery>) -> Json<serde_json::
                 "isRunning": is_running, "isVisible": is_visible,
                 "cloaked": cloaked, "isOnCurrentDesktop": app["isOnCurrentDesktop"],
                 "icon": app["icon"], "source": app["source"],
+                "tabIndex": app["tabIndex"],
                 "rlBoost": rl_boost,
             }))
         }).collect()

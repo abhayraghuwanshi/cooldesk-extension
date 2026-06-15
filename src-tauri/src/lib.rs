@@ -9,6 +9,7 @@ mod focus;
 mod categorize;
 mod scanner;
 mod matcher;
+mod tab_uia;
 
 use system::RunningApp;
 
@@ -134,6 +135,34 @@ async fn close_app(_app: tauri::AppHandle, pid: u32, hwnd: Option<i64>) -> Resul
         .map_err(|e| e.to_string())
 }
 
+/// List the UIA tabs of a window (Windows Terminal, File Explorer, ...).
+/// Returns [] for apps without addressable tabs or on non-Windows.
+#[tauri::command(rename_all = "snake_case")]
+async fn list_window_tabs(hwnd: i64) -> Vec<tab_uia::TabInfo> {
+    if hwnd == 0 {
+        return Vec::new();
+    }
+    tab_uia::list_tabs(hwnd as isize)
+}
+
+/// Focus a specific tab within a window via UIA, then foreground the window.
+/// Prefers `title` (stable across reordering); falls back to `index`.
+#[tauri::command(rename_all = "snake_case")]
+async fn focus_window_tab(
+    hwnd: i64,
+    index: Option<usize>,
+    title: Option<String>,
+) -> Result<(), String> {
+    if hwnd == 0 {
+        return Err("missing hwnd".into());
+    }
+    if tab_uia::focus_tab(hwnd as isize, index, title.as_deref()) {
+        Ok(())
+    } else {
+        Err("tab not found".into())
+    }
+}
+
 #[tauri::command]
 fn toggle_spotlight(app: tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("spotlight") {
@@ -254,41 +283,42 @@ fn set_spotlight_shortcut(app: tauri::AppHandle, shortcut: String) -> Result<ser
 async fn launch_app(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        use windows::Win32::UI::Shell::ShellExecuteW;
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        use windows::core::HSTRING;
 
-        // Launch with the working directory set to the exe's own folder. Many apps
-        // (OBS, portable apps, some games) resolve resources relative to the cwd —
-        // OBS fails with "Failed to find locale/en-US.ini" otherwise. This mirrors
-        // the "Start in" field that Start Menu shortcuts set.
-        let work_dir = std::path::Path::new(&path).parent();
+        // Working directory = the exe's own folder. Many apps (OBS, portable apps,
+        // some games) resolve resources relative to the cwd — OBS fails with
+        // "Failed to find locale/en-US.ini" otherwise. Mirrors a shortcut's "Start in".
+        let work_dir = std::path::Path::new(&path)
+            .parent()
+            .filter(|d| !d.as_os_str().is_empty());
 
-        // Try direct spawn first (fastest, works for normal .exe paths);
-        // fall back to ShellExecuteW for .lnk shortcuts and Store apps that
-        // can't be launched via CreateProcess directly.
-        let mut cmd = std::process::Command::new(&path);
-        cmd.creation_flags(CREATE_NO_WINDOW);
-        if let Some(dir) = work_dir.filter(|d| !d.as_os_str().is_empty()) {
-            cmd.current_dir(dir);
-        }
-        let direct_ok = cmd.spawn().is_ok();
-        if !direct_ok {
-            use windows::Win32::UI::Shell::ShellExecuteW;
-            use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
-            use windows::core::HSTRING;
-            let path_w = HSTRING::from(path.as_str());
-            let open_w = HSTRING::from("open");
-            // Pass the exe folder as ShellExecute's lpDirectory so the app's cwd is correct.
-            let dir_w = work_dir
-                .filter(|d| !d.as_os_str().is_empty())
-                .and_then(|d| d.to_str())
-                .map(HSTRING::from);
-            unsafe {
-                match &dir_w {
-                    Some(d) => { ShellExecuteW(None, &open_w, &path_w, None, d, SW_SHOWNORMAL); }
-                    None => { ShellExecuteW(None, &open_w, &path_w, None, None, SW_SHOWNORMAL); }
-                }
+        // Launch via ShellExecuteW — exactly how the Start Menu / double-clicking in
+        // Explorer launches an app. Critically, a console app (cmd.exe, powershell)
+        // gets its OWN new console window instead of inheriting ours (a plain spawn
+        // would attach cmd to our console when we're started from a terminal, e.g.
+        // `tauri dev`). GUI apps get their window with no console flash; it also
+        // handles .lnk shortcuts, Store apps, and UAC elevation.
+        let path_w = HSTRING::from(path.as_str());
+        let open_w = HSTRING::from("open");
+        let dir_w = work_dir.and_then(|d| d.to_str()).map(HSTRING::from);
+
+        let hinst = unsafe {
+            match &dir_w {
+                Some(d) => ShellExecuteW(None, &open_w, &path_w, None, d, SW_SHOWNORMAL),
+                None => ShellExecuteW(None, &open_w, &path_w, None, None, SW_SHOWNORMAL),
             }
+        };
+
+        // ShellExecuteW returns a value > 32 on success. On failure, fall back to a
+        // direct spawn (rare — e.g. an unusual path the shell rejects).
+        if (hinst.0 as isize) <= 32 {
+            let mut cmd = std::process::Command::new(&path);
+            if let Some(dir) = work_dir {
+                cmd.current_dir(dir);
+            }
+            let _ = cmd.spawn();
         }
     }
     #[cfg(target_os = "macos")]
@@ -531,6 +561,8 @@ pub fn run() {
         categorize_app,
         focus_window,
         close_app,
+        list_window_tabs,
+        focus_window_tab,
         toggle_spotlight,
         hide_spotlight,
         set_spotlight_shortcut,
