@@ -224,7 +224,15 @@ pub fn match_apps(scanner_data: ScannerOutput) -> Vec<AppEntry> {
                 // falsely match an unrelated app named after the folder and drag in
                 // all of explorer.exe's windows.
                 let win_exe = w.exe_name.trim_end_matches(".exe").to_lowercase();
-                if win_exe == "explorer" || win_exe == "applicationframehost" {
+                // Windows Terminal packs each tab into a separate same-PID
+                // window titled by the running shell ("Command Prompt", "Windows
+                // PowerShell", ...). Letting those apps claim a tab by title
+                // would fragment the window — one app grabs it, the rest of the
+                // tabs vanish. Skip it so every tab surfaces as its own entry.
+                if win_exe == "explorer"
+                    || win_exe == "applicationframehost"
+                    || win_exe == "windowsterminal"
+                {
                     continue;
                 }
                 for wt in &w.titles {

@@ -917,7 +917,11 @@ mod windows_impl {
         if is_visible {
             let titles = state.pid_to_titles.entry(pid).or_default();
             let hwnd_val = hwnd.0 as i64;
-            if !titles.iter().any(|(_, t)| t == &title) {
+            // Dedup by hwnd (always unique from EnumWindows), NOT by title:
+            // Windows Terminal exposes each tab as a separate, same-titled
+            // top-level window (e.g. three "Command Prompt" tabs, each its own
+            // cloaked hwnd). Collapsing by title would hide all but one session.
+            if !titles.iter().any(|(h, _)| *h == hwnd_val) {
                 titles.push((hwnd_val, title));
             }
         }

@@ -18,21 +18,22 @@ pub struct TabInfo {
     pub title: String,
 }
 
-/// Whether an app benefits from UIA tab drill-in. Matched against a normalized
-/// form (lowercased, alphanumerics only) of either the exe name or the display
-/// name, so e.g. "WindowsTerminal.exe", "Windows Terminal" and "explorer" all
-/// resolve. Everything else uses the normal one-HWND focus path. Add an app =
-/// add a string here; no other code changes needed.
+/// Whether an app needs UIA tab drill-in. Matched against a normalized form
+/// (lowercased, alphanumerics only) of either the exe name or the display name,
+/// so "explorer" and "File Explorer" both resolve.
+///
+/// NOTE: only apps whose tabs are NOT separate OS windows belong here. File
+/// Explorer packs all tabs into one `CabinetWClass` window, so UIA is the only
+/// way to see/select them. Windows Terminal is deliberately absent: each WT tab
+/// is its own (cloaked) top-level window, surfaced directly by the scanner and
+/// focusable by hwnd — running UIA on it would re-expand every tab N×N.
 pub fn supports_tabs(ident: &str) -> bool {
     let norm: String = ident
         .to_lowercase()
         .chars()
         .filter(|c| c.is_ascii_alphanumeric())
         .collect();
-    matches!(
-        norm.as_str(),
-        "windowsterminal" | "terminal" | "explorer" | "fileexplorer"
-    )
+    matches!(norm.as_str(), "explorer" | "fileexplorer")
 }
 
 #[cfg(target_os = "windows")]
