@@ -12,7 +12,6 @@ import '../../styles/spatial.css';
 import '../../styles/tabCard.css';
 import { Face, WorkspaceShell } from '../spatial/WorkspaceShell';
 import AIWorkspaceManager from './AIWorkspaceManager';
-import { KnowledgeGraph } from './KnowledgeGraph';
 import { CoolSearch } from './CoolSearch';
 import { GlobalAddButton } from './GlobalAddButton';
 import { OverviewDashboard } from './OverviewDashboard';
@@ -23,6 +22,8 @@ const WorkspaceList = lazy(() => import('./WorkspaceList').then(m => ({ default:
 const ChatContext = lazy(() => import('../spatial/ChatContext').then(m => ({ default: m.ChatContext })));
 const TeamView = lazy(() => import('../spatial/TeamView')); // Default export
 const TabManagement = lazy(() => import('./TabManagement').then(m => ({ default: m.TabManagement })));
+// Heavy: react-force-graph-2d (d3-force + canvas). Only load when the graph opens.
+const KnowledgeGraph = lazy(() => import('./KnowledgeGraph').then(m => ({ default: m.KnowledgeGraph })));
 
 console.log('[CoolDesk] Module loaded. OverviewDashboard:', OverviewDashboard);
 
@@ -655,8 +656,12 @@ export function CoolDeskContainer({
         initialWorkspace={aiManagerState.initialWorkspace}
       />
 
-      {/* Knowledge Graph */}
-      <KnowledgeGraph isOpen={graphOpen} onClose={() => setGraphOpen(false)} />
+      {/* Knowledge Graph — lazy; only mount when opened so d3/force-graph stays out of main */}
+      {graphOpen && (
+        <Suspense fallback={null}>
+          <KnowledgeGraph isOpen={graphOpen} onClose={() => setGraphOpen(false)} />
+        </Suspense>
+      )}
     </div >
   );
 }

@@ -4994,12 +4994,13 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 }
 .wcp-section-bar {
   display: inline-block;
-  width: 14px;
-  height: 2px;
-  border-radius: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
   background: currentColor;
-  box-shadow: 0 0 6px currentColor;
-  opacity: 0.85;
+  box-shadow: 0 0 7px color-mix(in srgb, currentColor 60%, transparent);
+  opacity: 0.95;
+  flex-shrink: 0;
 }
 .wcp-section-head[data-accent="status"] { color: #60a5fa; }
 .wcp-section-head[data-accent="todos"]  { color: #f59e0b; }
@@ -5042,110 +5043,72 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Status cards ────────────────────────────────────────────────────── */
-.wcp-status-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-}
-.wcp-status-card {
-  --seg-color: #94a3b8;
-  position: relative;
+/* ── Status segmented control ────────────────────────────────────────── */
+.wcp-status-seg {
   display: flex;
-  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 11px;
+  background: rgba(8, 11, 22, 0.42);
+  border: 1px solid rgba(148, 163, 184, 0.08);
+}
+.wcp-status-pill {
+  --seg-color: #94a3b8;
+  flex: 1;
+  display: flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 11px 6px 9px;
   min-width: 0;
-  border-radius: 10px;
-  background: rgba(8, 11, 22, 0.42);
-  border: 1px solid rgba(148, 163, 184, 0.08);
-  color: rgba(148, 163, 184, 0.78);
-  font-size: var(--font-xs, 11px);
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #cbd5e1;
+  font-size: var(--font-sm, 12px);
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
   cursor: pointer;
-  overflow: hidden;
-  transition:
-    background 180ms ease,
-    border-color 180ms ease,
-    color 180ms ease,
-    transform 180ms ease,
-    box-shadow 220ms ease;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
 }
-.wcp-status-card::after {
-  /* Diagonal sheen — sweeps across when card becomes active */
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -40%;
-  width: 60%;
-  height: 100%;
-  background: linear-gradient(115deg, transparent 0%, color-mix(in srgb, var(--seg-color) 20%, transparent) 50%, transparent 100%);
-  transform: translateX(-100%);
-  transition: transform 700ms cubic-bezier(.2, .8, .2, 1);
-  pointer-events: none;
-}
-.wcp-status-card-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--seg-color) 14%, transparent);
-  color: var(--seg-color);
-  font-size: var(--font-sm, 11px);
+.wcp-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
   flex-shrink: 0;
-  transition: background 220ms ease, color 220ms ease, box-shadow 260ms ease, transform 260ms cubic-bezier(.2, 1.4, .4, 1);
+  opacity: 0.55;
+  transition: opacity 160ms ease, box-shadow 160ms ease;
 }
-.wcp-status-card-label {
-  max-width: 100%;
+.wcp-status-pill-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1;
 }
-.wcp-status-card:hover {
+.wcp-status-pill:hover {
   color: #e2e8f0;
-  border-color: color-mix(in srgb, var(--seg-color) 35%, transparent);
-  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.03);
 }
-.wcp-status-card:hover .wcp-status-card-icon {
-  background: color-mix(in srgb, var(--seg-color) 22%, transparent);
-}
-.wcp-status-card.is-active {
+.wcp-status-pill:hover .wcp-status-dot { opacity: 0.85; }
+.wcp-status-pill.is-active {
   color: var(--seg-color);
-  background:
-    linear-gradient(135deg,
-      color-mix(in srgb, var(--seg-color) 22%, transparent) 0%,
-      color-mix(in srgb, var(--seg-color) 6%, transparent) 100%),
-    rgba(8, 11, 22, 0.55);
-  border-color: color-mix(in srgb, var(--seg-color) 48%, transparent);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 8px 22px color-mix(in srgb, var(--seg-color) 22%, transparent);
+  background: color-mix(in srgb, var(--seg-color) 14%, transparent);
+  border-color: color-mix(in srgb, var(--seg-color) 32%, transparent);
 }
-.wcp-status-card.is-active::after { transform: translateX(280%); }
-.wcp-status-card.is-active .wcp-status-card-icon {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--seg-color) 100%, white 8%), var(--seg-color));
-  color: #0b1020;
-  transform: scale(1.08);
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--seg-color) 18%, transparent),
-    0 0 16px color-mix(in srgb, var(--seg-color) 60%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+.wcp-status-pill.is-active .wcp-status-dot {
+  opacity: 1;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--seg-color) 70%, transparent);
 }
-.wcp-status-card:focus-visible {
+.wcp-status-pill:focus-visible {
   outline: none;
-  border-color: color-mix(in srgb, var(--seg-color) 60%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--seg-color) 22%, transparent);
+  border-color: color-mix(in srgb, var(--seg-color) 50%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--seg-color) 20%, transparent);
 }
 
-/* Narrow rail — stack into 1 column if there's no horizontal room */
+/* Narrow rail — stack vertically if there's no horizontal room */
 @media (max-width: 720px) {
-  .wcp-status-grid { grid-template-columns: 1fr; }
+  .wcp-status-seg { flex-direction: column; }
 }
 
 /* ── Todos ───────────────────────────────────────────────────────────── */
@@ -5408,9 +5371,8 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 14px 16px 14px 16px;
-  min-height: 84px;
+  gap: 6px;
+  padding: 11px 13px;
   background:
     radial-gradient(180% 100% at 0% 0%, rgba(167, 139, 250, 0.05), transparent 55%),
     linear-gradient(165deg, rgba(28, 36, 56, 0.55) 0%, rgba(12, 18, 32, 0.45) 100%);
@@ -5478,10 +5440,9 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   -webkit-box-orient: vertical;
   overflow: hidden;
   font-size: var(--font-sm, 12px);
-  color: rgba(203, 213, 225, 0.55);
+  color: rgba(203, 213, 225, 0.7);
   line-height: 1.5;
   min-width: 0;
-  min-height: calc(1.5em * 2); /* reserve 2 lines so cards don't collapse */
   word-break: break-word;
 }
 
@@ -5611,7 +5572,7 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   border-radius: 0;
   padding: 2px 0 8px;
   color: #f8fafc;
-  font-family: 'ui-serif', Georgia, 'Times New Roman', serif;
+  font-family: var(--font-family-base);
   font-size: var(--font-2xl, 19px);
   font-weight: 700;
   letter-spacing: -0.012em;
@@ -5660,7 +5621,7 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 .wcp-note-tiptap .ProseMirror h1,
 .wcp-note-tiptap .ProseMirror h2,
 .wcp-note-tiptap .ProseMirror h3 {
-  font-family: 'ui-serif', Georgia, serif;
+  font-family: var(--font-family-base);
   font-weight: 700;
   color: #f1f5f9;
   letter-spacing: -0.01em;

@@ -1,6 +1,6 @@
 import { faArrowLeft, faBolt, faCompass, faPause, faPlus, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   deleteNote,
   deleteWorkspaceTodo,
@@ -10,7 +10,8 @@ import {
   saveWorkspaceNote,
   saveWorkspaceTodo,
 } from '../../db/index.js';
-import TiptapEditor from '../spatial/editor/TiptapEditor';
+// Heavy: @tiptap/* (a dozen extensions). Only load when a note is actually opened.
+const TiptapEditor = lazy(() => import('../spatial/editor/TiptapEditor'));
 
 const STATUS_OPTIONS = [
   { key: 'active',   label: 'Active',   color: '#22c55e', icon: faBolt },
@@ -28,7 +29,16 @@ const formatAge = (ts) => {
 };
 
 const stripHtml = (html) =>
-  (html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  (html || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&amp;/gi, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 // Wrap legacy plain text so Tiptap renders it as a paragraph
 const toEditorContent = (text) => {
@@ -210,21 +220,19 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
               <span className="wcp-section-bar" aria-hidden="true" />
               <h4 className="wcp-section-title">Status</h4>
             </header>
-            <div className="wcp-status-grid" role="radiogroup" aria-label="Workspace status">
-              {STATUS_OPTIONS.map(({ key, label, color, icon }) => (
+            <div className="wcp-status-seg" role="radiogroup" aria-label="Workspace status">
+              {STATUS_OPTIONS.map(({ key, label, color }) => (
                 <button
                   key={key}
                   type="button"
                   role="radio"
                   aria-checked={status === key}
-                  className={`wcp-status-card ${status === key ? 'is-active' : ''}`}
+                  className={`wcp-status-pill ${status === key ? 'is-active' : ''}`}
                   style={{ '--seg-color': color }}
                   onClick={() => handleStatusChange(status === key ? null : key)}
                 >
-                  <span className="wcp-status-card-icon" aria-hidden="true">
-                    <FontAwesomeIcon icon={icon} />
-                  </span>
-                  <span className="wcp-status-card-label">{label}</span>
+                  <span className="wcp-status-dot" aria-hidden="true" />
+                  <span className="wcp-status-pill-label">{label}</span>
                 </button>
               ))}
             </div>
@@ -345,10 +353,12 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
                 autoFocus={activeNote._isNew}
               />
               <div className="wcp-note-tiptap">
-                <TiptapEditor
-                  content={toEditorContent(noteContent)}
-                  onChange={(html) => handleNoteChange('text', html)}
-                />
+                <Suspense fallback={<div className="wcp-note-loading">Loading editor…</div>}>
+                  <TiptapEditor
+                    content={toEditorContent(noteContent)}
+                    onChange={(html) => handleNoteChange('text', html)}
+                  />
+                </Suspense>
               </div>
             </div>
           ) : (

@@ -72,6 +72,20 @@ export default defineConfig(({ mode }) => {
           input: {
             main: resolve(__dirname, 'index.html'),
             spotlight: resolve(__dirname, 'spotlight.html'),
+          },
+          output: {
+            // Split only libs already on the EAGER path into stable vendor chunks.
+            // Do NOT blanket-group all node_modules: that would pull dynamically
+            // imported heavies (@tiptap/*, react-force-graph-2d) into an eager
+            // chunk and undo their lazy-loading. Anything not matched here is left
+            // to Rollup's defaults, which keeps lazy chunks isolated.
+            manualChunks(id) {
+              if (!id.includes('node_modules')) return;
+              const m = id.replace(/\\/g, '/');
+              // Match react/react-dom/scheduler as exact path segments so
+              // "react-force-graph-2d" is NOT captured by the "react" prefix.
+              if (/\/node_modules\/(react|react-dom|scheduler)\//.test(m)) return 'vendor-react';
+            }
           }
         }
       },
@@ -113,28 +127,28 @@ export default defineConfig(({ mode }) => {
           main: resolve(__dirname, 'extension.html'),
         },
         output: {
-          manualChunks: (id) => {
-            if (id.includes('node_modules')) {
-              // Core React Bundle
-              if (id.includes('react') || id.includes('react-dom')) {
-                return 'vendor-react';
-              }
+          //   manualChunks: (id) => {
+          //     if (id.includes('node_modules')) {
+          //       // Core React Bundle
+          //       if (id.includes('react') || id.includes('react-dom')) {
+          //         return 'vendor-react';
+          //       }
 
-              // FontAwesome
-              if (id.includes('fontawesome')) {
-                return 'vendor-styles';
-              }
+          //       // FontAwesome
+          //       if (id.includes('fontawesome')) {
+          //         return 'vendor-styles';
+          //       }
 
-              // Heavy app-only deps should NOT be in extension bundle
-              // These are excluded because ExtensionApp doesn't import them:
-              // - @tiptap/* (notes editor)
-              // - yjs, y-webrtc, y-indexeddb (P2P sync)
-              // - node-llama-cpp (local AI)
-              // - fuse.js (app search)
+          //       // Heavy app-only deps should NOT be in extension bundle
+          //       // These are excluded because ExtensionApp doesn't import them:
+          //       // - @tiptap/* (notes editor)
+          //       // - yjs, y-webrtc, y-indexeddb (P2P sync)
+          //       // - node-llama-cpp (local AI)
+          //       // - fuse.js (app search)
 
-              return 'vendor';
-            }
-          }
+          //       return 'vendor';
+          //     }
+          //   }
         }
       }
     },

@@ -141,7 +141,12 @@ const openUrl = (url, workspaceName, title) => {
   }
 };
 
-const isExtension = typeof chrome !== 'undefined' && !!chrome.runtime?.id;
+// Detect the desktop (Tauri) app via a positive signal. We can't rely on
+// `!chrome.runtime?.id` because WebView2 populates `chrome.runtime`, which made
+// the context panel/resize handle vanish in the app. electron-shim guarantees
+// window.electronAPI (and __TAURI__) in the app; neither exists in the extension.
+const isDesktopApp = typeof window !== 'undefined' &&
+  !!(window.__TAURI__ || window.__TAURI_INTERNALS__ || window.electronAPI);
 
 // Memoized WorkspaceCard to prevent unnecessary re-renders
 export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, isPinned = false, onPin, onDelete, onAddUrl, onUrlAction, deferAnalytics = false, ...rest }) {
@@ -1144,11 +1149,11 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
       )}
 
       {/* ── Context panel + resize handle — App only, not in extension ─── */}
-      {!isExtension && contextPanelVisible && (
+      {isDesktopApp && contextPanelVisible && (
         <WorkspaceContextPanel workspace={workspace} />
       )}
 
-      {!isExtension && (
+      {isDesktopApp && (
         <div
           className="workspace-resize-handle"
           onMouseDown={handleResizeMouseDown}
