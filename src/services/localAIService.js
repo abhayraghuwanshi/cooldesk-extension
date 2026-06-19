@@ -835,6 +835,25 @@ export async function cloudChat(message) {
 }
 
 /**
+ * Agentic workspace suggestions — the model investigates the user's open tabs,
+ * running apps and history via tools, then returns workspace groups as JSON.
+ * Calls /llm/v3/suggest. `response` is the raw JSON string to parse.
+ *
+ * @param {string} message - User intent (may be empty for general suggestions)
+ * @returns {Promise<{ok: boolean, response: string, provider: string, error?: string}>}
+ */
+export async function cloudSuggest(message = '') {
+    const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const response = await fetch(`${SIDECAR_HTTP_URL}/llm/v3/suggest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, requestId })
+    });
+    if (!response.ok) throw new Error(`v3 suggest failed: ${response.status}`);
+    return response.json();
+}
+
+/**
  * Chat with cloud AI — context-injection model (same interface as simpleChat).
  * This endpoint passes user data as context and lets the LLM respond naturally.
  *

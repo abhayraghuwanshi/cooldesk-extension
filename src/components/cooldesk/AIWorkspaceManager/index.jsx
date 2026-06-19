@@ -1,13 +1,12 @@
 import {
-  faTimes,
-  faWandMagicSparkles
+  faTimes
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { safeGetHostname } from '../../../utils/helpers';
 import { buildSyncContext, invalidateSyncContext } from '../../../services/syncContextService';
 import { runningAppsService } from '../../../services/runningAppsService';
-import WorkspaceSidebar from './WorkspaceSidebar';
+import WorkspaceSwitcher from './WorkspaceSwitcher';
 import WorkspaceEditor from './WorkspaceEditor';
 import AISuggestionPanel from './AISuggestionPanel';
 import AIPromptBar from './AIPromptBar';
@@ -355,38 +354,22 @@ export default function AIWorkspaceManager({
   return (
     <div className="ai-workspace-manager-overlay" onClick={handleClose}>
       <div className="ai-workspace-manager" onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div className="awm-header">
-          <h2>
-            <FontAwesomeIcon icon={faWandMagicSparkles} className="awm-header-icon" />
-            AI Workspace Manager
-          </h2>
-          <button className="awm-close-btn" onClick={handleClose}>
-            <FontAwesomeIcon icon={faTimes} />
-          </button>
-        </div>
-
         <div className="awm-content">
-          {/* Left Panel */}
-          <WorkspaceSidebar
-            workspaces={workspaces}
-            selectedId={selectedWorkspaceId}
-            onSelect={handleSelectWorkspace}
-            onCreateNew={handleCreateNew}
-            onShowSuggestions={handleShowSuggestions}
-            isSuggestionsMode={mode === 'suggestions'}
-          />
-
-          {/* Right Panel */}
           <div className="awm-main-panel">
-            <AIPromptBar
-              value={aiPrompt}
-              onChange={setAiPrompt}
-              onSubmit={handlePromptSubmit}
-              isLoading={isLoading}
-              mode={mode}
-              workspaceName={formData.name}
-            />
+            {/* Top bar — workspace switcher (replaces sidebar) + close */}
+            <div className="awm-topbar">
+              <WorkspaceSwitcher
+                workspaces={workspaces}
+                selectedId={selectedWorkspaceId}
+                isSuggestionsMode={mode === 'suggestions'}
+                onSelect={handleSelectWorkspace}
+                onShowSuggestions={handleShowSuggestions}
+                onCreateNew={handleCreateNew}
+              />
+              <button className="awm-close-btn" onClick={handleClose} title="Close">
+                <FontAwesomeIcon icon={faTimes} />
+              </button>
+            </div>
 
             <div className="awm-main-content">
               {mode === 'suggestions' ? (
@@ -396,6 +379,17 @@ export default function AIWorkspaceManager({
                   error={agentError}
                   onAccept={handleAcceptSuggestion}
                   onCreateNew={handleCreateNew}
+                  composer={
+                    <AIPromptBar
+                      variant="hero"
+                      value={aiPrompt}
+                      onChange={setAiPrompt}
+                      onSubmit={handlePromptSubmit}
+                      isLoading={isLoading}
+                      mode={mode}
+                      workspaceName={formData.name}
+                    />
+                  }
                 />
               ) : (
                 <WorkspaceEditor
@@ -413,9 +407,34 @@ export default function AIWorkspaceManager({
                   relatedUrlsLoading={relatedUrlsLoading || contextLoading}
                   aiError={currentError}
                   onAddItem={handleAddItems}
+                  composer={
+                    <AIPromptBar
+                      variant="inline"
+                      value={aiPrompt}
+                      onChange={setAiPrompt}
+                      onSubmit={handlePromptSubmit}
+                      isLoading={isLoading}
+                      mode={mode}
+                      workspaceName={formData.name}
+                    />
+                  }
                 />
               )}
             </div>
+
+            {/* Once suggestions exist the composer drops to the bottom (chat).
+                Empty state shows the centered hero composer instead;
+                edit/create mode keeps its own Save/Delete footer. */}
+            {mode === 'suggestions' && agentSuggestions.length > 0 && (
+              <AIPromptBar
+                value={aiPrompt}
+                onChange={setAiPrompt}
+                onSubmit={handlePromptSubmit}
+                isLoading={isLoading}
+                mode={mode}
+                workspaceName={formData.name}
+              />
+            )}
           </div>
         </div>
       </div>

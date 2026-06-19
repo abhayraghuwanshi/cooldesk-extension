@@ -3374,6 +3374,37 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   white-space: nowrap;
 }
 
+/* ── Expand / collapse button on the compact workspace card ─────────────── */
+.compact-expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  align-self: center;
+  margin-left: auto;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  color: var(--text-secondary, #94a3b8);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.compact-expand-btn:hover {
+  background: rgba(139, 92, 246, 0.16);
+  border-color: rgba(139, 92, 246, 0.5);
+  color: #c4b5fd;
+}
+
+.compact-expand-btn.is-open {
+  background: rgba(139, 92, 246, 0.18);
+  border-color: rgba(139, 92, 246, 0.5);
+  color: #c4b5fd;
+}
+
 /* ============================================
    RESPONSIVE COMPACT CARD BREAKPOINTS
    Supports: 4K (3840px), QHD (2560px), FHD (1920px),

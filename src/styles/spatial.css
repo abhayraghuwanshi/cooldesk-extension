@@ -89,7 +89,7 @@
 
 .face-indicator {
   position: fixed;
-  bottom: 12px;
+  bottom: 5px;
   left: 50%;
   transform: translateX(-50%) translateY(0);
   z-index: 1000;
@@ -102,7 +102,7 @@
   --face-hue: 250;
   /* Default (Violet) */
   --face-color: hsla(var(--face-hue), 85%, 65%, 1);
-  --face-glow: hsla(var(--face-hue), 85%, 65%, 0.4);
+  --face-glow: hsla(var(--face-hue), 85%, 65%, 0.22);
 
   /* Condensed state: Perfect Living Orb */
   gap: 0px;
@@ -113,7 +113,7 @@
   padding: 0;
   border-radius: 50%;
   border: 1.5px solid var(--face-color);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), 0 0 12px var(--face-glow);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), 0 0 6px var(--face-glow);
   transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
   opacity: 0.95;
   overflow: visible;
@@ -209,6 +209,7 @@
   border-radius: inherit;
   pointer-events: none;
   z-index: -1;
+  opacity: 0.5;
   transition: all 0.8s ease;
 }
 
@@ -255,7 +256,7 @@
 }
 
 .face-indicator:hover {
-  bottom: 24px;
+  bottom: 17px;
   gap: 8px;
   width: auto;
   min-width: 380px;

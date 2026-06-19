@@ -76,7 +76,8 @@ export default function WorkspaceEditor({
   relatedUrls = [],
   relatedUrlsLoading = false,
   aiError = null,
-  onAddItem
+  onAddItem,
+  composer
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -85,6 +86,8 @@ export default function WorkspaceEditor({
   const [installedApps, setInstalledApps] = useState([]);
   const searchTimeoutRef = useRef(null);
   const inputRef = useRef(null);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const iconPickerRef = useRef(null);
 
   const apps = formData.apps || [];
   const urls = formData.urls || [];
@@ -280,6 +283,18 @@ export default function WorkspaceEditor({
     setIsSearching(false);
   }, [tabs, history, bookmarks, runningApps, installedApps, existingUrlSet, existingAppSet]);
 
+  // Close the icon popover on outside click
+  useEffect(() => {
+    if (!iconPickerOpen) return;
+    const onDocClick = (e) => {
+      if (iconPickerRef.current && !iconPickerRef.current.contains(e.target)) {
+        setIconPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [iconPickerOpen]);
+
   // Debounced search
   useEffect(() => {
     if (searchTimeoutRef.current) {
@@ -408,28 +423,53 @@ export default function WorkspaceEditor({
 
   return (
     <div className="awm-editor">
-      {/* Name + Icon row */}
-      <div className="awm-name-row">
-        <div className="awm-icon-selector-compact">
-          {ICONS.map(({ key, icon }) => (
+      {/* Identity header — icon + name + description grouped together */}
+      <div className="awm-editor-head">
+        <div className="awm-name-row">
+          <div className="awm-icon-picker" ref={iconPickerRef}>
             <button
-              key={key}
-              className={`awm-icon-btn-sm ${formData.icon === key ? 'selected' : ''}`}
-              onClick={() => onUpdate('icon', key)}
+              type="button"
+              className="awm-icon-current"
+              onClick={() => setIconPickerOpen(o => !o)}
+              title="Change icon"
             >
-              <FontAwesomeIcon icon={icon} />
+              <FontAwesomeIcon icon={(ICONS.find(i => i.key === formData.icon) || ICONS[0]).icon} />
             </button>
-          ))}
+            {iconPickerOpen && (
+              <div className="awm-icon-popover">
+                {ICONS.map(({ key, icon }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`awm-icon-btn-sm ${formData.icon === key ? 'selected' : ''}`}
+                    onClick={() => { onUpdate('icon', key); setIconPickerOpen(false); }}
+                  >
+                    <FontAwesomeIcon icon={icon} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <input
+            type="text"
+            className="awm-name-input"
+            value={formData.name}
+            onChange={(e) => onUpdate('name', e.target.value)}
+            placeholder="Workspace name..."
+            autoFocus
+          />
         </div>
         <input
           type="text"
-          className="awm-name-input"
-          value={formData.name}
-          onChange={(e) => onUpdate('name', e.target.value)}
-          placeholder="Workspace name..."
-          autoFocus
+          className="awm-desc-input"
+          value={formData.description}
+          onChange={(e) => onUpdate('description', e.target.value)}
+          placeholder="Add a description (optional)"
         />
       </div>
+
+      {/* AI composer — ask the agent to find URLs; results land in the list below */}
+      {composer}
 
       {/* Unified Items Section */}
       <div className="awm-items-section">
@@ -653,17 +693,6 @@ export default function WorkspaceEditor({
             )}
           </div>
         </div>
-      </div>
-
-      {/* Description */}
-      <div className="awm-form-group awm-description-group">
-        <label>Description (optional)</label>
-        <input
-          type="text"
-          value={formData.description}
-          onChange={(e) => onUpdate('description', e.target.value)}
-          placeholder="What is this workspace for?"
-        />
       </div>
 
       {/* Actions */}

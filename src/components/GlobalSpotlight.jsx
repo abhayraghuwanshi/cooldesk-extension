@@ -1,7 +1,14 @@
-import { faChrome, faDiscord, faEdge, faFirefox, faGithub, faSlack, faSpotify } from '@fortawesome/free-brands-svg-icons';
-import { faBriefcase, faCalculator, faChartLine, faCloud, faCode, faCog, faComments, faDatabase, faDesktop, faEnvelope, faFile, faFileCode, faFileLines, faFilePdf, faFileZipper, faFlask, faFolder, faFolderOpen, faFont, faGamepad, faGlobe, faGraduationCap, faHashtag, faHeartPulse, faHistory, faHome, faImage, faLightbulb, faLink, faMicrochip, faMusic, faNewspaper, faPalette, faPlane, faRobot, faSearch, faShoppingBag, faStar, faStickyNote, faTasks, faTerminal, faThumbtack, faTools, faUtensils, faVial, faVideo } from '@fortawesome/free-solid-svg-icons';
+import { faChrome, faCss3Alt, faDiscord, faEdge, faFirefox, faGithub, faGolang, faHtml5, faJava, faJs, faMarkdown, faNodeJs, faPhp, faPython, faReact, faRust, faSlack, faSpotify, faSwift, faVuejs } from '@fortawesome/free-brands-svg-icons';
+import { faBriefcase, faCalculator, faChartLine, faCloud, faCode, faCog, faComments, faDatabase, faDesktop, faEnvelope, faFile, faFileCode, faFileCsv, faFileExcel, faFileLines, faFilePdf, faFilePowerpoint, faFileWord, faFileZipper, faFlask, faFolder, faFolderOpen, faFont, faGamepad, faGlobe, faGraduationCap, faHashtag, faHeartPulse, faHistory, faHome, faImage, faLightbulb, faLink, faMicrochip, faMusic, faNewspaper, faPalette, faPlane, faRobot, faSearch, faShoppingBag, faStar, faStickyNote, faTasks, faTerminal, faThumbtack, faTools, faUtensils, faVial, faVideo } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import {
+    SiC, SiClojure, SiCplusplus, SiCss, SiDart, SiDocker, SiElixir, SiGnubash, SiGo,
+    SiGraphql, SiHaskell, SiHtml5, SiJavascript, SiJson, SiJupyter, SiKotlin, SiLua,
+    SiMarkdown, SiMysql, SiOpenjdk, SiPerl, SiPhp, SiPrisma, SiPython, SiR, SiReact,
+    SiRuby, SiRust, SiSass, SiScala, SiSharp, SiSqlite, SiSvelte, SiSwift, SiTailwindcss,
+    SiToml, SiTypescript, SiVuedotjs, SiYaml,
+} from 'react-icons/si';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { storageGet, storageSet } from '../services/extensionApi';
 import { syncWebSocket } from '../services/syncWebSocket';
 import { isHostSyncEnabled } from '../services/syncConfig';
@@ -187,6 +194,9 @@ export function GlobalSpotlight() {
     const [loading, setLoading] = useState(false);
     const [deepSearch, setDeepSearch] = useState(false);
     const [showAllResults, setShowAllResults] = useState(false);
+    // Folder tree: expand folders inline (Explorer/Reddit-style hierarchy).
+    const [expandedPaths, setExpandedPaths] = useState(() => new Set());
+    const [treeChildren, setTreeChildren] = useState({}); // path -> child items[]
     const inputRef = useRef(null);
     const containerRef = useRef(null);
 
@@ -844,6 +854,10 @@ export function GlobalSpotlight() {
     useEffect(() => {
         const trimmedQuery = query.trim();
 
+        // A new query collapses any expanded folder tree from the previous search.
+        setExpandedPaths(new Set());
+        setTreeChildren({});
+
         // Skip search if in command mode
         if (commandMode) {
             return;
@@ -899,22 +913,23 @@ export function GlobalSpotlight() {
 
                 let [searchResults, osFiles] = await Promise.all([searchPromise, filesPromise]);
 
+                const qLower = trimmedQuery.toLowerCase();
                 const mappedFiles = (osFiles || []).map(file => {
-                    const filePath = typeof file === 'string' ? file : (file.path || '');
-                    if (!filePath) return null;
-                    const fileDate = file.date ? ` • ${file.date}` : '';
-                    const parentFolder = filePath.split(/[/\\]/).slice(0, -1).pop() || '';
-                    return {
-                        id: `file:${filePath}`,
-                        type: 'file',
-                        title: filePath.split(/[/\\]/).pop(),
-                        description: `${parentFolder}${fileDate}`,
-                        path: filePath,
-                        icon: 'file'
-                    };
+                    const item = fileToResultItem(file);
+                    if (!item) return null;
+                    const nameLower = item.title.toLowerCase();
+                    // Score by match quality so files/folders rank with apps/tabs
+                    // instead of always being dumped at the bottom of the list.
+                    let score = 70;
+                    if (nameLower === qLower) score = 96;
+                    else if (nameLower.startsWith(qLower)) score = 86;
+                    else if (nameLower.includes(qLower)) score = 76;
+                    if (item.isDir) score += 4; // nudge folders up — usually what the user wants to navigate
+                    return { ...item, score };
                 }).filter(Boolean);
 
-                searchResults = [...(searchResults || []), ...mappedFiles];
+                searchResults = [...(searchResults || []), ...mappedFiles]
+                    .sort((a, b) => (b.score || 0) - (a.score || 0));
 
                 // Check if still relevant (user may have typed more)
                 if (searchIdRef.current !== currentSearchId) return;
@@ -957,6 +972,64 @@ export function GlobalSpotlight() {
 
         return () => clearTimeout(timeoutId);
     }, [query, deepSearch, commandMode]);
+
+    // --- Folder tree helpers ---
+    // Base rows = search results capped to the visible window; folders among
+    // them can be expanded inline to reveal children (recursively).
+    const baseRows = useMemo(
+        () => results.slice(0, showAllResults ? results.length : 10),
+        [results, showAllResults]
+    );
+
+    // Flatten the tree (base rows + expanded children) into a single navigable
+    // list, tagging each row with its depth for indentation.
+    const flatRows = useMemo(() => {
+        const out = [];
+        const walk = (items, depth) => {
+            for (const it of items) {
+                const isFolder = it.type === 'folder';
+                const isExpanded = isFolder && expandedPaths.has(it.path);
+                out.push({ item: it, depth, isFolder, isExpanded });
+                if (isExpanded) {
+                    const kids = treeChildren[it.path];
+                    if (kids && kids.length) walk(kids, depth + 1);
+                }
+            }
+        };
+        walk(baseRows, 0);
+        return out;
+    }, [baseRows, expandedPaths, treeChildren]);
+
+    const collapsePath = (path) => {
+        setExpandedPaths(prev => {
+            const next = new Set(prev);
+            next.delete(path);
+            return next;
+        });
+    };
+
+    const expandPath = async (folder) => {
+        if (!folder || folder.type !== 'folder' || !folder.path) return;
+        const path = folder.path;
+        // Load children once, then cache.
+        if (!treeChildren[path] && window.electronAPI?.listDir) {
+            try {
+                const children = await window.electronAPI.listDir(path);
+                const items = (children || []).map(fileToResultItem).filter(Boolean);
+                setTreeChildren(prev => ({ ...prev, [path]: items }));
+            } catch (err) {
+                console.error('[Spotlight] listDir failed:', err);
+                setTreeChildren(prev => ({ ...prev, [path]: [] }));
+            }
+        }
+        setExpandedPaths(prev => new Set(prev).add(path));
+    };
+
+    const toggleExpand = (folder) => {
+        if (!folder || folder.type !== 'folder' || !folder.path) return;
+        if (expandedPaths.has(folder.path)) collapsePath(folder.path);
+        else expandPath(folder);
+    };
 
     // Handle Keyboard Navigation
     const handleKeyDown = (e) => {
@@ -1023,7 +1096,7 @@ export function GlobalSpotlight() {
         // If searching: Only Results
         const totalContext = isSearching ? 0 : contextItems.length;
         const totalPins = isSearching ? 0 : pinnedItems.length;
-        const totalResults = results.length;
+        const totalResults = flatRows.length; // results section is the (expandable) folder tree
         const totalItems = totalContext + totalPins + totalResults;
 
         // Current selected index in flat list (following visual order: context → pins → results)
@@ -1038,6 +1111,34 @@ export function GlobalSpotlight() {
             currentIndex = totalContext + selectedPinIndex;
         } else if (selectedIndex >= 0) {
             currentIndex = totalContext + totalPins + selectedIndex;
+        }
+
+        // Right/Left arrow → expand/collapse the selected folder (tree nav).
+        // Only applies inside the results tree (context/pins are hidden while searching).
+        const inResults = currentIndex >= totalContext + totalPins;
+        const treeIdx = currentIndex - totalContext - totalPins;
+        const treeRow = inResults && treeIdx >= 0 ? flatRows[treeIdx] : null;
+
+        if (e.key === 'ArrowRight' && treeRow && treeRow.isFolder) {
+            e.preventDefault();
+            if (!treeRow.isExpanded) {
+                expandPath(treeRow.item); // collapsed → expand
+            } else if (treeIdx + 1 < flatRows.length) {
+                setSelectedIndex(selectedIndex + 1); // expanded → step into first child
+            }
+            return;
+        }
+        if (e.key === 'ArrowLeft' && treeRow) {
+            e.preventDefault();
+            if (treeRow.isFolder && treeRow.isExpanded) {
+                collapsePath(treeRow.item.path); // expanded → collapse
+            } else if (treeRow.depth > 0) {
+                // step out to the parent row (nearest previous row at depth-1)
+                for (let i = treeIdx - 1; i >= 0; i--) {
+                    if (flatRows[i].depth === treeRow.depth - 1) { setSelectedIndex(i); break; }
+                }
+            }
+            return;
         }
 
         // Navigation handlers - follow visual order: Context → Pins → Results
@@ -1132,12 +1233,12 @@ export function GlobalSpotlight() {
                 } else if (currentIndex < totalContext + totalPins) {
                     handleSelect(pinnedItems[currentIndex - totalContext]);
                 } else {
-                    handleSelect(results[currentIndex - totalContext - totalPins]);
+                    handleSelect(flatRows[currentIndex - totalContext - totalPins]?.item);
                 }
             } else if (query.startsWith('http')) {
                 handleSelect({ url: query, type: 'url' });
-            } else if (results.length > 0) {
-                handleSelect(results[0]);
+            } else if (flatRows.length > 0) {
+                handleSelect(flatRows[0].item);
             }
         } else if (e.key === 'Escape') {
             e.preventDefault();
@@ -1145,7 +1246,7 @@ export function GlobalSpotlight() {
         } else if (e.key === 'p' && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
             if (currentIndex >= totalContext + totalPins && selectedIndex >= 0) {
-                togglePin(results[selectedIndex]);
+                togglePin(flatRows[selectedIndex]?.item);
             }
         } else if ((e.key === 'Delete' || e.key === 'Backspace') && !isSearching && currentIndex >= totalContext && currentIndex < totalContext + totalPins) {
             e.preventDefault();
@@ -1225,6 +1326,21 @@ export function GlobalSpotlight() {
         }
 
         // Handle files natively using OS default viewer
+        if (item.type === 'folder') {
+            try {
+                if (window.electronAPI?.openFolder) {
+                    await window.electronAPI.openFolder(item.path);
+                } else if (window.electronAPI?.launchApp) {
+                    await window.electronAPI.launchApp(item.path);
+                } else {
+                    console.warn('[Spotlight] openFolder not available for folders');
+                }
+            } catch (e) {
+                console.error('[Spotlight] Failed to open folder:', e);
+            }
+            return;
+        }
+
         if (item.type === 'file') {
             try {
                 if (window.electronAPI?.launchApp) {
@@ -1403,6 +1519,8 @@ export function GlobalSpotlight() {
     const handleClose = useCallback(() => {
         setQuery('');
         setResults([]);
+        setExpandedPaths(new Set());
+        setTreeChildren({});
         if (window.electronAPI && window.electronAPI.sendMessage) {
             window.electronAPI.sendMessage({ type: 'SPOTLIGHT_HIDE' });
         }
@@ -1438,6 +1556,7 @@ export function GlobalSpotlight() {
         if (item.type === 'history') return 'History';
         if (item.type === 'bookmark') return 'Bookmark';
         if (item.type === 'file') return 'File';
+        if (item.type === 'folder') return 'Folder';
         if (item.type === 'app') return item.isRunning ? 'Running' : 'App';
         return item.category || 'Link';
     };
@@ -1852,14 +1971,18 @@ export function GlobalSpotlight() {
                     </div>
                 )}
 
-                {/* Results - Limited to 10 visible for performance */}
-                {results.length > 0 && !commandMode && (
+                {/* Results — expandable folder tree (Explorer-style hierarchy) */}
+                {flatRows.length > 0 && !commandMode && (
                     <div className="spotlight-results">
-                        {results.slice(0, showAllResults ? results.length : 10).map((item, index) => (
+                        {flatRows.map((row, index) => (
                             <ResultItem
-                                key={item.id || index}
-                                item={item}
+                                key={row.item.id || index}
+                                item={row.item}
                                 index={index}
+                                depth={row.depth}
+                                isFolderRow={row.isFolder}
+                                isExpanded={row.isExpanded}
+                                onToggleExpand={toggleExpand}
                                 isSelected={index === selectedIndex}
                                 onSelect={handleSelect}
                                 onHover={setSelectedIndex}
@@ -1881,6 +2004,7 @@ export function GlobalSpotlight() {
                 <div className="spotlight-footer">
                     <div className="shortcut-hint"><span className="shortcut-key">↵</span> Open</div>
                     <div className="shortcut-hint"><span className="shortcut-key">↑↓</span> Navigate</div>
+                    <div className="shortcut-hint"><span className="shortcut-key">→←</span> Expand</div>
                     <div className="shortcut-hint"><span className="shortcut-key">Esc</span> Close</div>
                     <div className="shortcut-hint" style={{ marginLeft: 'auto' }}><span className="shortcut-key">⌘P</span> Pin</div>
                 </div>
@@ -1952,36 +2076,134 @@ function getWorkspaceIcon(name) {
     return faFolder;
 }
 
-function getFileIcon(filename) {
+// Real brand logos (Simple Icons) for code/tech extensions, with official-ish
+// brand colors. Anything not here falls back to the FontAwesome map below.
+const SI_FILE_ICONS = {
+    // JS / TS ecosystem
+    ts: { Icon: SiTypescript, color: '#3178c6' }, mts: { Icon: SiTypescript, color: '#3178c6' }, cts: { Icon: SiTypescript, color: '#3178c6' },
+    tsx: { Icon: SiReact, color: '#61dafb' }, jsx: { Icon: SiReact, color: '#61dafb' },
+    js: { Icon: SiJavascript, color: '#f7df1e' }, mjs: { Icon: SiJavascript, color: '#f7df1e' }, cjs: { Icon: SiJavascript, color: '#f7df1e' },
+    vue: { Icon: SiVuedotjs, color: '#42b883' }, svelte: { Icon: SiSvelte, color: '#ff3e00' },
+    // Web / styling
+    html: { Icon: SiHtml5, color: '#e34f26' }, htm: { Icon: SiHtml5, color: '#e34f26' },
+    css: { Icon: SiCss, color: '#2965f1' }, scss: { Icon: SiSass, color: '#cc6699' }, sass: { Icon: SiSass, color: '#cc6699' },
+    tailwind: { Icon: SiTailwindcss, color: '#38bdf8' },
+    // Languages
+    py: { Icon: SiPython, color: '#3776ab' }, ipynb: { Icon: SiJupyter, color: '#f37726' },
+    rs: { Icon: SiRust, color: '#dea584' }, go: { Icon: SiGo, color: '#00add8' },
+    java: { Icon: SiOpenjdk, color: '#e76f00' }, class: { Icon: SiOpenjdk, color: '#e76f00' },
+    kt: { Icon: SiKotlin, color: '#7f52ff' }, kts: { Icon: SiKotlin, color: '#7f52ff' },
+    rb: { Icon: SiRuby, color: '#cc342d' }, php: { Icon: SiPhp, color: '#777bb4' }, swift: { Icon: SiSwift, color: '#f05138' },
+    c: { Icon: SiC, color: '#a8b9cc' }, h: { Icon: SiC, color: '#a8b9cc' },
+    cpp: { Icon: SiCplusplus, color: '#00599c' }, cc: { Icon: SiCplusplus, color: '#00599c' }, hpp: { Icon: SiCplusplus, color: '#00599c' },
+    cs: { Icon: SiSharp, color: '#9b4f96' }, dart: { Icon: SiDart, color: '#0175c2' },
+    lua: { Icon: SiLua, color: '#2c2d72' }, pl: { Icon: SiPerl, color: '#39457e' }, pm: { Icon: SiPerl, color: '#39457e' },
+    scala: { Icon: SiScala, color: '#dc322f' }, ex: { Icon: SiElixir, color: '#4b275f' }, exs: { Icon: SiElixir, color: '#4b275f' },
+    clj: { Icon: SiClojure, color: '#5881d8' }, hs: { Icon: SiHaskell, color: '#5e5086' }, r: { Icon: SiR, color: '#276dc3' },
+    // Data / config / tooling
+    json: { Icon: SiJson, color: '#cbcb41' },
+    yaml: { Icon: SiYaml, color: '#cb171e' }, yml: { Icon: SiYaml, color: '#cb171e' },
+    toml: { Icon: SiToml, color: '#9c4221' }, md: { Icon: SiMarkdown, color: '#cbd5e1' }, markdown: { Icon: SiMarkdown, color: '#cbd5e1' },
+    graphql: { Icon: SiGraphql, color: '#e10098' }, gql: { Icon: SiGraphql, color: '#e10098' }, prisma: { Icon: SiPrisma, color: '#2d3748' },
+    dockerfile: { Icon: SiDocker, color: '#2496ed' },
+    sql: { Icon: SiMysql, color: '#4479a1' }, sqlite: { Icon: SiSqlite, color: '#003b57' }, sqlite3: { Icon: SiSqlite, color: '#003b57' }, db: { Icon: SiSqlite, color: '#003b57' },
+    sh: { Icon: SiGnubash, color: '#4eaa25' }, bash: { Icon: SiGnubash, color: '#4eaa25' }, zsh: { Icon: SiGnubash, color: '#4eaa25' },
+};
+
+// Resolve a filename to { kind: 'si'|'fa', Icon, color } — react-icons brand
+// logo where we have one, otherwise the FontAwesome category icon.
+function getFileVisual(filename) {
+    const ext = (filename || '').split('.').pop().toLowerCase();
+    const si = SI_FILE_ICONS[ext];
+    if (si) return { kind: 'si', Icon: si.Icon, color: si.color };
+    const meta = getFileIconMeta(filename);
+    return { kind: 'fa', Icon: meta.icon, color: meta.color };
+}
+
+// Per-extension icon + brand color. Returns { icon, color } so file rows show a
+// recognizable logo (React for .tsx/.jsx, Python, Rust, ...) tinted by language.
+function getFileIconMeta(filename) {
     const ext = (filename || '').split('.').pop().toLowerCase();
     switch (ext) {
+        // Web / frameworks
+        case 'tsx': case 'jsx': return { icon: faReact, color: '#61dafb' };
+        case 'ts':              return { icon: faFileCode, color: '#3178c6' };
+        case 'js': case 'mjs': case 'cjs': return { icon: faJs, color: '#f7df1e' };
+        case 'vue':             return { icon: faVuejs, color: '#42b883' };
+        case 'svelte':          return { icon: faFileCode, color: '#ff3e00' };
+        case 'html': case 'htm': return { icon: faHtml5, color: '#e34f26' };
+        case 'css': case 'scss': case 'sass': case 'less': return { icon: faCss3Alt, color: '#2965f1' };
+        case 'php':             return { icon: faPhp, color: '#8993be' };
+        case 'node':            return { icon: faNodeJs, color: '#83cd29' };
+        // Languages
+        case 'py':              return { icon: faPython, color: '#4b8bbe' };
+        case 'rs':              return { icon: faRust, color: '#f74c00' };
+        case 'java': case 'class': return { icon: faJava, color: '#e76f00' };
+        case 'go':              return { icon: faGolang, color: '#00add8' };
+        case 'swift':           return { icon: faSwift, color: '#f05138' };
+        case 'rb':              return { icon: faFileCode, color: '#cc342d' };
+        case 'c': case 'h':     return { icon: faFileCode, color: '#5c6bc0' };
+        case 'cpp': case 'cc': case 'hpp': return { icon: faFileCode, color: '#00599c' };
+        case 'cs':              return { icon: faFileCode, color: '#9b4f96' };
+        case 'kt': case 'kts':  return { icon: faFileCode, color: '#a97bff' };
+        // Data / config / docs
+        case 'json':            return { icon: faFileCode, color: '#cbcb41' };
+        case 'xml': case 'yaml': case 'yml': case 'toml': return { icon: faFileCode, color: '#89cff0' };
+        case 'md': case 'markdown': return { icon: faMarkdown, color: '#cbd5e1' };
+        case 'sql': case 'db': case 'sqlite': case 'sqlite3': return { icon: faDatabase, color: '#38bdf8' };
+        case 'txt': case 'log': case 'rtf': return { icon: faFileLines, color: '#94a3b8' };
+        case 'pdf':             return { icon: faFilePdf, color: '#ef4444' };
+        case 'doc': case 'docx': return { icon: faFileWord, color: '#2b579a' };
+        case 'xls': case 'xlsx': return { icon: faFileExcel, color: '#217346' };
+        case 'ppt': case 'pptx': return { icon: faFilePowerpoint, color: '#d24726' };
+        case 'csv':             return { icon: faFileCsv, color: '#217346' };
+        // Media
         case 'jpg': case 'jpeg': case 'png': case 'gif': case 'svg': case 'webp': case 'bmp': case 'ico': case 'tiff': case 'heic':
-            return faImage;
+            return { icon: faImage, color: '#c084fc' };
         case 'mp4': case 'mkv': case 'avi': case 'mov': case 'wmv': case 'flv': case 'webm': case 'm4v':
-            return faVideo;
+            return { icon: faVideo, color: '#f87171' };
         case 'mp3': case 'wav': case 'flac': case 'ogg': case 'aac': case 'm4a': case 'wma':
-            return faMusic;
-        case 'pdf':
-            return faFilePdf;
-        case 'js': case 'ts': case 'jsx': case 'tsx': case 'py': case 'java': case 'c': case 'cpp': case 'cs':
-        case 'go': case 'rs': case 'rb': case 'php': case 'swift': case 'kt': case 'html': case 'css':
-        case 'json': case 'xml': case 'yaml': case 'yml': case 'toml': case 'vue': case 'svelte':
-            return faFileCode;
-        case 'txt': case 'md': case 'log': case 'rtf': case 'csv':
-            return faFileLines;
+            return { icon: faMusic, color: '#34d399' };
+        // Archives / scripts / binaries / fonts
         case 'zip': case 'rar': case '7z': case 'tar': case 'gz': case 'bz2': case 'xz':
-            return faFileZipper;
-        case 'sql': case 'db': case 'sqlite': case 'sqlite3':
-            return faDatabase;
+            return { icon: faFileZipper, color: '#eab308' };
         case 'sh': case 'bash': case 'zsh': case 'bat': case 'cmd': case 'ps1':
-            return faTerminal;
+            return { icon: faTerminal, color: '#4ade80' };
         case 'ttf': case 'otf': case 'woff': case 'woff2':
-            return faFont;
+            return { icon: faFont, color: '#a78bfa' };
         case 'exe': case 'msi': case 'dmg': case 'pkg': case 'deb': case 'rpm': case 'appimage':
-            return faMicrochip;
+            return { icon: faMicrochip, color: '#94a3b8' };
         default:
-            return faFile;
+            return { icon: faFile, color: null };
     }
+}
+
+function getFileIcon(filename) {
+    return getFileIconMeta(filename).icon;
+}
+
+// Map a backend file/folder entry ({ path, date, is_dir }) to a result item.
+// Shared by file search and the folder drill-down so both render identically.
+function fileToResultItem(file) {
+    const filePath = typeof file === 'string' ? file : (file && file.path) || '';
+    if (!filePath) return null;
+    const isDir = typeof file === 'object' && !!file.is_dir;
+    const fileDate = (file && file.date) ? ` • ${file.date}` : '';
+    const segs = filePath.split(/[/\\]/).filter(Boolean);
+    const fileName = segs[segs.length - 1] || filePath;
+    // Parent location, with C:\Users\<name> abbreviated to ~ so the user can
+    // tell which folder this is (e.g. ~ vs ~\Documents).
+    const parentPath = segs.slice(0, -1).join('\\')
+        .replace(/^([A-Za-z]:\\Users\\[^\\]+)/i, '~');
+    return {
+        id: `${isDir ? 'folder' : 'file'}:${filePath}`,
+        type: isDir ? 'folder' : 'file',
+        title: fileName,
+        description: `${parentPath || 'Local'}${fileDate}`,
+        path: filePath,
+        icon: isDir ? 'folder' : 'file',
+        isDir,
+    };
 }
 
 function getIcon(type, name) {
@@ -1993,6 +2215,7 @@ function getIcon(type, name) {
         case 'note': return faStickyNote;
         case 'app': return faDesktop;
         case 'file': return getFileIcon(name);
+        case 'folder': return faFolderOpen;
         default: return faLink;
     }
 }
@@ -2097,32 +2320,64 @@ const ContextItem = memo(function ContextItem({ item, index, isSelected, onSelec
 });
 
 // Memoized Result Item to prevent unnecessary re-renders
-const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect, onHover, onTogglePin, formatUrl, getBadgeLabel, getAppIcon }) {
+const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect, onHover, onTogglePin, formatUrl, getBadgeLabel, getAppIcon, depth = 0, isFolderRow = false, isExpanded = false, onToggleExpand }) {
     const handleClick = useCallback(() => onSelect(item), [item, onSelect]);
     const handleMouseEnter = useCallback(() => onHover(index), [index, onHover]);
     const handlePinClick = useCallback((e) => onTogglePin(item, e), [item, onTogglePin]);
+    const handleToggle = useCallback((e) => { e.stopPropagation(); onToggleExpand?.(item); }, [item, onToggleExpand]);
 
     // Track icon load errors to show fallback
     const [iconError, setIconError] = useState(false);
+    const rowRef = useRef(null);
+    // Per-extension logo + tint for file rows (e.g. React-blue for .tsx).
+    const fileMeta = item.type === 'file' ? getFileVisual(item.title || item.name) : null;
 
     // Reset error when item changes
     useEffect(() => {
         setIconError(false);
     }, [item.id, item.icon, item.favicon]);
 
+    // Keep the keyboard-selected row visible as the tree scrolls.
+    useEffect(() => {
+        if (isSelected && rowRef.current) {
+            rowRef.current.scrollIntoView({ block: 'nearest' });
+        }
+    }, [isSelected]);
+
     return (
         <div
-            className={`result-item ${isSelected ? 'selected' : ''} result-${['tab', 'bookmark', 'history', 'workspace', 'note', 'app'].includes(item.type) ? item.type : 'link'}`}
+            ref={rowRef}
+            className={`result-item ${isSelected ? 'selected' : ''} result-${['tab', 'bookmark', 'history', 'workspace', 'note', 'app', 'folder', 'file'].includes(item.type) ? item.type : 'link'}`}
+            title={(item.type === 'folder' || item.type === 'file') ? item.path : undefined}
             onClick={handleClick}
             onMouseEnter={handleMouseEnter}
         >
-            <div className="result-icon">
+            {/* Tree indentation guides (one vertical line per ancestor level) */}
+            {depth > 0 && Array.from({ length: depth }).map((_, d) => (
+                <span key={d} className="tree-indent" />
+            ))}
+            {/* Expand/collapse chevron for folders in the tree */}
+            {isFolderRow ? (
+                <button
+                    className={`tree-chevron ${isExpanded ? 'expanded' : ''}`}
+                    onClick={handleToggle}
+                    title={isExpanded ? 'Collapse' : 'Expand'}
+                >▸</button>
+            ) : (depth > 0 && <span className="tree-chevron-spacer" />)}
+            <div
+                className="result-icon"
+                style={fileMeta?.color ? { color: fileMeta.color, background: `${fileMeta.color}1f` } : undefined}
+            >
                 {item.type === 'app' ? (
                     (item.icon && item.icon.length > 50 && !iconError) ? (
                         <img src={item.icon} className="app-icon-img" alt="" onError={() => setIconError(true)} />
                     ) : (
                         <FontAwesomeIcon icon={getAppIcon(item.name)} className="app-icon" />
                     )
+                ) : item.type === 'file' && fileMeta ? (
+                    fileMeta.kind === 'si'
+                        ? <fileMeta.Icon className="file-glyph" />
+                        : <FontAwesomeIcon icon={fileMeta.Icon} />
                 ) : (() => {
                     const resolvedFavicon = item.favicon || (item.url ? getFaviconUrl(item.url, 32, null, true) : null);
                     return resolvedFavicon && !iconError ? (

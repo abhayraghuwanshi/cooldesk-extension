@@ -306,6 +306,7 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
     let app = app
         .route("/llm/v3/simple-chat", post(v3_simple_chat))
         .route("/llm/v3/chat", post(v3_chat))
+        .route("/llm/v3/suggest", post(v3_suggest))
         .route("/llm/v3/status", get(v3_status))
         .route("/llm/v3/config", get(v3_get_config).post(v3_save_config));
 

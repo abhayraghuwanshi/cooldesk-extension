@@ -70,7 +70,6 @@ h1 {
   line-height: 1.1;
 }
 
-button,
 input,
 select,
 textarea {
@@ -84,18 +83,22 @@ textarea {
   color: inherit;
 }
 
+/* Buttons reset to unstyled by default — components own their own look.
+   (Removes Vite scaffolding's #1a1a1a box, transparent border, and the
+   #646cff hover/focus rings that leaked everywhere.) */
 button {
+  font-family: inherit;
+  font-size: 1em;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
   cursor: pointer;
-  transition: border-color 0.25s;
 }
 
-button:hover {
-  border-color: #646cff;
-}
-
-button:focus,
 button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  outline: 2px solid rgba(139, 92, 246, 0.6);
+  outline-offset: 2px;
 }
 
 @media (prefers-color-scheme: light) {

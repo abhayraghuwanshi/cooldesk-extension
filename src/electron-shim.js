@@ -510,6 +510,16 @@ const electronAPI = {
         }
     },
 
+    listDir: async (path) => {
+        try {
+            const result = await invoke('list_dir', { path });
+            return result;
+        } catch (e) {
+            console.error('[TauriShim] Failed to list dir:', e);
+            return [];
+        }
+    },
+
     // ==========================================
     // LLM (via Sidecar WebSocket)
     // ==========================================

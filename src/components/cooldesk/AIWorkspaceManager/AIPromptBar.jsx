@@ -22,7 +22,8 @@ export default function AIPromptBar({
   onSubmit,
   isLoading,
   mode = 'suggestions',
-  workspaceName = ''
+  workspaceName = '',
+  variant = 'bar'
 }) {
   const inputRef = useRef(null);
 
@@ -46,8 +47,112 @@ export default function AIPromptBar({
     onSubmit(example);
   }, [onChange, onSubmit]);
 
+  // ── Inline variant — compact composer embedded inside the editor ───────────
+  if (variant === 'inline') {
+    return (
+      <div className="awm-inline-composer">
+        <div className="awm-inline-composer-box">
+          <FontAwesomeIcon
+            icon={faMagicWandSparkles}
+            className={`awm-inline-composer-icon ${isLoading ? 'spinning' : ''}`}
+          />
+          <input
+            ref={inputRef}
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            disabled={isLoading}
+          />
+          <button
+            className="awm-inline-composer-send"
+            onClick={() => onSubmit(value)}
+            disabled={isLoading || !value.trim()}
+          >
+            {isLoading ? <div className="awm-spinner-sm" /> : <FontAwesomeIcon icon={faPaperPlane} />}
+          </button>
+        </div>
+        <div className="awm-inline-composer-chips">
+          {examples.map((example, idx) => (
+            <button
+              key={idx}
+              className="awm-prompt-example"
+              onClick={() => handleExampleClick(example)}
+              disabled={isLoading}
+            >
+              {example}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Hero variant — large centered, Gemini-style composer ───────────────────
+  if (variant === 'hero') {
+    return (
+      <div className="awm-hero-composer">
+        <div className="awm-hero-composer-box">
+          <input
+            ref={inputRef}
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            disabled={isLoading}
+          />
+          <div className="awm-hero-composer-actions">
+            <span className="awm-hero-composer-hint">
+              <FontAwesomeIcon
+                icon={faMagicWandSparkles}
+                className={isLoading ? 'spinning' : ''}
+              />
+            </span>
+            <button
+              className="awm-hero-go"
+              onClick={() => onSubmit(value)}
+              disabled={isLoading || !value.trim()}
+            >
+              {isLoading ? <div className="awm-spinner-sm" /> : <FontAwesomeIcon icon={faPaperPlane} />}
+              <span>{isLoading ? 'Thinking…' : 'Suggest workspaces'}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="awm-hero-chips">
+          {examples.map((example, idx) => (
+            <button
+              key={idx}
+              className="awm-prompt-example"
+              onClick={() => handleExampleClick(example)}
+              disabled={isLoading}
+            >
+              {example}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="awm-prompt-bar">
+      <div className="awm-prompt-examples">
+        <span>Try:</span>
+        {examples.map((example, idx) => (
+          <button
+            key={idx}
+            className="awm-prompt-example"
+            onClick={() => handleExampleClick(example)}
+            disabled={isLoading}
+          >
+            {example}
+          </button>
+        ))}
+      </div>
+
       <div className="awm-prompt-input-wrapper">
         <FontAwesomeIcon
           icon={faMagicWandSparkles}
@@ -73,20 +178,6 @@ export default function AIPromptBar({
             <FontAwesomeIcon icon={faPaperPlane} />
           )}
         </button>
-      </div>
-
-      <div className="awm-prompt-examples">
-        <span>Try:</span>
-        {examples.map((example, idx) => (
-          <button
-            key={idx}
-            className="awm-prompt-example"
-            onClick={() => handleExampleClick(example)}
-            disabled={isLoading}
-          >
-            {example}
-          </button>
-        ))}
       </div>
     </div>
   );

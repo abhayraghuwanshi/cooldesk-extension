@@ -1821,6 +1821,25 @@ pub async fn v3_chat(
     }))
 }
 
+/// Agentic workspace suggestions — the model investigates open tabs / running
+/// apps / history via tools, then returns workspace groups as JSON in `response`.
+pub async fn v3_suggest(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<V3ChatRequest>,
+) -> Json<serde_json::Value> {
+    log::info!("[v3] suggest: {}", &req.message[..req.message.len().min(60)]);
+    let agent = CloudAgent::new(state.sync_data.clone());
+    let result = agent.suggest(&req.message).await;
+
+    Json(serde_json::json!({
+        "ok": result.ok,
+        "response": result.content,
+        "provider": result.provider,
+        "requestId": req.request_id,
+        "error": result.error,
+    }))
+}
+
 /// Returns whether cloud AI is configured (API key is set).
 pub async fn v3_status() -> Json<serde_json::Value> {
     let config = load_config();

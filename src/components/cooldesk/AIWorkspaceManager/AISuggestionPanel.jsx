@@ -14,15 +14,19 @@ export default function AISuggestionPanel({
   isLoading,
   error,
   onAccept,
-  onCreateNew
+  onCreateNew,
+  composer
 }) {
   if (isLoading) {
     return (
       <div className="awm-suggestions">
-        <div className="awm-suggestions-loading">
-          <div className="awm-spinner" />
-          <span>Analysing your workspace...</span>
-          <p>Finding tabs, apps, and open projects to suggest smart groups</p>
+        <div className="awm-hero">
+          <div className="awm-hero-orb is-loading">
+            <FontAwesomeIcon icon={faMagicWandSparkles} />
+          </div>
+          <h3 className="awm-hero-title">Reading your workspace…</h3>
+          <p className="awm-hero-sub">Scanning open tabs, running apps and editor projects to suggest smart groups.</p>
+          <div className="awm-hero-bar"><span /></div>
         </div>
       </div>
     );
@@ -31,22 +35,32 @@ export default function AISuggestionPanel({
   if (!suggestions || suggestions.length === 0) {
     return (
       <div className="awm-suggestions">
-        <div className="awm-suggestions-empty">
-          <FontAwesomeIcon icon={faMagicWandSparkles} className="awm-empty-icon" />
+        <div className="awm-hero">
+          <div className={`awm-hero-orb ${error ? 'is-error' : ''}`}>
+            <FontAwesomeIcon icon={faMagicWandSparkles} />
+          </div>
+
           {error ? (
             <>
-              <h4>AI unavailable</h4>
-              <p className="awm-suggestions-error">{error}</p>
+              <h3 className="awm-hero-title">AI is unavailable</h3>
+              <p className="awm-hero-sub awm-hero-error">{error}</p>
             </>
           ) : (
             <>
-              <h4>Ready to analyse your workspace</h4>
-              <p>Hit one of the prompts above or type your own — the agent will look at your open tabs, running apps, and editor projects to suggest workspaces.</p>
+              <h3 className="awm-hero-title">What should we organize?</h3>
+              <p className="awm-hero-sub">
+                Describe how you want your tabs, apps and projects grouped — the agent reads your
+                workspace and proposes workspaces you can tweak.
+              </p>
             </>
           )}
-          <button className="awm-btn awm-btn-secondary" onClick={onCreateNew}>
+
+          {/* Gemini-style centered composer lives right here in the empty state */}
+          {composer}
+
+          <button className="awm-hero-ghost" onClick={onCreateNew}>
             <FontAwesomeIcon icon={faPlus} />
-            Create Manually
+            {error ? 'Create a workspace manually' : 'or build one manually'}
           </button>
         </div>
       </div>

@@ -2,20 +2,6 @@ import { useCallback } from 'react';
 import * as LocalAIService from '../../../services/localAIService';
 import { safeGetHostname } from '../../../utils/helpers';
 
-// ── AI backend resolver ───────────────────────────────────────────────────────
-
-async function resolveChatFn() {
-  try {
-    const cloud = await LocalAIService.getCloudStatus();
-    if (cloud?.configured) return LocalAIService.cloudSimpleChat;
-  } catch { /* ignore */ }
-  try {
-    const local = await LocalAIService.isAvailable();
-    if (local) return LocalAIService.simpleChat;
-  } catch { /* ignore */ }
-  return null;
-}
-
 // ── Tool 1: URL collector ─────────────────────────────────────────────────────
 // Gathers tabs, recent history, and bookmarks into a unified numbered list
 
@@ -241,20 +227,35 @@ export function useWorkspaceAgent() {
     syncContext = '',
     memoryContext = ''
   }) => {
-    const chatFn = await resolveChatFn();
-    if (!chatFn) {
-      throw new Error('AI not available. Configure a cloud AI key in Settings, or load a local model.');
-    }
-
-    // Collect data from all three tools (synchronous transforms)
+    // Always collect local data — used to resolve accepted suggestions back to
+    // concrete URLs/app paths/icons regardless of which backend produced them.
     const urlItems      = collectUrlData(tabs, history, bookmarks);
     const appData       = collectAppData(runningApps, installedApps);
     const openProjects  = detectOpenProjects(runningApps);
 
-    const prompt = buildAgentPrompt(customPrompt, urlItems, appData, openProjects, syncContext, memoryContext);
-    console.log('[WorkspaceAgent] Sending agent prompt, urlItems:', urlItems.length, 'apps:', appData.running.length + appData.installed.length, 'projects:', openProjects.length);
+    // Prefer the agentic cloud loop: the backend agent investigates the live
+    // tabs/apps/history via tools, so we only pass the user's intent (no big
+    // context dump). Fall back to the local model's one-shot prompt otherwise.
+    let cloudConfigured = false;
+    try {
+      const cloud = await LocalAIService.getCloudStatus();
+      cloudConfigured = !!cloud?.configured;
+    } catch { /* ignore */ }
 
-    const result = await chatFn(prompt);
+    let result;
+    if (cloudConfigured) {
+      console.log('[WorkspaceAgent] Using agentic cloud loop (tools), prompt:', customPrompt || '(default)');
+      result = await LocalAIService.cloudSuggest(customPrompt || '');
+    } else {
+      const local = await LocalAIService.isAvailable().catch(() => false);
+      if (!local) {
+        throw new Error('AI not available. Configure a cloud AI key in Settings, or load a local model.');
+      }
+      const prompt = buildAgentPrompt(customPrompt, urlItems, appData, openProjects, syncContext, memoryContext);
+      console.log('[WorkspaceAgent] Using local model (one-shot), urlItems:', urlItems.length, 'apps:', appData.running.length + appData.installed.length, 'projects:', openProjects.length);
+      result = await LocalAIService.simpleChat(prompt);
+    }
+
     if (!result.ok) throw new Error(result.error || 'AI agent request failed');
 
     const response = result.response || '';
@@ -285,7 +286,21 @@ export function useWorkspaceAgent() {
     const openProjects = group._openProjects || [];
 
     // ── URLs ─────────────────────────────────────────────────────────────────
-    const tabUrls = (group.items || [])
+    // Agentic cloud path returns full URLs in `urls`; local path returns tab
+    // indices in `items`. Support both, enriching favicon/title from local data.
+    const fromFullUrls = (group.urls || [])
+      .filter(u => u && u.url)
+      .map(u => {
+        const match = urlItems.find(x => x.url === u.url);
+        return {
+          url: u.url,
+          title: u.title || match?.title || safeGetHostname(u.url),
+          favicon: match?.favicon || null,
+          addedAt: Date.now()
+        };
+      });
+
+    const fromTabIndices = (group.items || [])
       .map(idx => urlItems.find(u => u.tabIndex === idx))
       .filter(Boolean)
       .map(u => ({ url: u.url, title: u.title, favicon: u.favicon || null, addedAt: Date.now() }));
@@ -294,10 +309,10 @@ export function useWorkspaceAgent() {
       .filter(su => su.url)
       .map(su => ({ url: su.url, title: su.title || safeGetHostname(su.url), favicon: null, addedAt: Date.now() }));
 
-    const urlSet = new Set(tabUrls.map(u => u.url));
-    const allUrls = [...tabUrls];
-    suggestedUrls.forEach(su => {
-      if (!urlSet.has(su.url)) { allUrls.push(su); urlSet.add(su.url); }
+    const urlSet = new Set();
+    const allUrls = [];
+    [...fromFullUrls, ...fromTabIndices, ...suggestedUrls].forEach(u => {
+      if (u.url && !urlSet.has(u.url)) { allUrls.push(u); urlSet.add(u.url); }
     });
 
     // ── Apps ──────────────────────────────────────────────────────────────────
@@ -312,16 +327,19 @@ export function useWorkspaceAgent() {
       })
       .filter(Boolean);
 
-    // ── Folders (project slots — path needs user confirmation) ────────────────
+    // ── Folders (project slots) ───────────────────────────────────────────────
+    // Prefer a path the agent surfaced (terminal CWD / editor title); fall back
+    // to the locally-detected editor project; otherwise flag for user confirm.
     const folderApps = (group.folders || [])
       .map(f => {
         const proj = openProjects.find(p => p.name.toLowerCase() === f.name.toLowerCase());
+        const path = f.path || (proj ? proj.appPath : '');
         return {
           name: f.name,
-          path: proj ? proj.appPath : '',
+          path,
           icon: proj ? proj.appIcon : null,
           appType: f.editor || 'folder',
-          _needsPath: true  // flag for UI to prompt user to confirm path
+          _needsPath: !path  // only prompt when we still have no path
         };
       });
 

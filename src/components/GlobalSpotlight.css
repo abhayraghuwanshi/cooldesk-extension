@@ -433,7 +433,10 @@ html, body {
    RESULTS LIST
    ============================================ */
 .spotlight-results {
+  flex: 1 1 auto;
+  min-height: 0; /* allow the list to shrink & scroll inside the flex column */
   overflow-y: auto;
+  overflow-anchor: none;
   padding: 6px 8px;
   display: flex;
   flex-direction: column;
@@ -488,6 +491,11 @@ html, body {
   height: 18px;
   border-radius: 3px;
   object-fit: contain;
+}
+
+.result-icon .file-glyph {
+  width: 16px;
+  height: 16px;
 }
 
 .result-content {
@@ -598,7 +606,49 @@ html, body {
 .result-item.result-note { border-left-color: rgba(16, 185, 129, 0.5); }
 .result-item.result-note.selected { border-left-color: #10b981; }
 
+.result-item.result-folder { border-left-color: rgba(250, 204, 21, 0.5); }
+.result-item.result-folder.selected { border-left-color: #facc15; }
+.result-item.result-folder .result-icon { color: #facc15; background: rgba(250, 204, 21, 0.12); }
+.result-item.result-folder .result-badge { background: rgba(250, 204, 21, 0.15); color: #facc15; }
+
+.result-item.result-file { border-left-color: rgba(148, 163, 184, 0.35); }
+.result-item.result-file.selected { border-left-color: #94a3b8; }
+.result-item.result-file .result-icon { color: #94a3b8; }
+.result-item.result-file .result-badge { background: rgba(148, 163, 184, 0.12); color: #94a3b8; }
+
 .result-item.result-link { border-left-color: rgba(148, 163, 184, 0.3); }
+
+/* Folder tree (expandable Explorer-style hierarchy) — clean indentation, no guide lines */
+.tree-indent {
+  flex-shrink: 0;
+  width: 15px;
+}
+
+.tree-chevron {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-right: 2px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease, color 0.15s;
+}
+
+.tree-chevron:hover { color: #facc15; }
+.tree-chevron.expanded { transform: rotate(90deg); color: rgba(250, 204, 21, 0.8); }
+
+.tree-chevron-spacer {
+  flex-shrink: 0;
+  width: 16px;
+}
 
 .badge-running {
   background: rgba(34, 197, 94, 0.12) !important;

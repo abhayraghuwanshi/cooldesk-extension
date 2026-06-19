@@ -528,16 +528,44 @@ async fn open_folder(path: String) -> Result<(), String> {
 pub struct SearchFileResult {
     pub path: String,
     pub date: String,
+    pub is_dir: bool,
 }
 
-fn search_dir_recursive(dir: &std::path::Path, query: &str, results: &mut Vec<SearchFileResult>, depth: u32) {
-    if depth == 0 || results.len() >= 15 { return; }
+/// Heavy/noise directories we never recurse INTO (they still match by name).
+/// Keeps a home-rooted search fast by skipping AppData, build output, caches, etc.
+fn is_pruned_dir(name_lower: &str) -> bool {
+    if name_lower.starts_with('.') { return true; } // .git, .cache, .vscode, ...
+    matches!(name_lower,
+        "node_modules" | "appdata" | "$recycle.bin" | "target" | "dist" | "build"
+        | "vendor" | "library" | "programdata" | "application data" | "local settings"
+        | "__pycache__" | "venv" | "obj" | "out" | "coverage" | "tmp"
+    )
+}
+
+/// Token-based name match: every query word must appear in the name. This makes
+/// separators interchangeable — "rejected project" matches "rejected-project",
+/// "rejected_project", "Rejected Project", etc.
+fn name_matches(name_lower: &str, tokens: &[String]) -> bool {
+    !tokens.is_empty() && tokens.iter().all(|t| name_lower.contains(t.as_str()))
+}
+
+fn search_dir_recursive(
+    dir: &std::path::Path,
+    tokens: &[String],
+    results: &mut Vec<SearchFileResult>,
+    depth: u32,
+    budget: &mut u32,
+) {
+    if depth == 0 || results.len() >= 15 || *budget == 0 { return; }
+    *budget -= 1;
     let Ok(entries) = std::fs::read_dir(dir) else { return };
     for entry in entries.flatten() {
-        if results.len() >= 15 { break; }
+        if results.len() >= 15 || *budget == 0 { break; }
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_lowercase();
-        if name.contains(query) && path.is_file() {
+        let is_dir = path.is_dir();
+        // Match both files AND folders by name (pruned dirs still match here).
+        if name_matches(&name, tokens) {
             let date_str = std::fs::metadata(&path)
                 .ok()
                 .and_then(|m| m.modified().ok())
@@ -546,9 +574,11 @@ fn search_dir_recursive(dir: &std::path::Path, query: &str, results: &mut Vec<Se
                     dt.format("%Y-%m-%d %H:%M").to_string()
                 })
                 .unwrap_or_default();
-            results.push(SearchFileResult { path: path.to_string_lossy().into_owned(), date: date_str });
-        } else if path.is_dir() {
-            search_dir_recursive(&path, query, results, depth - 1);
+            results.push(SearchFileResult { path: path.to_string_lossy().into_owned(), date: date_str, is_dir });
+        }
+        // Descend into folders, but skip heavy/noise ones to stay fast.
+        if is_dir && !is_pruned_dir(&name) {
+            search_dir_recursive(&path, tokens, results, depth - 1, budget);
         }
     }
 }
@@ -560,10 +590,45 @@ async fn search_files(query: String) -> Result<Vec<SearchFileResult>, String> {
         return Ok(vec![]);
     }
     
+    let query_lower = query.to_lowercase();
+    // Split into words so separators (space/-/_) are interchangeable when matching.
+    let tokens: Vec<String> = query_lower.split_whitespace().map(String::from).collect();
+
+    // Search the whole home folder (covers Downloads/Documents/Desktop AND
+    // arbitrary folders like ~/projects/...). Pruning keeps it fast.
     let mut targets = Vec::new();
-    if let Some(dl) = dirs::download_dir() { targets.push(dl); }
-    if let Some(doc) = dirs::document_dir() { targets.push(doc); }
-    if let Some(desk) = dirs::desktop_dir() { targets.push(desk); }
+    if let Some(home) = dirs::home_dir() {
+        targets.push(home);
+    } else {
+        if let Some(dl) = dirs::download_dir() { targets.push(dl); }
+        if let Some(doc) = dirs::document_dir() { targets.push(doc); }
+        if let Some(desk) = dirs::desktop_dir() { targets.push(desk); }
+    }
+
+    // Match the well-known user folders by their OWN name first, so typing
+    // "download" surfaces the Downloads folder itself (not just its contents).
+    let mut final_results: Vec<SearchFileResult> = Vec::new();
+    let roots = [
+        dirs::download_dir(), dirs::document_dir(), dirs::desktop_dir(),
+        dirs::picture_dir(), dirs::video_dir(), dirs::audio_dir(),
+        dirs::home_dir(),
+    ];
+    for root in roots.into_iter().flatten() {
+        let Some(name) = root.file_name() else { continue };
+        if name_matches(&name.to_string_lossy().to_lowercase(), &tokens) {
+            let date_str = std::fs::metadata(&root).ok()
+                .and_then(|m| m.modified().ok())
+                .map(|t| {
+                    let dt: chrono::DateTime<chrono::Local> = t.into();
+                    dt.format("%Y-%m-%d %H:%M").to_string()
+                })
+                .unwrap_or_default();
+            let path = root.to_string_lossy().into_owned();
+            if !final_results.iter().any(|r| r.path == path) {
+                final_results.push(SearchFileResult { path, date: date_str, is_dir: true });
+            }
+        }
+    }
 
     #[cfg(target_os = "macos")]
     {
@@ -572,45 +637,79 @@ async fn search_files(query: String) -> Result<Vec<SearchFileResult>, String> {
             cmd.arg("-onlyin").arg(target);
         }
         cmd.arg("-name").arg(&query);
-        
+
         let output = cmd.output().map_err(|e| e.to_string())?;
         let output_str = String::from_utf8_lossy(&output.stdout);
-        let results: Vec<String> = output_str.lines()
-            .map(|s| s.to_string())
-            .filter(|s| !s.is_empty())
-            .take(15)
-            .collect();
-            
-        let mut final_results = Vec::new();
-        for path in results {
+        for path in output_str.lines().filter(|s| !s.is_empty()).take(15) {
             let mut date_str = String::new();
-            if let Ok(metadata) = std::fs::metadata(&path) {
+            let mut is_dir = false;
+            if let Ok(metadata) = std::fs::metadata(path) {
+                is_dir = metadata.is_dir();
                 if let Ok(modified) = metadata.modified() {
                     let datetime: chrono::DateTime<chrono::Local> = modified.into();
                     date_str = datetime.format("%Y-%m-%d %H:%M").to_string();
                 }
             }
-            final_results.push(SearchFileResult { path, date: date_str });
-        }
-        return Ok(final_results);
-    }
-    
-    #[cfg(target_os = "windows")]
-    {
-        let query_lower = query.to_lowercase();
-        let mut final_results: Vec<SearchFileResult> = Vec::new();
-        for target in &targets {
-            search_dir_recursive(target, &query_lower, &mut final_results, 3);
-            if final_results.len() >= 15 { break; }
+            if !final_results.iter().any(|r| r.path == path) {
+                final_results.push(SearchFileResult { path: path.to_string(), date: date_str, is_dir });
+            }
         }
         final_results.truncate(15);
         return Ok(final_results);
     }
-    
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut budget: u32 = 8000; // cap directories scanned to bound latency
+        for target in &targets {
+            search_dir_recursive(target, &tokens, &mut final_results, 5, &mut budget);
+            if final_results.len() >= 15 || budget == 0 { break; }
+        }
+        final_results.truncate(15);
+        return Ok(final_results);
+    }
+
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        Ok(vec![])
+        let _ = &targets;
+        final_results.truncate(15);
+        Ok(final_results)
     }
+}
+
+/// List the immediate children of a folder (folders first, then files).
+/// Powers the spotlight's inline folder drill-down.
+#[tauri::command]
+async fn list_dir(path: String) -> Result<Vec<SearchFileResult>, String> {
+    let dir = std::path::Path::new(&path);
+    if !dir.is_dir() {
+        return Err(format!("not a directory: {path}"));
+    }
+    let entries = std::fs::read_dir(dir).map_err(|e| e.to_string())?;
+
+    let mut dirs_out: Vec<SearchFileResult> = Vec::new();
+    let mut files_out: Vec<SearchFileResult> = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with('.') { continue; } // skip hidden/system dotfiles
+        let p = entry.path();
+        let is_dir = p.is_dir();
+        let date_str = entry.metadata().ok()
+            .and_then(|m| m.modified().ok())
+            .map(|t| {
+                let dt: chrono::DateTime<chrono::Local> = t.into();
+                dt.format("%Y-%m-%d %H:%M").to_string()
+            })
+            .unwrap_or_default();
+        let r = SearchFileResult { path: p.to_string_lossy().into_owned(), date: date_str, is_dir };
+        if is_dir { dirs_out.push(r) } else { files_out.push(r) }
+    }
+    // Folders first, each group sorted case-insensitively by name.
+    dirs_out.sort_by(|a, b| a.path.to_lowercase().cmp(&b.path.to_lowercase()));
+    files_out.sort_by(|a, b| a.path.to_lowercase().cmp(&b.path.to_lowercase()));
+    dirs_out.extend(files_out);
+    dirs_out.truncate(300);
+    Ok(dirs_out)
 }
 
 
@@ -644,6 +743,7 @@ pub fn run() {
         open_url,
         open_folder,
         search_files,
+        list_dir,
         get_focused_app,
         get_app_version,
         check_winget_update,

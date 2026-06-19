@@ -172,14 +172,14 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     setHasUserResized(false);
   }, [compact]);
 
-  // When the parent toggles isExpanded on, give the card a default height so
-  // the context panel has room. Don't clobber a user-chosen height.
+  // Mirror the parent's isExpanded into the card height: expand gives the
+  // context panel room, collapse snaps back to the natural (auto) height.
+  // Skip while the user is manually resizing so we don't clobber their drag.
   const EXPANDED_DEFAULT_HEIGHT = compact ? 320 : 380;
   useEffect(() => {
-    if (isExpanded && !hasUserResized) {
-      setCardHeight(EXPANDED_DEFAULT_HEIGHT);
-    }
-  }, [isExpanded, hasUserResized, EXPANDED_DEFAULT_HEIGHT]);
+    if (hasUserResized) return;
+    setCardHeight(isExpanded ? EXPANDED_DEFAULT_HEIGHT : (compact ? null : 280));
+  }, [isExpanded, hasUserResized, EXPANDED_DEFAULT_HEIGHT, compact]);
 
   // Show panel when parent says so, OR when the user has dragged the card
   // tall enough to render meaningful content.
@@ -579,6 +579,20 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     onClick?.(workspace);
   };
 
+  // Expand/collapse button. Collapse must clear any manual-drag state too,
+  // otherwise the card stays open from `hasUserResized` even after toggling.
+  const handleToggleExpand = (e) => {
+    e.stopPropagation();
+    if (contextPanelVisible) {
+      // Collapsing: drop local drag height, and turn off parent expansion if set.
+      setHasUserResized(false);
+      setCardHeight(compact ? null : 280);
+      if (isExpanded) onClick?.(workspace);
+    } else {
+      onClick?.(workspace);
+    }
+  };
+
   const handleContextMenu = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -827,6 +841,18 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
               );
             })()}
           </div>
+
+          {/* Expand / collapse — pops the card open inline (status, tasks, notes) */}
+          {totalCount > 0 && (
+            <button
+              className={`compact-expand-btn ${contextPanelVisible ? 'is-open' : ''}`}
+              onClick={handleToggleExpand}
+              title={contextPanelVisible ? 'Collapse' : 'Expand'}
+              aria-label={contextPanelVisible ? 'Collapse workspace' : 'Expand workspace'}
+            >
+              <FontAwesomeIcon icon={contextPanelVisible ? faChevronUp : faChevronDown} />
+            </button>
+          )}
 
           {/* Render Group Popover if Active */}
           {groupPopoverState.group && (
