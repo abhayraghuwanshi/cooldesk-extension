@@ -16,6 +16,8 @@ import { recordSearchSelection } from '../services/feedbackService';
 import * as LocalAI from '../services/localAIService';
 import { runningAppsService } from '../services/runningAppsService';
 import { isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../services/searchService';
+import { searchWindowsSettings } from '../data/windowsSettings';
+import { searchWindowsTools } from '../data/windowsTools';
 import { enrichRunningAppsWithIcons, getBaseDomainFromUrl, getFaviconUrl } from '../utils/helpers';
 import './GlobalSpotlight.css';
 
@@ -51,6 +53,15 @@ class LRUCache {
 
 // Global cache persists across re-renders
 const searchCache = new LRUCache(100);
+
+// Windows Settings (ms-settings: pages) are only launchable on the Windows
+// desktop build — the `open_url` backend uses ShellExecute, and the URI scheme
+// is Windows-only. Gate the catalog on both so we never surface unopenable rows.
+const IS_WINDOWS_DESKTOP =
+    typeof navigator !== 'undefined' &&
+    /Windows/i.test(navigator.userAgent || '') &&
+    typeof window !== 'undefined' &&
+    !!(window.electronAPI || window.__TAURI__ || window.__TAURI_INTERNALS__);
 
 // Track app usage for recommendations
 async function trackAppUsage(appName) {
@@ -928,7 +939,18 @@ export function GlobalSpotlight() {
                     return { ...item, score };
                 }).filter(Boolean);
 
-                searchResults = [...(searchResults || []), ...mappedFiles]
+                // Windows Settings pages (Display, Bluetooth, Wi-Fi, …) and
+                // Control Panel / system tools (Device Manager, regedit, …),
+                // ranked by the same fuzzyScore so they interleave with
+                // apps/tabs/files instead of being bolted on at the end.
+                const settingsResults = IS_WINDOWS_DESKTOP
+                    ? searchWindowsSettings(trimmedQuery, 5)
+                    : [];
+                const toolsResults = IS_WINDOWS_DESKTOP
+                    ? searchWindowsTools(trimmedQuery, 5)
+                    : [];
+
+                searchResults = [...(searchResults || []), ...mappedFiles, ...settingsResults, ...toolsResults]
                     .sort((a, b) => (b.score || 0) - (a.score || 0));
 
                 // Check if still relevant (user may have typed more)
@@ -1325,6 +1347,38 @@ export function GlobalSpotlight() {
             }
         }
 
+        // Windows Settings page — launch via the ms-settings: URI (ShellExecute).
+        if (item.type === 'setting') {
+            try {
+                if (window.electronAPI?.openExternal) {
+                    await window.electronAPI.openExternal(item.uri);
+                } else {
+                    console.warn('[Spotlight] openExternal not available for settings');
+                }
+            } catch (e) {
+                console.error('[Spotlight] Failed to open Windows setting:', e);
+            }
+            return;
+        }
+
+        // Control Panel applet / system tool. Items with args (e.g. `control
+        // /name …`) need the spawn-with-args path; single tokens (.msc/.cpl/exe)
+        // open via ShellExecute, exactly like typing them into Run.
+        if (item.type === 'tool') {
+            try {
+                if (item.args?.length && window.electronAPI?.launchAppWithArgs) {
+                    await window.electronAPI.launchAppWithArgs(item.exec, item.args);
+                } else if (window.electronAPI?.launchApp) {
+                    await window.electronAPI.launchApp(item.exec);
+                } else {
+                    console.warn('[Spotlight] launchApp not available for tools');
+                }
+            } catch (e) {
+                console.error('[Spotlight] Failed to launch Windows tool:', e);
+            }
+            return;
+        }
+
         // Handle files natively using OS default viewer
         if (item.type === 'folder') {
             try {
@@ -1558,6 +1612,8 @@ export function GlobalSpotlight() {
         if (item.type === 'file') return 'File';
         if (item.type === 'folder') return 'Folder';
         if (item.type === 'app') return item.isRunning ? 'Running' : 'App';
+        if (item.type === 'setting') return 'Setting';
+        if (item.type === 'tool') return 'Tool';
         return item.category || 'Link';
     };
 
@@ -2216,6 +2272,8 @@ function getIcon(type, name) {
         case 'app': return faDesktop;
         case 'file': return getFileIcon(name);
         case 'folder': return faFolderOpen;
+        case 'setting': return faCog;
+        case 'tool': return faTools;
         default: return faLink;
     }
 }

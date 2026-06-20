@@ -358,7 +358,7 @@ async fn launch_app(path: String) -> Result<(), String> {
     {
         use windows::Win32::UI::Shell::ShellExecuteW;
         use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
-        use windows::core::HSTRING;
+        use windows::core::{HSTRING, PCWSTR};
 
         // Working directory = the exe's own folder. Many apps (OBS, portable apps,
         // some games) resolve resources relative to the cwd — OBS fails with
@@ -377,15 +377,27 @@ async fn launch_app(path: String) -> Result<(), String> {
         let open_w = HSTRING::from("open");
         let dir_w = work_dir.and_then(|d| d.to_str()).map(HSTRING::from);
 
-        let hinst = unsafe {
+        let exec = |verb: PCWSTR| unsafe {
             match &dir_w {
-                Some(d) => ShellExecuteW(None, &open_w, &path_w, None, d, SW_SHOWNORMAL),
-                None => ShellExecuteW(None, &open_w, &path_w, None, None, SW_SHOWNORMAL),
+                Some(d) => ShellExecuteW(None, verb, &path_w, None, d, SW_SHOWNORMAL),
+                None => ShellExecuteW(None, verb, &path_w, None, None, SW_SHOWNORMAL),
             }
         };
 
-        // ShellExecuteW returns a value > 32 on success. On failure, fall back to a
-        // direct spawn (rare — e.g. an unusual path the shell rejects).
+        // ShellExecuteW returns a value > 32 on success. Try the explicit "open"
+        // verb first (so console apps get their own console window).
+        let mut hinst = exec(PCWSTR(open_w.as_ptr()));
+
+        // If "open" isn't registered for this file type, retry with the shell's
+        // default verb (NULL). Control Panel applets (.cpl) register "cplopen"
+        // rather than "open", so forcing "open" fails for them — the NULL verb
+        // resolves to whatever double-clicking the file in Explorer would do.
+        if (hinst.0 as isize) <= 32 {
+            hinst = exec(PCWSTR::null());
+        }
+
+        // Still failed: fall back to a direct spawn (rare — e.g. an unusual path
+        // the shell rejects). Only meaningful for real executables.
         if (hinst.0 as isize) <= 32 {
             let mut cmd = std::process::Command::new(&path);
             if let Some(dir) = work_dir {
