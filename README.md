@@ -12,6 +12,7 @@ across your apps, tabs, notes, history and bookmarks — all stored locally.
 
 [![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Available-brightgreen?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/new-tab-by-cooldesk/ioggffobciopdddacpclplkeodllhjko)
 [![winget](https://img.shields.io/badge/winget-CoolDesk.CoolDesk-0078D4?logo=windows&logoColor=white)](https://learn.microsoft.com/windows/package-manager/)
+[![Homebrew](https://img.shields.io/badge/Homebrew-cooldesk-FBB040?logo=homebrew&logoColor=white)](https://github.com/abhayraghuwanshi/cooldesk-extension#macos)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 ![Tauri](https://img.shields.io/badge/built%20with-Tauri%202-24C8DB)
@@ -65,7 +66,17 @@ across your apps, tabs, notes, history and bookmarks — all stored locally.
 winget install CoolDesk.CoolDesk
 ```
 
-**macOS / Linux** — download the latest installer from the
+<a name="macos"></a>
+**macOS** (Apple Silicon) — install via [Homebrew](https://brew.sh):
+
+```bash
+brew tap abhayraghuwanshi/cooldesk https://github.com/abhayraghuwanshi/cooldesk-extension
+brew install --cask cooldesk
+```
+
+To update later: `brew upgrade --cask cooldesk`.
+
+**macOS / Linux (manual)** — download the latest installer from the
 [latest GitHub release](https://github.com/abhayraghuwanshi/cooldesk-extension/releases/latest).
 
 ### Browser extension

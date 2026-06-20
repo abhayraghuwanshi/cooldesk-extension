@@ -98,6 +98,38 @@ C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe ^
 
 ---
 
+## Homebrew (macOS distribution)
+
+CoolDesk ships a **Homebrew Cask** served as a tap from this same repo (no
+separate `homebrew-cooldesk` repo needed). The cask file lives at
+[`Casks/cooldesk.rb`](./Casks/cooldesk.rb).
+
+**Users install with:**
+
+```bash
+brew tap abhayraghuwanshi/cooldesk https://github.com/abhayraghuwanshi/cooldesk-extension
+brew install --cask cooldesk
+brew upgrade --cask cooldesk   # later updates
+```
+
+**How it stays in sync:** the `homebrew` job in
+[`.github/workflows/release.yml`](./.github/workflows/release.yml) runs after
+`publish`, hashes the final (repacked) `*_aarch64.dmg`, rewrites the `version`
+and `sha256` in `Casks/cooldesk.rb`, and commits back to the default branch.
+No manual step is required per release.
+
+**Notes / limitations:**
+- Apple Silicon only — the release pipeline currently builds `aarch64` DMGs.
+  Add an `x64` matrix entry and an `on_arch` block in the cask to cover Intel.
+- The build is **not notarized**, so the cask's `postflight` clears the
+  `com.apple.quarantine` flag (same idea as `scripts/repack-mac-dmg.sh`).
+- To get into the **official** `homebrew/cask` (and the formulae.brew.sh
+  backlink), the app must be signed + notarized and meet Homebrew's notability
+  threshold. Once notarized, remove the `postflight` block and submit via
+  `brew bump-cask-pr`.
+
+---
+
 ## Chrome Extension
 
 ### Build

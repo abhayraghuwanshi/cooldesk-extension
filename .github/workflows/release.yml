@@ -384,3 +384,53 @@ jobs:
           identifier: CoolDesk.CoolDesk
           installers-regex: '(setup\.exe|en-US\.msi)$'
           token: ${{ secrets.WINGET_TOKEN }}
+
+  homebrew:
+    needs: [publish]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_TOKEN_CD }}
+          fetch-depth: 0
+
+      # Bump Casks/cooldesk.rb to the just-published version + DMG hash and
+      # commit it back to the default branch, so `brew upgrade` picks it up.
+      # Runs after publish so it hashes the FINAL (repacked) DMG asset.
+      - name: Update Homebrew cask
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_CD }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          VERSION="${TAG#v}"
+
+          DMG_URL=$(gh release view "$TAG" --repo "$REPO" --json assets \
+            --jq '.assets[] | select(.name | endswith("aarch64.dmg")) | .browserDownloadUrl' | head -1)
+          if [ -z "$DMG_URL" ]; then
+            echo "No aarch64 DMG in release — skipping cask update"
+            exit 0
+          fi
+
+          curl -fsSL --retry 5 --retry-all-errors "$DMG_URL" -o cooldesk.dmg
+          SHA=$(sha256sum cooldesk.dmg | cut -d' ' -f1)
+          echo "==> cask version=$VERSION sha256=$SHA"
+
+          git fetch origin "$DEFAULT_BRANCH"
+          git checkout "$DEFAULT_BRANCH"
+
+          sed -i -E "s/^  version \".*\"/  version \"$VERSION\"/" Casks/cooldesk.rb
+          sed -i -E "s/^  sha256 \".*\"/  sha256 \"$SHA\"/" Casks/cooldesk.rb
+
+          if git diff --quiet Casks/cooldesk.rb; then
+            echo "Cask already up to date — nothing to commit"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/cooldesk.rb
+          git commit -m "homebrew: update cask to $VERSION"
+          git push origin "HEAD:$DEFAULT_BRANCH"
