@@ -13,6 +13,7 @@ import { storageGet, storageSet } from '../services/extensionApi';
 import { syncWebSocket } from '../services/syncWebSocket';
 import { isHostSyncEnabled } from '../services/syncConfig';
 import { recordSearchSelection } from '../services/feedbackService';
+import { recordSpotlightOpen } from '../services/analytics';
 import * as LocalAI from '../services/localAIService';
 import { runningAppsService } from '../services/runningAppsService';
 import { isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../services/searchService';
@@ -257,8 +258,11 @@ export function GlobalSpotlight() {
 
     // Focus input on mount and load items
     useEffect(() => {
-        // Guarantee focus on window focus (when Alt+K brings window to front)
+        // Guarantee focus on window focus (when Alt+K brings window to front).
+        // Each focus ≈ one spotlight open — count it (count only, never the
+        // query). Read + reset by the daily update-check ping.
         const handleFocus = () => {
+            recordSpotlightOpen();
             if (inputRef.current) {
                 // Determine if we need to select all text
                 setTimeout(() => {
@@ -269,7 +273,7 @@ export function GlobalSpotlight() {
         };
         window.addEventListener('focus', handleFocus);
 
-        // Initial focus and load
+        // Initial focus and load (handleFocus records the open)
         handleFocus();
         console.log('[Spotlight] Initial mount - loading context items');
         loadContextItems();

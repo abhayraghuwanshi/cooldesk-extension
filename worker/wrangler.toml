@@ -1,0 +1,17 @@
+name = "cooldesk-analytics"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# D1 binding — fill database_id after `wrangler d1 create cooldesk-analytics`.
+# Binding name must match `env.DB` in src/index.js.
+[[d1_databases]]
+binding = "DB"
+database_name = "cooldesk-analytics"
+database_id = "281366e4-45e0-4ab5-acd9-90d2fe36b653"
+
+# Serve at https://cool-desk.com/api/version. Either set the route here (requires
+# the zone to be on this Cloudflare account) or add a Custom Domain / route in
+# the dashboard. Uncomment and adjust:
+# [[routes]]
+# pattern = "cool-desk.com/api/*"
+# zone_name = "cool-desk.com"

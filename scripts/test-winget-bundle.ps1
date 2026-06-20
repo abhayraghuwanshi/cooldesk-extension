@@ -30,6 +30,8 @@ $Publisher = "CoolDesk"
 $Author    = "Abhay Raghuwanshi"
 $PkgName   = "CoolDesk"
 $PkgUrl    = "https://github.com/$Repo"
+$Website   = "https://cool-desk.com"
+$Privacy   = "https://cool-desk.com/privacy-details"
 
 # ── Resolve tag ──────────────────────────────────────────────────────────────
 if (-not $Tag) {
@@ -144,11 +146,12 @@ PackageIdentifier: $PkgId
 PackageVersion: $Version
 PackageLocale: en-US
 Publisher: $Publisher
-PublisherUrl: $PkgUrl
+PublisherUrl: $Website
 PublisherSupportUrl: $PkgUrl/issues
+PrivacyUrl: $Privacy
 Author: $Author
 PackageName: $PkgName
-PackageUrl: $PkgUrl
+PackageUrl: $Website
 License: Proprietary
 ShortDescription: AI-powered desktop workspace manager
 Description: CoolDesk is an AI-powered desktop workspace manager that organizes your browser tabs, apps, and workflows. It features a global spotlight search, smart tab grouping, workspace management, and real-time sync across browsers.

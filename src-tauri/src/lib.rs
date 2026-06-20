@@ -50,25 +50,59 @@ struct UpdateInfo {
     notes_url: String,
 }
 
-/// Detection only: compares the running version against the latest GitHub
-/// release tag. The actual update is performed by `run_winget_upgrade` so we
-/// never silently overwrite a winget-managed install.
-#[tauri::command]
-async fn check_winget_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
-    let current = app.package_info().version.to_string();
+const GITHUB_LATEST: &str =
+    "https://api.github.com/repos/abhayraghuwanshi/cooldesk-extension/releases/latest";
+const ANALYTICS_ENDPOINT: &str = "https://cool-desk.com/api/version";
 
-    let resp = reqwest::Client::new()
-        .get("https://api.github.com/repos/abhayraghuwanshi/cooldesk-extension/releases/latest")
-        .header("User-Agent", "CoolDesk")
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .json::<serde_json::Value>()
-        .await
-        .map_err(|e| e.to_string())?;
+// Distribution channel, stamped at build time by the release workflow
+// (winget / github / dmg). Defaults to "unknown" for local/dev builds.
+fn install_source() -> &'static str {
+    option_env!("COOLDESK_INSTALL_SOURCE").unwrap_or("unknown")
+}
 
-    let latest = resp["tag_name"]
+// Anonymous, randomly-generated install identifier. Created once and persisted
+// in the app config dir; contains no personal data. Used only to count distinct
+// installs / daily-active installs. Returns an empty string if it can't be
+// persisted, in which case analytics simply degrades — never an error.
+fn get_or_create_install_id(app: &tauri::AppHandle) -> String {
+    let path = match app.path().app_config_dir() {
+        Ok(dir) => dir.join("install_id"),
+        Err(_) => return String::new(),
+    };
+    if let Ok(existing) = std::fs::read_to_string(&path) {
+        let trimmed = existing.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+    let id = uuid::Uuid::new_v4().to_string();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&path, &id);
+    id
+}
+
+// The anonymous usage payload: 7 scalar fields, no free text. Never includes
+// search queries, URLs, or any user content.
+fn analytics_payload(
+    app: &tauri::AppHandle,
+    current: &str,
+    spotlight_opens: u32,
+    locale: Option<String>,
+) -> serde_json::Value {
+    serde_json::json!({
+        "install_id": get_or_create_install_id(app),
+        "os": std::env::consts::OS,
+        "app_version": current,
+        "install_source": install_source(),
+        "locale": locale.unwrap_or_default(),
+        "spotlight_opens": spotlight_opens,
+    })
+}
+
+fn parse_update_info(current: String, release: &serde_json::Value) -> UpdateInfo {
+    let latest = release["tag_name"]
         .as_str()
         .unwrap_or("")
         .trim_start_matches('v')
@@ -82,12 +116,64 @@ async fn check_winget_update(app: tauri::AppHandle) -> Result<UpdateInfo, String
         _ => false,
     };
 
-    Ok(UpdateInfo {
+    UpdateInfo {
         current,
         latest,
         has_update,
-        notes_url: resp["html_url"].as_str().unwrap_or("").to_string(),
-    })
+        notes_url: release["html_url"].as_str().unwrap_or("").to_string(),
+    }
+}
+
+/// Detection only: compares the running version against the latest GitHub
+/// release tag. The actual update is performed by `run_winget_upgrade` so we
+/// never silently overwrite a winget-managed install.
+///
+/// Doubles as the anonymous usage heartbeat: unless `analytics_enabled` is
+/// `Some(false)`, the version check is routed through our own endpoint, which
+/// records the ping and proxies the GitHub release back. If that endpoint fails
+/// (offline, not yet deployed, opted out), it falls back to querying GitHub
+/// directly — so the update check is never broken by analytics.
+#[tauri::command]
+async fn check_winget_update(
+    app: tauri::AppHandle,
+    analytics_enabled: Option<bool>,
+    spotlight_opens: Option<u32>,
+    locale: Option<String>,
+) -> Result<UpdateInfo, String> {
+    let current = app.package_info().version.to_string();
+    let client = reqwest::Client::new();
+
+    // Preferred path: route through our endpoint so the ping is recorded.
+    if analytics_enabled != Some(false) {
+        let payload = analytics_payload(&app, &current, spotlight_opens.unwrap_or(0), locale);
+        let attempt = client
+            .post(ANALYTICS_ENDPOINT)
+            .header("User-Agent", "CoolDesk")
+            .json(&payload)
+            .send()
+            .await
+            .and_then(|r| r.error_for_status());
+        if let Ok(resp) = attempt {
+            if let Ok(release) = resp.json::<serde_json::Value>().await {
+                return Ok(parse_update_info(current, &release));
+            }
+        }
+        // Any failure falls through to a direct GitHub query below.
+    }
+
+    // Fallback / opted-out path: query GitHub directly.
+    let release = client
+        .get(GITHUB_LATEST)
+        .header("User-Agent", "CoolDesk")
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(parse_update_info(current, &release))
 }
 
 /// Launches `winget upgrade` for this package in a new console window so the

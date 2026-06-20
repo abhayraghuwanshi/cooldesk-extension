@@ -43,9 +43,11 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             bundle_args: --bundles nsis,msi
+            install_source: winget
           - os: macos-latest
             target: aarch64-apple-darwin
             bundle_args: --bundles dmg
+            install_source: dmg
 
     runs-on: ${{ matrix.os }}
 
@@ -85,6 +87,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN_CD }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          COOLDESK_INSTALL_SOURCE: ${{ matrix.install_source }}
         with:
           args: --target ${{ matrix.target }} ${{ matrix.bundle_args }}
 
@@ -176,6 +179,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN_CD }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          COOLDESK_INSTALL_SOURCE: ${{ matrix.install_source }}
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           tagName: ${{ github.ref_name }}

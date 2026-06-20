@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import './UpdateBanner.css';
+import { checkUpdateWithPing } from '../services/analytics';
 
 const isTauri = () =>
   typeof window !== 'undefined' && !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
@@ -19,8 +20,8 @@ export function UpdateBanner() {
     let cancelled = false;
     (async () => {
       try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        const result = await invoke('check_winget_update');
+        // On-launch update check; also carries the anonymous usage heartbeat.
+        const result = await checkUpdateWithPing();
         if (!cancelled && result?.has_update) setInfo(result);
       } catch {
         // Offline / rate-limited / no release yet — stay silent.

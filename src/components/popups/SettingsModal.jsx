@@ -15,6 +15,7 @@ import { isElectronApp } from '../../services/environmentDetector';
 import { sendMessage, storageGet, storageSet } from '../../services/extensionApi';
 import { loadSyncConfig, toggleHostSync } from '../../services/syncConfig';
 import { setAndSaveFontFamily, setAndSaveFontSize } from '../../utils/fontUtils';
+import { checkUpdateWithPing, isAnalyticsEnabled, setAnalyticsEnabled } from '../../services/analytics';
 import AIModelsTab from '../settings/AIModelsTab';
 import ExportData from '../settings/ExportData';
 import TeamsTab from '../settings/TeamsTab';
@@ -70,6 +71,7 @@ export function SettingsModal({
   const [isRecordingShortcut, setIsRecordingShortcut] = useState(false);
 
   const [autostartEnabled, setAutostartEnabled] = useState(false);
+  const [analyticsEnabled, setAnalyticsEnabledState] = useState(true);
 
   const [unsplashApiKey, setUnsplashApiKey] = useState('');
   const [autoGroupEnabled, setAutoGroupEnabled] = useState(false);
@@ -162,6 +164,8 @@ export function SettingsModal({
       storageGet(['autoGroupEnabled']).then((result) => {
         setAutoGroupEnabled(result?.autoGroupEnabled || false);
       });
+
+      setAnalyticsEnabledState(isAnalyticsEnabled());
 
       if (isTauri) {
         tauriInvoke('plugin:autostart|is-enabled').then((enabled) => {
@@ -322,12 +326,17 @@ export function SettingsModal({
     } catch { setError('Failed to toggle auto-update'); }
   };
 
+  const handleToggleAnalytics = (enabled) => {
+    setAnalyticsEnabled(enabled);
+    setAnalyticsEnabledState(enabled);
+  };
+
   const handleCheckForUpdates = async () => {
     // Desktop (Tauri/winget): compare against the latest GitHub release.
     if (isTauri) {
       setCheckingUpdate(true);
       try {
-        const info = await tauriInvoke('check_winget_update');
+        const info = await checkUpdateWithPing();
         if (info?.has_update) {
           setUpdateAvailable(true);
           setLatestVersion(info.latest);
@@ -845,6 +854,25 @@ export function SettingsModal({
                       hint="Install updates automatically in the background"
                       right={<Toggle checked={autoUpdateEnabled} onChange={handleToggleAutoUpdate} />}
                       onClick={() => handleToggleAutoUpdate(!autoUpdateEnabled)}
+                    />
+                    <SettingRow
+                      label="Anonymous Usage Stats"
+                      hint={
+                        <span>
+                          Share anonymous launch counts to help improve CoolDesk. No search queries, URLs, or personal data.{' '}
+                          <a
+                            href="https://cool-desk.com/privacy-details"
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            style={{ color: '#60a5fa', textDecoration: 'none' }}
+                          >
+                            Learn more
+                          </a>
+                        </span>
+                      }
+                      right={<Toggle checked={analyticsEnabled} onChange={handleToggleAnalytics} accentColor="#22c55e" />}
+                      onClick={() => handleToggleAnalytics(!analyticsEnabled)}
                       last
                     />
                   </Card>

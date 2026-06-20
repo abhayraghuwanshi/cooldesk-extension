@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "CoolDesk",
-  "version": "1.2.8",
+  "version": "1.3.0",
   "identifier": "com.cooldesk.desktop",
   "build": {
     "frontendDist": "../dist-tauri",
@@ -51,7 +51,7 @@
     "active": true,
     "targets": "all",
     "publisher": "CN=cool-products",
-    "homepage": "https://github.com/abhayraghuwanshi/cooldesk-extension",
+    "homepage": "https://cool-desk.com",
     "shortDescription": "AI-powered desktop workspace manager",
     "longDescription": "CoolDesk is an AI-powered workspace manager that helps you organize browser tabs, running apps, and workspaces across all your devices.",
     "copyright": "© 2025 CoolDesk",
