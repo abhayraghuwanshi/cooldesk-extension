@@ -348,7 +348,12 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
+      # Informational only: prints the SHA256 of the published installers.
+      # Must never block the winget submission below, so it is non-fatal and the
+      # downloads retry transient network/DNS failures (the old single-shot curl
+      # under `bash -e` failed with exit 6 and skipped the submit step).
       - name: Verify final installer hashes
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN_CD }}
           TAG: ${{ github.ref_name }}
@@ -361,13 +366,15 @@ jobs:
 
           echo "==> Hashing final signed artifacts from release URLs"
           if [ -n "$NSIS_URL" ]; then
-            curl -sL "$NSIS_URL" -o installer.exe
-            echo "NSIS SHA256: $(sha256sum installer.exe | cut -d' ' -f1 | tr '[:lower:]' '[:upper:]')"
+            curl -fsSL --retry 5 --retry-all-errors "$NSIS_URL" -o installer.exe \
+              && echo "NSIS SHA256: $(sha256sum installer.exe | cut -d' ' -f1 | tr '[:lower:]' '[:upper:]')" \
+              || echo "NSIS download failed (non-fatal)"
             echo "NSIS URL:    $NSIS_URL"
           fi
           if [ -n "$MSI_URL" ]; then
-            curl -sL "$MSI_URL" -o installer.msi
-            echo "MSI  SHA256: $(sha256sum installer.msi | cut -d' ' -f1 | tr '[:lower:]' '[:upper:]')"
+            curl -fsSL --retry 5 --retry-all-errors "$MSI_URL" -o installer.msi \
+              && echo "MSI  SHA256: $(sha256sum installer.msi | cut -d' ' -f1 | tr '[:lower:]' '[:upper:]')" \
+              || echo "MSI download failed (non-fatal)"
             echo "MSI  URL:    $MSI_URL"
           fi
 
