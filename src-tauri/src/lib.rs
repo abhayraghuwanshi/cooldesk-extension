@@ -203,10 +203,10 @@ fn run_winget_upgrade() -> Result<(), String> {
 
 #[tauri::command]
 async fn get_running_apps(_app: tauri::AppHandle) -> Result<serde_json::Value, String> {
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     return Ok(serde_json::json!([]));
 
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
         // Return cached result if a scan completed within the last SCAN_CACHE_SECS seconds.
         // This prevents scan storms when the frontend calls this command many times at once.
