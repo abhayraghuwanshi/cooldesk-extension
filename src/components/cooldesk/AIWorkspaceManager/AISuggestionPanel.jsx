@@ -36,21 +36,22 @@ export default function AISuggestionPanel({
     return (
       <div className="awm-suggestions">
         <div className="awm-hero">
-          <div className={`awm-hero-orb ${error ? 'is-error' : ''}`}>
+          <span className={`awm-hero-kicker ${error ? 'is-error' : ''}`}>
             <FontAwesomeIcon icon={faMagicWandSparkles} />
-          </div>
+            {error ? 'AI unavailable' : 'AI Organizer'}
+          </span>
 
           {error ? (
             <>
-              <h3 className="awm-hero-title">AI is unavailable</h3>
+              <h3 className="awm-hero-title">Something went sideways</h3>
               <p className="awm-hero-sub awm-hero-error">{error}</p>
             </>
           ) : (
             <>
               <h3 className="awm-hero-title">What should we organize?</h3>
               <p className="awm-hero-sub">
-                Describe how you want your tabs, apps and projects grouped — the agent reads your
-                workspace and proposes workspaces you can tweak.
+                Tell the agent how to group things. It scans your tabs, apps and
+                projects, then suggests workspaces you can fine-tune.
               </p>
             </>
           )}

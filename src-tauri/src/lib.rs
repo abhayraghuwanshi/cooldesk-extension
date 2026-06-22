@@ -1,4 +1,5 @@
 use tauri::{Manager, Emitter};
+use tauri_plugin_autostart::ManagerExt;
 use std::sync::{Arc, RwLock};
 use tauri::tray::TrayIconBuilder;
 use tauri::menu::{Menu, MenuItem};
@@ -40,6 +41,58 @@ async fn get_focused_app() -> Option<RunningApp> {
 #[tauri::command]
 fn get_app_version(app: tauri::AppHandle) -> String {
     app.package_info().version.to_string()
+}
+
+// ── Launch at login ──────────────────────────────────────────────────────────
+// The autostart plugin only writes the Windows `Run` registry value when the
+// user toggles it. Our NSIS preinstall hook runs the *previous* version's
+// uninstaller on every update, and Tauri's uninstaller deletes that `Run`
+// value — so autostart silently dies after the first auto-update. To survive
+// that, we persist the user's intent in a small flag file and re-assert it on
+// every startup (see `run()` setup), independent of the registry's state.
+fn autostart_flag_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    app.path().app_config_dir().ok().map(|dir| dir.join("launch_at_login"))
+}
+
+fn read_autostart_intent(app: &tauri::AppHandle) -> Option<bool> {
+    let path = autostart_flag_path(app)?;
+    match std::fs::read_to_string(&path) {
+        Ok(s) => Some(s.trim() == "1"),
+        Err(_) => None,
+    }
+}
+
+fn write_autostart_intent(app: &tauri::AppHandle, enabled: bool) {
+    if let Some(path) = autostart_flag_path(app) {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(&path, if enabled { "1" } else { "0" });
+    }
+}
+
+#[tauri::command]
+fn set_launch_at_login(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    let manager = app.autolaunch();
+    if enabled {
+        manager.enable().map_err(|e| e.to_string())?;
+    } else {
+        manager.disable().map_err(|e| e.to_string())?;
+    }
+    // Persist intent only after the registry write succeeds, so the on-startup
+    // re-assert reflects what the user actually has set.
+    write_autostart_intent(&app, enabled);
+    Ok(())
+}
+
+// Returns the user's persisted intent. Falls back to the live registry state
+// for installs that pre-date the flag file (first run after this change).
+#[tauri::command]
+fn get_launch_at_login(app: tauri::AppHandle) -> bool {
+    if let Some(intent) = read_autostart_intent(&app) {
+        return intent;
+    }
+    app.autolaunch().is_enabled().unwrap_or(false)
 }
 
 #[derive(serde::Serialize)]
@@ -811,6 +864,114 @@ async fn list_dir(path: String) -> Result<Vec<SearchFileResult>, String> {
 }
 
 
+/// Find the process(es) listening on a TCP port and force-kill them.
+/// Windows: `netstat -ano` → parse LISTENING rows → `taskkill /F /PID`.
+/// macOS/Linux: `lsof -ti tcp:PORT` → `kill -9`.
+/// Returns a human-readable summary; errors only when nothing could be killed.
+#[tauri::command]
+async fn kill_process_on_port(port: u16) -> Result<String, String> {
+    if port == 0 {
+        return Err("Invalid port".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        let output = std::process::Command::new("netstat")
+            .args(["-ano", "-p", "tcp"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map_err(|e| format!("Failed to run netstat: {e}"))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let needle = format!(":{port}");
+
+        // Collect unique PIDs whose local address ends with :PORT and are LISTENING.
+        let mut pids: Vec<u32> = Vec::new();
+        for line in stdout.lines() {
+            let cols: Vec<&str> = line.split_whitespace().collect();
+            // Proto, Local Address, Foreign Address, State, PID
+            if cols.len() < 5 {
+                continue;
+            }
+            let local = cols[1];
+            let state = cols[3];
+            if !state.eq_ignore_ascii_case("LISTENING") {
+                continue;
+            }
+            // Match the port exactly (the local addr is e.g. 0.0.0.0:5173 or [::]:5173).
+            if !local.ends_with(&needle) {
+                continue;
+            }
+            if let Ok(pid) = cols[4].parse::<u32>() {
+                if pid != 0 && !pids.contains(&pid) {
+                    pids.push(pid);
+                }
+            }
+        }
+
+        if pids.is_empty() {
+            return Err(format!("No process is listening on port {port}"));
+        }
+
+        let mut killed = Vec::new();
+        let mut failed = Vec::new();
+        for pid in &pids {
+            let res = std::process::Command::new("taskkill")
+                .args(["/F", "/T", "/PID", &pid.to_string()])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output();
+            match res {
+                Ok(o) if o.status.success() => killed.push(*pid),
+                _ => failed.push(*pid),
+            }
+        }
+
+        if killed.is_empty() {
+            return Err(format!(
+                "Found PID(s) {:?} on port {port} but taskkill failed (try running as admin)",
+                failed
+            ));
+        }
+        Ok(format!("Killed PID(s) {killed:?} on port {port}"))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // lsof -ti returns one PID per line for processes with the port open.
+        let output = std::process::Command::new("lsof")
+            .args(["-ti", &format!("tcp:{port}")])
+            .output()
+            .map_err(|e| format!("Failed to run lsof: {e}"))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let pids: Vec<&str> = stdout.split_whitespace().filter(|s| !s.is_empty()).collect();
+
+        if pids.is_empty() {
+            return Err(format!("No process is listening on port {port}"));
+        }
+
+        let mut killed = Vec::new();
+        let mut failed = Vec::new();
+        for pid in &pids {
+            let res = std::process::Command::new("kill")
+                .args(["-9", pid])
+                .output();
+            match res {
+                Ok(o) if o.status.success() => killed.push(*pid),
+                _ => failed.push(*pid),
+            }
+        }
+
+        if killed.is_empty() {
+            return Err(format!("Found PID(s) {failed:?} on port {port} but kill failed"));
+        }
+        Ok(format!("Killed PID(s) {killed:?} on port {port}"))
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -844,8 +1005,11 @@ pub fn run() {
         list_dir,
         get_focused_app,
         get_app_version,
+        set_launch_at_login,
+        get_launch_at_login,
         check_winget_update,
-        run_winget_upgrade
+        run_winget_upgrade,
+        kill_process_on_port
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {
@@ -862,6 +1026,22 @@ pub fn run() {
               log::error!("[Sidecar] Server failed: {}", e);
           }
       });
+
+      // Re-assert launch-at-login. Auto-updates run the old NSIS uninstaller,
+      // which wipes the autostart registry entry; if the user wanted it on,
+      // recreate it here so the setting survives updates.
+      {
+          let app_handle = app.handle();
+          if read_autostart_intent(app_handle) == Some(true) {
+              let manager = app_handle.autolaunch();
+              if !manager.is_enabled().unwrap_or(false) {
+                  match manager.enable() {
+                      Ok(_) => log::info!("[Autostart] Re-asserted launch-at-login after update"),
+                      Err(e) => log::warn!("[Autostart] Failed to re-assert: {}", e),
+                  }
+              }
+          }
+      }
 
       // Check for updates in the background on startup
       let update_handle = app.handle().clone();

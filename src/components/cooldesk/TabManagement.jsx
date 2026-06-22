@@ -1,4 +1,4 @@
-import { faBrain, faClock, faDesktop, faLayerGroup, faSync, faTasks, faToggleOff, faToggleOn, faWifi } from '@fortawesome/free-solid-svg-icons';
+import { faBrain, faClock, faCode, faDesktop, faLayerGroup, faSync, faTasks, faToggleOff, faToggleOn, faWifi } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { recordFeedbackEvent } from '../../services/feedbackService.js';
@@ -46,6 +46,32 @@ function detectBrowser() {
 // Get current browser (cached)
 const CURRENT_BROWSER = detectBrowser();
 
+// Detect localhost / local dev server URLs (localhost, loopback, private LAN IPs, *.local mDNS).
+// These are grouped into their own "Local Dev" section instead of by hostname.
+function isLocalhostUrl(url) {
+  if (!url) return false;
+  let hostname;
+  try {
+    hostname = new URL(url).hostname;
+  } catch {
+    return false;
+  }
+  if (!hostname) return false;
+  const h = hostname.toLowerCase();
+  if (h === 'localhost' || h.endsWith('.localhost')) return true;
+  if (h === '0.0.0.0' || h === '::1' || h === '[::1]') return true;
+  if (h.endsWith('.local')) return true; // mDNS / Bonjour
+  if (h.startsWith('127.')) return true; // loopback range
+  // Private LAN ranges (RFC 1918): 10.x, 192.168.x, 172.16–31.x
+  if (h.startsWith('10.') || h.startsWith('192.168.')) return true;
+  const m = h.match(/^172\.(\d{1,3})\./);
+  if (m) {
+    const second = parseInt(m[1], 10);
+    if (second >= 16 && second <= 31) return true;
+  }
+  return false;
+}
+
 // Debounce utility
 function debounce(func, wait) {
   let timeout;
@@ -83,6 +109,8 @@ export function TabManagement() {
   const [requestingTabs, setRequestingTabs] = useState(false);
   // True when tabs come from remote sidecar (not live chrome.tabs API)
   const isRemoteTabMode = !window.electronAPI && !(typeof chrome !== 'undefined' && chrome?.tabs?.query);
+  // Tauri desktop app — only here is the Rust `kill_process_on_port` command available.
+  const isTauriApp = typeof window !== 'undefined' && !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
 
   // Load auto-group, smart sort, and task view state on mount
   useEffect(() => {
@@ -531,6 +559,25 @@ export function TabManagement() {
     }
   }, []);
 
+  // Kill the process listening on a local dev tab's port (Tauri desktop only),
+  // then close the now-dead tab. Returns nothing; surfaces failures via console.
+  const handleKillPort = useCallback(async (tab, port) => {
+    const parsedPort = parseInt(port, 10);
+    if (!parsedPort) {
+      console.warn('[TabManagement] No port to kill for tab:', tab?.url);
+      return;
+    }
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const result = await invoke('kill_process_on_port', { port: parsedPort });
+      console.log('[TabManagement] kill_process_on_port:', result);
+      // Server is gone — close the orphaned tab too.
+      handleTabClose(tab);
+    } catch (error) {
+      console.error('[TabManagement] Failed to kill port', parsedPort, ':', error);
+    }
+  }, [handleTabClose]);
+
   const handleAppClick = useCallback(async (app) => {
     try {
       // Record feedback for RAG learning (fire-and-forget)
@@ -594,7 +641,16 @@ export function TabManagement() {
     const pinnedIds = new Set(pinned.map(t => t.id));
 
     // 2. Unpinned Tabs
-    const unpinned = filteredTabs.filter(t => !pinnedIds.has(t.id));
+    const unpinnedAll = filteredTabs.filter(t => !pinnedIds.has(t.id));
+
+    // 2b. Local Dev (localhost / loopback / LAN) — pulled out into their own section
+    // so dev servers across many ports don't scatter into per-host domain groups.
+    const localhost = [];
+    const unpinned = [];
+    unpinnedAll.forEach(t => {
+      if (isLocalhostUrl(t.url)) localhost.push(t);
+      else unpinned.push(t);
+    });
 
     // 3. Chrome native tab groups (extension mode only)
     // Tabs with groupId !== -1 belong to a Chrome group - separate them out
@@ -647,6 +703,7 @@ export function TabManagement() {
 
     return {
       pinned,
+      localhost,
       chromeGroups: Object.values(chromeGrouped),
       grouped: groups,
       recent,
@@ -1141,6 +1198,41 @@ export function TabManagement() {
                       onClose={handleTabClose}
                       onPin={handleTabPin}
                       isPinned={true}
+                      isActive={tab.active}
+                      lastAccessedAt={tabActivity[tab.id] || null}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 1b. Local Dev Section (localhost / loopback / LAN dev servers) */}
+            {partitionedTabs.localhost.length > 0 && (
+              <div>
+                <h3 style={{
+                  fontSize: 'var(--font-2xl, 20px)',
+                  fontWeight: 600,
+                  color: 'var(--text-secondary, #94A3B8)',
+                  marginBottom: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <FontAwesomeIcon icon={faCode} style={{ opacity: 0.6 }} />
+                  Local Dev ({partitionedTabs.localhost.length})
+                </h3>
+                <div className="tabs-grid">
+                  {partitionedTabs.localhost.map(tab => (
+                    <TabCard
+                      key={`${tab.browser || 'other'}-${tab.id}`}
+                      tab={tab}
+                      onClick={handleTabClick}
+                      onClose={handleTabClose}
+                      onPin={handleTabPin}
+                      onKillPort={isTauriApp ? handleKillPort : null}
+                      isPinned={false}
                       isActive={tab.active}
                       lastAccessedAt={tabActivity[tab.id] || null}
                     />

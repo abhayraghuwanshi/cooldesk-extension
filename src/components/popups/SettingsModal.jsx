@@ -168,7 +168,7 @@ export function SettingsModal({
       setAnalyticsEnabledState(isAnalyticsEnabled());
 
       if (isTauri) {
-        tauriInvoke('plugin:autostart|is-enabled').then((enabled) => {
+        tauriInvoke('get_launch_at_login').then((enabled) => {
           setAutostartEnabled(!!enabled);
         }).catch(() => {});
       }
@@ -395,7 +395,7 @@ export function SettingsModal({
 
   const handleAutostartToggle = async (enabled) => {
     try {
-      await tauriInvoke(enabled ? 'plugin:autostart|enable' : 'plugin:autostart|disable');
+      await tauriInvoke('set_launch_at_login', { enabled });
       setAutostartEnabled(enabled);
     } catch (e) {
       setError('Failed to update launch at login setting');

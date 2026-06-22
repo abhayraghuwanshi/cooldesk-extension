@@ -1,7 +1,7 @@
 
-import { faBolt, faChevronDown, faClock, faDesktop, faExternalLinkAlt, faGlobe, faMagic, faTasks, faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faBolt, faChevronDown, faClock, faDesktop, faExternalLinkAlt, faGlobe, faMagic, faPowerOff, faTasks, faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { memo, useState } from 'react';
+import { memo, useRef, useState } from 'react';
 import { getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
 const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
 
@@ -95,10 +95,14 @@ async function getTabPageText(tabId) {
  * Follows WorkspaceCard design pattern with tab-specific features
  * Memoized to prevent unnecessary re-renders
  */
-export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isPinned = false, isActive = false, isLastActive = false, lastAccessedAt = null }) {
+export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, onKillPort = null, isPinned = false, isActive = false, isLastActive = false, lastAccessedAt = null }) {
   const [summary, setSummary] = useState(null);
   const [summarizing, setSummarizing] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  // Two-step confirm for the destructive "kill dev server" action.
+  const [confirmKill, setConfirmKill] = useState(false);
+  const [killing, setKilling] = useState(false);
+  const confirmTimer = useRef(null);
 
   if (!tab) return null;
 
@@ -108,6 +112,15 @@ export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isP
   const faviconUrl = favIconUrl || getFaviconUrl(url, 16);
   const relativeTime = formatRelativeTime(lastAccessedAt);
   const browserStyle = BROWSER_COLORS[browser] || BROWSER_COLORS.other;
+  // Port behind a local dev tab (used by the optional "kill server" action).
+  const devPort = (() => {
+    try {
+      const u = new URL(url);
+      return u.port || (u.protocol === 'https:' ? '443' : '80');
+    } catch {
+      return null;
+    }
+  })();
 
   const handleCardClick = () => {
     onClick?.(tab);
@@ -121,6 +134,21 @@ export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isP
   const handlePin = (e) => {
     e.stopPropagation();
     onPin?.(tab);
+  };
+
+  // First click arms the confirm (auto-disarms after 3s); second click kills.
+  const handleKill = (e) => {
+    e.stopPropagation();
+    if (!confirmKill) {
+      setConfirmKill(true);
+      if (confirmTimer.current) clearTimeout(confirmTimer.current);
+      confirmTimer.current = setTimeout(() => setConfirmKill(false), 3000);
+      return;
+    }
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    setConfirmKill(false);
+    setKilling(true);
+    Promise.resolve(onKillPort?.(tab, devPort)).finally(() => setKilling(false));
   };
 
   const handleSummarize = async (e) => {
@@ -252,6 +280,26 @@ export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isP
         >
           <FontAwesomeIcon icon={summarizing ? faSpinner : faMagic} spin={summarizing} />
         </button> */}
+        {onKillPort && devPort && (
+          <button
+            className="tab-action-btn kill-btn"
+            onClick={handleKill}
+            disabled={killing}
+            title={confirmKill ? `Click again to kill the server on port ${devPort}` : `Kill the dev server on port ${devPort}`}
+            style={{
+              width: confirmKill ? 'auto' : undefined,
+              padding: confirmKill ? '0 8px' : undefined,
+              color: confirmKill ? '#F87171' : '#FB923C',
+              background: confirmKill ? 'rgba(239, 68, 68, 0.18)' : undefined,
+              fontSize: confirmKill ? '11px' : undefined,
+              fontWeight: 600,
+              gap: '4px'
+            }}
+          >
+            <FontAwesomeIcon icon={faPowerOff} spin={killing} />
+            {confirmKill && <span>Kill :{devPort}?</span>}
+          </button>
+        )}
         <button
           className="tab-action-btn pin-btn"
           onClick={handlePin}

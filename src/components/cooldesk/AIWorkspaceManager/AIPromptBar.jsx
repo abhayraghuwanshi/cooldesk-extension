@@ -104,20 +104,13 @@ export default function AIPromptBar({
             disabled={isLoading}
           />
           <div className="awm-hero-composer-actions">
-            <span className="awm-hero-composer-hint">
-              <FontAwesomeIcon
-                icon={faMagicWandSparkles}
-                className={isLoading ? 'spinning' : ''}
-              />
-            </span>
-            <button
-              className="awm-hero-go"
-              onClick={() => onSubmit(value)}
-              disabled={isLoading || !value.trim()}
-            >
-              {isLoading ? <div className="awm-spinner-sm" /> : <FontAwesomeIcon icon={faPaperPlane} />}
-              <span>{isLoading ? 'Thinking…' : 'Suggest workspaces'}</span>
-            </button>
+            {isLoading ? (
+              <span className="awm-hero-thinking">
+                <div className="awm-spinner-sm" /> Thinking…
+              </span>
+            ) : value.trim() ? (
+              <kbd className="awm-hero-kbd">↵&nbsp;Enter</kbd>
+            ) : null}
           </div>
         </div>
 
