@@ -1,4 +1,4 @@
-import { faBrain, faClock, faCode, faDesktop, faLayerGroup, faSync, faTasks, faToggleOff, faToggleOn, faWifi } from '@fortawesome/free-solid-svg-icons';
+import { faBrain, faClock, faCode, faDesktop, faSync, faTasks, faToggleOff, faToggleOn, faWifi } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { recordFeedbackEvent } from '../../services/feedbackService.js';
@@ -10,6 +10,7 @@ import { runningAppsService } from '../../services/runningAppsService.js';
 import { enrichRunningAppsWithIcons, getBaseDomainFromUrl } from '../../utils/helpers.js';
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
 import { AppCard, TabCard, TabGroupCard, TaskGroupCard } from './TabCard';
+import { DevServersPanel } from './DevServersPanel';
 
 // Chrome native tab group colors (matches Chrome's palette)
 const CHROME_GROUP_COLORS = {
@@ -578,6 +579,24 @@ export function TabManagement() {
     }
   }, [handleTabClose]);
 
+  // Force-quit a running app by PID (Tauri desktop only). The running-apps
+  // service will drop it from the list on its next poll.
+  const handleKillApp = useCallback(async (app) => {
+    if (!app?.pid) {
+      console.warn('[TabManagement] No PID to kill for app:', app?.name);
+      return;
+    }
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const result = await invoke('kill_process', { pid: app.pid });
+      console.log('[TabManagement] kill_process:', result);
+      // Optimistically drop every window of that PID from the list.
+      setRunningApps(prev => prev.filter(a => a.pid !== app.pid));
+    } catch (error) {
+      console.error('[TabManagement] Failed to kill app', app.pid, ':', error);
+    }
+  }, []);
+
   const handleAppClick = useCallback(async (app) => {
     try {
       // Record feedback for RAG learning (fire-and-forget)
@@ -974,46 +993,6 @@ export function TabManagement() {
             />
             <span style={{ pointerEvents: 'none' }}>Auto Group</span>
           </button>
-          <button
-            onClick={() => {
-              console.log('[TabManagement] Merge duplicate groups requested');
-              chrome.runtime.sendMessage({ type: 'MERGE_DUPLICATE_GROUPS' })
-                .then(res => console.log('[TabManagement] Merge result:', res))
-                .catch(() => {/* ignore errors */ });
-            }}
-            style={{
-              background: 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))',
-              border: '1px solid rgba(100, 116, 139, 0.3)',
-              borderRadius: '8px',
-              padding: '6px 12px',
-              color: '#94A3B8',
-              cursor: 'pointer',
-              fontSize: 'var(--font-sm, 12px)',
-              fontWeight: 600,
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'linear-gradient(135deg, rgba(100, 116, 139, 0.3), rgba(71, 85, 105, 0.25))';
-              e.currentTarget.style.borderColor = 'rgba(100, 116, 139, 0.5)';
-              e.currentTarget.style.transform = 'translateY(-1px)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))';
-              e.currentTarget.style.borderColor = 'rgba(100, 116, 139, 0.3)';
-              e.currentTarget.style.transform = 'translateY(0)';
-            }}
-            title="Merge duplicate tab groups (consolidate groups with the same domain)"
-          >
-            <FontAwesomeIcon
-              icon={faLayerGroup}
-              size="lg"
-              style={{ pointerEvents: 'none' }}
-            />
-            <span style={{ pointerEvents: 'none' }}>Merge Dupes</span>
-          </button>
           {/* <button
             onClick={() => {
               const newState = !taskViewEnabled;
@@ -1241,6 +1220,14 @@ export function TabManagement() {
               </div>
             )}
 
+            {/* 1c. Dev Servers panel — port-driven list of listening processes (Tauri only) */}
+            {isTauriApp && (
+              <DevServersPanel
+                tabs={partitionedTabs.localhost}
+                onTabClick={handleTabClick}
+              />
+            )}
+
             {/* 2. Chrome Native Tab Groups (Extension only) */}
             {!taskViewEnabled && partitionedTabs.hasChromeGroups && (
               <div>
@@ -1300,6 +1287,7 @@ export function TabManagement() {
                       key={app.id || app.pid}
                       app={app}
                       onClick={handleAppClick}
+                      onKill={isTauriApp ? handleKillApp : null}
                     />
                   ))}
                 </div>

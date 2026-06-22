@@ -4240,6 +4240,29 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   transform: translateX(0);
 }
 
+/* App force-quit button: hidden until the card is hovered, so it never
+   consumes layout space in the resting state. Inline opacity keeps it
+   visible once the confirm is armed. */
+.app-kill-btn {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.cooldesk-tab-card:hover .app-kill-btn {
+  opacity: 1;
+}
+
+/* Dev Servers Open/Kill row: revealed on card hover. Space stays reserved so
+   the card doesn't resize; inline opacity keeps it shown once a kill is armed. */
+.dev-server-actions {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.cooldesk-tab-card:hover .dev-server-actions {
+  opacity: 1;
+}
+
 .tab-action-btn {
   width: 28px;
   height: 28px;

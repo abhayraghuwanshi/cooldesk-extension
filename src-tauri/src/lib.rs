@@ -972,6 +972,214 @@ async fn kill_process_on_port(port: u16) -> Result<String, String> {
     }
 }
 
+#[derive(serde::Serialize)]
+pub struct ListeningPort {
+    pub port: u16,
+    pub pid: u32,
+    pub process: String,
+    /// CPU usage percent (100 = one full core; may exceed 100 on multi-core).
+    pub cpu: f32,
+    /// Resident memory in bytes.
+    pub memory: u64,
+}
+
+/// Sample CPU% + memory for the given PIDs. CPU needs two reads spaced by
+/// sysinfo's minimum interval, so this briefly blocks — call via spawn_blocking.
+fn collect_process_stats(
+    pids: &std::collections::HashSet<u32>,
+) -> std::collections::HashMap<u32, (f32, u64)> {
+    use sysinfo::{Pid, ProcessRefreshKind, System};
+    let mut sys = System::new();
+    sys.refresh_processes_specifics(ProcessRefreshKind::new().with_cpu().with_memory());
+    std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
+    sys.refresh_processes_specifics(ProcessRefreshKind::new().with_cpu().with_memory());
+
+    let mut map = std::collections::HashMap::new();
+    for &pid in pids {
+        if let Some(p) = sys.process(Pid::from_u32(pid)) {
+            map.insert(pid, (p.cpu_usage(), p.memory()));
+        }
+    }
+    map
+}
+
+/// Force-kill a process by PID. Windows: `taskkill /F /T` (kills the tree so
+/// wrappers like npm→node go too). macOS/Linux: `kill -9`.
+#[tauri::command]
+async fn kill_process(pid: u32) -> Result<String, String> {
+    if pid == 0 {
+        return Err("Invalid PID".to_string());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let out = std::process::Command::new("taskkill")
+            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map_err(|e| format!("Failed to run taskkill: {e}"))?;
+        if out.status.success() {
+            Ok(format!("Killed PID {pid}"))
+        } else {
+            Err(format!(
+                "taskkill failed for PID {pid}: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ))
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let out = std::process::Command::new("kill")
+            .args(["-9", &pid.to_string()])
+            .output()
+            .map_err(|e| format!("Failed to run kill: {e}"))?;
+        if out.status.success() {
+            Ok(format!("Killed PID {pid}"))
+        } else {
+            Err(format!(
+                "kill failed for PID {pid}: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ))
+        }
+    }
+}
+
+/// Enumerate processes listening on a TCP port (the "Dev Servers" panel source).
+/// Windows: `netstat -ano` for (port, pid) + `tasklist` for pid→name.
+/// macOS/Linux: `lsof -nP -iTCP -sTCP:LISTEN`.
+/// Returns every listening port; the frontend applies dev-range/process filtering.
+#[tauri::command]
+async fn list_listening_ports() -> Result<Vec<ListeningPort>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::collections::HashMap;
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        // 1. (port, pid) pairs from netstat LISTENING rows.
+        let netstat = std::process::Command::new("netstat")
+            .args(["-ano", "-p", "tcp"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map_err(|e| format!("Failed to run netstat: {e}"))?;
+        let netstat_out = String::from_utf8_lossy(&netstat.stdout);
+
+        // Dedupe on (port, pid) — a server bound to both 0.0.0.0 and [::] shows twice.
+        let mut seen: std::collections::HashSet<(u16, u32)> = std::collections::HashSet::new();
+        let mut rows: Vec<(u16, u32)> = Vec::new();
+        for line in netstat_out.lines() {
+            let cols: Vec<&str> = line.split_whitespace().collect();
+            if cols.len() < 5 || !cols[3].eq_ignore_ascii_case("LISTENING") {
+                continue;
+            }
+            // Local address: 0.0.0.0:5173 / [::]:5173 / 127.0.0.1:5173 — port is after the last ':'.
+            let local = cols[1];
+            let port = match local.rsplit_once(':').and_then(|(_, p)| p.parse::<u16>().ok()) {
+                Some(p) => p,
+                None => continue,
+            };
+            let pid = match cols[4].parse::<u32>() {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+            if pid != 0 && seen.insert((port, pid)) {
+                rows.push((port, pid));
+            }
+        }
+
+        // 2. pid → image name from tasklist (CSV, no header).
+        let tasklist = std::process::Command::new("tasklist")
+            .args(["/FO", "CSV", "/NH"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map_err(|e| format!("Failed to run tasklist: {e}"))?;
+        let tasklist_out = String::from_utf8_lossy(&tasklist.stdout);
+        let mut names: HashMap<u32, String> = HashMap::new();
+        for line in tasklist_out.lines() {
+            // "name.exe","1234","Console","1","12,345 K"
+            let fields: Vec<&str> = line.split("\",\"").collect();
+            if fields.len() < 2 {
+                continue;
+            }
+            let name = fields[0].trim_matches('"').to_string();
+            if let Ok(pid) = fields[1].trim_matches('"').parse::<u32>() {
+                names.insert(pid, name);
+            }
+        }
+
+        // CPU/RAM for just the listening PIDs (off-thread because it sleeps).
+        let pidset: std::collections::HashSet<u32> = rows.iter().map(|(_, pid)| *pid).collect();
+        let stats = tokio::task::spawn_blocking(move || collect_process_stats(&pidset))
+            .await
+            .unwrap_or_default();
+
+        let mut result: Vec<ListeningPort> = rows
+            .into_iter()
+            .map(|(port, pid)| {
+                let (cpu, memory) = stats.get(&pid).copied().unwrap_or((0.0, 0));
+                ListeningPort {
+                    port,
+                    pid,
+                    process: names.get(&pid).cloned().unwrap_or_else(|| "Unknown".to_string()),
+                    cpu,
+                    memory,
+                }
+            })
+            .collect();
+        result.sort_by_key(|p| p.port);
+        Ok(result)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // lsof one-line-per-socket: COMMAND PID USER FD TYPE DEVICE SIZE NODE NAME
+        // NAME ends with ...:PORT (LISTEN). -nP keeps host/port numeric.
+        let output = std::process::Command::new("lsof")
+            .args(["-nP", "-iTCP", "-sTCP:LISTEN"])
+            .output()
+            .map_err(|e| format!("Failed to run lsof: {e}"))?;
+        let out = String::from_utf8_lossy(&output.stdout);
+
+        let mut seen: std::collections::HashSet<(u16, u32)> = std::collections::HashSet::new();
+        let mut rows: Vec<(u16, u32, String)> = Vec::new();
+        for line in out.lines().skip(1) {
+            let cols: Vec<&str> = line.split_whitespace().collect();
+            if cols.len() < 9 {
+                continue;
+            }
+            let process = cols[0].to_string();
+            let pid = match cols[1].parse::<u32>() {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+            let name = cols[cols.len() - 1];
+            let port = match name.rsplit_once(':').and_then(|(_, p)| p.parse::<u16>().ok()) {
+                Some(p) => p,
+                None => continue,
+            };
+            if seen.insert((port, pid)) {
+                rows.push((port, pid, process));
+            }
+        }
+
+        let pidset: std::collections::HashSet<u32> = rows.iter().map(|(_, pid, _)| *pid).collect();
+        let stats = tokio::task::spawn_blocking(move || collect_process_stats(&pidset))
+            .await
+            .unwrap_or_default();
+
+        let mut result: Vec<ListeningPort> = rows
+            .into_iter()
+            .map(|(port, pid, process)| {
+                let (cpu, memory) = stats.get(&pid).copied().unwrap_or((0.0, 0));
+                ListeningPort { port, pid, process, cpu, memory }
+            })
+            .collect();
+        result.sort_by_key(|p| p.port);
+        Ok(result)
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -1009,7 +1217,9 @@ pub fn run() {
         get_launch_at_login,
         check_winget_update,
         run_winget_upgrade,
-        kill_process_on_port
+        kill_process_on_port,
+        list_listening_ports,
+        kill_process
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

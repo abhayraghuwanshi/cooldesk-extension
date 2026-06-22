@@ -337,7 +337,11 @@ export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, onK
  * AppCard - Card component for displaying running desktop apps
  * Similar to TabCard but for native applications
  */
-export const AppCard = memo(function AppCard({ app, onClick }) {
+export const AppCard = memo(function AppCard({ app, onClick, onKill = null }) {
+  const [confirmKill, setConfirmKill] = useState(false);
+  const [killing, setKilling] = useState(false);
+  const confirmTimer = useRef(null);
+
   if (!app) return null;
 
   const { name, title, icon, pid } = app;
@@ -346,6 +350,21 @@ export const AppCard = memo(function AppCard({ app, onClick }) {
 
   const handleClick = () => {
     onClick?.(app);
+  };
+
+  // First click arms confirm (auto-disarms after 3s); second click kills.
+  const handleKill = (e) => {
+    e.stopPropagation();
+    if (!confirmKill) {
+      setConfirmKill(true);
+      if (confirmTimer.current) clearTimeout(confirmTimer.current);
+      confirmTimer.current = setTimeout(() => setConfirmKill(false), 3000);
+      return;
+    }
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    setConfirmKill(false);
+    setKilling(true);
+    Promise.resolve(onKill?.(app)).finally(() => setKilling(false));
   };
 
   return (
@@ -381,6 +400,31 @@ export const AppCard = memo(function AppCard({ app, onClick }) {
             {name !== title && name ? name : 'Running'}
           </div>
         </div>
+        {onKill && pid && (
+          <button
+            className="tab-action-btn app-kill-btn"
+            onClick={handleKill}
+            disabled={killing}
+            title={confirmKill ? `Click again to force-quit ${displayName}` : `Force-quit ${displayName}`}
+            style={{
+              position: 'absolute',
+              top: '10px',
+              right: '10px',
+              padding: confirmKill ? '0 8px' : undefined,
+              width: confirmKill ? 'auto' : undefined,
+              color: confirmKill ? '#F87171' : '#FB923C',
+              background: confirmKill ? 'rgba(239, 68, 68, 0.18)' : undefined,
+              fontSize: confirmKill ? '11px' : undefined,
+              fontWeight: 600,
+              gap: '4px',
+              // Stay visible once armed even if the pointer leaves the card.
+              opacity: confirmKill ? 1 : undefined
+            }}
+          >
+            <FontAwesomeIcon icon={faPowerOff} spin={killing} />
+            {confirmKill && <span>Quit?</span>}
+          </button>
+        )}
       </div>
     </div>
   );
