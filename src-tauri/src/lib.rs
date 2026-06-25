@@ -105,7 +105,8 @@ struct UpdateInfo {
 
 const GITHUB_LATEST: &str =
     "https://api.github.com/repos/abhayraghuwanshi/cooldesk-extension/releases/latest";
-const ANALYTICS_ENDPOINT: &str = "https://cool-desk.com/api/version";
+const ANALYTICS_ENDPOINT: &str =
+    "https://cooldesk-analytics.raghuwanshi-abhay405.workers.dev/api/version";
 
 // Distribution channel, stamped at build time by the release workflow
 // (winget / github / dmg). Defaults to "unknown" for local/dev builds.
