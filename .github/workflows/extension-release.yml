@@ -1,0 +1,99 @@
+name: Publish Chrome Extension
+
+# Publishes the Chrome extension to the Chrome Web Store, independently of the
+# desktop-app release pipeline (release.yml, which fires on `v*` tags).
+#
+# Trigger by pushing a dedicated tag, e.g.:
+#   git tag ext-v2.0.6 && git push origin ext-v2.0.6
+# The version after `ext-v` is written into manifest.json before the build, so
+# the Web Store always receives a strictly-incrementing version (CWS rejects a
+# re-upload of an existing version).
+#
+# Or run it manually from the Actions tab (workflow_dispatch) with a version and
+# an optional dry-run that builds + zips but does not submit.
+#
+# Required repo secrets (Chrome Web Store API — create once):
+#   CWS_EXTENSION_ID, CWS_CLIENT_ID, CWS_CLIENT_SECRET, CWS_REFRESH_TOKEN
+
+on:
+  push:
+    tags:
+      - 'ext-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Extension version to publish (e.g. 2.0.6)'
+        required: true
+      dry_run:
+        description: 'Build and zip only, do not submit to the Web Store'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Tag push  -> strip the `ext-v` prefix; manual run -> use the input.
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VERSION="${GITHUB_REF_NAME#ext-v}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+(\.[0-9]+){0,3}$'; then
+            echo "::error::'$VERSION' is not a valid Chrome Web Store version (1-4 dot-separated integers)."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Publishing extension version $VERSION"
+
+      # @crxjs/vite-plugin imports manifest.json at build time, so stamping it
+      # here flows the version straight into dist/.
+      - name: Stamp manifest version
+        run: |
+          node -e "const f='manifest.json',m=require('./'+f);m.version='${{ steps.ver.outputs.version }}';require('fs').writeFileSync(f,JSON.stringify(m,null,2)+'\n')"
+          echo "manifest.json version is now: $(node -p "require('./manifest.json').version")"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build extension
+        run: npm run build
+
+      # CWS requires manifest.json at the ZIP root, so zip the contents of dist/
+      # rather than the dist/ folder itself.
+      - name: Package
+        run: |
+          test -f dist/manifest.json || { echo "::error::dist/manifest.json missing — build output unexpected"; exit 1; }
+          cd dist && zip -r ../extension.zip . && cd ..
+          echo "Zipped $(du -h extension.zip | cut -f1)"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome-extension-${{ steps.ver.outputs.version }}
+          path: extension.zip
+
+      - name: Publish to Chrome Web Store
+        if: github.event_name == 'push' || github.event.inputs.dry_run == 'false'
+        uses: mnao305/chrome-extension-upload@v5
+        with:
+          file-path: extension.zip
+          extension-id: ${{ secrets.CWS_EXTENSION_ID }}
+          client-id: ${{ secrets.CWS_CLIENT_ID }}
+          client-secret: ${{ secrets.CWS_CLIENT_SECRET }}
+          refresh-token: ${{ secrets.CWS_REFRESH_TOKEN }}
+          publish: true
