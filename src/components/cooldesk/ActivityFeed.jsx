@@ -2,8 +2,12 @@ import {
     faBookmark,
     faCalendarAlt,
     faChevronDown,
+    faEyeSlash,
     faGlobe,
-    faLink
+    faLink,
+    faPlus,
+    faRotateLeft,
+    faXmark
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
@@ -14,6 +18,26 @@ import { runningAppsService } from '../../services/runningAppsService.js';
 import '../../styles/cooldesk.css';
 import { enrichRunningAppsWithIcons, getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
 
+
+// Curated "Search" launcher: the search engines + AI tools people actually
+// open. Domains are used to detect whether one is already open in a tab so we
+// can focus it instead of opening a duplicate. (URLs all exist in
+// data/appstore.json under the "ai"/"information" categories — this is just a
+// hand-ordered subset with proper display names.)
+const SEARCH_APPS = [
+    { name: 'Google', url: 'https://www.google.com', domains: ['google.com'] },
+    { name: 'ChatGPT', url: 'https://chatgpt.com', domains: ['chatgpt.com', 'chat.openai.com'] },
+    { name: 'Claude', url: 'https://claude.ai', domains: ['claude.ai'] },
+    { name: 'Gemini', url: 'https://gemini.google.com', domains: ['gemini.google.com'] },
+    { name: 'Perplexity', url: 'https://www.perplexity.ai', domains: ['perplexity.ai'] },
+    { name: 'Grok', url: 'https://grok.com', domains: ['grok.com', 'x.ai'] },
+    { name: 'Copilot', url: 'https://copilot.microsoft.com', domains: ['copilot.microsoft.com'] },
+    { name: 'DeepSeek', url: 'https://chat.deepseek.com', domains: ['deepseek.com'] },
+    { name: 'Mistral', url: 'https://chat.mistral.ai', domains: ['mistral.ai'] },
+    { name: 'You.com', url: 'https://you.com', domains: ['you.com'] },
+    { name: 'Bing', url: 'https://www.bing.com', domains: ['bing.com'] },
+    { name: 'DuckDuckGo', url: 'https://duckduckgo.com', domains: ['duckduckgo.com'] },
+];
 
 // Platform config derived from scrapper.json
 const PLATFORM_CONFIG = scrapperConfig.platforms.reduce((acc, platform) => {
@@ -62,6 +86,16 @@ export function ActivityFeed() {
     const [calendarEvents, setCalendarEvents] = useState([]);
     const [activeTab, setActiveTab] = useState('all');
     const [isLoading, setIsLoading] = useState(true);
+    // Apps the user has removed from the Search launcher (persisted)
+    const [hiddenSearchApps, setHiddenSearchApps] = useState(() => {
+        try { return new Set(JSON.parse(localStorage.getItem('searchHiddenApps') || '[]')); } catch { return new Set(); }
+    });
+    // User-added Search apps (persisted): [{ name, url, domains, custom: true }]
+    const [customSearchApps, setCustomSearchApps] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('searchCustomApps') || '[]'); } catch { return []; }
+    });
+    const [addingSearchApp, setAddingSearchApp] = useState(false);
+    const [newSearchUrl, setNewSearchUrl] = useState('');
     const [visibleFavCount, setVisibleFavCount] = useState(8);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [region, setRegion] = useState('');
@@ -534,6 +568,170 @@ export function ActivityFeed() {
         window.open(url, '_blank');
     };
 
+    // Close an actual open Chrome tab from the feed
+    const handleCloseTab = async (tabItem, e) => {
+        if (e) e.stopPropagation();
+        const rawId = typeof tabItem.id === 'string' ? tabItem.id.replace(/^tab_/, '') : tabItem.id;
+        const tabId = parseInt(rawId, 10);
+        if (!Number.isFinite(tabId)) return;
+
+        // Optimistically drop it from the feed for instant feedback;
+        // chrome.tabs.onRemoved will reconcile the real state shortly after.
+        setFeedItems(prev => prev.filter(i => i.id !== tabItem.id));
+        try {
+            if (chrome?.tabs?.remove) await chrome.tabs.remove(tabId);
+        } catch (err) {
+            console.error('Failed to close tab:', err);
+        }
+    };
+
+    // Small × button shown on open-tab rows
+    const renderTabCloseBtn = (tabItem) => (
+        <button
+            className="feed-tab-close"
+            type="button"
+            title="Close tab"
+            aria-label="Close tab"
+            onClick={(e) => handleCloseTab(tabItem, e)}
+            style={{
+                flexShrink: 0,
+                width: '24px',
+                height: '24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '6px',
+                border: 'none',
+                background: 'transparent',
+                color: '#94A3B8',
+                cursor: 'pointer',
+                fontSize: '12px',
+                transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={e => {
+                e.stopPropagation();
+                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.18)';
+                e.currentTarget.style.color = '#F87171';
+            }}
+            onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = '#94A3B8';
+            }}
+        >
+            <FontAwesomeIcon icon={faXmark} />
+        </button>
+    );
+
+    // Remove an app from the Search launcher. Built-ins are hidden (restorable);
+    // user-added apps are deleted from the custom list.
+    const removeSearchApp = (app, e) => {
+        if (e) e.stopPropagation();
+        if (app.custom) {
+            setCustomSearchApps(prev => {
+                const next = prev.filter(a => a.url !== app.url);
+                try { localStorage.setItem('searchCustomApps', JSON.stringify(next)); } catch { /* ignore */ }
+                return next;
+            });
+        } else {
+            setHiddenSearchApps(prev => {
+                const next = new Set(prev);
+                next.add(app.name);
+                try { localStorage.setItem('searchHiddenApps', JSON.stringify([...next])); } catch { /* ignore */ }
+                return next;
+            });
+        }
+    };
+
+    const restoreSearchApps = () => {
+        setHiddenSearchApps(new Set());
+        try { localStorage.removeItem('searchHiddenApps'); } catch { /* ignore */ }
+    };
+
+    // Add a user-supplied URL to the Search launcher
+    const addSearchApp = (raw) => {
+        const input = (raw || '').trim();
+        if (!input) return;
+        const urlStr = /^https?:\/\//i.test(input) ? input : `https://${input}`;
+        let host;
+        try { host = new URL(urlStr).hostname.replace(/^www\./, '').toLowerCase(); } catch { return; }
+        if (!host) return;
+
+        // If this host already matches an existing app, just un-hide it (don't duplicate)
+        const builtinMatch = SEARCH_APPS.find(a => a.domains.some(d => host === d || host.endsWith('.' + d)));
+        const customMatch = customSearchApps.find(a => a.domains.some(d => host === d || host.endsWith('.' + d)));
+        if (builtinMatch || customMatch) {
+            if (builtinMatch) {
+                setHiddenSearchApps(prev => {
+                    if (!prev.has(builtinMatch.name)) return prev;
+                    const next = new Set(prev); next.delete(builtinMatch.name);
+                    try { localStorage.setItem('searchHiddenApps', JSON.stringify([...next])); } catch { /* ignore */ }
+                    return next;
+                });
+            }
+            setNewSearchUrl(''); setAddingSearchApp(false);
+            return;
+        }
+
+        // Derive a display name from the registrable domain (perplexity.ai -> "Perplexity")
+        const parts = host.split('.');
+        const sld = parts.length >= 2 ? parts[parts.length - 2] : parts[0];
+        const name = sld.charAt(0).toUpperCase() + sld.slice(1);
+        const app = { name, url: urlStr, domains: [host], custom: true };
+
+        setCustomSearchApps(prev => {
+            const next = [...prev, app];
+            try { localStorage.setItem('searchCustomApps', JSON.stringify(next)); } catch { /* ignore */ }
+            return next;
+        });
+        setNewSearchUrl(''); setAddingSearchApp(false);
+    };
+
+    // Grey "remove from list" button (hidden until row hover, like the close ×)
+    const renderHideBtn = (app) => (
+        <button
+            className="feed-tab-close"
+            type="button"
+            title="Remove from Search"
+            aria-label="Remove from Search"
+            onClick={(e) => removeSearchApp(app, e)}
+            style={{
+                flexShrink: 0,
+                width: '24px',
+                height: '24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '6px',
+                border: 'none',
+                background: 'transparent',
+                color: '#94A3B8',
+                cursor: 'pointer',
+                fontSize: '11px',
+                transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={e => {
+                e.stopPropagation();
+                e.currentTarget.style.background = 'rgba(148, 163, 184, 0.18)';
+                e.currentTarget.style.color = '#E2E8F0';
+            }}
+            onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = '#94A3B8';
+            }}
+        >
+            <FontAwesomeIcon icon={faEyeSlash} />
+        </button>
+    );
+
+    // Fixed-width trailing slot so every row's right edge lines up regardless of
+    // whether it has a close button. Pass the tab item to show ×, or null for an
+    // empty (but space-reserving) slot.
+    const renderActionSlot = (tabItem) => (
+        <div style={{ width: '24px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '4px' }}>
+            {tabItem ? renderTabCloseBtn(tabItem) : null}
+        </div>
+    );
+
     const formatTime = (ts) => {
         const diff = (Date.now() - ts) / 1000;
         if (diff < 60) return 'Just now';
@@ -542,11 +740,223 @@ export function ActivityFeed() {
         return `${Math.floor(diff / 86400)}d ago`;
     };
 
+    // "Search" tab: curated launcher of search engines + AI tools.
+    // If one is already open in a tab, badge it and focus that tab on click.
+    const renderSearchApps = () => {
+        // Built-ins the user hasn't hidden, plus any user-added apps
+        const visibleApps = [
+            ...SEARCH_APPS.filter(app => !hiddenSearchApps.has(app.name)),
+            ...customSearchApps
+        ];
+
+        const openTabs = feedItems.filter(i => i.type === 'tab' && i.url);
+        const activeByApp = {}; // app.name -> open tab item
+        openTabs.forEach(tab => {
+            let host = '';
+            try { host = new URL(tab.url).hostname.replace(/^www\./, '').toLowerCase(); } catch { return; }
+            // Pick the app with the most specific (longest) matching domain so
+            // gemini.google.com maps to Gemini, not Google.
+            let best = null, bestLen = -1;
+            for (const app of visibleApps) {
+                for (const d of app.domains) {
+                    if ((host === d || host.endsWith('.' + d)) && d.length > bestLen) {
+                        best = app; bestLen = d.length;
+                    }
+                }
+            }
+            if (best && !activeByApp[best.name]) activeByApp[best.name] = tab;
+        });
+
+        // Show currently-open ones first, keeping curated order within each group.
+        const ordered = visibleApps.map((app, i) => ({ app, i }))
+            .sort((a, b) => (activeByApp[b.app.name] ? 1 : 0) - (activeByApp[a.app.name] ? 1 : 0) || a.i - b.i)
+            .map(x => x.app);
+
+        const hiddenCount = hiddenSearchApps.size;
+
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {ordered.map(app => {
+                    const activeTabItem = activeByApp[app.name];
+                    const activeUrl = activeTabItem?.url;
+                    return (
+                        <div key={app.url || app.name}
+                            className="feed-row"
+                            onClick={() => handleItemClick(activeUrl || app.url)}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '12px',
+                                padding: '12px 16px',
+                                cursor: 'pointer',
+                                borderBottom: '1px solid rgba(148, 163, 184, 0.05)',
+                                transition: 'background 0.2s'
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                        >
+                            {/* Icon */}
+                            <div style={{ borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'var(--accent-blue, #60a5fa)', overflow: 'hidden' }}>
+                                <img
+                                    src={getFaviconUrl(app.url, 32)}
+                                    alt=""
+                                    style={{ width: 'var(--font-5xl)', height: 'var(--font-5xl)', objectFit: 'contain' }}
+                                    onError={e => { e.target.style.display = 'none'; if (e.target.nextSibling) e.target.nextSibling.style.display = 'block'; }}
+                                />
+                                <div style={{ display: 'none' }}>
+                                    <FontAwesomeIcon icon={faGlobe} style={{ fontSize: '16px' }} />
+                                </div>
+                            </div>
+
+                            {/* Name */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{
+                                    fontSize: 'var(--font-base)',
+                                    color: 'var(--text-primary, #F1F5F9)',
+                                    fontWeight: 500,
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis'
+                                }}>
+                                    {app.name}
+                                </div>
+                            </div>
+
+                            {/* Active "Open" badge */}
+                            {activeUrl && (
+                                <div style={{
+                                    flexShrink: 0,
+                                    fontSize: 'var(--font-xs)',
+                                    fontWeight: 600,
+                                    color: '#34D399',
+                                    background: 'rgba(16, 185, 129, 0.12)',
+                                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                                    padding: '2px 8px',
+                                    borderRadius: '999px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '5px'
+                                }}>
+                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34D399' }}></span>
+                                    Open
+                                </div>
+                            )}
+
+                            {/* Hover actions: remove-from-list (always) + close-tab (when open). Fixed width keeps right edges aligned. */}
+                            <div style={{ width: '52px', flexShrink: 0, marginLeft: '4px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '2px' }}>
+                                {renderHideBtn(app)}
+                                {activeTabItem && renderTabCloseBtn(activeTabItem)}
+                            </div>
+                        </div>
+                    );
+                })}
+
+                {/* Add a custom app */}
+                {addingSearchApp ? (
+                    <div style={{ display: 'flex', gap: '8px', margin: '10px 16px' }}>
+                        <input
+                            autoFocus
+                            value={newSearchUrl}
+                            onChange={e => setNewSearchUrl(e.target.value)}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter') addSearchApp(newSearchUrl);
+                                else if (e.key === 'Escape') { setAddingSearchApp(false); setNewSearchUrl(''); }
+                            }}
+                            placeholder="Paste a URL — e.g. notion.so"
+                            style={{
+                                flex: 1,
+                                minWidth: 0,
+                                padding: '8px 10px',
+                                background: 'rgba(15, 23, 42, 0.6)',
+                                border: '1px solid rgba(96, 165, 250, 0.4)',
+                                borderRadius: '8px',
+                                color: '#E2E8F0',
+                                fontSize: 'var(--font-sm)',
+                                outline: 'none'
+                            }}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => addSearchApp(newSearchUrl)}
+                            style={{
+                                padding: '8px 14px',
+                                background: 'rgba(96, 165, 250, 0.18)',
+                                border: '1px solid rgba(96, 165, 250, 0.45)',
+                                borderRadius: '8px',
+                                color: '#93C5FD',
+                                fontSize: 'var(--font-sm)',
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                            }}
+                        >
+                            Add
+                        </button>
+                    </div>
+                ) : (
+                    <button
+                        type="button"
+                        onClick={() => setAddingSearchApp(true)}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px',
+                            margin: '10px 16px 4px 16px',
+                            padding: '9px',
+                            background: 'transparent',
+                            border: '1px dashed rgba(96, 165, 250, 0.3)',
+                            borderRadius: '8px',
+                            color: '#93C5FD',
+                            fontSize: 'var(--font-xs)',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(96, 165, 250, 0.1)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                    >
+                        <FontAwesomeIcon icon={faPlus} style={{ fontSize: '10px' }} />
+                        Add app
+                    </button>
+                )}
+
+                {hiddenCount > 0 && (
+                    <button
+                        type="button"
+                        onClick={restoreSearchApps}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px',
+                            margin: '10px 16px',
+                            padding: '8px',
+                            background: 'transparent',
+                            border: '1px dashed rgba(148, 163, 184, 0.25)',
+                            borderRadius: '8px',
+                            color: '#94A3B8',
+                            fontSize: 'var(--font-xs)',
+                            fontWeight: 500,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(148, 163, 184, 0.08)'; e.currentTarget.style.color = '#CBD5E1'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94A3B8'; }}
+                    >
+                        <FontAwesomeIcon icon={faRotateLeft} style={{ fontSize: '10px' }} />
+                        Restore {hiddenCount} hidden {hiddenCount === 1 ? 'app' : 'apps'}
+                    </button>
+                )}
+            </div>
+        );
+    };
+
     // Group tabs by domain and chats by platform for cleaner view
     const groupedFeedItems = useMemo(() => {
         const filtered = feedItems.filter(item => {
             if (activeTab === 'all') return true;
-            if (activeTab === 'tabs') return item.type === 'tab' || item.type === 'recent';
+            // "Browsing" = only currently-open tabs (recent history + chats stay under "All Activity")
+            if (activeTab === 'tabs') return item.type === 'tab';
             if (activeTab === 'apps') return item.type === 'app';
             return false;
         });
@@ -904,48 +1314,56 @@ export function ActivityFeed() {
                     {/* Modern Pill-Style Segmented Control */}
                     <div style={{
                         display: 'inline-flex',
-                        // background: 'rgba(15, 23, 42, 0.6)',
-                        // border: '1px solid rgba(148, 163, 184, 0.15)',
+                        background: 'rgba(15, 23, 42, 0.5)',
+                        border: '1px solid rgba(148, 163, 184, 0.12)',
                         borderRadius: '12px',
                         padding: '4px',
                         gap: '4px',
                         position: 'relative'
                     }}>
-                        {(isDesktopApp ? ['all', 'chats', 'tabs', 'apps'] : ['all', 'tabs']).map(tab => (
-                            <button
-                                key={tab}
-                                onClick={() => setActiveTab(tab)}
-                                style={{
-                                    padding: '8px 16px',
-                                    color: activeTab === tab ? '#60A5FA' : '#94A3B8',
-                                    fontSize: '12px',
-                                    fontWeight: activeTab === tab ? 600 : 500,
-                                    cursor: 'pointer',
-                                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                    textTransform: 'capitalize',
-                                    position: 'relative',
-                                    zIndex: 1,
-                                    whiteSpace: 'nowrap',
-                                    // boxShadow: activeTab === tab
-                                    //     ? '0 4px 12px rgba(96, 165, 250, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
-                                    //     : 'none'
-                                }}
-                                onMouseEnter={(e) => {
-                                    if (activeTab !== tab) {
-                                        e.currentTarget.style.background = 'rgba(148, 163, 184, 0.08)';
-                                        e.currentTarget.style.color = '#CBD5E1';
-                                    }
-                                }}
-                                onMouseLeave={(e) => {
-                                    if (activeTab !== tab) {
-                                        e.currentTarget.style.background = 'transparent';
-                                        e.currentTarget.style.color = '#94A3B8';
-                                    }
-                                }}
-                            >
-                                {tab === 'all' ? 'All Activity' : tab === 'tabs' ? 'Browsing' : tab.charAt(0).toUpperCase() + tab.slice(1)}
-                            </button>
-                        ))}
+                        {(isDesktopApp ? ['all', 'chats', 'tabs', 'apps', 'search'] : ['all', 'tabs', 'search']).map(tab => {
+                            const isActive = activeTab === tab;
+                            return (
+                                <button
+                                    key={tab}
+                                    type="button"
+                                    onClick={() => setActiveTab(tab)}
+                                    style={{
+                                        appearance: 'none',
+                                        WebkitAppearance: 'none',
+                                        border: isActive ? '1px solid rgba(96, 165, 250, 0.45)' : '1px solid transparent',
+                                        outline: 'none',
+                                        padding: '7px 16px',
+                                        borderRadius: '9px',
+                                        background: isActive ? 'rgba(96, 165, 250, 0.18)' : 'transparent',
+                                        color: isActive ? '#93C5FD' : '#94A3B8',
+                                        fontSize: '12px',
+                                        fontWeight: isActive ? 600 : 500,
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                        textTransform: 'capitalize',
+                                        position: 'relative',
+                                        zIndex: 1,
+                                        whiteSpace: 'nowrap',
+                                        boxShadow: isActive ? '0 2px 8px rgba(96, 165, 250, 0.18)' : 'none'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        if (!isActive) {
+                                            e.currentTarget.style.background = 'rgba(148, 163, 184, 0.08)';
+                                            e.currentTarget.style.color = '#CBD5E1';
+                                        }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        if (!isActive) {
+                                            e.currentTarget.style.background = 'transparent';
+                                            e.currentTarget.style.color = '#94A3B8';
+                                        }
+                                    }}
+                                >
+                                    {tab === 'all' ? 'All Activity' : tab === 'tabs' ? 'Browsing' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
 
@@ -958,7 +1376,9 @@ export function ActivityFeed() {
                         minHeight: 0 // Important for flex children with overflow
                     }}>
                     {/* Calendar Tab Content */}
-                    {activeTab === 'calendar' ? (
+                    {activeTab === 'search' ? (
+                        renderSearchApps()
+                    ) : activeTab === 'calendar' ? (
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                             {/* Clock Header */}
                             <div style={{
@@ -1229,6 +1649,8 @@ export function ActivityFeed() {
                                                         }}
                                                     />
                                                 </button>
+                                                {/* Empty action slot keeps chat-group pills aligned with tab rows */}
+                                                {renderActionSlot(null)}
                                             </div>
 
                                             {/* Expanded Chats */}
@@ -1350,6 +1772,7 @@ export function ActivityFeed() {
                                         <div key={`group-${item.domain}`} style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.05)' }}>
                                             {/* Group Header - Shows top tab with expand button */}
                                             <div
+                                                className="feed-row"
                                                 style={{
                                                     display: 'flex',
                                                     alignItems: 'center',
@@ -1450,6 +1873,9 @@ export function ActivityFeed() {
                                                         }}
                                                     />
                                                 </button>
+
+                                                {/* Close the top tab of this group */}
+                                                {renderActionSlot(topTab)}
                                             </div>
 
                                             {/* Expanded Tabs */}
@@ -1461,6 +1887,7 @@ export function ActivityFeed() {
                                                     {item.tabs.slice(1).map((tab, tabIdx) => (
                                                         <div
                                                             key={tab.id}
+                                                            className="feed-row"
                                                             onClick={() => handleItemClick(tab.url)}
                                                             style={{
                                                                 display: 'flex',
@@ -1494,6 +1921,7 @@ export function ActivityFeed() {
                                                             <span style={{ fontSize: 'var(--font-xs)', color: '#64748B' }}>
                                                                 {formatTime(tab.timestamp)}
                                                             </span>
+                                                            {renderActionSlot(tab)}
                                                         </div>
                                                     ))}
                                                 </div>
@@ -1864,6 +2292,7 @@ export function ActivityFeed() {
 
                                 return (
                                     <div key={item.id}
+                                        className="feed-row"
                                         onClick={() => handleItemClick(item.url)}
                                         style={{
                                             display: 'flex',
@@ -2007,6 +2436,9 @@ export function ActivityFeed() {
                                                 </div>
                                             )}
                                         </div>
+
+                                        {/* Action slot: close button for open tabs, empty otherwise (keeps right edges aligned) */}
+                                        {renderActionSlot(item.type === 'tab' ? item : null)}
                                     </div>
                                 );
                             })}
@@ -2022,6 +2454,16 @@ export function ActivityFeed() {
 
             {/* Custom scrollbar for favorites */}
             <style>{`
+                /* Tab close button: hidden until the row is hovered (or focused via keyboard) */
+                .feed-tab-close {
+                    opacity: 0;
+                    transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+                }
+                .feed-row:hover .feed-tab-close,
+                .feed-tab-close:focus-visible {
+                    opacity: 1;
+                }
+
                 .favorites-scroll-container::-webkit-scrollbar {
                     height: 6px;
                 }

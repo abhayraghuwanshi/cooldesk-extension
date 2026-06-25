@@ -1,9 +1,21 @@
 {
   "manifest_version": 3,
   "name": "New Tab by Cooldesk",
-  "version": "2.0.4",
+  "version": "2.0.5",
+  "icons": {
+    "16": "logo-2.png",
+    "32": "logo-2.png",
+    "48": "logo-2.png",
+    "128": "logo-2.png"
+  },
   "action": {
-    "default_title": "Open CoolDesk"
+    "default_title": "Open CoolDesk",
+    "default_icon": {
+      "16": "logo-2.png",
+      "32": "logo-2.png",
+      "48": "logo-2.png",
+      "128": "logo-2.png"
+    }
   },
   "options_page": "extension.html",
   "chrome_url_overrides": {

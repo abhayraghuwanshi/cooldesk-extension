@@ -1,7 +1,6 @@
 import { lazy, memo, Suspense, useEffect, useState } from 'react';
 import '../../styles/cooldesk.css';
 import { defaultFontFamily } from '../../utils/fontUtils';
-import { ResumeWorkWidget } from '../widgets/ResumeWorkWidget';
 
 const ActivityFeed = lazy(() => import('./ActivityFeed').then(m => ({ default: m.ActivityFeed })));
 
@@ -55,9 +54,6 @@ const OverviewDashboard = memo(function OverviewDashboard() {
                         {greeting}
                     </div>
                 </div>
-
-                {/* Resume last session */}
-                <ResumeWorkWidget />
             </div>
 
             {/* Right: Activity Feed — unchanged */}
