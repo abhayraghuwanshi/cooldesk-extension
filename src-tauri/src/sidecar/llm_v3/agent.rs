@@ -47,10 +47,14 @@ FIRST investigate the user's real context using the tools — do not guess:
 - search_tabs("") to see what's currently open
 - search_apps("") to see running desktop apps (editors, IDEs, tools)
 - get_open_projects() to see the LOCAL FOLDERS/projects open in code editors — use these for "folders"
-- search_history(keyword) / get_recent_activity to find relevant sites not currently open
+- suggest_workspaces() for a per-domain engagement rollup + the pages the user spends the most time on
+- search_history(keyword) / get_recent_activity for engagement-ranked sites not currently open
 - search_workspaces("") to avoid duplicating workspaces that already exist
 
-THEN group related tabs, apps and projects into workspaces.
+THEN group related tabs, apps and projects into workspaces. Activity results are annotated
+with engagement like "[12m active, 5 visits, 3 days]" — weight high-engagement pages and
+the top domains from suggest_workspaces heavily; they reveal what the user truly works on.
+Ignore one-off, low-engagement pages unless they clearly complete a theme.
 
 Respond with ONLY a JSON object — no prose, no markdown fences — in EXACTLY this schema:
 {"groups":[{
@@ -64,9 +68,10 @@ Respond with ONLY a JSON object — no prose, no markdown fences — in EXACTLY 
 
 Rules:
 - "urls": FULL real URLs taken from search_tabs / search_history results — never invent them.
+- Prioritise pages with the strongest engagement signal when choosing what belongs together.
 - "apps": app names exactly as returned by search_apps (no browsers).
 - "folders": local projects from get_open_projects — use the exact name, editor key, and path it returns (include "path" when shown).
-- "suggestedUrls": 2-4 NEW useful URLs not already open.
+- "suggestedUrls": 2-4 useful URLs not already open. Prefer real pages from the user's history/pins (via search_history / get_pinned_items) over generic well-known sites; only fall back to inventing a well-known URL when history has no good fit.
 - Keep each workspace focused on one theme. Omit empty fields rather than padding them."#;
 
 // =============================================================================
@@ -218,6 +223,7 @@ impl CloudAgent {
                     .tool(SearchHistory { sync_data: sd.clone() })
                     .tool(SearchWorkspaces { sync_data: sd.clone() })
                     .tool(GetRecentActivity { sync_data: sd.clone() })
+                    .tool(SuggestWorkspaces { sync_data: sd.clone() })
                     .tool(GetPinnedItems { sync_data: sd })
                     .build();
                 run_tool_loop(&agent, &message, self.sync_data.clone(), MAX_TURNS).await
@@ -237,6 +243,7 @@ impl CloudAgent {
                     .tool(SearchHistory { sync_data: sd.clone() })
                     .tool(SearchWorkspaces { sync_data: sd.clone() })
                     .tool(GetRecentActivity { sync_data: sd.clone() })
+                    .tool(SuggestWorkspaces { sync_data: sd.clone() })
                     .tool(GetPinnedItems { sync_data: sd })
                     .build();
                 run_tool_loop(&agent, &message, self.sync_data.clone(), MAX_TURNS).await
@@ -253,6 +260,7 @@ impl CloudAgent {
                     .tool(SearchHistory { sync_data: sd.clone() })
                     .tool(SearchWorkspaces { sync_data: sd.clone() })
                     .tool(GetRecentActivity { sync_data: sd.clone() })
+                    .tool(SuggestWorkspaces { sync_data: sd.clone() })
                     .tool(GetPinnedItems { sync_data: sd })
                     .build();
                 run_tool_loop(&agent, &message, self.sync_data.clone(), MAX_TURNS).await
@@ -296,9 +304,8 @@ async fn run_tool_loop<M: rig::completion::CompletionModel>(
     sync_data: Arc<RwLock<SyncData>>,
     max_turns: usize,
 ) -> Result<String, String> {
-    use rig::completion::message::{AssistantContent, Message, ToolResultContent, UserContent};
+    use rig::completion::message::{AssistantContent, Message};
     use rig::completion::Completion;
-    use rig::OneOrMany;
 
     let mut history: Vec<Message> = Vec::new();
     let mut turn_input: Message = Message::user(initial);
@@ -312,39 +319,45 @@ async fn run_tool_loop<M: rig::completion::CompletionModel>(
             .await
             .map_err(|e| e.to_string())?;
 
-        let choice = resp.choice;
+        let mut assistant_text = String::new();
+        let mut calls: Vec<String> = Vec::new();
+        let mut results: Vec<String> = Vec::new();
 
-        // Record this exchange so the model sees its own tool calls next turn.
-        history.push(turn_input.clone());
-        history.push(Message::Assistant { content: choice.clone() });
-
-        let mut final_text = String::new();
-        let mut tool_results: Vec<UserContent> = Vec::new();
-
-        for content in choice.into_iter() {
+        for content in resp.choice.into_iter() {
             match content {
-                AssistantContent::Text(t) => final_text.push_str(&t.text),
+                AssistantContent::Text(t) => assistant_text.push_str(&t.text),
                 AssistantContent::ToolCall(call) => {
                     log::info!("[CloudAgent] tool call: {}", call.function.name);
-                    let output =
-                        dispatch_tool(&call.function.name, call.function.arguments, &sync_data).await;
-                    tool_results.push(UserContent::tool_result(
-                        call.id,
-                        OneOrMany::one(ToolResultContent::text(output)),
-                    ));
+                    let name = call.function.name;
+                    let args = call.function.arguments;
+                    let output = dispatch_tool(&name, args.clone(), &sync_data).await;
+                    calls.push(format!("{}({})", name, args));
+                    results.push(format!("### Result of {}({})\n{}", name, args, output));
                 }
             }
         }
 
         // No tools requested → the model has produced its final answer.
-        if tool_results.is_empty() {
-            return Ok(final_text);
+        if results.is_empty() {
+            return Ok(assistant_text);
         }
 
-        log::info!("[CloudAgent] turn {} ran {} tool(s)", turn, tool_results.len());
-        turn_input = Message::User {
-            content: OneOrMany::many(tool_results).map_err(|e| e.to_string())?,
+        // Replay the exchange as PLAIN TEXT rather than typed tool-call messages.
+        // Round-tripping provider tool-call parts breaks on Gemini 3, which rejects
+        // a replayed functionCall without its thought_signature — a field rig 0.9
+        // does not model. A text transcript avoids that on every provider.
+        log::info!("[CloudAgent] turn {} ran {} tool(s)", turn, results.len());
+        history.push(turn_input);
+        let assistant_summary = if assistant_text.is_empty() {
+            format!("Calling tools: {}", calls.join(", "))
+        } else {
+            format!("{}\n\nCalling tools: {}", assistant_text, calls.join(", "))
         };
+        history.push(Message::assistant(assistant_summary));
+        turn_input = Message::user(format!(
+            "Tool results below. Call more tools if you still need data; otherwise give your final answer.\n\n{}",
+            results.join("\n\n")
+        ));
     }
 
     Err("reached the tool-call limit without a final answer".to_string())
@@ -383,6 +396,10 @@ async fn dispatch_tool(
         },
         "get_recent_activity" => match serde_json::from_value::<GetRecentActivityArgs>(args) {
             Ok(a) => GetRecentActivity { sync_data: sync_data.clone() }.call(a).await.map_err(|e| e.to_string()),
+            Err(e) => Err(format!("invalid args: {e}")),
+        },
+        "suggest_workspaces" => match serde_json::from_value::<SuggestWorkspacesArgs>(args) {
+            Ok(a) => SuggestWorkspaces { sync_data: sync_data.clone() }.call(a).await.map_err(|e| e.to_string()),
             Err(e) => Err(format!("invalid args: {e}")),
         },
         "get_pinned_items" => match serde_json::from_value::<GetPinnedItemsArgs>(args) {

@@ -1,6 +1,7 @@
-use crate::sidecar::data::SyncData;
+use crate::sidecar::data::{Activity, SyncData};
 use rig::{completion::ToolDefinition, tool::Tool};
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -16,6 +17,135 @@ impl fmt::Display for V3ToolError {
 }
 
 impl std::error::Error for V3ToolError {}
+
+// =============================================================================
+// ENGAGEMENT HELPERS
+// The browser extension records dwell time, visit counts and return-visits for
+// every page (see Activity). Surfacing those signals — instead of a flat recency
+// list — lets the model cluster a workspace around the sites the user actually
+// works in, not ones they glanced at once.
+// =============================================================================
+
+/// True for a real, groupable web page (excludes extension/internal pages).
+fn is_real_web(url: &str) -> bool {
+    url.starts_with("http") && !url.contains("chrome-extension://")
+}
+
+/// Bare host of a URL, lowercased and without a leading "www.".
+fn domain_of(url: &str) -> String {
+    let after = url.split("://").nth(1).unwrap_or(url);
+    let host = after.split('/').next().unwrap_or(after);
+    host.trim_start_matches("www.").to_lowercase()
+}
+
+/// One page aggregated from possibly many activity rows for the same URL.
+struct PageStat {
+    title: String,
+    url: String,
+    time_ms: i64,
+    visits: i32,
+    return_visits: i32,
+}
+
+/// Engagement score: dwell time dominates, repeat visits and multi-day returns
+/// add weight. Used to rank pages so the model sees the user's anchors first.
+fn engagement_score(p: &PageStat) -> i64 {
+    p.time_ms / 1000 + (p.visits as i64) * 20 + (p.return_visits as i64) * 60
+}
+
+/// Human-readable engagement annotation, e.g. " [12m active, 5 visits, 3 days]".
+fn fmt_engagement(p: &PageStat) -> String {
+    let mut bits = Vec::new();
+    if p.time_ms >= 1000 {
+        let secs = p.time_ms / 1000;
+        if secs >= 60 {
+            bits.push(format!("{}m active", secs / 60));
+        } else {
+            bits.push(format!("{}s active", secs));
+        }
+    }
+    if p.visits > 1 {
+        bits.push(format!("{} visits", p.visits));
+    }
+    if p.return_visits > 0 {
+        bits.push(format!("{} days", p.return_visits));
+    }
+    if bits.is_empty() {
+        String::new()
+    } else {
+        format!(" [{}]", bits.join(", "))
+    }
+}
+
+/// Aggregate the given activity rows per-URL and return pages sorted by
+/// engagement (highest first). `visit_count` is treated as cumulative (take max);
+/// dwell time sums across rows. Pages with no recorded visits default to 1.
+fn aggregate_pages<'a>(rows: impl Iterator<Item = &'a Activity>) -> Vec<PageStat> {
+    let mut map: HashMap<String, PageStat> = HashMap::new();
+    for a in rows {
+        let Some(url) = a.url.as_ref() else { continue };
+        if !is_real_web(url) {
+            continue;
+        }
+        let entry = map.entry(url.clone()).or_insert_with(|| PageStat {
+            title: a.title.clone().unwrap_or_else(|| url.clone()),
+            url: url.clone(),
+            time_ms: 0,
+            visits: 0,
+            return_visits: 0,
+        });
+        // Prefer a non-empty title if a later row has one.
+        if entry.title.is_empty() || entry.title == entry.url {
+            if let Some(t) = a.title.as_ref() {
+                if !t.is_empty() {
+                    entry.title = t.clone();
+                }
+            }
+        }
+        entry.time_ms += a.time.unwrap_or(0);
+        entry.visits = entry.visits.max(a.visit_count.unwrap_or(0));
+        entry.return_visits = entry.return_visits.max(a.return_visits.unwrap_or(0));
+    }
+
+    let mut pages: Vec<PageStat> = map
+        .into_values()
+        .map(|mut p| {
+            if p.visits == 0 {
+                p.visits = 1;
+            }
+            p
+        })
+        .collect();
+    pages.sort_by_key(|p| std::cmp::Reverse(engagement_score(p)));
+    pages
+}
+
+/// Roll aggregated pages up to a per-domain summary, sorted by total engagement.
+/// Returns lines like "github.com — 5 pages, 47m active, 23 visits".
+fn domain_rollup(pages: &[PageStat], top: usize) -> Vec<String> {
+    // (page_count, time_ms, visits)
+    let mut by_domain: HashMap<String, (u32, i64, i64)> = HashMap::new();
+    for p in pages {
+        let e = by_domain.entry(domain_of(&p.url)).or_insert((0, 0, 0));
+        e.0 += 1;
+        e.1 += p.time_ms;
+        e.2 += p.visits as i64;
+    }
+    let mut rows: Vec<(String, (u32, i64, i64))> = by_domain.into_iter().collect();
+    rows.sort_by_key(|(_, (_, time, visits))| std::cmp::Reverse(time / 1000 + visits * 20));
+    rows.into_iter()
+        .take(top)
+        .map(|(domain, (count, time_ms, visits))| {
+            let mins = time_ms / 60_000;
+            let time_str = if mins > 0 {
+                format!(", {}m active", mins)
+            } else {
+                String::new()
+            };
+            format!("- {} — {} page(s){}, {} visit(s)", domain, count, time_str, visits)
+        })
+        .collect()
+}
 
 // =============================================================================
 // SEARCH WORKSPACES
@@ -131,7 +261,9 @@ impl Tool for GetRecentActivity {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Get the user's recent browsing activity to understand what they've been working on.".to_string(),
+            description: "Get the user's recent browsing activity ranked by ENGAGEMENT (dwell time, \
+                visit count, days returned) — the best signal for what they actually work on. Each \
+                line is annotated with those metrics so you can weight heavily-used pages.".to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -147,26 +279,27 @@ impl Tool for GetRecentActivity {
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let data = self.sync_data.read().await;
 
-        let items: Vec<String> = data
-            .activity
-            .iter()
-            .rev()
-            .take(args.limit)
-            .filter_map(|a| {
-                let url = a.url.as_ref()?;
-                if !url.starts_with("http") || url.contains("chrome-extension://") {
-                    return None;
-                }
-                let title = a.title.as_deref().unwrap_or("Unknown");
-                Some(format!("- {} ({})", title, url))
-            })
-            .collect();
+        // Aggregate over a recent window so results balance "what they're doing now"
+        // (recency) with "what they care about" (engagement), then rank by engagement.
+        let window = (args.limit * 8).clamp(50, 400);
+        let pages = aggregate_pages(data.activity.iter().rev().take(window));
 
-        if items.is_empty() {
+        if pages.is_empty() {
             return Ok("No recent browsing activity found.".to_string());
         }
 
-        Ok(format!("Recent activity ({} items):\n{}", items.len(), items.join("\n")))
+        let items: Vec<String> = pages
+            .iter()
+            .take(args.limit)
+            .map(|p| format!("- {} ({}){}", p.title, p.url, fmt_engagement(p)))
+            .collect();
+
+        Ok(format!(
+            "Most-engaged recent pages ({} of {} tracked):\n{}",
+            items.len(),
+            pages.len(),
+            items.join("\n")
+        ))
     }
 }
 
@@ -191,7 +324,9 @@ impl Tool for SuggestWorkspaces {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Analyze the user's browsing activity and suggest new workspace organization ideas.".to_string(),
+            description: "Analyze the user's browsing activity (engagement-ranked, with a per-domain \
+                rollup) to ground new workspace organization ideas. Returns the domains and pages they \
+                spend the most time on, plus existing workspaces to avoid duplicating.".to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {}
@@ -204,33 +339,29 @@ impl Tool for SuggestWorkspaces {
 
         let existing: Vec<&str> = data.workspaces.iter().map(|w| w.name.as_str()).collect();
 
-        let recent_urls: Vec<String> = data
-            .activity
-            .iter()
-            .rev()
-            .take(50)
-            .filter_map(|a| {
-                let url = a.url.as_ref()?;
-                if !url.starts_with("http") || url.contains("chrome-extension://") {
-                    return None;
-                }
-                let title = a.title.as_deref().unwrap_or("Untitled");
-                Some(format!("- {} ({})", title, url))
-            })
-            .collect();
+        // Aggregate a wide recent window so the rollup reflects real habits.
+        let pages = aggregate_pages(data.activity.iter().rev().take(300));
 
-        if recent_urls.is_empty() {
+        if pages.is_empty() {
             return Ok("Not enough activity data to suggest workspaces.".to_string());
         }
 
+        let domains = domain_rollup(&pages, 12);
+        let top_pages: Vec<String> = pages
+            .iter()
+            .take(25)
+            .map(|p| format!("- {} ({}){}", p.title, p.url, fmt_engagement(p)))
+            .collect();
+
         Ok(format!(
-            "Existing workspaces: {}\n\nRecent browsing (to base suggestions on):\n{}",
+            "Existing workspaces: {}\n\nTop domains by engagement:\n{}\n\nMost-engaged pages (base suggestions on these):\n{}",
             if existing.is_empty() {
                 "none".to_string()
             } else {
                 existing.join(", ")
             },
-            recent_urls.join("\n")
+            domains.join("\n"),
+            top_pages.join("\n")
         ))
     }
 }
@@ -406,33 +537,29 @@ impl Tool for SearchHistory {
         let q = args.query.to_lowercase();
         let data = self.sync_data.read().await;
 
-        let items: Vec<String> = data
-            .activity
-            .iter()
-            .rev()
-            .filter_map(|a| {
-                let url = a.url.as_ref()?;
-                if !url.starts_with("http") || url.contains("chrome-extension://") {
-                    return None;
-                }
-                let title = a.title.as_deref().unwrap_or("Untitled");
-                if q.is_empty()
-                    || title.to_lowercase().contains(&q)
-                    || url.to_lowercase().contains(&q)
-                {
-                    Some(format!("- {} | {}", title, url))
-                } else {
-                    None
-                }
-            })
-            .take(args.limit.clamp(1, 60))
-            .collect();
+        // Filter activity rows to the query, then aggregate per-URL so repeat
+        // visits collapse into one engagement-ranked entry (full URLs preserved).
+        let matched = data.activity.iter().rev().filter(|a| {
+            let Some(url) = a.url.as_ref() else { return false };
+            if !is_real_web(url) {
+                return false;
+            }
+            let title = a.title.as_deref().unwrap_or("");
+            q.is_empty() || title.to_lowercase().contains(&q) || url.to_lowercase().contains(&q)
+        });
 
-        if items.is_empty() {
+        let pages = aggregate_pages(matched);
+        if pages.is_empty() {
             return Ok(format!("No history matches '{}'.", args.query));
         }
 
-        Ok(format!("History matches ({} shown):\n{}", items.len(), items.join("\n")))
+        let items: Vec<String> = pages
+            .iter()
+            .take(args.limit.clamp(1, 60))
+            .map(|p| format!("- {} | {}{}", p.title, p.url, fmt_engagement(p)))
+            .collect();
+
+        Ok(format!("History matches ({} shown, engagement-ranked):\n{}", items.len(), items.join("\n")))
     }
 }
 
@@ -705,5 +832,154 @@ impl Tool for GetOpenProjects {
         }
 
         Ok(format!("Open local projects/folders ({}):\n{}", items.len(), items.join("\n")))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn activity(url: &str, title: &str, time_ms: i64, visits: i32, returns: i32) -> Activity {
+        Activity {
+            id: None,
+            timestamp: None,
+            activity_type: None,
+            url: Some(url.to_string()),
+            title: Some(title.to_string()),
+            created_at: None,
+            updated_at: None,
+            time: Some(time_ms),
+            scroll: None,
+            clicks: None,
+            forms: None,
+            visit_count: Some(visits),
+            return_visits: Some(returns),
+        }
+    }
+
+    // ── URL / domain helpers ────────────────────────────────────────────────
+
+    #[test]
+    fn domain_of_strips_scheme_www_and_path() {
+        assert_eq!(domain_of("https://www.github.com/user/repo"), "github.com");
+        assert_eq!(domain_of("http://Docs.RS/serde"), "docs.rs");
+        assert_eq!(domain_of("https://mail.google.com/mail/u/0"), "mail.google.com");
+    }
+
+    #[test]
+    fn is_real_web_excludes_internal_pages() {
+        assert!(is_real_web("https://github.com"));
+        assert!(!is_real_web("chrome://newtab"));
+        assert!(!is_real_web("https://x/chrome-extension://abc"));
+        assert!(!is_real_web("about:blank"));
+    }
+
+    // ── Engagement aggregation (what ranks tool output for the model) ──────
+
+    #[test]
+    fn aggregate_pages_merges_rows_and_ranks_by_engagement() {
+        let rows = vec![
+            activity("https://github.com/a", "Repo A", 30_000, 2, 0),
+            activity("https://github.com/a", "Repo A", 60_000, 5, 2), // same page again
+            activity("https://example.com/once", "Glanced", 1_000, 1, 0),
+        ];
+        let pages = aggregate_pages(rows.iter());
+        assert_eq!(pages.len(), 2, "same-URL rows must merge");
+        assert_eq!(pages[0].url, "https://github.com/a", "heavier page ranks first");
+        assert_eq!(pages[0].time_ms, 90_000, "dwell time sums across rows");
+        assert_eq!(pages[0].visits, 5, "visit_count is cumulative — take max, not sum");
+        assert_eq!(pages[0].return_visits, 2);
+    }
+
+    #[test]
+    fn aggregate_pages_defaults_zero_visits_to_one() {
+        let mut a = activity("https://a.com/x", "A", 5_000, 0, 0);
+        a.visit_count = None;
+        let pages = aggregate_pages(std::iter::once(&a));
+        assert_eq!(pages[0].visits, 1);
+    }
+
+    #[test]
+    fn fmt_engagement_is_compact_and_omits_empty() {
+        let p = PageStat { title: String::new(), url: String::new(), time_ms: 720_000, visits: 5, return_visits: 3 };
+        assert_eq!(fmt_engagement(&p), " [12m active, 5 visits, 3 days]");
+        let quiet = PageStat { title: String::new(), url: String::new(), time_ms: 0, visits: 1, return_visits: 0 };
+        assert_eq!(fmt_engagement(&quiet), "", "single quick visit gets no annotation");
+    }
+
+    #[test]
+    fn domain_rollup_groups_pages_per_domain() {
+        let rows = vec![
+            activity("https://github.com/a", "A", 60_000, 3, 0),
+            activity("https://github.com/b", "B", 60_000, 2, 0),
+            activity("https://docs.rs/serde", "Serde", 10_000, 1, 0),
+        ];
+        let pages = aggregate_pages(rows.iter());
+        let rollup = domain_rollup(&pages, 10);
+        assert_eq!(rollup.len(), 2);
+        assert!(rollup[0].contains("github.com — 2 page(s)"), "got: {}", rollup[0]);
+    }
+
+    // ── Editor window-title parsing (feeds get_open_projects) ──────────────
+
+    #[test]
+    fn editor_title_yields_second_to_last_segment() {
+        assert_eq!(
+            project_from_editor_title("agent.rs - extension - Visual Studio Code"),
+            Some("extension".to_string())
+        );
+        // dirty-file marker and em-dash separator
+        assert_eq!(
+            project_from_editor_title("● tools.rs — my-app — Cursor"),
+            Some("my-app".to_string())
+        );
+    }
+
+    #[test]
+    fn editor_title_without_folder_yields_none() {
+        assert_eq!(project_from_editor_title("settings.json - Visual Studio Code"), None);
+        assert_eq!(project_from_editor_title("Visual Studio Code"), None);
+    }
+
+    #[test]
+    fn editor_title_prefers_workspace_marker() {
+        assert_eq!(
+            project_from_editor_title("file.ts - client (Workspace) - Visual Studio Code"),
+            Some("client".to_string())
+        );
+    }
+
+    #[test]
+    fn editor_key_maps_known_editors() {
+        assert_eq!(editor_key_for("Cursor.exe"), "cursor");
+        assert_eq!(editor_key_for("idea64"), "idea");
+        assert_eq!(editor_key_for("Code"), "vscode");
+    }
+
+    // ── Terminal / Explorer path extraction ─────────────────────────────────
+
+    #[test]
+    fn path_from_title_handles_msys_and_windows_forms() {
+        assert_eq!(
+            path_from_title("MINGW64:/c/Users/raghu/projects/extension"),
+            Some("/c/Users/raghu/projects/extension".to_string())
+        );
+        assert_eq!(
+            path_from_title(r"Administrator: C:\Users\raghu\projects"),
+            Some(r"C:\Users\raghu\projects".to_string())
+        );
+        assert_eq!(path_from_title("Windows PowerShell"), None);
+    }
+
+    #[test]
+    fn msys_path_converts_to_windows_drive() {
+        assert_eq!(msys_to_windows("/c/Users/raghu/x"), r"C:\Users\raghu\x");
+        assert_eq!(msys_to_windows(r"C:\already\windows"), r"C:\already\windows");
+    }
+
+    #[test]
+    fn folder_name_takes_last_segment() {
+        assert_eq!(folder_name_from_path("/c/Users/raghu/projects/extension"), "extension");
+        assert_eq!(folder_name_from_path(r"C:\Users\raghu\projects\extension\"), "extension");
     }
 }
