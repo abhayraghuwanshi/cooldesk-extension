@@ -475,6 +475,8 @@ pub struct UrlClickRequest {
     pub action: String,
     /// Optional response time in ms
     pub response_time_ms: Option<i64>,
+    /// Search query that produced this result (for query→URL learning)
+    pub query: Option<String>,
 }
 
 /// Response for URL affinity query

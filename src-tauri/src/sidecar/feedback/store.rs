@@ -310,13 +310,37 @@ impl FeedbackStore {
         state.app_stats.clone()
     }
 
-    /// Record a URL click (for search ranking feedback)
-    pub async fn record_url_click(&self, url: &str, action: &UserAction, response_time_ms: Option<i64>) {
+    /// Record a URL click (for search ranking feedback). When `query` is given,
+    /// also learns the (query → URL) association so the same keyword ranks this
+    /// link higher next time.
+    pub async fn record_url_click(&self, url: &str, action: &UserAction, response_time_ms: Option<i64>, query: Option<&str>) {
         let mut state = self.state.write().await;
         let key = normalize_url(url);
 
         let stats = state.url_stats.entry(key.clone()).or_insert_with(SuggestionStats::default);
         stats.record(action, response_time_ms);
+
+        // Only accepted clicks teach the query association — a dismissal for a
+        // query shouldn't strengthen it.
+        if let (Some(q), UserAction::Accepted) = (query, action) {
+            let q = q.trim().to_lowercase();
+            if !q.is_empty() && q.len() <= 100 {
+                let assoc_key = format!("{}|{}", q, key);
+                if let Some(entry) = state.query_url_clicks.iter_mut().find(|c| c.key() == assoc_key) {
+                    entry.count = entry.count.saturating_add(1);
+                    entry.last_seen = chrono::Utc::now().timestamp_millis();
+                } else {
+                    state.query_url_clicks.push(QueryUrlClick::new(q, key.clone()));
+                }
+                // Keep the table bounded: drop the weakest (oldest/rarest) entries.
+                if state.query_url_clicks.len() > 2000 {
+                    state.query_url_clicks.sort_by(|a, b| {
+                        b.score().partial_cmp(&a.score()).unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                    state.query_url_clicks.truncate(1500);
+                }
+            }
+        }
 
         log::debug!("[Feedback] Recorded URL click: {} -> {:?}", key, action);
     }
@@ -332,6 +356,50 @@ impl FeedbackStore {
     pub async fn get_all_url_stats(&self) -> std::collections::HashMap<String, SuggestionStats> {
         let state = self.state.read().await;
         state.url_stats.clone()
+    }
+
+    /// Ranking boosts for URL search results, keyed by normalized URL.
+    ///
+    /// Two signals, mirroring the app-side `calculate_rl_boost`:
+    /// - global: URLs the user picks often from search, whatever they typed (0–10)
+    /// - query:  URLs picked for THIS query before — exact or prefix match, so
+    ///   "prod" already benefits from clicks recorded under "product" (0–15)
+    ///
+    /// Total is capped at 25 so learned preference re-orders comparable matches
+    /// but can never beat a strong direct keyword match.
+    pub async fn get_url_boosts(&self, query: &str) -> std::collections::HashMap<String, f64> {
+        let state = self.state.read().await;
+        let q = query.trim().to_lowercase();
+
+        let mut boosts: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
+
+        // Global per-URL signal
+        for (url, stats) in &state.url_stats {
+            if stats.total_shown == 0 {
+                continue;
+            }
+            let acceptance = stats.acceptance_rate() * 7.0;
+            let usage = (stats.total_shown as f64 + 1.0).ln().min(3.0);
+            boosts.insert(url.clone(), acceptance + usage);
+        }
+
+        // Query-specific signal (prefix match either way)
+        if !q.is_empty() {
+            for c in &state.query_url_clicks {
+                let related = c.query == q || c.query.starts_with(&q) || q.starts_with(&c.query);
+                if !related {
+                    continue;
+                }
+                // score() is recency-decayed ln(count+1): 1 click ≈ 0.7, 10 ≈ 2.4
+                let query_boost = (c.score() * 6.0).min(15.0);
+                *boosts.entry(c.url.clone()).or_insert(0.0) += query_boost;
+            }
+        }
+
+        for v in boosts.values_mut() {
+            *v = v.min(25.0);
+        }
+        boosts
     }
 
     /// Record an app-workspace association (when app is added to or used with a workspace)
@@ -505,6 +573,60 @@ mod tests {
             .await;
 
         assert!(affinity > 0.0);
+    }
+
+    #[tokio::test]
+    async fn url_click_with_query_learns_keyword_association() {
+        let dir = tempdir().unwrap();
+        let store = FeedbackStore::new(dir.path().to_path_buf());
+
+        // Two accepted clicks on the same result for the query "product"
+        store.record_url_click("https://shop.com/product/42", &UserAction::Accepted, None, Some("product")).await;
+        store.record_url_click("https://shop.com/product/42", &UserAction::Accepted, None, Some("Product")).await;
+        // A click without a query only feeds global stats
+        store.record_url_click("https://other.com/page", &UserAction::Accepted, None, None).await;
+
+        let boosts = store.get_url_boosts("product").await;
+        let clicked = boosts.get("shop.com/product/42").copied().unwrap_or(0.0);
+        let other = boosts.get("other.com/page").copied().unwrap_or(0.0);
+        assert!(clicked > other, "query-matched URL must outrank query-less one ({clicked} vs {other})");
+
+        // Prefix of the learned query gets the boost too ("prod" while typing)
+        let prefix = store.get_url_boosts("prod").await;
+        assert!(
+            prefix.get("shop.com/product/42").copied().unwrap_or(0.0) > other,
+            "prefix query should reuse the learned association"
+        );
+
+        // Unrelated query gets only the global component
+        let unrelated = store.get_url_boosts("banana").await;
+        let unrelated_boost = unrelated.get("shop.com/product/42").copied().unwrap_or(0.0);
+        assert!(unrelated_boost < clicked, "query boost must not leak to unrelated queries");
+    }
+
+    #[tokio::test]
+    async fn rejected_click_does_not_learn_query_association() {
+        let dir = tempdir().unwrap();
+        let store = FeedbackStore::new(dir.path().to_path_buf());
+
+        store.record_url_click("https://spam.com/x", &UserAction::Rejected, None, Some("product")).await;
+
+        let state = store.export_state().await;
+        assert!(state.query_url_clicks.is_empty(), "rejections must not create query associations");
+    }
+
+    #[tokio::test]
+    async fn url_boosts_are_capped() {
+        let dir = tempdir().unwrap();
+        let store = FeedbackStore::new(dir.path().to_path_buf());
+
+        for _ in 0..50 {
+            store.record_url_click("https://a.com/hot", &UserAction::Accepted, None, Some("hot")).await;
+        }
+
+        let boosts = store.get_url_boosts("hot").await;
+        let b = boosts.get("a.com/hot").copied().unwrap_or(0.0);
+        assert!(b > 0.0 && b <= 25.0, "boost must be positive and capped at 25, got {b}");
     }
 
     #[test]

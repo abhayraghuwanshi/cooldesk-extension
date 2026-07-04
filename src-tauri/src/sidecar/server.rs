@@ -322,6 +322,7 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/feedback/save", post(feedback_save))
         .route("/feedback/app-launch", post(feedback_app_launch))
         .route("/feedback/url-click", post(feedback_url_click))
+        .route("/feedback/url-boosts", get(feedback_url_boosts))
         .route("/feedback/app-workspace", post(feedback_record_app_workspace))
         .route("/feedback/suggest-apps", post(feedback_suggest_apps))
         .route("/feedback/suggest-workspaces-for-app", post(feedback_suggest_workspaces_for_app))

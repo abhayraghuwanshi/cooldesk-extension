@@ -2195,7 +2195,7 @@ pub async fn feedback_url_click(
 
     if let Some(store) = store_guard.as_ref() {
         // Record to URL-specific stats for search ranking
-        store.record_url_click(&req.url, &action, req.response_time_ms).await;
+        store.record_url_click(&req.url, &action, req.response_time_ms, req.query.as_deref()).await;
 
         // Also record as a general feedback event for analytics
         let event = FeedbackEvent::new(
@@ -2217,6 +2217,31 @@ pub async fn feedback_url_click(
     } else {
         Json(SuccessResponse { success: false })
     }
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct UrlBoostsQuery {
+    pub q: Option<String>,
+}
+
+/// GET /feedback/url-boosts?q=... — ranking boosts for URL search results,
+/// keyed by normalized URL (host + path, no www/trailing slash). Combines the
+/// user's global click history with clicks recorded for this specific query.
+pub async fn feedback_url_boosts(
+    Query(params): Query<UrlBoostsQuery>,
+) -> Json<serde_json::Value> {
+    let query = params.q.unwrap_or_default();
+
+    let store_mutex = get_feedback_store().await;
+    let store_guard = store_mutex.lock().await;
+
+    let boosts = if let Some(store) = store_guard.as_ref() {
+        store.get_url_boosts(&query).await
+    } else {
+        std::collections::HashMap::new()
+    };
+
+    Json(serde_json::json!({ "boosts": boosts }))
 }
 
 /// Record app-workspace association (for learning which apps belong to which workspaces)

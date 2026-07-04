@@ -1313,8 +1313,9 @@ export function GlobalSpotlight() {
         // Close immediately for snappy feel
         handleClose();
 
-        // Record feedback for RAG (fire-and-forget, non-blocking)
-        recordSearchSelection(item, resultsDisplayedAtRef.current).catch(() => { });
+        // Record feedback for RAG (fire-and-forget, non-blocking). The query is
+        // included so the backend learns keyword→URL associations for ranking.
+        recordSearchSelection(item, resultsDisplayedAtRef.current, query?.trim()).catch(() => { });
 
         // For tabs, switch to the existing tab instead of opening new
         if (item.type === 'tab') {
@@ -2384,7 +2385,15 @@ const ContextItem = memo(function ContextItem({ item, index, isSelected, onSelec
 // Memoized Result Item to prevent unnecessary re-renders
 const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect, onHover, onTogglePin, formatUrl, getBadgeLabel, getAppIcon, depth = 0, isFolderRow = false, isExpanded = false, onToggleExpand }) {
     const handleClick = useCallback(() => onSelect(item), [item, onSelect]);
-    const handleMouseEnter = useCallback(() => onHover(index), [index, onHover]);
+    // Mark hover-driven selection so the scroll effect can skip it: while wheel
+    // scrolling, rows slide under the stationary cursor and fire mouseenter —
+    // auto-scrolling to each one fights the user's scroll direction and makes
+    // the end of a long result list hard to reach.
+    const hoverSelectedRef = useRef(false);
+    const handleMouseEnter = useCallback(() => {
+        hoverSelectedRef.current = true;
+        onHover(index);
+    }, [index, onHover]);
     const handlePinClick = useCallback((e) => onTogglePin(item, e), [item, onTogglePin]);
     const handleToggle = useCallback((e) => { e.stopPropagation(); onToggleExpand?.(item); }, [item, onToggleExpand]);
 
@@ -2399,11 +2408,14 @@ const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect,
         setIconError(false);
     }, [item.id, item.icon, item.favicon]);
 
-    // Keep the keyboard-selected row visible as the tree scrolls.
+    // Keep the keyboard-selected row visible as the tree scrolls. Hover-driven
+    // selection is skipped — the row is already under the cursor, and scrolling
+    // to it would hijack an in-progress wheel scroll.
     useEffect(() => {
-        if (isSelected && rowRef.current) {
+        if (isSelected && rowRef.current && !hoverSelectedRef.current) {
             rowRef.current.scrollIntoView({ block: 'nearest' });
         }
+        hoverSelectedRef.current = false;
     }, [isSelected]);
 
     return (

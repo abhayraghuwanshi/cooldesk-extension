@@ -56,8 +56,9 @@ export async function recordFeedbackEvent({
  * Record when user selects a search result (positive feedback)
  * @param {Object} item - The selected search result item
  * @param {number} [displayedAtMs] - When the result was displayed (for response time calculation)
+ * @param {string} [query] - The search query that produced this result (enables keyword→URL learning)
  */
-export async function recordSearchSelection(item, displayedAtMs) {
+export async function recordSearchSelection(item, displayedAtMs, query) {
     const responseTimeMs = displayedAtMs ? Date.now() - displayedAtMs : undefined;
 
     // For apps, use dedicated app launch tracking (affects search ranking)
@@ -65,9 +66,9 @@ export async function recordSearchSelection(item, displayedAtMs) {
         return recordAppLaunch(item.name || item.title, 'accepted', responseTimeMs);
     }
 
-    // For URLs/saved links, use dedicated URL click tracking (affects search ranking)
-    if (item.type === 'url' || item.type === 'savedLink' || item.type === 'history' || item.type === 'bookmark') {
-        return recordUrlClick(item.url, item.title, 'accepted', responseTimeMs);
+    // For URLs/saved links/tabs, use dedicated URL click tracking (affects search ranking)
+    if (item.url && (item.type === 'url' || item.type === 'savedLink' || item.type === 'history' || item.type === 'bookmark' || item.type === 'tab')) {
+        return recordUrlClick(item.url, item.title, 'accepted', responseTimeMs, query);
     }
 
     // Determine suggestion type based on item type
@@ -117,8 +118,9 @@ export async function recordAppLaunch(appName, action = 'accepted', responseTime
  * @param {string} [title] - Optional page title for context
  * @param {string} [action='accepted'] - 'accepted' (clicked), 'rejected' (dismissed), 'ignored' (timeout)
  * @param {number} [responseTimeMs] - Time from showing result to action
+ * @param {string} [query] - Search query that surfaced this URL (for keyword→URL learning)
  */
-export async function recordUrlClick(url, title, action = 'accepted', responseTimeMs) {
+export async function recordUrlClick(url, title, action = 'accepted', responseTimeMs, query) {
     if (!url) return false;
 
     try {
@@ -129,7 +131,8 @@ export async function recordUrlClick(url, title, action = 'accepted', responseTi
                 url,
                 title,
                 action,
-                response_time_ms: responseTimeMs
+                response_time_ms: responseTimeMs,
+                query: query || undefined
             })
         });
         return response.ok;

@@ -353,6 +353,58 @@ async function searchAppsFromBackend(query, maxResults = 20) {
 }
 
 /**
+ * Fetch learned ranking boosts for URL results from the feedback store.
+ * Returns { [normalizedUrl]: boost } — combines the user's global click
+ * history with clicks previously recorded for this exact query (so a link
+ * picked after searching "product" ranks higher next time "product" is typed).
+ */
+async function fetchUrlBoosts(query) {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 800);
+    const res = await fetch(
+      `http://localhost:4545/feedback/url-boosts?q=${encodeURIComponent(query)}`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeoutId);
+    if (!res.ok) return {};
+    const data = await res.json();
+    return data.boosts || {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Mirror of the backend's normalize_url: host without "www." + path without
+ * trailing slash, lowercased. Must stay in sync with feedback/store.rs so
+ * boost lookups hit.
+ */
+function normalizeUrlForBoost(url) {
+  try {
+    const u = new URL(url);
+    const host = (u.hostname || '').replace(/^www\./, '').toLowerCase();
+    const path = u.pathname.replace(/\/+$/, '').toLowerCase();
+    return host + path;
+  } catch {
+    return (url || '').toLowerCase();
+  }
+}
+
+/**
+ * Add learned click-feedback boosts to results that carry a URL.
+ */
+function applyUrlBoosts(results, boosts) {
+  if (!boosts || Object.keys(boosts).length === 0) return results;
+  return results.map(r => {
+    if (!r.url) return r;
+    const boost = boosts[normalizeUrlForBoost(r.url)];
+    if (!boost) return r;
+    return { ...r, score: Math.min(100, (r.score || 0) + boost), rlBoost: boost };
+  });
+}
+
+/**
  * Local cache search for non-app items (tabs, workspaces, history, bookmarks).
  * Apps are handled by the Rust backend via searchAppsFromBackend().
  */
@@ -626,10 +678,11 @@ export async function quickSearch(query, maxResults = 15) {
 
   // ELECTRON/TAURI: apps come from Rust backend, tabs/workspaces from local cache
   if (isElectron()) {
-    // Run app search (backend) and non-app cache search in parallel
-    const [appResults, cacheResults] = await Promise.all([
+    // Run app search (backend), non-app cache search, and learned URL boosts in parallel
+    const [appResults, cacheResults, urlBoosts] = await Promise.all([
       searchAppsFromBackend(query, maxResults),
       Promise.resolve(searchElectronCache(query)),
+      fetchUrlBoosts(query),
     ]);
 
     // Refresh stale cache data for next search (non-blocking)
@@ -639,7 +692,8 @@ export async function quickSearch(query, maxResults = 15) {
 
     // No deduplication needed — AppMatcher outputs one entry per unique PID.
     // Each entry is a real focusable window. Show them all.
-    const combined = [...appResults, ...cacheResults];
+    // URL results get their learned click-feedback boost before ranking.
+    const combined = [...appResults, ...applyUrlBoosts(cacheResults, urlBoosts)];
     return deduplicateByUrl(combined)
       .sort((a, b) => (b.score || 0) - (a.score || 0))
       .slice(0, maxResults);

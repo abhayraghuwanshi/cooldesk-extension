@@ -351,6 +351,38 @@ impl AppWorkspaceAssociation {
     }
 }
 
+/// A (search query → clicked URL) association learned from search selections.
+/// Lets the exact keyword the user typed boost the link they picked next time.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryUrlClick {
+    /// Normalized query (lowercased, trimmed)
+    pub query: String,
+    /// Normalized URL (host + path)
+    pub url: String,
+    /// Times this URL was picked for this query
+    pub count: u32,
+    /// Last click timestamp (ms)
+    pub last_seen: i64,
+}
+
+impl QueryUrlClick {
+    pub fn new(query: String, url: String) -> Self {
+        Self { query, url, count: 1, last_seen: chrono::Utc::now().timestamp_millis() }
+    }
+
+    pub fn key(&self) -> String {
+        format!("{}|{}", self.query, self.url)
+    }
+
+    /// Recency-weighted click count — decays over 30 days like other associations
+    pub fn score(&self) -> f64 {
+        let now = chrono::Utc::now().timestamp_millis();
+        let age_days = (now - self.last_seen).max(0) as f64 / (24.0 * 60.0 * 60.0 * 1000.0);
+        (self.count as f64 + 1.0).ln() * (-age_days / 30.0_f64).exp()
+    }
+}
+
 /// Cross-type item co-occurrence recorded automatically from 30-second session snapshots.
 /// Connects apps, URLs, folders, and media that are active simultaneously.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -402,6 +434,9 @@ pub struct FeedbackState {
     /// Stats per URL (keyed by normalized URL)
     #[serde(default)]
     pub url_stats: std::collections::HashMap<String, SuggestionStats>,
+    /// (query → URL) click associations from search selections
+    #[serde(default)]
+    pub query_url_clicks: Vec<QueryUrlClick>,
     /// URL co-occurrence data (explicit user grouping signals)
     pub url_co_occurrences: Vec<UrlCoOccurrence>,
     /// Workspace patterns
