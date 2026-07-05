@@ -173,10 +173,14 @@ html, body {
   font-weight: 400;
 }
 
-.context-item.context-expand-chip:hover,
-.context-item.context-expand-chip.pin-selected {
+.context-item.context-expand-chip:hover {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.3);
+}
+
+.context-item.context-expand-chip.pin-selected {
+  background: rgba(139, 92, 246, 0.16);
+  border-color: rgba(139, 92, 246, 0.65);
 }
 
 .context-item.context-expand-chip:hover .pin-label,
@@ -204,48 +208,25 @@ html, body {
   overflow: hidden;
 }
 
-/* Compact pill-style items */
+/* Compact pill-style items — one neutral base for apps/tabs/workspace alike.
+   Icons, favicons and the green live/running dots carry identity; the purple
+   accent is reserved for the selection state ("purple = where you are"). */
 .context-item {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 5px 10px 5px 8px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   transition: all 0.12s ease;
   cursor: pointer;
   max-width: 160px;
 }
 
-.context-item:hover,
-.context-item.pin-selected {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-/* App pills - subtle blue tint */
-.context-item.context-app {
-  background: rgba(99, 102, 241, 0.1);
-  border-color: rgba(99, 102, 241, 0.15);
-}
-
-.context-item.context-app:hover,
-.context-item.context-app.pin-selected {
-  background: rgba(99, 102, 241, 0.18);
-  border-color: rgba(99, 102, 241, 0.3);
-}
-
-/* Tab pills - subtle purple tint */
-.context-item.context-tab {
-  background: rgba(139, 92, 246, 0.1);
-  border-color: rgba(139, 92, 246, 0.15);
-}
-
-.context-item.context-tab:hover,
-.context-item.context-tab.pin-selected {
-  background: rgba(139, 92, 246, 0.18);
-  border-color: rgba(139, 92, 246, 0.3);
+.context-item:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.14);
 }
 
 .context-item .pin-icon {
@@ -283,6 +264,13 @@ html, body {
 
 .context-item.ws-item-live:hover {
   border-color: rgba(34, 197, 94, 0.45);
+}
+
+/* Keyboard/hover selection — the one accented state. Declared after
+   .ws-item-live so the accent border wins on selected live chips. */
+.context-item.pin-selected {
+  background: rgba(139, 92, 246, 0.16);
+  border-color: rgba(139, 92, 246, 0.65);
 }
 
 /* Green dot for open tab in workspace */
@@ -387,8 +375,8 @@ html, body {
 }
 
 .pin-item.pin-selected {
-  background: rgba(139, 92, 246, 0.15);
-  border-color: rgba(139, 92, 246, 0.4);
+  background: rgba(139, 92, 246, 0.16);
+  border-color: rgba(139, 92, 246, 0.65);
 }
 
 .pin-label {
@@ -436,20 +424,7 @@ html, body {
   background: rgba(248, 113, 113, 0.15);
 }
 
-.pin-app {
-  background: rgba(99, 102, 241, 0.08);
-  border-color: rgba(99, 102, 241, 0.12);
-}
-
-.pin-app:hover {
-  background: rgba(99, 102, 241, 0.15);
-  border-color: rgba(99, 102, 241, 0.25);
-}
-
-.pin-app.pin-selected {
-  background: rgba(99, 102, 241, 0.2);
-  border-color: rgba(99, 102, 241, 0.5);
-}
+/* Pinned apps share the neutral pill base — no per-type tint */
 
 /* ============================================
    RESULTS LIST
@@ -977,17 +952,22 @@ html, body {
   position: relative;
 }
 
+/* Doubles as the section title: styled like .spotlight-pins-title (uppercase
+   micro-label) but interactive — box appears on hover/open only */
 .ws-dropdown-trigger {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 8px 3px 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 3px 8px;
+  margin-left: -8px; /* optically align the label with the section edge */
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: 6px;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 11px;
-  font-weight: 500;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   font-family: inherit;
   cursor: pointer;
   transition: all 0.12s ease;
@@ -1004,6 +984,14 @@ html, body {
 .ws-dropdown-trigger.open {
   background: rgba(139, 92, 246, 0.12);
   border-color: rgba(139, 92, 246, 0.35);
+  color: #c4b5fd;
+}
+
+/* Keyboard selection when the empty-workspace slot is the selector itself —
+   same accent grammar as .pin-selected chips */
+.ws-dropdown-trigger.kb-selected {
+  background: rgba(139, 92, 246, 0.16);
+  border-color: rgba(139, 92, 246, 0.65);
   color: #c4b5fd;
 }
 

@@ -280,13 +280,15 @@ export function GlobalSpotlight() {
         return () => document.removeEventListener('mousedown', handler);
     }, [wsDropdownOpen]);
 
-    // Place the workspace menu next to its trigger. Opens downward by default
-    // (there is always window space below the panel), flips upward only when
-    // the bottom of the viewport is closer than the menu is tall. Re-measures
-    // when the panel resizes while open (tabs/apps still loading in).
+    // Place the workspace menu next to its trigger (left-anchored — the
+    // trigger doubles as the section title on the left). Opens downward by
+    // default (there is always window space below the panel), flips upward
+    // only when the bottom of the viewport is closer than the menu is tall.
+    // Re-measures when the panel resizes while open (tabs/apps still loading in).
     useLayoutEffect(() => {
         if (!wsDropdownOpen) { setWsMenuStyle(null); return; }
         const MENU_MAX = 220;
+        const MENU_MAX_WIDTH = 260; // keep in sync with .ws-dropdown-menu max-width
         const measure = () => {
             const trigger = wsDropdownRef.current?.querySelector('.ws-dropdown-trigger');
             if (!trigger) return;
@@ -295,7 +297,7 @@ export function GlobalSpotlight() {
             const spaceAbove = r.top - 12;
             const openDown = spaceBelow >= Math.min(MENU_MAX, spaceAbove);
             setWsMenuStyle({
-                right: Math.max(8, window.innerWidth - r.right),
+                left: Math.max(8, Math.min(r.left, window.innerWidth - MENU_MAX_WIDTH - 8)),
                 maxHeight: Math.max(80, Math.min(MENU_MAX, openDown ? spaceBelow : spaceAbove)),
                 ...(openDown
                     ? { top: r.bottom + 4 }
@@ -1247,7 +1249,10 @@ export function GlobalSpotlight() {
         // While searching: only Results (the expandable folder tree).
         const totalContext = isSearching ? 0 : contextGroups.visibleList.length;
         const totalPins = isSearching ? 0 : pinnedItems.length;
-        const totalWs = isSearching ? 0 : wsNavItems.length;
+        // Empty workspace (or "None") still gets one slot — the selector itself —
+        // so the section stays reachable and ←/→ can switch workspaces from it.
+        const wsSelectorOnly = !isSearching && wsNavItems.length === 0 && workspaces.length > 0;
+        const totalWs = isSearching ? 0 : (wsSelectorOnly ? 1 : wsNavItems.length);
         const totalResults = flatRows.length; // results section is the (expandable) folder tree
         const totalItems = totalContext + totalPins + totalWs + totalResults;
 
@@ -1344,8 +1349,10 @@ export function GlobalSpotlight() {
             const inWsSection = currentIndex >= totalContext + totalPins && currentIndex < totalItems;
             if (inWsSection || currentIndex === -1) {
                 e.preventDefault();
-                const cur = Math.max(0, workspaces.findIndex(w => w.id === expandedWorkspaceId));
-                const next = (cur + (e.key === 'ArrowRight' ? 1 : -1) + workspaces.length) % workspaces.length;
+                const cur = workspaces.findIndex(w => w.id === expandedWorkspaceId);
+                const next = cur === -1
+                    ? (e.key === 'ArrowRight' ? 0 : workspaces.length - 1) // from "None"
+                    : (cur + (e.key === 'ArrowRight' ? 1 : -1) + workspaces.length) % workspaces.length;
                 setExpandedWorkspaceId(workspaces[next].id);
                 // Land on the new workspace's first entry so ↑↓/Enter continue from there
                 if (inWsSection) setSelectedPinIndex(pinnedItems.length + totalContext);
@@ -1382,7 +1389,12 @@ export function GlobalSpotlight() {
                 } else if (currentIndex < totalContext + totalPins) {
                     handleSelect(pinnedItems[currentIndex - totalContext]);
                 } else if (currentIndex < totalContext + totalPins + totalWs) {
-                    handleWorkspaceItemSelect(wsNavItems[currentIndex - totalContext - totalPins]);
+                    if (wsSelectorOnly) {
+                        // Slot is the selector itself — Enter toggles the picker menu
+                        setWsDropdownOpen(v => !v);
+                    } else {
+                        handleWorkspaceItemSelect(wsNavItems[currentIndex - totalContext - totalPins]);
+                    }
                 } else {
                     handleSelect(flatRows[currentIndex - totalContext - totalPins - totalWs]?.item);
                 }
@@ -1406,7 +1418,11 @@ export function GlobalSpotlight() {
             }
         } else if (e.key === 'Escape') {
             e.preventDefault();
-            handleClose();
+            if (wsDropdownOpen) {
+                setWsDropdownOpen(false); // close the workspace picker before the spotlight
+            } else {
+                handleClose();
+            }
         } else if (e.key === 'p' && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
             if (isSearching && selectedIndex >= 0) {
@@ -1736,16 +1752,17 @@ export function GlobalSpotlight() {
         }
     }, []);
 
-    // Handle Escape key to close
+    // Handle Escape key to close (workspace picker first, then the spotlight)
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (e.key === 'Escape') {
-                handleClose();
+                if (wsDropdownOpen) setWsDropdownOpen(false);
+                else handleClose();
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [handleClose]);
+    }, [handleClose, wsDropdownOpen]);
 
     // Close on click outside
     useOnClickOutside(containerRef, handleClose);
@@ -1772,6 +1789,12 @@ export function GlobalSpotlight() {
         if (item.type === 'tool') return 'Tool';
         return item.category || 'Link';
     };
+
+    // When the active workspace has no entries, the workspace nav slot is the
+    // selector itself — highlight the trigger so keyboard position stays visible.
+    const wsSelectorSelected = !query.trim() && !commandMode
+        && wsNavItems.length === 0 && workspaces.length > 0
+        && selectedPinIndex === pinnedItems.length + contextGroups.visibleList.length;
 
     return (
         <div className="spotlight-overlay">
@@ -2048,10 +2071,10 @@ export function GlobalSpotlight() {
                     <div className="spotlight-pins">
                         {workspaces.length > 0 && (
                             <div className="spotlight-pins-header">
-                                <span className="spotlight-pins-title">Workspaces</span>
+                                {/* The selector IS the section title — no separate label */}
                                 <div className="ws-dropdown" ref={wsDropdownRef}>
                                     <button
-                                        className={`ws-dropdown-trigger ${wsDropdownOpen ? 'open' : ''}`}
+                                        className={`ws-dropdown-trigger ${wsDropdownOpen ? 'open' : ''}${wsSelectorSelected ? ' kb-selected' : ''}`}
                                         onClick={() => setWsDropdownOpen(v => !v)}
                                     >
                                         {expandedWorkspaceId
@@ -2102,7 +2125,7 @@ export function GlobalSpotlight() {
                             return (
                                 <div className="context-section">
                                     {wsNavItems.length === 0 ? (
-                                        <div style={{ opacity: 0.4, fontSize: 11, padding: '6px 0', fontStyle: 'italic' }}>Nothing in this workspace yet</div>
+                                        <div style={{ opacity: 0.4, fontSize: 11, padding: '6px 0', fontStyle: 'italic' }}>Nothing in this workspace yet — ←/→ to switch</div>
                                     ) : (
                                         <div className="context-row context-row--grid">
                                             {wsNavItems.map((entry, idx) => {
