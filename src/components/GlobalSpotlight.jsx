@@ -8,7 +8,7 @@ import {
     SiRuby, SiRust, SiSass, SiScala, SiSharp, SiSqlite, SiSvelte, SiSwift, SiTailwindcss,
     SiToml, SiTypescript, SiVuedotjs, SiYaml,
 } from 'react-icons/si';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { storageGet, storageSet } from '../services/extensionApi';
 import { syncWebSocket } from '../services/syncWebSocket';
 import { isHostSyncEnabled } from '../services/syncConfig';
@@ -128,6 +128,25 @@ const APP_ICONS = {
     'settings': faCog,
 };
 
+// Editor app types stored in workspaces that launch via their CLI command
+// (e.g. `code <path>`) instead of a plain executable path.
+const WS_EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'fleet', 'zed'];
+
+// Scoped search prefixes — "/a term" searches apps only, "/u" urls, "/f" files.
+// The prefix is stripped before searching and results are filtered to the
+// scope's types. The regex requires whitespace (or end) after the letter so
+// "/ai" and "/model" command detection is never shadowed.
+const SEARCH_SCOPES = {
+    u: { label: 'URLs', types: ['tab', 'history', 'bookmark'] },
+    a: { label: 'Apps', types: ['app'] },
+    f: { label: 'Files', types: ['file', 'folder'] },
+};
+function parseScopedQuery(q) {
+    const m = /^\/([uaf])(?:\s+(.*))?$/i.exec(q || '');
+    if (!m) return { scope: null, term: q || '' };
+    return { scope: SEARCH_SCOPES[m[1].toLowerCase()], term: (m[2] || '').trim() };
+}
+
 // Get icon for app by name
 function getAppIcon(appName) {
     if (!appName) return faDesktop;
@@ -216,6 +235,11 @@ export function GlobalSpotlight() {
     const [showAllTabs, setShowAllTabs] = useState(false);
     const [showAllApps, setShowAllApps] = useState(false);
     const [wsDropdownOpen, setWsDropdownOpen] = useState(false);
+    // Fixed-position coords for the workspace menu. The menu must escape the
+    // container's overflow:hidden (it clips at the panel edge — worst while
+    // tabs are still loading and the panel is short), so it renders
+    // position:fixed and is placed relative to the trigger here.
+    const [wsMenuStyle, setWsMenuStyle] = useState(null);
     const wsDropdownRef = useRef(null);
     const [workspaces, setWorkspaces] = useState([]);
     const [expandedWorkspaceId, setExpandedWorkspaceId] = useState(() => {
@@ -254,6 +278,34 @@ export function GlobalSpotlight() {
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
+    }, [wsDropdownOpen]);
+
+    // Place the workspace menu next to its trigger. Opens downward by default
+    // (there is always window space below the panel), flips upward only when
+    // the bottom of the viewport is closer than the menu is tall. Re-measures
+    // when the panel resizes while open (tabs/apps still loading in).
+    useLayoutEffect(() => {
+        if (!wsDropdownOpen) { setWsMenuStyle(null); return; }
+        const MENU_MAX = 220;
+        const measure = () => {
+            const trigger = wsDropdownRef.current?.querySelector('.ws-dropdown-trigger');
+            if (!trigger) return;
+            const r = trigger.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - r.bottom - 12;
+            const spaceAbove = r.top - 12;
+            const openDown = spaceBelow >= Math.min(MENU_MAX, spaceAbove);
+            setWsMenuStyle({
+                right: Math.max(8, window.innerWidth - r.right),
+                maxHeight: Math.max(80, Math.min(MENU_MAX, openDown ? spaceBelow : spaceAbove)),
+                ...(openDown
+                    ? { top: r.bottom + 4 }
+                    : { bottom: window.innerHeight - r.top + 4 }),
+            });
+        };
+        measure();
+        const ro = new ResizeObserver(measure);
+        if (containerRef.current) ro.observe(containerRef.current);
+        return () => ro.disconnect();
     }, [wsDropdownOpen]);
 
     // Focus input on mount and load items
@@ -335,7 +387,7 @@ export function GlobalSpotlight() {
                 setShowAllTabs(false);
                 setShowAllApps(false);
                 setExpandedWorkspaceId(() => { try { return localStorage.getItem('spotlight_ws_id') || null; } catch { return null; } });
-                setShowWorkspacesDropdown(false);
+                setWsDropdownOpen(false);
                 loadWorkspaces();
 
                 // Refresh search cache (non-blocking)
@@ -445,16 +497,16 @@ export function GlobalSpotlight() {
             const usedIds = new Set();
             const usedRunningWindowKeys = new Set();
 
-            // 1. Apps — all installed apps (mirrors AppGrid), running ones shown first
-            // Merge from running apps first so the context still shows active apps
-            // even when installed-app metadata is stale or missing.
+            // 1. Apps — active (running) apps only. Installed-but-not-running
+            // apps are reachable by typing a search; listing them here just
+            // pads the row with entries that look openable but aren't open.
             const normalizeAppName = (value) => (value || '').toLowerCase().replace(/\.exe$/i, '');
             const runningNames = new Set(runningApps.map(a => normalizeAppName(a.name)));
             const enrichedRunningApps = enrichRunningAppsWithIcons(runningApps, installedApps);
             const runningAppsByName = new Map(
                 enrichedRunningApps.map(app => [normalizeAppName(app.name), app])
             );
-            const enrichedAll = [...enrichedRunningApps, ...installedApps];
+            const enrichedAll = enrichedRunningApps;
 
             // Exact process names that are pure system noise (no user value)
             const systemExactNames = new Set([
@@ -887,12 +939,23 @@ export function GlobalSpotlight() {
         // Reset pin selection when searching
         setSelectedPinIndex(-1);
 
+        // Scoped search (/u /a /f): strip the prefix, search with the bare term
+        const { scope, term: scopedTerm } = parseScopedQuery(trimmedQuery);
+        if (scope && !scopedTerm) {
+            // Prefix typed but no term yet — wait for input instead of searching ''
+            setResults([]);
+            setSelectedIndex(-1);
+            return;
+        }
+        const searchTerm = scope ? scopedTerm : trimmedQuery;
+
         // Check cache first for instant results
         const cacheKey = trimmedQuery.toLowerCase();
         const cached = searchCache.get(cacheKey);
         if (cached) {
             setResults(cached);
-            setSelectedIndex(-1);
+            // Pre-select the top result so the highlight always shows what Enter will do
+            setSelectedIndex(cached.length > 0 ? 0 : -1);
             // Still fetch fresh results in background for longer queries
             if (trimmedQuery.length < 1) return;
         }
@@ -916,19 +979,21 @@ export function GlobalSpotlight() {
                 // Determine search type and run search
                 // In Electron: quickSearch uses in-memory cache (includes apps, tabs, workspaces)
                 // In Chrome: quickSearch uses local index or IPC fallback
-                const isNaturalLanguage = isNaturalLanguageQuery(trimmedQuery);
+                const isNaturalLanguage = isNaturalLanguageQuery(searchTerm);
 
                 const searchPromise = isNaturalLanguage
-                    ? naturalLanguageSearch(trimmedQuery, 15)
-                    : quickSearch(trimmedQuery, 15);
+                    ? naturalLanguageSearch(searchTerm, 15)
+                    : quickSearch(searchTerm, 15);
 
-                const filesPromise = window.electronAPI?.searchFiles
-                    ? window.electronAPI.searchFiles(trimmedQuery)
+                // File search only matters for unscoped or /f searches
+                const wantFiles = !scope || scope === SEARCH_SCOPES.f;
+                const filesPromise = wantFiles && window.electronAPI?.searchFiles
+                    ? window.electronAPI.searchFiles(searchTerm)
                     : Promise.resolve([]);
 
                 let [searchResults, osFiles] = await Promise.all([searchPromise, filesPromise]);
 
-                const qLower = trimmedQuery.toLowerCase();
+                const qLower = searchTerm.toLowerCase();
                 const mappedFiles = (osFiles || []).map(file => {
                     const item = fileToResultItem(file);
                     if (!item) return null;
@@ -947,15 +1012,20 @@ export function GlobalSpotlight() {
                 // Control Panel / system tools (Device Manager, regedit, …),
                 // ranked by the same fuzzyScore so they interleave with
                 // apps/tabs/files instead of being bolted on at the end.
-                const settingsResults = IS_WINDOWS_DESKTOP
-                    ? searchWindowsSettings(trimmedQuery, 5)
+                const settingsResults = IS_WINDOWS_DESKTOP && !scope
+                    ? searchWindowsSettings(searchTerm, 5)
                     : [];
-                const toolsResults = IS_WINDOWS_DESKTOP
-                    ? searchWindowsTools(trimmedQuery, 5)
+                const toolsResults = IS_WINDOWS_DESKTOP && !scope
+                    ? searchWindowsTools(searchTerm, 5)
                     : [];
 
                 searchResults = [...(searchResults || []), ...mappedFiles, ...settingsResults, ...toolsResults]
                     .sort((a, b) => (b.score || 0) - (a.score || 0));
+
+                // Scoped search keeps only the scope's result types
+                if (scope) {
+                    searchResults = searchResults.filter(r => scope.types.includes(r.type));
+                }
 
                 // Check if still relevant (user may have typed more)
                 if (searchIdRef.current !== currentSearchId) return;
@@ -982,9 +1052,10 @@ export function GlobalSpotlight() {
 
                 console.log('[Spotlight] Rendering results:', searchResults);
 
-                // Update UI
+                // Update UI — pre-select the top result (Spotlight-style) so
+                // Enter always acts on the visibly highlighted row
                 setResults(searchResults);
-                setSelectedIndex(-1);
+                setSelectedIndex(searchResults.length > 0 ? 0 : -1);
                 resultsDisplayedAtRef.current = Date.now(); // Track for feedback response time
 
             } catch (err) {
@@ -1057,6 +1128,60 @@ export function GlobalSpotlight() {
         else expandPath(folder);
     };
 
+    // --- Idle-mode navigation model ---
+    // Context chips render sliced (4 apps / 8 tabs until expanded) — keyboard
+    // nav must walk the same visible list, or the highlight and what Enter
+    // opens drift apart. Rows with hidden items get an expand/collapse chip
+    // appended so "show all" is reachable by keyboard too; Enter on it toggles
+    // the row (handled in handleKeyDown, never sent to handleSelect).
+    const contextGroups = useMemo(() => {
+        const apps = contextItems.filter(i => i.type === 'app');
+        const tabs = contextItems.filter(i => i.type === 'tab');
+        const visibleApps = apps.slice(0, showAllApps ? apps.length : 4);
+        const visibleTabs = tabs.slice(0, showAllTabs ? tabs.length : 8);
+        const visibleList = [...visibleApps];
+        if (apps.length > 4) {
+            visibleList.push({ type: 'expand-apps', expanded: showAllApps, hiddenCount: apps.length - visibleApps.length });
+        }
+        const appsBlockLen = visibleList.length; // apps + their expand chip
+        visibleList.push(...visibleTabs);
+        if (tabs.length > 8) {
+            visibleList.push({ type: 'expand-tabs', expanded: showAllTabs, hiddenCount: tabs.length - visibleTabs.length });
+        }
+        const tabsBlockLen = visibleList.length - appsBlockLen; // tabs + their expand chip
+        return { apps, tabs, visibleApps, visibleTabs, visibleList, appsBlockLen, tabsBlockLen };
+    }, [contextItems, showAllApps, showAllTabs]);
+
+    // Active workspace entries (urls then apps) with their live tab/app
+    // lookups, shared by the render and the keyboard handler so Enter opens
+    // exactly what is highlighted.
+    const wsNavItems = useMemo(() => {
+        if (!expandedWorkspaceId) return [];
+        const ws = workspaces.find(w => w.id === expandedWorkspaceId);
+        if (!ws) return [];
+        const getHostname = (url) => { try { return new URL(url).hostname; } catch { return null; } };
+        const openTabsByHostname = new Map(
+            contextItems.filter(c => c.type === 'tab' && c.url).map(c => [getHostname(c.url), c])
+        );
+        const runningAppsByName = new Map(
+            contextItems.filter(c => c.type === 'app' && c.isRunning)
+                .map(c => [(c.name || '').toLowerCase().replace(/\.exe$/i, ''), c])
+        );
+        const urls = (ws.urls || []).map(u => ({
+            kind: 'url',
+            data: u,
+            openTab: u.url ? openTabsByHostname.get(getHostname(u.url)) || null : null,
+        }));
+        const apps = (ws.apps || []).map(app => ({
+            kind: 'app',
+            data: app,
+            runningApp: (app.appType !== 'folder' && app.appType !== 'file')
+                ? runningAppsByName.get((app.name || '').toLowerCase().replace(/\.exe$/i, '')) || null
+                : null,
+        }));
+        return [...urls, ...apps];
+    }, [workspaces, expandedWorkspaceId, contextItems]);
+
     // Handle Keyboard Navigation
     const handleKeyDown = (e) => {
         // Handle command modes first
@@ -1117,40 +1242,85 @@ export function GlobalSpotlight() {
 
         const isSearching = !!query.trim();
 
-        // Build complete navigable list depending on state
-        // Visual order: Context Items → Pinned Items → Results
-        // If searching: Only Results
-        const totalContext = isSearching ? 0 : contextItems.length;
+        // Build complete navigable list depending on state.
+        // Visual order (idle): Apps → Tabs → Pinned → Workspace items.
+        // While searching: only Results (the expandable folder tree).
+        const totalContext = isSearching ? 0 : contextGroups.visibleList.length;
         const totalPins = isSearching ? 0 : pinnedItems.length;
+        const totalWs = isSearching ? 0 : wsNavItems.length;
         const totalResults = flatRows.length; // results section is the (expandable) folder tree
-        const totalItems = totalContext + totalPins + totalResults;
+        const totalItems = totalContext + totalPins + totalWs + totalResults;
 
-        // Current selected index in flat list (following visual order: context → pins → results)
-        // selectedPinIndex >= pinnedItems.length means a context item is selected
-        // selectedPinIndex 0 to pinnedItems.length-1 means a pin is selected
+        // selectedPinIndex encodes idle-mode selection:
+        //   [0, pins)                 → pinned item
+        //   [pins, pins+context)      → context chip (visible apps then tabs)
+        //   [pins+context, …+ws)      → workspace entry
+        // selectedIndex indexes flatRows while searching.
         let currentIndex = -1;
-        if (selectedPinIndex >= pinnedItems.length && !isSearching) {
-            // Context item selected - visual position is (selectedPinIndex - pinnedItems.length)
-            currentIndex = selectedPinIndex - pinnedItems.length;
-        } else if (selectedPinIndex >= 0 && selectedPinIndex < pinnedItems.length && !isSearching) {
-            // Pin selected - visual position is totalContext + selectedPinIndex
-            currentIndex = totalContext + selectedPinIndex;
-        } else if (selectedIndex >= 0) {
-            currentIndex = totalContext + totalPins + selectedIndex;
+        if (!isSearching && selectedPinIndex >= 0) {
+            if (selectedPinIndex < pinnedItems.length) {
+                currentIndex = totalContext + selectedPinIndex;
+            } else if (selectedPinIndex < pinnedItems.length + totalContext) {
+                currentIndex = selectedPinIndex - pinnedItems.length;
+            } else {
+                currentIndex = totalContext + totalPins + (selectedPinIndex - pinnedItems.length - totalContext);
+            }
+        } else if (isSearching && selectedIndex >= 0) {
+            currentIndex = selectedIndex;
         }
 
-        // Right/Left arrow → expand/collapse the selected folder (tree nav).
-        // Only applies inside the results tree (context/pins are hidden while searching).
-        const inResults = currentIndex >= totalContext + totalPins;
-        const treeIdx = currentIndex - totalContext - totalPins;
-        const treeRow = inResults && treeIdx >= 0 ? flatRows[treeIdx] : null;
+        // Map a visual index back onto the two selection states (wraps around).
+        const selectVisualIndex = (idx) => {
+            if (totalItems === 0) return;
+            const i = ((idx % totalItems) + totalItems) % totalItems;
+            if (!isSearching) {
+                if (i < totalContext) {
+                    setSelectedPinIndex(pinnedItems.length + i);
+                } else if (i < totalContext + totalPins) {
+                    setSelectedPinIndex(i - totalContext);
+                } else {
+                    setSelectedPinIndex(pinnedItems.length + totalContext + (i - totalContext - totalPins));
+                }
+                setSelectedIndex(-1);
+                return;
+            }
+            setSelectedPinIndex(-1);
+            setSelectedIndex(i);
+        };
+
+        // Tab / Shift+Tab → jump between sections (Apps → Tabs → Pinned → Workspace).
+        // Swallowed while searching too, so focus never escapes the input.
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            if (!isSearching) {
+                const sections = [
+                    { start: 0, len: contextGroups.appsBlockLen },
+                    { start: contextGroups.appsBlockLen, len: contextGroups.tabsBlockLen },
+                    { start: totalContext, len: totalPins },
+                    { start: totalContext + totalPins, len: totalWs },
+                ].filter(s => s.len > 0);
+                if (sections.length > 0) {
+                    const cur = sections.findIndex(s => currentIndex >= s.start && currentIndex < s.start + s.len);
+                    const next = cur === -1
+                        ? (e.shiftKey ? sections.length - 1 : 0)
+                        : (cur + (e.shiftKey ? -1 : 1) + sections.length) % sections.length;
+                    selectVisualIndex(sections[next].start);
+                }
+            }
+            return;
+        }
+
+        // Right/Left arrow while searching → expand/collapse the selected
+        // folder (tree nav). In idle mode ←/→ drive the workspace selector below.
+        const treeIdx = currentIndex;
+        const treeRow = isSearching && currentIndex >= 0 ? flatRows[currentIndex] : null;
 
         if (e.key === 'ArrowRight' && treeRow && treeRow.isFolder) {
             e.preventDefault();
             if (!treeRow.isExpanded) {
                 expandPath(treeRow.item); // collapsed → expand
-            } else if (treeIdx + 1 < flatRows.length) {
-                setSelectedIndex(selectedIndex + 1); // expanded → step into first child
+            } else if (flatRows[treeIdx + 1]?.depth === treeRow.depth + 1) {
+                setSelectedIndex(treeIdx + 1); // expanded → step into first child
             }
             return;
         }
@@ -1167,111 +1337,79 @@ export function GlobalSpotlight() {
             return;
         }
 
-        // Navigation handlers - follow visual order: Context → Pins → Results
+        // ←/→ in idle mode → switch the active workspace (the selector), when
+        // in the workspace section or before any selection. Safe to hijack:
+        // the input is empty, so there is no text caret to move.
+        if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !isSearching && workspaces.length > 1) {
+            const inWsSection = currentIndex >= totalContext + totalPins && currentIndex < totalItems;
+            if (inWsSection || currentIndex === -1) {
+                e.preventDefault();
+                const cur = Math.max(0, workspaces.findIndex(w => w.id === expandedWorkspaceId));
+                const next = (cur + (e.key === 'ArrowRight' ? 1 : -1) + workspaces.length) % workspaces.length;
+                setExpandedWorkspaceId(workspaces[next].id);
+                // Land on the new workspace's first entry so ↑↓/Enter continue from there
+                if (inWsSection) setSelectedPinIndex(pinnedItems.length + totalContext);
+                return;
+            }
+        }
+
+        // Navigation handlers — follow visual order: Apps → Tabs → Pins → Workspace → Results
         if (e.key === 'ArrowDown' && totalItems > 0) {
             e.preventDefault();
-            const nextIndex = currentIndex + 1;
-
-            // If at end or not started, wrap/start
-            if (currentIndex === -1) {
-                // Start at top (first context item, then first pin, then first result)
-                if (totalContext > 0) {
-                    setSelectedPinIndex(pinnedItems.length); // Context items start after pins in selectedPinIndex
-                    setSelectedIndex(-1);
-                } else if (totalPins > 0) {
-                    setSelectedPinIndex(0);
-                    setSelectedIndex(-1);
-                } else {
-                    setSelectedIndex(0);
-                }
-            } else if (nextIndex < totalItems) {
-                // Map nextIndex to the right section
-                if (nextIndex < totalContext) {
-                    // Still in context items
-                    setSelectedPinIndex(pinnedItems.length + nextIndex);
-                    setSelectedIndex(-1);
-                } else if (nextIndex < totalContext + totalPins) {
-                    // In pins section
-                    setSelectedPinIndex(nextIndex - totalContext);
-                    setSelectedIndex(-1);
-                } else {
-                    // In results section
-                    setSelectedPinIndex(-1);
-                    setSelectedIndex(nextIndex - totalContext - totalPins);
-                }
-            } else {
-                // Loop back to top
-                if (totalContext > 0) {
-                    setSelectedPinIndex(pinnedItems.length);
-                    setSelectedIndex(-1);
-                } else if (totalPins > 0) {
-                    setSelectedPinIndex(0);
-                    setSelectedIndex(-1);
-                } else {
-                    setSelectedIndex(0);
-                }
-            }
+            selectVisualIndex(currentIndex + 1); // -1 → first item; wraps at the end
         } else if (e.key === 'ArrowUp' && totalItems > 0) {
             e.preventDefault();
-            const nextIndex = currentIndex - 1;
-
-            if (currentIndex === -1) {
-                // Start at bottom (last result, or last pin, or last context)
-                if (totalResults > 0) {
-                    setSelectedPinIndex(-1);
-                    setSelectedIndex(totalResults - 1);
-                } else if (totalPins > 0) {
-                    setSelectedPinIndex(totalPins - 1);
-                    setSelectedIndex(-1);
-                } else if (totalContext > 0) {
-                    setSelectedPinIndex(pinnedItems.length + totalContext - 1);
-                    setSelectedIndex(-1);
-                }
-            } else if (nextIndex >= 0) {
-                if (nextIndex < totalContext) {
-                    setSelectedPinIndex(pinnedItems.length + nextIndex);
-                    setSelectedIndex(-1);
-                } else if (nextIndex < totalContext + totalPins) {
-                    setSelectedPinIndex(nextIndex - totalContext);
-                    setSelectedIndex(-1);
-                } else {
-                    setSelectedPinIndex(-1);
-                    setSelectedIndex(nextIndex - totalContext - totalPins);
-                }
-            } else {
-                // Loop to bottom
-                if (totalResults > 0) {
-                    setSelectedPinIndex(-1);
-                    setSelectedIndex(totalResults - 1);
-                } else if (totalPins > 0) {
-                    setSelectedPinIndex(totalPins - 1);
-                    setSelectedIndex(-1);
-                } else if (totalContext > 0) {
-                    setSelectedPinIndex(pinnedItems.length + totalContext - 1);
-                    setSelectedIndex(-1);
-                }
-            }
+            selectVisualIndex(currentIndex === -1 ? totalItems - 1 : currentIndex - 1);
         } else if (e.key === 'Enter') {
             e.preventDefault();
+            // Exactly one action per Enter, in priority order:
+            // selected item → typed URL → top result → Google search fallback
             if (currentIndex >= 0 && currentIndex < totalItems) {
                 if (currentIndex < totalContext) {
-                    handleSelect(contextItems[currentIndex]);
+                    const item = contextGroups.visibleList[currentIndex];
+                    // Expand/collapse chips toggle their row instead of opening anything.
+                    // Expanding keeps the index — the chip's slot becomes the first newly
+                    // revealed item. Collapsing re-selects the chip at its new position.
+                    if (item?.type === 'expand-apps') {
+                        setShowAllApps(v => !v);
+                        if (item.expanded) setSelectedPinIndex(pinnedItems.length + 4);
+                    } else if (item?.type === 'expand-tabs') {
+                        setShowAllTabs(v => !v);
+                        if (item.expanded) setSelectedPinIndex(pinnedItems.length + contextGroups.appsBlockLen + 8);
+                    } else {
+                        handleSelect(item);
+                    }
                 } else if (currentIndex < totalContext + totalPins) {
                     handleSelect(pinnedItems[currentIndex - totalContext]);
+                } else if (currentIndex < totalContext + totalPins + totalWs) {
+                    handleWorkspaceItemSelect(wsNavItems[currentIndex - totalContext - totalPins]);
                 } else {
-                    handleSelect(flatRows[currentIndex - totalContext - totalPins]?.item);
+                    handleSelect(flatRows[currentIndex - totalContext - totalPins - totalWs]?.item);
                 }
             } else if (query.startsWith('http')) {
                 handleSelect({ url: query, type: 'url' });
             } else if (flatRows.length > 0) {
                 handleSelect(flatRows[0].item);
+            } else if (query.trim()) {
+                // No results — search the web instead (without any /u /a /f prefix;
+                // a bare prefix with no term does nothing)
+                const { scope: qScope, term: qTerm } = parseScopedQuery(query.trim());
+                const webQuery = qScope ? qTerm : query.trim();
+                if (webQuery) {
+                    if (window.electronAPI?.openExternal) {
+                        window.electronAPI.openExternal(`https://www.google.com/search?q=${encodeURIComponent(webQuery)}`);
+                    } else {
+                        window.open(`https://www.google.com/search?q=${encodeURIComponent(webQuery)}`, '_blank');
+                    }
+                    handleClose();
+                }
             }
         } else if (e.key === 'Escape') {
             e.preventDefault();
             handleClose();
         } else if (e.key === 'p' && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
-            if (currentIndex >= totalContext + totalPins && selectedIndex >= 0) {
+            if (isSearching && selectedIndex >= 0) {
                 togglePin(flatRows[selectedIndex]?.item);
             }
         } else if ((e.key === 'Delete' || e.key === 'Backspace') && !isSearching && currentIndex >= totalContext && currentIndex < totalContext + totalPins) {
@@ -1282,21 +1420,6 @@ export function GlobalSpotlight() {
             const maxPinIndex = totalPins - 2; // -1 for removed, -1 for 0-index
             if (maxPinIndex >= 0) setSelectedPinIndex(Math.min(pinIndex, maxPinIndex));
             else setSelectedPinIndex(-1);
-        }
-
-        // Fallback handlers
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            handleClose();
-        } else if (e.key === 'Enter' && query.trim() && currentIndex < 0) {
-            e.preventDefault();
-            // Search Google
-            if (window.electronAPI?.openExternal) {
-                window.electronAPI.openExternal(`https://www.google.com/search?q=${encodeURIComponent(query.trim())}`);
-            } else {
-                window.open(`https://www.google.com/search?q=${encodeURIComponent(query.trim())}`, '_blank');
-            }
-            handleClose();
         }
     };
 
@@ -1314,8 +1437,9 @@ export function GlobalSpotlight() {
         handleClose();
 
         // Record feedback for RAG (fire-and-forget, non-blocking). The query is
-        // included so the backend learns keyword→URL associations for ranking.
-        recordSearchSelection(item, resultsDisplayedAtRef.current, query?.trim()).catch(() => { });
+        // included so the backend learns keyword→URL associations for ranking —
+        // strip any /u /a /f scope prefix so it learns the bare keyword.
+        recordSearchSelection(item, resultsDisplayedAtRef.current, parseScopedQuery(query?.trim() || '').term).catch(() => { });
 
         // For tabs, switch to the existing tab instead of opening new
         if (item.type === 'tab') {
@@ -1531,6 +1655,33 @@ export function GlobalSpotlight() {
         }
     };
 
+    // Open a workspace entry (url or app chip) — shared by click and Enter so
+    // keyboard selection behaves exactly like clicking the chip.
+    const handleWorkspaceItemSelect = (entry) => {
+        if (!entry) return;
+        if (entry.kind === 'url') {
+            if (entry.openTab) { handleSelect(entry.openTab); return; }
+            if (window.electronAPI?.openExternal) {
+                window.electronAPI.openExternal(entry.data.url);
+            } else {
+                window.open(entry.data.url, '_blank');
+            }
+            handleClose();
+            return;
+        }
+        const app = entry.data;
+        if (entry.runningApp) { handleSelect(entry.runningApp); return; }
+        const type = (app.appType || '').toLowerCase();
+        if (WS_EDITORS.includes(type) && window.electronAPI?.launchAppWithArgs) {
+            window.electronAPI.launchAppWithArgs(type === 'vscode' ? 'code' : type, [app.path]);
+        } else if (app.appType === 'folder' && window.electronAPI?.openFolder) {
+            window.electronAPI.openFolder(app.path);
+        } else if (window.electronAPI?.launchApp) {
+            window.electronAPI.launchApp(app.path);
+        }
+        handleClose();
+    };
+
     // Close a running app or browser tab directly from its context pill.
     // Keeps the spotlight open (unlike handleSelect) so the user can close several.
     const handleContextClose = useCallback(async (item, e) => {
@@ -1628,6 +1779,10 @@ export function GlobalSpotlight() {
                 {/* Search Header */}
                 <div className="spotlight-search-box">
                     <span className="spotlight-prompt">{'>'}</span>
+                    {(() => {
+                        const { scope } = parseScopedQuery(query.trim());
+                        return scope ? <span className="spotlight-scope-badge">{scope.label}</span> : null;
+                    })()}
                     <input
                         ref={inputRef}
                         className="spotlight-input"
@@ -1773,9 +1928,8 @@ export function GlobalSpotlight() {
 
                 {/* Recommendations Section - Shows when query is empty */}
                 {!query.trim() && !commandMode && contextItems.length > 0 && (() => {
-                    // Group items by type
-                    const apps = contextItems.filter(item => item.type === 'app');
-                    const tabs = contextItems.filter(item => item.type === 'tab');
+                    // Grouped/sliced in contextGroups so keyboard nav walks the same visible list
+                    const { apps, tabs, visibleApps, visibleTabs } = contextGroups;
                     let flatIndex = pinnedItems.length; // Start after pinned items
 
                     console.log('[Spotlight] Rendering context - apps:', apps.length, 'tabs:', tabs.length);
@@ -1787,17 +1941,9 @@ export function GlobalSpotlight() {
                                 <div className="context-section">
                                     <div className="context-section-header">
                                         <div className="context-section-label">Apps</div>
-                                        {apps.length > 4 && (
-                                            <button
-                                                className="context-expand-btn"
-                                                onClick={() => setShowAllApps(v => !v)}
-                                            >
-                                                {showAllApps ? '▴ less' : `▾ ${apps.length - 4} more`}
-                                            </button>
-                                        )}
                                     </div>
                                     <div className="context-row context-row--grid">
-                                        {apps.slice(0, showAllApps ? apps.length : 4).map((item, i) => {
+                                        {visibleApps.map((item, i) => {
                                             const itemIndex = flatIndex++;
                                             return (
                                                 <ContextItem
@@ -1812,6 +1958,20 @@ export function GlobalSpotlight() {
                                                 />
                                             );
                                         })}
+                                        {apps.length > 4 && (() => {
+                                            const itemIndex = flatIndex++;
+                                            return (
+                                                <div
+                                                    key="expand-apps"
+                                                    className={`context-item context-expand-chip${itemIndex === selectedPinIndex ? ' pin-selected' : ''}`}
+                                                    onClick={() => setShowAllApps(v => !v)}
+                                                    onMouseEnter={() => setSelectedPinIndex(itemIndex)}
+                                                    title={showAllApps ? 'Show fewer apps' : 'Show all apps'}
+                                                >
+                                                    <span className="pin-label">{showAllApps ? '− less' : `+${apps.length - 4} more`}</span>
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
                             )}
@@ -1821,17 +1981,9 @@ export function GlobalSpotlight() {
                                 <div className="context-section">
                                     <div className="context-section-header">
                                         <div className="context-section-label">Tabs</div>
-                                        {tabs.length > 8 && (
-                                            <button
-                                                className="context-expand-btn"
-                                                onClick={() => setShowAllTabs(v => !v)}
-                                            >
-                                                {showAllTabs ? '▴ less' : `▾ ${tabs.length - 8} more`}
-                                            </button>
-                                        )}
                                     </div>
                                     <div className="context-row context-row--grid">
-                                        {tabs.slice(0, showAllTabs ? tabs.length : 8).map((item, i) => {
+                                        {visibleTabs.map((item, i) => {
                                             const itemIndex = flatIndex++;
                                             return (
                                                 <ContextItem
@@ -1846,6 +1998,20 @@ export function GlobalSpotlight() {
                                                 />
                                             );
                                         })}
+                                        {tabs.length > 8 && (() => {
+                                            const itemIndex = flatIndex++;
+                                            return (
+                                                <div
+                                                    key="expand-tabs"
+                                                    className={`context-item context-expand-chip${itemIndex === selectedPinIndex ? ' pin-selected' : ''}`}
+                                                    onClick={() => setShowAllTabs(v => !v)}
+                                                    onMouseEnter={() => setSelectedPinIndex(itemIndex)}
+                                                    title={showAllTabs ? 'Show fewer tabs' : 'Show all tabs'}
+                                                >
+                                                    <span className="pin-label">{showAllTabs ? '− less' : `+${tabs.length - 8} more`}</span>
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
                             )}
@@ -1892,14 +2058,14 @@ export function GlobalSpotlight() {
                                             ? (() => {
                                                 const ws = workspaces.find(w => w.id === expandedWorkspaceId);
                                                 const count = ws ? (ws.urls || []).length + (ws.apps || []).length : 0;
-                                                return <><FontAwesomeIcon icon={getWorkspaceIcon(ws?.name || '')} className="ws-dd-icon" /><span>{ws?.name}</span>{count > 0 && <span className="ws-dd-count">{count}</span>}</>;
+                                                return <><FontAwesomeIcon icon={getWorkspaceIcon(ws?.name || '')} className="ws-dd-icon" /><span className="ws-dd-name">{ws?.name}</span>{count > 0 && <span className="ws-dd-count">{count}</span>}</>;
                                             })()
                                             : <span className="ws-dd-placeholder">Select…</span>
                                         }
                                         <svg className="ws-dd-chevron" width="8" height="5" viewBox="0 0 8 5" fill="none"><path d="M1 1l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                                     </button>
-                                    {wsDropdownOpen && (
-                                        <div className="ws-dropdown-menu">
+                                    {wsDropdownOpen && wsMenuStyle && (
+                                        <div className="ws-dropdown-menu" style={wsMenuStyle}>
                                             <button
                                                 className={`ws-dropdown-item ${!expandedWorkspaceId ? 'active' : ''}`}
                                                 onClick={() => { setExpandedWorkspaceId(null); setWsDropdownOpen(false); }}
@@ -1915,7 +2081,7 @@ export function GlobalSpotlight() {
                                                         onClick={() => { setExpandedWorkspaceId(ws.id); setWsDropdownOpen(false); }}
                                                     >
                                                         <FontAwesomeIcon icon={getWorkspaceIcon(ws.name)} className="ws-dd-icon" />
-                                                        <span>{ws.name}</span>
+                                                        <span className="ws-dd-name">{ws.name}</span>
                                                         {count > 0 && <span className="ws-dd-count">{count}</span>}
                                                     </button>
                                                 );
@@ -1926,91 +2092,56 @@ export function GlobalSpotlight() {
                             </div>
                         )}
 
-                        {/* Active workspace URLs shown as context items */}
+                        {/* Active workspace entries — rendered from wsNavItems so keyboard
+                            selection (selectedPinIndex past pins+context) matches exactly */}
                         {expandedWorkspaceId && (() => {
                             const ws = workspaces.find(w => w.id === expandedWorkspaceId);
                             if (!ws) return null;
-                            const urls = ws.urls || [];
-                            const apps = ws.apps || [];
-                            const EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'fleet', 'zed'];
-                            const isEmpty = urls.length === 0 && apps.length === 0;
-
-                            // Build live-state lookups from contextItems
-                            const getHostname = (url) => { try { return new URL(url).hostname; } catch { return null; } };
-                            const openTabsByHostname = new Map(
-                                contextItems.filter(c => c.type === 'tab' && c.url)
-                                    .map(c => [getHostname(c.url), c])
-                            );
-                            const runningAppsByName = new Map(
-                                contextItems.filter(c => c.type === 'app' && c.isRunning)
-                                    .map(c => [(c.name || '').toLowerCase().replace(/\.exe$/i, ''), c])
-                            );
+                            const wsSelBase = pinnedItems.length + contextGroups.visibleList.length;
 
                             return (
                                 <div className="context-section">
-                                    {isEmpty ? (
+                                    {wsNavItems.length === 0 ? (
                                         <div style={{ opacity: 0.4, fontSize: 11, padding: '6px 0', fontStyle: 'italic' }}>Nothing in this workspace yet</div>
                                     ) : (
                                         <div className="context-row context-row--grid">
-                                            {urls.map((u, idx) => {
-                                                const resolvedFavicon = u.favicon || (u.url ? getFaviconUrl(u.url, 16, null, true) : null);
-                                                const openTab = u.url ? openTabsByHostname.get(getHostname(u.url)) : null;
-                                                return (
-                                                    <div
-                                                        key={`url-${idx}`}
-                                                        className={`context-item context-tab${openTab ? ' ws-item-live' : ''}`}
-                                                        onClick={() => {
-                                                            if (openTab) {
-                                                                handleSelect(openTab);
-                                                            } else if (window.electronAPI?.openExternal) {
-                                                                window.electronAPI.openExternal(u.url);
-                                                                handleClose();
-                                                            } else {
-                                                                window.open(u.url, '_blank');
-                                                                handleClose();
-                                                            }
-                                                        }}
-                                                        title={openTab ? `Open tab: ${openTab.title || u.url}` : (u.title || u.url)}
-                                                    >
-                                                        <div className="pin-icon">
-                                                            {resolvedFavicon ? (
-                                                                <img src={resolvedFavicon} onError={e => { e.target.style.display = 'none'; }} alt="" />
-                                                            ) : (
-                                                                <FontAwesomeIcon icon={faGlobe} style={{ color: '#a78bfa' }} />
-                                                            )}
+                                            {wsNavItems.map((entry, idx) => {
+                                                const isSel = selectedPinIndex === wsSelBase + idx;
+                                                if (entry.kind === 'url') {
+                                                    const u = entry.data;
+                                                    const openTab = entry.openTab;
+                                                    const resolvedFavicon = u.favicon || (u.url ? getFaviconUrl(u.url, 16, null, true) : null);
+                                                    return (
+                                                        <div
+                                                            key={`url-${idx}`}
+                                                            className={`context-item context-tab${openTab ? ' ws-item-live' : ''}${isSel ? ' pin-selected' : ''}`}
+                                                            onClick={() => handleWorkspaceItemSelect(entry)}
+                                                            onMouseEnter={() => setSelectedPinIndex(wsSelBase + idx)}
+                                                            title={openTab ? `Open tab: ${openTab.title || u.url}` : (u.title || u.url)}
+                                                        >
+                                                            <div className="pin-icon">
+                                                                {resolvedFavicon ? (
+                                                                    <img src={resolvedFavicon} onError={e => { e.target.style.display = 'none'; }} alt="" />
+                                                                ) : (
+                                                                    <FontAwesomeIcon icon={faGlobe} style={{ color: '#a78bfa' }} />
+                                                                )}
+                                                            </div>
+                                                            <span className="pin-label">{(u.title || u.url || 'Link').replace(/^https?:\/\//, '')}</span>
+                                                            {openTab && <span className="ws-live-dot" title="Tab open" />}
                                                         </div>
-                                                        <span className="pin-label">{(u.title || u.url || 'Link').replace(/^https?:\/\//, '')}</span>
-                                                        {openTab && <span className="ws-live-dot" title="Tab open" />}
-                                                    </div>
-                                                );
-                                            })}
-                                            {apps.map((app, idx) => {
-                                                const isEditor = EDITORS.includes(app.appType?.toLowerCase());
+                                                    );
+                                                }
+                                                const app = entry.data;
+                                                const runningApp = entry.runningApp;
+                                                const isEditor = WS_EDITORS.includes(app.appType?.toLowerCase());
                                                 const appColor = isEditor ? '#38bdf8' : app.appType === 'folder' ? '#facc15' : app.appType === 'file' ? '#94a3b8' : '#8b5cf6';
                                                 const appIcon = isEditor ? faCode : app.appType === 'folder' ? faFolderOpen : app.appType === 'file' ? faFileLines : faDesktop;
-                                                const normalizedName = (app.name || '').toLowerCase().replace(/\.exe$/i, '');
-                                                const runningApp = (app.appType !== 'folder' && app.appType !== 'file')
-                                                    ? runningAppsByName.get(normalizedName)
-                                                    : null;
                                                 return (
                                                     <div
                                                         key={`app-${idx}`}
-                                                        className={`context-item context-app${runningApp ? ' ws-item-live' : ''}`}
-                                                        onClick={() => {
-                                                            if (runningApp) {
-                                                                handleSelect(runningApp);
-                                                            } else if (isEditor && window.electronAPI?.launchAppWithArgs) {
-                                                                const cmd = app.appType.toLowerCase() === 'vscode' ? 'code' : app.appType.toLowerCase();
-                                                                window.electronAPI.launchAppWithArgs(cmd, [app.path]);
-                                                                handleClose();
-                                                            } else if (app.appType === 'folder' && window.electronAPI?.openFolder) {
-                                                                window.electronAPI.openFolder(app.path);
-                                                                handleClose();
-                                                            } else if (window.electronAPI?.launchApp) {
-                                                                window.electronAPI.launchApp(app.path);
-                                                                handleClose();
-                                                            }
-                                                        }}
+                                                        className={`context-item context-app${runningApp ? ' ws-item-live' : ''}${isSel ? ' pin-selected' : ''}`}
+                                                        onClick={() => handleWorkspaceItemSelect(entry)}
+                                                        onMouseEnter={() => setSelectedPinIndex(wsSelBase + idx)}
                                                         title={runningApp ? `Running: ${app.name}` : (app.path || app.name)}
                                                     >
                                                         <div className="pin-icon">
@@ -2065,7 +2196,17 @@ export function GlobalSpotlight() {
                 <div className="spotlight-footer">
                     <div className="shortcut-hint"><span className="shortcut-key">↵</span> Open</div>
                     <div className="shortcut-hint"><span className="shortcut-key">↑↓</span> Navigate</div>
-                    <div className="shortcut-hint"><span className="shortcut-key">→←</span> Expand</div>
+                    <div className="shortcut-hint"><span className="shortcut-key">/u /a /f</span> Scope</div>
+                    {query.trim() ? (
+                        <div className="shortcut-hint"><span className="shortcut-key">→←</span> Expand</div>
+                    ) : (
+                        <>
+                            <div className="shortcut-hint"><span className="shortcut-key">⇥</span> Section</div>
+                            {workspaces.length > 1 && (
+                                <div className="shortcut-hint"><span className="shortcut-key">→←</span> Workspace</div>
+                            )}
+                        </>
+                    )}
                     <div className="shortcut-hint"><span className="shortcut-key">Esc</span> Close</div>
                     <div className="shortcut-hint" style={{ marginLeft: 'auto' }}><span className="shortcut-key">⌘P</span> Pin</div>
                 </div>

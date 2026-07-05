@@ -43,7 +43,11 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\raghu\\\\projects\\\\extension\" -Recurse -Directory)",
       "Bash(Select-Object -ExpandProperty FullName)",
       "Bash(dir C:Usersraghuprojectsextension *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(node *)",
+      "PowerShell(npx babel --presets @babel/preset-react src/components/GlobalSpotlight.jsx -o NUL 2>&1 | Select-Object -First 5; if \\($LASTEXITCODE -eq 0\\) { 'parse OK' })",
+      "PowerShell(./node_modules/.bin/esbuild.cmd src/components/GlobalSpotlight.jsx --loader:.jsx=jsx --bundle=false --outfile=$env:TEMP\\\\spotlight-check.js --log-level=error; if \\($LASTEXITCODE -eq 0\\) { 'parse OK' } else { 'parse FAILED' })"
     ],
     "deny": [],
     "ask": [],

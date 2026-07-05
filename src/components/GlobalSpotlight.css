@@ -78,6 +78,21 @@ html, body {
   opacity: 0.9;
 }
 
+/* Active /u /a /f search-scope indicator next to the prompt */
+.spotlight-scope-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #a78bfa;
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  padding: 3px 7px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
 .spotlight-input {
   flex: 1;
   background: transparent;
@@ -145,21 +160,28 @@ html, body {
   line-height: 1;
 }
 
-.context-expand-btn {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.35);
-  font-size: 11px;
-  cursor: pointer;
-  padding: 0 4px;
-  line-height: 1;
-  border-radius: 4px;
-  transition: color 0.15s, background 0.15s;
+/* Expand/collapse chip at the end of a row — part of keyboard navigation,
+   so it highlights like the other pills via .pin-selected */
+.context-item.context-expand-chip {
+  justify-content: center;
+  background: transparent;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
 }
 
-.context-expand-btn:hover {
-  color: rgba(255, 255, 255, 0.7);
-  background: rgba(255, 255, 255, 0.06);
+.context-item.context-expand-chip .pin-label {
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 400;
+}
+
+.context-item.context-expand-chip:hover,
+.context-item.context-expand-chip.pin-selected {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.context-item.context-expand-chip:hover .pin-label,
+.context-item.context-expand-chip.pin-selected .pin-label {
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .context-row {
@@ -1002,6 +1024,14 @@ html, body {
   flex-shrink: 0;
 }
 
+/* Workspace name — ellipsize instead of stretching the trigger/menu */
+.ws-dd-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ws-dd-count {
   font-size: 10px;
   padding: 0 4px;
@@ -1020,11 +1050,12 @@ html, body {
 }
 
 .ws-dropdown-menu {
-  position: absolute;
-  bottom: calc(100% + 4px);
-  top: auto;
-  right: 0;
+  /* Fixed so it escapes the container's overflow:hidden — an absolute menu
+     gets clipped at the panel edge while the panel is still short (tabs
+     loading). top/bottom/right/max-height are set inline from the trigger. */
+  position: fixed;
   min-width: 160px;
+  max-width: 260px;
   max-height: 220px;
   overflow-y: auto;
   background: #1c1c2e;
