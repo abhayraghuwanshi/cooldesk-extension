@@ -10,6 +10,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import annyang from 'annyang';
 import Fuse from 'fuse.js';
 import React, { useEffect, useRef, useState } from 'react';
+import { TEAM_FEATURE_ENABLED } from '../../config/features.js';
 import { CommandExecutor } from '../../services/commandExecutor.js';
 import { CommandParser } from '../../services/commandParser.js';
 import * as LocalAI from '../../services/localAIService.js';
@@ -916,10 +917,12 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         console.log('[CoolSearch] Voice: Go to tabs');
         if (onNavigate) onNavigate('tabs');
       },
-      'go to team': () => {
-        console.log('[CoolSearch] Voice: Go to team');
-        if (onNavigate) onNavigate('team');
-      },
+      ...(TEAM_FEATURE_ENABLED ? {
+        'go to team': () => {
+          console.log('[CoolSearch] Voice: Go to team');
+          if (onNavigate) onNavigate('team');
+        },
+      } : {}),
       // Tab switching - MUST come before general search commands
       'switch to tab :num': async (num) => {
         await commandProcessorRef.current.processVoiceCommand(`switch to tab ${num}`);
@@ -1294,7 +1297,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             '/workspace': 'workspace',
             '/chat': 'chat',
             '/tabs': 'tabs',
-            '/team': 'team',
+            ...(TEAM_FEATURE_ENABLED ? { '/team': 'team' } : {}),
             '/overview': 'overview'
           };
 
@@ -1303,7 +1306,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             '/w': 'workspace',
             '/c': 'chat',
             '/t': 'tabs',
-            '/tm': 'team'
+            ...(TEAM_FEATURE_ENABLED ? { '/tm': 'team' } : {})
           };
 
           const target = navigationMap[query] || ALIAS_MAP[query];
@@ -1571,7 +1574,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           '/workspace': 'workspace',
           '/chat': 'chat',
           '/tabs': 'tabs',
-          '/team': 'team',
+          ...(TEAM_FEATURE_ENABLED ? { '/team': 'team' } : {}),
           '/overview': 'overview'
         };
 

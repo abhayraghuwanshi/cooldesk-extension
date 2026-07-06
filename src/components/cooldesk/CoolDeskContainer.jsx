@@ -3,6 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import logo from '../../../logo-2.png';
 import { addUrlToWorkspace, deleteWorkspace, saveWorkspace } from '../../db/unified-api';
+import { TEAM_FEATURE_ENABLED } from '../../config/features';
 import { isElectronApp } from '../../services/environmentDetector';
 import { runningAppsService } from '../../services/runningAppsService';
 import { getPendingSuggestions, runSeedingIfNeeded } from '../../services/appCategorizationService';
@@ -115,6 +116,7 @@ export function CoolDeskContainer({
     // 'notes' face was removed (notes are now embedded in workspace cards) — migrate any
     // leftover persisted value so the app doesn't boot into an empty/broken state.
     if (stored === 'notes') return fallback;
+    if (stored === 'team' && !TEAM_FEATURE_ENABLED) return fallback;
     return stored || fallback;
   });
 
@@ -431,7 +433,7 @@ export function CoolDeskContainer({
       'workspace': 'workspace',
       'chat': 'chat',
       'tabs': 'tabs',
-      'team': 'team',
+      ...(TEAM_FEATURE_ENABLED ? { 'team': 'team' } : {}),
       'overview': 'overview'
     };
 
@@ -451,8 +453,9 @@ export function CoolDeskContainer({
     const initial = new Set(['overview']);
     try {
       const active = localStorage.getItem('cooldesk-active-face') || 'overview';
-      // 'notes' face was removed — don't treat it as a visited face anymore
-      if (active !== 'notes') initial.add(active);
+      // 'notes' face was removed — don't treat it as a visited face anymore.
+      // 'team' is feature-flagged off — visiting it would lazy-init P2P for nothing.
+      if (active !== 'notes' && (active !== 'team' || TEAM_FEATURE_ENABLED)) initial.add(active);
     } catch { }
     return initial;
   });
@@ -618,8 +621,8 @@ export function CoolDeskContainer({
           </Face>
         )}
 
-        {/* Face 3: Team (Right-most) - Desktop App Only */}
-        {isDesktopApp && (
+        {/* Face 3: Team (Right-most) - Desktop App Only, behind feature flag */}
+        {isDesktopApp && TEAM_FEATURE_ENABLED && (
           <Face index="team">
             {shouldRenderFace('team') && (
               <Suspense fallback={null}>

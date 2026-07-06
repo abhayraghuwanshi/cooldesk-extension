@@ -16,6 +16,7 @@ import { sendMessage, storageGet, storageSet } from '../../services/extensionApi
 import { loadSyncConfig, toggleHostSync } from '../../services/syncConfig';
 import { setAndSaveFontFamily, setAndSaveFontSize } from '../../utils/fontUtils';
 import { checkUpdateWithPing, isAnalyticsEnabled, setAnalyticsEnabled } from '../../services/analytics';
+import { TEAM_FEATURE_ENABLED } from '../../config/features';
 import AIModelsTab from '../settings/AIModelsTab';
 import ExportData from '../settings/ExportData';
 import TeamsTab from '../settings/TeamsTab';
@@ -82,7 +83,7 @@ export function SettingsModal({
     { id: 'general',    label: 'General',    icon: faCog     },
     { id: 'appearance', label: 'Appearance', icon: faPalette },
     { id: 'local-ai',   label: 'Local AI',   icon: faRocket  },
-    ...(isDesktopApp ? [{ id: 'team', label: 'Team', icon: faUsers }] : []),
+    ...(isDesktopApp && TEAM_FEATURE_ENABLED ? [{ id: 'team', label: 'Team', icon: faUsers }] : []),
   ];
 
   const themes = [

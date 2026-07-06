@@ -2,7 +2,11 @@ import { faFolder, faGear, faTh, faUsers } from '@fortawesome/free-solid-svg-ico
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { teamManager } from '../../services/p2p/teamManager';
+import { TEAM_FEATURE_ENABLED } from '../../config/features';
 import '../../styles/spatial.css';
+
+// Faces available in the desktop app, in spatial (left→right) order.
+const DESKTOP_FACES = TEAM_FEATURE_ENABLED ? ['workspace', 'tabs', 'team'] : ['workspace', 'tabs'];
 
 
 /**
@@ -66,6 +70,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
 
 
   useEffect(() => {
+    if (!TEAM_FEATURE_ENABLED) return;
     teamManager.init().then(() => {
       const team = teamManager.getTeam(teamManager.activeTeamId);
       if (team) setActiveTeam(team);
@@ -89,7 +94,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
     if (face === currentFace) return;
 
     // Smart Travel: Dynamic duration based on distance
-    const faces = isDesktopApp ? ['workspace', 'tabs', 'team'] : ['overview'];
+    const faces = isDesktopApp ? DESKTOP_FACES : ['overview'];
     const currentIndex = faces.indexOf(currentFace);
     const targetIndex = faces.indexOf(face);
     const distance = Math.abs(targetIndex - currentIndex);
@@ -136,7 +141,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
         console.log('[WorkspaceShell] Spatial Nav triggered:', e.key);
         e.preventDefault();
 
-        const faces = isDesktopApp ? ['workspace', 'tabs', 'team'] : ['overview'];
+        const faces = isDesktopApp ? DESKTOP_FACES : ['overview'];
         const currentIndex = faces.indexOf(currentFace);
 
         if (currentIndex === -1) {
@@ -158,9 +163,10 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
       if (modifierPressed && ['1', '2', '3'].includes(e.key)) {
         e.preventDefault();
         const faceMap = {
-          '1': 'workspace', '2': 'tabs', '3': 'team'
+          '1': 'workspace', '2': 'tabs',
+          ...(TEAM_FEATURE_ENABLED ? { '3': 'team' } : {})
         };
-        navigateToFace(faceMap[e.key]);
+        if (faceMap[e.key]) navigateToFace(faceMap[e.key]);
       }
 
       if (e.key === 'Escape') {
@@ -243,7 +249,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
       if (Math.abs(state.accumulator) > THRESHOLD) {
         if (e.cancelable) e.preventDefault();
 
-        const faces = isDesktopApp ? ['workspace', 'tabs', 'team'] : ['overview'];
+        const faces = isDesktopApp ? DESKTOP_FACES : ['overview'];
         const currentIndex = faces.indexOf(currentFace);
 
         let switched = false;
@@ -315,15 +321,17 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
             >
               <FontAwesomeIcon icon={faTh} className="face-icon" />
             </button>
-            <button
-              className={`face-dot ${currentFace === 'team' ? 'active' : ''}`}
-              onClick={() => navigateToFace('team')}
-              onMouseEnter={() => setHoveredFace('team')}
-              title="Spaces (Ctrl + 3)"
-              data-onboarding="nav-team"
-            >
-              <FontAwesomeIcon icon={faUsers} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
-            </button>
+            {TEAM_FEATURE_ENABLED && (
+              <button
+                className={`face-dot ${currentFace === 'team' ? 'active' : ''}`}
+                onClick={() => navigateToFace('team')}
+                onMouseEnter={() => setHoveredFace('team')}
+                title="Spaces (Ctrl + 3)"
+                data-onboarding="nav-team"
+              >
+                <FontAwesomeIcon icon={faUsers} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
+              </button>
+            )}
             {onOpenSettings && (
               <button
                 className="face-dot"

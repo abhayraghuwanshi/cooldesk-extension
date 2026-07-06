@@ -1,6 +1,7 @@
 import { faArrowLeft, faArrowRight, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
+import { TEAM_FEATURE_ENABLED } from '../../config/features';
 // CSS is imported in App.jsx to avoid lazy-load preload issues
 
 // Internal component for game-like typing effect
@@ -125,7 +126,8 @@ const ONBOARDING_STEPS = [
     duration: 4000,
     emoji: '✨'
   }
-];
+  // Team/P2P face is feature-flagged off — skip its tour step
+].filter(s => TEAM_FEATURE_ENABLED || s.id !== 'team');
 
 // Fake Cursor Component
 const FakeCursor = ({ target }) => {
