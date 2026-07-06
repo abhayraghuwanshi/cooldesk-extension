@@ -854,27 +854,31 @@ export function SettingsModal({
                       hint="Install updates automatically in the background"
                       right={<Toggle checked={autoUpdateEnabled} onChange={handleToggleAutoUpdate} />}
                       onClick={() => handleToggleAutoUpdate(!autoUpdateEnabled)}
+                      last={!isTauri}
                     />
-                    <SettingRow
-                      label="Anonymous Usage Stats"
-                      hint={
-                        <span>
-                          Share anonymous launch counts to help improve CoolDesk. No search queries, URLs, or personal data.{' '}
-                          <a
-                            href="https://cool-desk.com/privacy-details"
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={e => e.stopPropagation()}
-                            style={{ color: '#60a5fa', textDecoration: 'none' }}
-                          >
-                            Learn more
-                          </a>
-                        </span>
-                      }
-                      right={<Toggle checked={analyticsEnabled} onChange={handleToggleAnalytics} accentColor="#22c55e" />}
-                      onClick={() => handleToggleAnalytics(!analyticsEnabled)}
-                      last
-                    />
+                    {/* Analytics ping is a desktop-app feature — hide in the extension */}
+                    {isTauri && (
+                      <SettingRow
+                        label="Anonymous Usage Stats"
+                        hint={
+                          <span>
+                            Share anonymous launch counts to help improve CoolDesk. No search queries, URLs, or personal data.{' '}
+                            <a
+                              href="https://cool-desk.com/privacy-details"
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              style={{ color: '#60a5fa', textDecoration: 'none' }}
+                            >
+                              Learn more
+                            </a>
+                          </span>
+                        }
+                        right={<Toggle checked={analyticsEnabled} onChange={handleToggleAnalytics} accentColor="#22c55e" />}
+                        onClick={() => handleToggleAnalytics(!analyticsEnabled)}
+                        last
+                      />
+                    )}
                   </Card>
                 </section>
 

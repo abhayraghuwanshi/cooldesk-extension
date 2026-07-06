@@ -42,11 +42,11 @@
   /* Added top padding to vertically center the 44px items in 64px min-height */
   /* Reduced padding from 32px */
   /* Internal content padding */
-  background: rgba(15, 23, 42, 0.9);
+  background: rgba(15, 15, 20, 0.9);
   /* Slightly more opaque for floating look */
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(139, 92, 246, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   /* Pill corners */
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
@@ -114,22 +114,22 @@
 .cooldesk-settings-btn {
   width: 44px;
   height: 44px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   color: #94A3B8;
   flex-shrink: 0;
 }
 
 .cooldesk-settings-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.16);
   color: #E5E7EB;
-  transform: scale(1.05);
 }
 
 .cooldesk-settings-btn svg {
@@ -320,20 +320,21 @@
   box-sizing: border-box;
 }
 
+/* Neutral surface + one accent (purple = focus) — same color grammar as the
+   spotlight. Feature tints (nav/action/ai) stay on the command-* modifiers. */
 .cooldesk-search-box {
   width: 100%;
-  background: var(--glass-bg, rgba(15, 23, 42, 0.6));
+  background: rgba(18, 18, 24, 0.75);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border-color, rgba(59, 130, 246, 0.3));
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 12px;
-  /* Boxier terminal look */
   display: flex;
   align-items: flex-start;
   gap: 12px;
   padding: 8px 12px;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
   min-height: 44px;
 }
 
@@ -353,17 +354,14 @@
 }
 
 .cooldesk-search-box:hover {
-  background: var(--interactive-bg, rgba(30, 41, 59, 0.8));
-  border-color: var(--border-hover, rgba(59, 130, 246, 0.5));
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
-  transform: translateY(-1px);
+  background: rgba(24, 24, 32, 0.8);
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 .cooldesk-search-box:focus-within {
-  background: var(--active-item-bg, rgba(5, 5, 10, 0.98));
-  border-color: var(--accent-color, #34C759);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--accent-color, #34C759) inset;
-  transform: translateY(-1px);
+  background: rgba(12, 12, 16, 0.92);
+  border-color: rgba(139, 92, 246, 0.65);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.14), 0 8px 30px rgba(0, 0, 0, 0.35);
 }
 
 .cooldesk-search-input {
@@ -425,15 +423,14 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 }
 
 .cooldesk-search-input::placeholder {
-  color: var(--text-secondary, #64748B);
+  color: rgba(255, 255, 255, 0.32);
   font-weight: 400;
-  font-style: italic;
   font-family: inherit;
   transition: color 0.2s;
 }
 
 .cooldesk-search-box:focus-within .cooldesk-search-input::placeholder {
-  color: #64748B;
+  color: rgba(255, 255, 255, 0.26);
 }
 
 .cooldesk-voice-btn {

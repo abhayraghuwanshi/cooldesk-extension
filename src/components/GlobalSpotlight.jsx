@@ -241,6 +241,11 @@ export function GlobalSpotlight() {
     // position:fixed and is placed relative to the trigger here.
     const [wsMenuStyle, setWsMenuStyle] = useState(null);
     const wsDropdownRef = useRef(null);
+    // Workspace entries scroll internally when the section is squeezed by the
+    // 70vh panel cap — keep the keyboard-selected chip visible. Hover-driven
+    // selection is skipped (same reasoning as ResultItem's hover-scroll guard).
+    const wsEntriesRef = useRef(null);
+    const wsHoverSelectedRef = useRef(false);
     const [workspaces, setWorkspaces] = useState([]);
     const [expandedWorkspaceId, setExpandedWorkspaceId] = useState(() => {
         try { return localStorage.getItem('spotlight_ws_id') || null; } catch { return null; }
@@ -704,6 +709,17 @@ export function GlobalSpotlight() {
             else localStorage.removeItem('spotlight_ws_id');
         } catch { }
     }, [expandedWorkspaceId]);
+
+    // Keep the keyboard-selected workspace chip visible while the entries grid
+    // scrolls. Hover-driven selection is skipped — the chip is already under
+    // the cursor, and scrolling to it would hijack an in-progress wheel scroll.
+    useEffect(() => {
+        if (!wsHoverSelectedRef.current) {
+            const el = wsEntriesRef.current?.querySelector('.pin-selected');
+            if (el) el.scrollIntoView({ block: 'nearest' });
+        }
+        wsHoverSelectedRef.current = false;
+    }, [selectedPinIndex]);
 
     // Save Pinned Items
     const savePinnedItems = async (items) => {
@@ -2068,7 +2084,7 @@ export function GlobalSpotlight() {
 
                 {/* Workspaces Section */}
                 {!query.trim() && !commandMode && (
-                    <div className="spotlight-pins">
+                    <div className="spotlight-pins spotlight-pins--workspace">
                         {workspaces.length > 0 && (
                             <div className="spotlight-pins-header">
                                 {/* The selector IS the section title — no separate label */}
@@ -2123,7 +2139,7 @@ export function GlobalSpotlight() {
                             const wsSelBase = pinnedItems.length + contextGroups.visibleList.length;
 
                             return (
-                                <div className="context-section">
+                                <div className="context-section" ref={wsEntriesRef}>
                                     {wsNavItems.length === 0 ? (
                                         <div style={{ opacity: 0.4, fontSize: 11, padding: '6px 0', fontStyle: 'italic' }}>Nothing in this workspace yet — ←/→ to switch</div>
                                     ) : (
@@ -2139,7 +2155,7 @@ export function GlobalSpotlight() {
                                                             key={`url-${idx}`}
                                                             className={`context-item context-tab${openTab ? ' ws-item-live' : ''}${isSel ? ' pin-selected' : ''}`}
                                                             onClick={() => handleWorkspaceItemSelect(entry)}
-                                                            onMouseEnter={() => setSelectedPinIndex(wsSelBase + idx)}
+                                                            onMouseEnter={() => { wsHoverSelectedRef.current = true; setSelectedPinIndex(wsSelBase + idx); }}
                                                             title={openTab ? `Open tab: ${openTab.title || u.url}` : (u.title || u.url)}
                                                         >
                                                             <div className="pin-icon">
@@ -2164,7 +2180,7 @@ export function GlobalSpotlight() {
                                                         key={`app-${idx}`}
                                                         className={`context-item context-app${runningApp ? ' ws-item-live' : ''}${isSel ? ' pin-selected' : ''}`}
                                                         onClick={() => handleWorkspaceItemSelect(entry)}
-                                                        onMouseEnter={() => setSelectedPinIndex(wsSelBase + idx)}
+                                                        onMouseEnter={() => { wsHoverSelectedRef.current = true; setSelectedPinIndex(wsSelBase + idx); }}
                                                         title={runningApp ? `Running: ${app.name}` : (app.path || app.name)}
                                                     >
                                                         <div className="pin-icon">

@@ -11,6 +11,7 @@ mod categorize;
 mod scanner;
 mod matcher;
 mod tab_uia;
+mod webapp_embed;
 
 use system::RunningApp;
 
@@ -589,6 +590,45 @@ async fn open_url(url: String) -> Result<(), String> {
     {
         open::that(&url).map_err(|e| e.to_string())?;
     }
+    Ok(())
+}
+
+/// Open a web app in its own dedicated webview window ("installed web app"
+/// feel). The window is a real top-level browsing context, so sign-ins are
+/// first-party and persist in the shared WebView profile across launches —
+/// unlike iframes, which trip third-party cookie blocking. Reuses the window
+/// if it's already open.
+#[tauri::command]
+async fn open_webapp_window(
+    app: tauri::AppHandle,
+    id: String,
+    url: String,
+    title: Option<String>,
+) -> Result<(), String> {
+    let parsed: tauri::Url = url.parse().map_err(|e| format!("Invalid URL: {}", e))?;
+    if parsed.scheme() != "https" && parsed.scheme() != "http" {
+        return Err("Only http(s) URLs can be opened as web apps".to_string());
+    }
+
+    // Window labels only allow [a-zA-Z0-9-/:_]
+    let safe_id: String = id
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .collect();
+    let label = format!("webapp-{}", safe_id);
+
+    if let Some(window) = app.get_webview_window(&label) {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+
+    tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::External(parsed))
+        .title(title.unwrap_or_else(|| "CoolDesk".to_string()))
+        .inner_size(1080.0, 760.0)
+        .build()
+        .map_err(|e| format!("Failed to open web app window: {}", e))?;
     Ok(())
 }
 
@@ -1209,6 +1249,10 @@ pub fn run() {
         launch_app,
         launch_app_with_args,
         open_url,
+        open_webapp_window,
+        webapp_embed::webapp_embed_open,
+        webapp_embed::webapp_embed_set_bounds,
+        webapp_embed::webapp_embed_close,
         open_folder,
         search_files,
         list_dir,
@@ -1237,6 +1281,17 @@ pub fn run() {
               log::error!("[Sidecar] Server failed: {}", e);
           }
       });
+
+      // Close glued --app windows a previous process left behind (dev
+      // rebuilds and crashes skip RunEvent::Exit), then arm persistence.
+      {
+          let dir = app
+              .path()
+              .app_data_dir()
+              .unwrap_or_else(|_| std::env::temp_dir());
+          let _ = std::fs::create_dir_all(&dir);
+          webapp_embed::init(dir.join("webapp_embeds.json"));
+      }
 
       // Re-assert launch-at-login. Auto-updates run the old NSIS uninstaller,
       // which wipes the autostart registry entry; if the user wanted it on,
@@ -1345,9 +1400,14 @@ pub fn run() {
     })
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
-    .run(|_app_handle, _event| {
+    .run(|_app_handle, event| {
         // macOS dock icon reopen handling would go here if needed
         // RunEvent::Reopen is macOS-specific and not available on Windows
+        if let tauri::RunEvent::Exit = event {
+            // Glued --app browser windows aren't our children — close them
+            // explicitly so quitting CoolDesk doesn't orphan them.
+            webapp_embed::close_all();
+        }
     });
 }
 

@@ -2320,3 +2320,60 @@ pub async fn feedback_suggest_workspaces_for_app(
     }
 }
 
+
+// ============================================================
+// Web App Preview helpers
+// ============================================================
+
+/// GET /webapp/frame-check?url=... — will this URL render inside an iframe?
+/// Fetched server-side (no cookies, no CORS), so the answer reflects the
+/// site's framing policy, not the user's session:
+///   - `X-Frame-Options: DENY/SAMEORIGIN` → not frameable
+///   - CSP `frame-ancestors` without `*` → not frameable
+/// The dashboard uses this to swap a doomed iframe preview for a static,
+/// still-clickable app face instead of rendering a blank frame.
+pub async fn webapp_frame_check(
+    Query(params): Query<HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    let url = match params.get("url") {
+        Some(u) if u.starts_with("https://") || u.starts_with("http://") => u.clone(),
+        Some(_) => return Json(serde_json::json!({ "ok": false, "error": "only http(s) urls" })),
+        None => return Json(serde_json::json!({ "ok": false, "error": "missing url param" })),
+    };
+
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(8))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => return Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+    };
+
+    match client.get(&url).send().await {
+        Ok(resp) => {
+            let status = resp.status().as_u16();
+            let header = |name: &str| {
+                resp.headers()
+                    .get(name)
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("")
+                    .to_lowercase()
+            };
+
+            let xfo = header("x-frame-options");
+            let mut frameable = !(xfo.contains("deny") || xfo.contains("sameorigin"));
+
+            if frameable {
+                let csp = header("content-security-policy");
+                if let Some(fa) = csp.split(';').map(str::trim).find(|d| d.starts_with("frame-ancestors")) {
+                    if !fa.contains('*') {
+                        frameable = false;
+                    }
+                }
+            }
+
+            Json(serde_json::json!({ "ok": true, "frameable": frameable, "status": status }))
+        }
+        Err(e) => Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+    }
+}

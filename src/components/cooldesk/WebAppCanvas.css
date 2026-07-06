@@ -1,0 +1,125 @@
+/* Web app canvas — deliberately isolated styling.
+   Everything here is namespaced under .webapps-canvas and this file is only
+   imported by WebAppPreviews.jsx; the canvas is its own little world and does
+   NOT inherit the app's card/panel conventions. Keep app-wide styles out. */
+
+.webapps-canvas {
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.05) 1px, transparent 1px) 0 0 / 24px 24px,
+    rgba(8, 8, 12, 0.55);
+}
+
+/* Pannable layer — tiles keep absolute canvas coords; panning translates
+   the layer, so an "unlimited" canvas needs no scrollbars at all. */
+.webapps-canvas__layer {
+  position: absolute;
+  inset: 0;
+}
+
+/* Fullscreen mode: the canvas becomes the viewport. No scroll container
+   above it → nothing for glued native windows to overlap. */
+.webapps-canvas-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  flex-direction: column;
+  background: rgb(10, 10, 14);
+}
+
+.webapps-canvas-overlay__bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.webapps-canvas--fullscreen {
+  flex: 1;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  cursor: grab;
+}
+
+.webapps-canvas--fullscreen:active {
+  cursor: grabbing;
+}
+
+.webapps-canvas__card {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(18, 18, 24, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.webapps-canvas__card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.webapps-canvas__card--active {
+  border-color: rgba(139, 92, 246, 0.55);
+  z-index: 5;
+}
+
+.webapps-canvas__card-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px 6px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: grab;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.webapps-canvas__card-header:active {
+  cursor: grabbing;
+}
+
+.webapps-canvas__body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Bottom-right resize grip */
+.webapps-canvas__resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 26px;
+  height: 26px;
+  cursor: nwse-resize;
+  z-index: 6;
+  opacity: 0.35;
+  transition: opacity 0.15s ease;
+  touch-action: none;
+}
+
+.webapps-canvas__resize:hover {
+  opacity: 0.9;
+}
+
+.webapps-canvas__resize::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid rgba(255, 255, 255, 0.55);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.55);
+  border-bottom-right-radius: 3px;
+}

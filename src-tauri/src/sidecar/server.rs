@@ -267,6 +267,8 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/dashboard", get(get_dashboard).post(post_dashboard))
         // Knowledge graph
         .route("/graph", get(get_graph))
+        // Web app preview helper (dashboard widgets)
+        .route("/webapp/frame-check", get(webapp_frame_check))
         // Commands
         .route("/cmd/jump-to-tab", post(cmd_jump_to_tab))
         .route("/cmd/jump-next", get(cmd_jump_next))
