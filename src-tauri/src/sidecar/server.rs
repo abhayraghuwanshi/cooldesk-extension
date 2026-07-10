@@ -162,67 +162,13 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         }
     });
 
-    // Start background app activity tracking
-    let tracker_state = state.clone();
-    tokio::spawn(async move {
-        let mut last_visible_set: std::collections::HashSet<String> = std::collections::HashSet::new();
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
-        
-        loop {
-            interval.tick().await;
-            
-            let visible_apps = crate::system::get_visible_apps_info().await;
-            let mut current_visible_set = std::collections::HashSet::new();
-            let mut newly_visible = Vec::new();
-            
-            for app in visible_apps {
-                if crate::system::is_browser(&app.name) { continue; }
-                
-                let app_identity = format!("{}:{}", app.name, app.title);
-                current_visible_set.insert(app_identity.clone());
-                
-                if !last_visible_set.contains(&app_identity) {
-                    newly_visible.push(app);
-                }
-            }
-
-            if !newly_visible.is_empty() {
-                let now = chrono::Utc::now().timestamp_millis();
-                let mut activities = Vec::new();
-
-                for app in newly_visible {
-                    let activity = Activity {
-                        id: Some(format!("activity-{}", now)),
-                        timestamp: Some(now),
-                        activity_type: Some("app".to_string()),
-                        url: Some(app.path.clone()),
-                        title: Some(app.title.clone()),
-                        created_at: Some(now),
-                        updated_at: Some(now),
-                        ..Default::default()  // Fill remaining fields (time, scroll, clicks, etc.) with None
-                    };
-                    activities.push(activity);
-                }
-
-                // Update state and broadcast
-                {
-                    let mut data = tracker_state.sync_data.write().await;
-                    for act in &activities {
-                        data.activity.push(act.clone());
-                    }
-                    // Keep last 1000
-                    if data.activity.len() > 1000 {
-                        let to_remove = data.activity.len() - 1000;
-                        data.activity.drain(0..to_remove);
-                    }
-                }
-
-                tracker_state.broadcast("activity-updated", serde_json::to_value(activities).unwrap_or_default());
-            }
-
-            last_visible_set = current_visible_set;
-        }
-    });
+    // Focus sampler: per-app active/media time attribution, persisted as one
+    // JSON file per day under sync-data/activity/ (Windows signals only). Also
+    // broadcasts "activity-updated" on focus changes for the ActivityFeed —
+    // this replaced the old visible-apps tracker that appended app rows into
+    // sync-data.json.
+    #[cfg(target_os = "windows")]
+    tokio::spawn(crate::sidecar::sampler::run_sampler_loop(state.clone()));
 
     // Allowed origins for security - only our extension and Tauri webview
     // TODO: Replace YOUR_EXTENSION_ID with your actual Chrome extension ID
@@ -257,6 +203,7 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/activity/focused", get(get_focused_app))
         .route("/activity/visible", get(get_visible_apps))
         .route("/activity/all-desktops", get(get_all_desktop_apps))
+        .route("/activity/app-usage", get(get_app_usage))
         .route("/notes", get(get_notes).post(post_notes))
         .route("/url-notes", get(get_url_notes).post(post_url_notes))
         .route("/pins", get(get_pins).post(post_pins))

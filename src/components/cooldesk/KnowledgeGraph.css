@@ -41,28 +41,20 @@
   position: relative;
 }
 
-/* Animated RGB border glow */
+/* Static subtle border (was an animated RGB shimmer — calmer without it) */
 .kg-modal::before {
   content: '';
   position: absolute;
   inset: -1px;
   border-radius: 23px;
-  background: linear-gradient(135deg, rgba(99,102,241,0.3), rgba(16,185,129,0.15), rgba(236,72,153,0.15), rgba(99,102,241,0.3));
-  background-size: 300% 300%;
-  animation: kg-border-shift 8s ease infinite;
+  background: linear-gradient(135deg, rgba(99,102,241,0.25), rgba(99,102,241,0.06));
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   padding: 1px;
-  opacity: 0.6;
+  opacity: 0.5;
   pointer-events: none;
   z-index: 0;
-}
-
-@keyframes kg-border-shift {
-  0%   { background-position: 0% 50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
 }
 
 @keyframes kg-modal-in {
@@ -97,6 +89,20 @@
 .kg-title svg {
   color: #818cf8;
   filter: drop-shadow(0 0 8px #6366f1aa) drop-shadow(0 0 20px #6366f155);
+}
+
+/* Overview | Graph switcher in the toolbar */
+.kg-view-tabs {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+  justify-content: center;
+}
+
+.kg-view-tabs .kg-pill {
+  padding: 4px 16px;
+  font-size: 11px;
+  color: #64748b;
 }
 
 /* ── Root canvas layout ────────────────────────────────────────────────────── */
@@ -181,6 +187,20 @@
 }
 
 /* ── Controls row ──────────────────────────────────────────────────────────── */
+/* Single control bar: search · filters · time/live/fit */
+.kg-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.015);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  flex-shrink: 0;
+}
+
+.kg-topbar .kg-search-wrap { flex: 0 1 220px; }
+.kg-topbar .kg-filters { flex: 1; }
+
 .kg-controls {
   display: flex;
   align-items: center;
@@ -400,15 +420,22 @@
 }
 
 /* ── Workspace legend ──────────────────────────────────────────────────────── */
+/* Floating over the canvas (bottom-left) instead of its own toolbar row */
 .kg-legend {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 5px 14px;
-  background: rgba(255, 255, 255, 0.01);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.028);
-  flex-shrink: 0;
   flex-wrap: wrap;
+  max-width: 60%;
+  padding: 4px 6px;
+  border-radius: 12px;
+  background: rgba(2, 6, 14, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(8px);
 }
 
 .kg-legend-item {

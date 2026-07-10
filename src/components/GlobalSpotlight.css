@@ -15,7 +15,7 @@ html, body {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 12vh;
+  padding-top: 6vh;
   animation: fadeIn 0.15s ease-out;
   pointer-events: none;
   z-index: 9999;
@@ -48,7 +48,9 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: 'cv01', 'cv02', 'cv03', 'cv04';
-  max-height: 70vh;
+  /* The window is sized to ~85% of the monitor by toggle_spotlight (lib.rs),
+     so the panel grows with content instead of squeezing the workspace section. */
+  max-height: 90vh;
   font-size: 13px;
   line-height: 1;
 }

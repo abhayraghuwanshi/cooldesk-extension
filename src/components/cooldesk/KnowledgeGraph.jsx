@@ -4,6 +4,8 @@ import { forceCollide } from 'd3-force-3d';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { fetchGraph, graphChanged } from '../../services/graphService';
+import { getHostUrl } from '../../services/syncConfig';
+import { ActivityOverview } from './ActivityOverview';
 import './KnowledgeGraph.css';
 
 // ── Visual config ─────────────────────────────────────────────────────────────
@@ -54,30 +56,21 @@ const FILTERS = ['all', 'url', 'app', 'folder', 'file', 'media', 'workspace'];
 
 function nodeRadius(node) {
   if (node.type === 'workspace') return 16 + Math.sqrt(node.weight || 1) * 3;
-  return 3.5 + Math.sqrt(node.weight || 1) * 1.4;
-}
-
-function drawDiamond(ctx, x, y, r) {
-  ctx.beginPath();
-  ctx.moveTo(x, y - r); ctx.lineTo(x + r, y);
-  ctx.lineTo(x, y + r); ctx.lineTo(x - r, y);
-  ctx.closePath();
-}
-
-function drawSquare(ctx, x, y, r) {
-  ctx.beginPath();
-  ctx.rect(x - r * 0.85, y - r * 0.85, r * 1.7, r * 1.7);
-}
-
-function drawHex(ctx, x, y, r) {
-  ctx.beginPath();
-  for (let i = 0; i < 6; i++) {
-    const a = (i * Math.PI) / 3 - Math.PI / 6;
-    i === 0
-      ? ctx.moveTo(x + r * Math.cos(a), y + r * Math.sin(a))
-      : ctx.lineTo(x + r * Math.cos(a), y + r * Math.sin(a));
+  const byLinks = 3.5 + Math.sqrt(node.weight || 1) * 1.4;
+  // Real usage beats link count: size by active minutes (14d) when the sampler
+  // has data for this node.
+  if (node.activeS) {
+    const byUsage = 4 + Math.sqrt(node.activeS / 60) * 0.55;
+    return Math.min(15, Math.max(byLinks, byUsage));
   }
-  ctx.closePath();
+  return byLinks;
+}
+
+function fmtActive(secs) {
+  if (!secs || secs < 60) return null;
+  const h = Math.floor(secs / 3600);
+  const m = Math.round((secs % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
 function applyFilter(graphData, filter) {
@@ -107,30 +100,57 @@ export function GraphCanvas() {
   const [rawData, setRawData]             = useState({ nodes: [], links: [] });
   const [loading, setLoading]             = useState(false);
   const [filter, setFilter]               = useState('all');
-  const [showLabels, setShowLabels]       = useState(true);
   const [selectedId, setSelectedId]       = useState(null);
   const [tooltip, setTooltip]             = useState(null);
   const [dims, setDims]                   = useState(null);
   const [liveMode, setLiveMode]           = useState(true);
-  const [lastUpdated, setLastUpdated]     = useState(null);
   const [hasNewData, setHasNewData]       = useState(false);
-  const [edgeThreshold, setEdgeThreshold] = useState(0.05);
   const [searchQuery, setSearchQuery]     = useState('');
   const [timeRange, setTimeRange]         = useState('all');
   const [localMode, setLocalMode]         = useState(false);
   const [hopDepth, setHopDepth]           = useState(1);
+
+  // Fixed weak-edge cutoff (was a user slider; a good default beats a knob)
+  const EDGE_THRESHOLD = 0.05;
 
   const fgRef      = useRef(null);
   const canvasRef  = useRef(null);
   const mousePos   = useRef({ x: 0, y: 0 });
   const rawDataRef = useRef(rawData);
   const flashTimer = useRef(null);
-  const orbitRef   = useRef(null);   // orbital data after simulation settles
-  const rafRef     = useRef(null);   // animation frame ID
   useEffect(() => { rawDataRef.current = rawData; }, [rawData]);
   useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current); }, []);
-  // Clean up orbital RAF on unmount
-  useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
+
+  // ── Usage enrichment: size nodes by real active time from the focus sampler ──
+  const [usageMap, setUsageMap] = useState(null);
+  useEffect(() => {
+    fetch(`${getHostUrl()}/activity/app-usage?days=14`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (!data?.trends) return;
+        const map = new Map();
+        // Mirror the backend's graph-node id cleaning (server.rs snapshot loop)
+        const cleanApp = n => n.toLowerCase().replace(/\.exe$/, '')
+          .replace('visual studio code', 'vscode').trim().replace(/ /g, '_');
+        (data.trends.apps || []).forEach(a => {
+          map.set(`app::${cleanApp(a.name)}`, a.totalActiveS);
+          map.set(`media::${cleanApp(a.name)}`, a.totalActiveS);
+        });
+        (data.trends.contexts || []).forEach(c => {
+          map.set(`folder::${c.name.toLowerCase().replace(/ /g, '_')}`, c.totalActiveS);
+        });
+        setUsageMap(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!usageMap || rawData.nodes.length === 0) return;
+    rawData.nodes.forEach(n => {
+      const secs = usageMap.get(n.id);
+      if (secs) n.activeS = secs;
+    });
+  }, [usageMap, rawData]);
 
   useEffect(() => {
     const track = e => { mousePos.current = { x: e.clientX, y: e.clientY }; };
@@ -139,25 +159,21 @@ export function GraphCanvas() {
   }, []);
 
   useEffect(() => {
-    // Cancel any running orbital loop before new simulation starts
-    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
-    orbitRef.current = null;
-
     const fg = fgRef.current;
     if (!fg) return;
-    // Workspaces = massive planets pushing each other away; moons = gentle repulsion
+    // Tight clusters: strong enough to separate groups without scattering the
+    // map into empty space (the old -1800/220 values produced a mostly-void canvas).
     fg.d3Force('charge')?.strength(node =>
-      node.type === 'workspace' ? -1800 : -60
+      node.type === 'workspace' ? -500 : -40
     );
-    // Short orbit radius for workspace→moon; long distance for cross-cluster co-occurrence
     fg.d3Force('link')?.distance(link => {
       const srcType = typeof link.source === 'object' ? link.source.type : null;
       const tgtType = typeof link.target === 'object' ? link.target.type : null;
-      if (srcType === 'workspace' || tgtType === 'workspace') return 120;
-      return 220;
+      if (srcType === 'workspace' || tgtType === 'workspace') return 80;
+      return 140;
     });
     // Hard collision bubble — nodes can NEVER overlap
-    fg.d3Force('collide', forceCollide(node => nodeRadius(node) + 8));
+    fg.d3Force('collide', forceCollide(node => nodeRadius(node) + 6));
     // Reheat so new forces take effect immediately
     fg.d3ReheatSimulation();
   }, [rawData]);
@@ -173,7 +189,6 @@ export function GraphCanvas() {
       { nodes: next.nodes, edges: next.links }
     )) return;
     setRawData(next);
-    setLastUpdated(new Date());
     if (isLiveUpdate) {
       setHasNewData(true);
       if (flashTimer.current) clearTimeout(flashTimer.current);
@@ -228,12 +243,12 @@ export function GraphCanvas() {
     if (timeCutoffMs) {
       data = { ...data, links: data.links.filter(l => !l.last_seen || l.last_seen >= timeCutoffMs) };
     }
-    if (edgeThreshold > 0) {
+    {
       const STATIC = new Set(['url_in_workspace','app_in_workspace','folder_in_workspace','file_in_workspace','shared_resource']);
-      data = { ...data, links: data.links.filter(l => STATIC.has(l.type) || (l.weight || 0) >= edgeThreshold) };
+      data = { ...data, links: data.links.filter(l => STATIC.has(l.type) || (l.weight || 0) >= EDGE_THRESHOLD) };
     }
     return data;
-  }, [rawData, filter, edgeThreshold, timeCutoffMs]);
+  }, [rawData, filter, timeCutoffMs]);
 
   const connectedIds = useMemo(() => {
     if (!selectedId) return null;
@@ -358,90 +373,10 @@ export function GraphCanvas() {
   }, []);
   const handleEngineStop = useCallback(() => {
     if (fgRef.current) fgRef.current.zoomToFit(400, 40);
-    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
-
-    // ── Pin workspace planets so D3 won't move them ──────────────────────────
+    // Pin workspace planets after settle so live refreshes don't shuffle the map.
     rawData.nodes.forEach(n => {
       if (n.type === 'workspace' && isFinite(n.x)) { n.fx = n.x; n.fy = n.y; }
     });
-
-    // ── Assign moons to orbital rings per workspace ───────────────────────────
-    const orbit  = {};
-    const placed = new Set();
-
-    rawData.nodes
-      .filter(n => n.type === 'workspace' && isFinite(n.x))
-      .forEach(ws => {
-        const moons = [];
-        rawData.links.forEach(link => {
-          const src = typeof link.source === 'object' ? link.source : null;
-          const tgt = typeof link.target === 'object' ? link.target : null;
-          if (!src || !tgt) return;
-          const isWsSrc = src.id === ws.id;
-          const isWsTgt = tgt.id === ws.id;
-          if (!isWsSrc && !isWsTgt) return;
-          const moon = isWsSrc ? tgt : src;
-          if (moon.type === 'workspace' || placed.has(moon.id) || !isFinite(moon.x)) return;
-          placed.add(moon.id);
-          moons.push(moon);
-        });
-
-        if (moons.length === 0) return;
-        moons.sort((a, b) => (b.weight || 0) - (a.weight || 0));
-
-        // Ring radii scale with planet size; Keplerian speeds (inner = faster)
-        const pr     = nodeRadius(ws);
-        const RADII  = [Math.max(90, pr * 3.8), Math.max(138, pr * 5.8), Math.max(188, pr * 7.8)];
-        const SPEEDS = [0.28, 0.158, 0.094]; // rad/s  (r³/² Kepler scaling)
-        const CAPS   = [7, 13, Infinity];
-
-        const rings = [];
-        let idx = 0;
-        RADII.forEach((radius, ri) => {
-          const batch = moons.slice(idx, idx + CAPS[ri]);
-          if (batch.length === 0) return;
-          idx += batch.length;
-          rings.push({
-            radius,
-            speed: SPEEDS[ri],
-            moons: batch.map((node, i) => ({
-              node,
-              // Spread evenly; offset each ring so they don't start aligned
-              angle: (i / batch.length) * 2 * Math.PI + ri * (Math.PI / 2.2),
-            })),
-          });
-        });
-
-        orbit[ws.id] = { node: ws, rings };
-      });
-
-    orbitRef.current = orbit;
-    if (Object.keys(orbit).length === 0) return;
-
-    // ── Orbital animation loop ────────────────────────────────────────────────
-    let prevTs = 0;
-    const animate = (ts) => {
-      if (!orbitRef.current || !fgRef.current) return;
-      const dt = prevTs ? Math.min((ts - prevTs) / 1000, 0.05) : 0.016;
-      prevTs = ts;
-
-      Object.values(orbitRef.current).forEach(({ node: ws, rings }) => {
-        if (!isFinite(ws.x)) return;
-        rings.forEach(ring => {
-          const delta = ring.speed * dt;
-          ring.moons.forEach(m => {
-            m.angle += delta;
-            m.node.x = ws.x + Math.cos(m.angle) * ring.radius;
-            m.node.y = ws.y + Math.sin(m.angle) * ring.radius;
-          });
-        });
-      });
-
-      fgRef.current.refresh();
-      rafRef.current = requestAnimationFrame(animate);
-    };
-
-    rafRef.current = requestAnimationFrame(animate);
   }, [rawData]);
 
   // ── Node canvas renderer ──────────────────────────────────────────────────
@@ -463,208 +398,78 @@ export function GraphCanvas() {
     const baseAlpha = faded ? 0.055 : 1;
     ctx.globalAlpha = baseAlpha;
 
-    // ── Orbital trail rings (workspace nodes only) ────────────────────────────
-    if (node.type === 'workspace') {
-      const wsOrbit = orbitRef.current?.[node.id];
-      if (wsOrbit) {
-        ctx.save();
-        wsOrbit.rings.forEach((ring, ri) => {
-          ctx.beginPath();
-          ctx.arc(node.x, node.y, ring.radius, 0, 2 * Math.PI);
-          ctx.strokeStyle = vis.glow;
-          ctx.lineWidth   = 0.6 / globalScale;
-          ctx.globalAlpha = faded ? 0.04 : (ri === 0 ? 0.18 : ri === 1 ? 0.12 : 0.08);
-          ctx.setLineDash([4 / globalScale, 7 / globalScale]);
-          ctx.stroke();
-          ctx.setLineDash([]);
-        });
-        ctx.restore();
-        ctx.globalAlpha = baseAlpha;
-      }
-    }
+    const isWs = node.type === 'workspace';
 
-    // ── Ambient volumetric halo (outermost, very diffuse) ──
-    if (!faded) {
-      const haloR = r * (isSelected ? 3.2 : 2.4);
-      const halo = ctx.createRadialGradient(node.x, node.y, r * 0.5, node.x, node.y, haloR);
-      halo.addColorStop(0, vis.glow + '44');
-      halo.addColorStop(0.4, vis.glow + '18');
-      halo.addColorStop(1, 'transparent');
-      ctx.fillStyle = halo;
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, haloR, 0, 2 * Math.PI);
-      ctx.fill();
-    }
-
-    // ── Planetary orbital ring (workspace nodes only) ──
-    if (node.type === 'workspace' && !faded) {
-      ctx.save();
-      ctx.globalAlpha = baseAlpha * (isSelected ? 0.55 : 0.32);
-      ctx.strokeStyle = vis.hi;
+    // ── Selection / search highlight: one ring, subtle glow ──
+    if (isSelected || searchHit) {
+      const ringCol = searchHit && !isSelected ? '#fbbf24' : vis.hi;
+      ctx.strokeStyle = ringCol;
       ctx.lineWidth   = 1.5 / globalScale;
-      ctx.shadowColor = vis.glow;
-      ctx.shadowBlur  = 6;
-      // Tilted ellipse ring like Saturn
+      ctx.shadowColor = ringCol;
+      ctx.shadowBlur  = 10;
       ctx.beginPath();
-      ctx.ellipse(node.x, node.y, r * 2.5, r * 0.55, -0.28, 0, 2 * Math.PI);
-      ctx.stroke();
-      // Outer faint ring
-      ctx.globalAlpha = baseAlpha * 0.14;
-      ctx.lineWidth   = 1 / globalScale;
-      ctx.beginPath();
-      ctx.ellipse(node.x, node.y, r * 3.1, r * 0.68, -0.28, 0, 2 * Math.PI);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // ── Selection rings ──
-    if (isSelected) {
-      ctx.shadowColor = vis.glow;
-      ctx.shadowBlur  = 28;
-      ctx.strokeStyle = vis.hi;
-      ctx.lineWidth   = 1.5 / globalScale;
-
-      ctx.globalAlpha = 0.55;
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, r + 10 / globalScale, 0, 2 * Math.PI);
-      ctx.stroke();
-
-      ctx.globalAlpha = 0.22;
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, r + 22 / globalScale, 0, 2 * Math.PI);
-      ctx.stroke();
-
-      ctx.globalAlpha = 0.1;
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, r + 36 / globalScale, 0, 2 * Math.PI);
-      ctx.stroke();
-
-      ctx.globalAlpha = baseAlpha;
-      ctx.shadowBlur  = 0;
-    }
-
-    // ── Search glow ring ──
-    if (searchHit) {
-      ctx.shadowColor = '#fbbf24';
-      ctx.shadowBlur  = 24;
-      ctx.strokeStyle = '#fbbf24';
-      ctx.lineWidth   = 2 / globalScale;
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, r + 6 / globalScale, 0, 2 * Math.PI);
+      ctx.arc(node.x, node.y, r + 5 / globalScale, 0, 2 * Math.PI);
       ctx.stroke();
       ctx.shadowBlur = 0;
     }
 
-    // ── Node core glow ──
+    // ── Flat core: solid fill + thin lighter rim ──
     ctx.shadowColor = vis.glow;
-    ctx.shadowBlur  = isSelected ? 36 : 18;
-
-    // ── Sphere gradient fill ──
-    const grad = ctx.createRadialGradient(
-      node.x - r * 0.32, node.y - r * 0.32, r * 0.02,
-      node.x, node.y, r
-    );
-    grad.addColorStop(0,    '#ffffff');
-    grad.addColorStop(0.12, vis.hi);
-    grad.addColorStop(0.48, vis.base);
-    grad.addColorStop(1,    vis.dim);
-    ctx.fillStyle = grad;
-
-    // ── Shape ──
-    if (node.type === 'workspace') {
-      drawHex(ctx, node.x, node.y, r * 1.35);
-    } else if (node.type === 'folder') {
-      drawDiamond(ctx, node.x, node.y, r * 1.3);
-    } else if (node.type === 'file') {
-      drawSquare(ctx, node.x, node.y, r);
-    } else if (node.type === 'media') {
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      const ig = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, r * 0.5);
-      ig.addColorStop(0, '#ffffff');
-      ig.addColorStop(0.25, vis.hi);
-      ig.addColorStop(1, vis.base);
-      ctx.fillStyle = ig;
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, r * 0.42, 0, 2 * Math.PI);
-    } else {
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-    }
+    ctx.shadowBlur  = isWs ? 12 : 5;
+    ctx.fillStyle   = vis.base;
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
     ctx.fill();
-
     ctx.shadowBlur = 0;
 
-    // ── Workspace hex border ──
-    if (node.type === 'workspace') {
-      ctx.strokeStyle = vis.hi + 'bb';
-      ctx.lineWidth   = 1.5 / globalScale;
-      ctx.stroke();
-    }
+    ctx.strokeStyle = vis.hi + (faded ? '30' : '80');
+    ctx.lineWidth   = 1 / globalScale;
+    ctx.stroke();
 
-    // ── Specular highlight (glass sphere top-left shine) ──
-    if (!faded) {
-      const specGrad = ctx.createRadialGradient(
-        node.x - r * 0.3, node.y - r * 0.34, 0,
-        node.x - r * 0.2, node.y - r * 0.22, r * 0.7
-      );
-      specGrad.addColorStop(0,    'rgba(255,255,255,0.52)');
-      specGrad.addColorStop(0.35, 'rgba(255,255,255,0.1)');
-      specGrad.addColorStop(1,    'rgba(255,255,255,0)');
-      ctx.fillStyle = specGrad;
-      if (node.type === 'workspace') {
-        drawHex(ctx, node.x, node.y, r * 1.35);
-      } else if (node.type === 'folder') {
-        drawDiamond(ctx, node.x, node.y, r * 1.3);
-      } else {
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-      }
-      ctx.fill();
+    // ── Workspace: single clean outer ring ──
+    if (isWs && !faded) {
+      ctx.strokeStyle = vis.hi + '50';
+      ctx.lineWidth   = 1.2 / globalScale;
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, r * 1.4, 0, 2 * Math.PI);
+      ctx.stroke();
     }
 
     // ── Labels ──
-    const isWs = node.type === 'workspace';
-    // Workspace labels always visible; moon labels only when zoomed in close
-    if (showLabels && (isWs || globalScale > 1.8)) {
-      const fs  = isWs ? Math.max(13, 15 / globalScale) : Math.max(8, 9 / globalScale);
-      const lbl = node.label.length > 22 ? node.label.slice(0, 21) + '…' : node.label;
-      const ty  = node.y + (isWs ? r * 1.72 : r + 1) + 3 / globalScale;
+    // Workspace labels always visible; child labels once mildly zoomed in, or
+    // always for nodes with real usage / selection (what the user cares about).
+    if (isWs || globalScale > 1.1 || node.activeS || isSelected) {
+      const fs  = isWs ? Math.max(12, 14 / globalScale) : Math.max(8, 9 / globalScale);
+      const lbl = node.label.length > 24 ? node.label.slice(0, 23) + '…' : node.label;
+      const ty  = node.y + r + (isWs ? 7 : 3) / globalScale;
 
-      ctx.font         = `${isWs ? 800 : 500} ${fs}px -apple-system, system-ui, sans-serif`;
+      ctx.font         = `${isWs ? 700 : 500} ${fs}px -apple-system, system-ui, sans-serif`;
       ctx.textAlign    = 'center';
       ctx.textBaseline = 'top';
-
-      // Text shadow for readability
-      ctx.fillStyle = 'rgba(0,0,0,0.95)';
-      ctx.fillText(lbl, node.x + 0.8 / globalScale, ty + 0.8 / globalScale);
-      ctx.fillText(lbl, node.x - 0.5 / globalScale, ty - 0.5 / globalScale);
-
-      if (!faded) { ctx.shadowColor = vis.glow; ctx.shadowBlur = 8; }
-      ctx.fillStyle = faded ? 'rgba(255,255,255,0.08)' : (isWs ? '#f8fafc' : vis.hi);
+      ctx.shadowColor  = 'rgba(0,0,0,0.9)';
+      ctx.shadowBlur   = 4;
+      ctx.fillStyle    = faded ? 'rgba(255,255,255,0.08)' : (isWs ? '#f1f5f9' : '#cbd5e1');
       ctx.fillText(lbl, node.x, ty);
-      ctx.shadowBlur = 0;
 
-      // Workspace subtitle: child count
-      if (isWs) {
+      // Workspace subtitle: child count + active time when known
+      if (isWs && !faded) {
         const count = wsChildCount.get(node.id) || 0;
-        if (count > 0) {
-          const subFs = Math.max(9, 10 / globalScale);
-          const subTy = ty + fs + 2 / globalScale;
-          ctx.font      = `500 ${subFs}px -apple-system, system-ui, sans-serif`;
-          ctx.fillStyle = 'rgba(0,0,0,0.8)';
-          ctx.fillText(`${count} items`, node.x + 0.6 / globalScale, subTy + 0.6 / globalScale);
-          ctx.fillStyle = faded ? 'rgba(255,255,255,0.06)' : vis.hi + '99';
-          ctx.fillText(`${count} items`, node.x, subTy);
+        const bits = [];
+        if (count > 0) bits.push(`${count} items`);
+        const act = fmtActive(node.activeS);
+        if (act) bits.push(act);
+        if (bits.length > 0) {
+          ctx.font      = `500 ${Math.max(9, 10 / globalScale)}px -apple-system, system-ui, sans-serif`;
+          ctx.fillStyle = vis.hi + '99';
+          ctx.fillText(bits.join(' · '), node.x, ty + fs + 2 / globalScale);
         }
       }
+      ctx.shadowBlur = 0;
     }
 
     ctx.restore();
     node.__r = r;
-  }, [connectedIds, selectedId, showLabels, searchMatches, wsColorMap, wsChildCount]);
+  }, [connectedIds, selectedId, searchMatches, wsColorMap, wsChildCount]);
 
   const nodePointerAreaPaint = useCallback((node, col, ctx) => {
     ctx.fillStyle = col;
@@ -673,76 +478,33 @@ export function GraphCanvas() {
     ctx.fill();
   }, []);
 
-  // ── Fiber-optic edge renderer ─────────────────────────────────────────────
+  // ── Edge renderer: one clean pass, opacity by weight ─────────────────────
   const handleLinkCanvasObject = useCallback((link, ctx, globalScale) => {
     const src = link.source;
     const tgt = link.target;
     if (!src || !tgt || !isFinite(src.x) || !isFinite(tgt.x)) return;
 
     // Use workspace-inherited color if available; fall back to edge-type color
-    const srcId    = typeof src === 'object' ? src.id : src;
-    const wsEntry  = wsColorMap.get(srcId);
-    const col      = wsEntry?.vis?.base || EDGE_COLORS[link.type] || '#94a3b8';
-    const base = link.type === 'shared_resource' ? 0.6 : (link.weight || 0.3);
-    const w    = Math.max(0.3, base * 2.5);
-    const isCurved = link.type === 'shared_resource';
+    const srcId   = typeof src === 'object' ? src.id : src;
+    const wsEntry = wsColorMap.get(srcId);
+    const col     = wsEntry?.vis?.base || EDGE_COLORS[link.type] || '#64748b';
+    const w       = Math.max(0.5, (link.weight || 0.3) * 2);
 
-    let alpha = 1;
+    let alpha = 0.3;
     if (connectedIds) {
-      const srcId = typeof src === 'object' ? src.id : src;
       const tgtId = typeof tgt === 'object' ? tgt.id : tgt;
-      alpha = (connectedIds.has(srcId) && connectedIds.has(tgtId)) ? 1 : 0.04;
+      alpha = (connectedIds.has(srcId) && connectedIds.has(tgtId)) ? 0.8 : 0.03;
     }
 
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.lineCap = 'round';
-
-    const drawPath = () => {
-      ctx.beginPath();
-      if (isCurved) {
-        const dx   = tgt.x - src.x;
-        const dy   = tgt.y - src.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const mx   = (src.x + tgt.x) / 2;
-        const my   = (src.y + tgt.y) / 2;
-        const ang  = Math.atan2(dy, dx) + Math.PI / 2;
-        ctx.moveTo(src.x, src.y);
-        ctx.quadraticCurveTo(
-          mx + Math.cos(ang) * dist * 0.3,
-          my + Math.sin(ang) * dist * 0.3,
-          tgt.x, tgt.y
-        );
-      } else {
-        ctx.moveTo(src.x, src.y);
-        ctx.lineTo(tgt.x, tgt.y);
-      }
-    };
-
-    // Outer diffuse glow
-    drawPath();
-    ctx.strokeStyle = col + '14';
-    ctx.lineWidth   = w * 9 / globalScale;
+    ctx.lineCap     = 'round';
+    ctx.strokeStyle = col;
+    ctx.lineWidth   = w / globalScale;
+    ctx.beginPath();
+    ctx.moveTo(src.x, src.y);
+    ctx.lineTo(tgt.x, tgt.y);
     ctx.stroke();
-
-    // Mid bloom
-    drawPath();
-    ctx.strokeStyle = col + '30';
-    ctx.lineWidth   = w * 3.5 / globalScale;
-    ctx.stroke();
-
-    // Inner glow
-    drawPath();
-    ctx.strokeStyle = col + '70';
-    ctx.lineWidth   = w * 1.2 / globalScale;
-    ctx.stroke();
-
-    // Core filament
-    drawPath();
-    ctx.strokeStyle = col + 'ee';
-    ctx.lineWidth   = w * 0.45 / globalScale;
-    ctx.stroke();
-
     ctx.restore();
   }, [connectedIds, wsColorMap]);
 
@@ -751,32 +513,19 @@ export function GraphCanvas() {
   return (
     <div className="kg-canvas-root">
 
-      {/* Search + time row */}
-      <div className="kg-search-row">
+      {/* Single control bar: search · type filters · time · live · fit */}
+      <div className="kg-topbar">
         <div className="kg-search-wrap">
           <svg className="kg-search-icon" viewBox="0 0 16 16" fill="none">
             <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
             <path d="M10.5 10.5 L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
-          <input className="kg-search-input" type="text" placeholder="Search nodes…"
+          <input className="kg-search-input" type="text" placeholder="Search…"
                  value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
           {searchQuery && (
             <button className="kg-search-clear" onClick={() => setSearchQuery('')}>×</button>
           )}
         </div>
-        <div className="kg-time-pills">
-          {[['7d','7d'],['30d','30d'],['all','All']].map(([val, label]) => (
-            <button key={val}
-                    className={`kg-pill ${timeRange === val ? 'active all' : ''}`}
-                    onClick={() => setTimeRange(val)}>
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Filter + action row */}
-      <div className="kg-controls">
         <div className="kg-filters">
           {FILTERS.map(f => (
             <button key={f} className={`kg-pill ${f} ${filter === f ? 'active' : ''}`}
@@ -786,54 +535,22 @@ export function GraphCanvas() {
           ))}
         </div>
         <div className="kg-actions">
+          {[['7d','7d'],['30d','30d'],['all','All']].map(([val, label]) => (
+            <button key={val}
+                    className={`kg-pill ${timeRange === val ? 'active all' : ''}`}
+                    onClick={() => setTimeRange(val)}>
+              {label}
+            </button>
+          ))}
           <span className={`kg-live-badge ${liveMode ? 'on' : 'off'} ${hasNewData ? 'pulse' : ''}`}
                 onClick={() => setLiveMode(v => !v)}>
             <span className="kg-live-dot" />
             {liveMode ? 'Live' : 'Paused'}
           </span>
           <button className="kg-btn" onClick={handleRefresh} title="Refresh now">↺</button>
-          {lastUpdated && (
-            <span className="kg-last-updated">
-              {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
-          )}
-          <label className="kg-slider-label" title="Filter weak edges">
-            Strength
-            <input type="range" className="kg-slider" min="0" max="0.9" step="0.05"
-                   value={edgeThreshold} onChange={e => setEdgeThreshold(parseFloat(e.target.value))} />
-            <span className="kg-slider-val">
-              {edgeThreshold > 0 ? `>${(edgeThreshold * 100).toFixed(0)}%` : 'all'}
-            </span>
-          </label>
-          <button className={`kg-btn ${showLabels ? 'active' : ''}`}
-                  onClick={() => setShowLabels(v => !v)}>Labels</button>
           <button className="kg-btn" onClick={() => fgRef.current?.zoomToFit(400, 30)}>Fit</button>
         </div>
       </div>
-
-      {/* Workspace color legend */}
-      {rawData.nodes.filter(n => n.type === 'workspace').length > 0 && (
-        <div className="kg-legend">
-          {rawData.nodes
-            .filter(n => n.type === 'workspace')
-            .sort((a, b) => a.label.localeCompare(b.label))
-            .map((ws, i) => {
-              const p = WORKSPACE_PALETTE[i % WORKSPACE_PALETTE.length];
-              return (
-                <button
-                  key={ws.id}
-                  className="kg-legend-item"
-                  style={{ '--legend-color': p.base, '--legend-glow': p.glow }}
-                  onClick={() => setSelectedId(prev => prev === ws.id ? null : ws.id)}
-                  title={`${ws.label} — click to focus`}
-                >
-                  <span className="kg-legend-dot" />
-                  <span className="kg-legend-label">{ws.label}</span>
-                </button>
-              );
-            })}
-        </div>
-      )}
 
       {/* Canvas + detail panel */}
       <div className="kg-body">
@@ -875,6 +592,30 @@ export function GraphCanvas() {
               nodeId="id" linkSource="source" linkTarget="target"
             />
           )}
+
+          {/* Workspace color legend — floating over the canvas */}
+          {!loading && rawData.nodes.some(n => n.type === 'workspace') && (
+            <div className="kg-legend">
+              {rawData.nodes
+                .filter(n => n.type === 'workspace')
+                .sort((a, b) => a.label.localeCompare(b.label))
+                .map((ws, i) => {
+                  const p = WORKSPACE_PALETTE[i % WORKSPACE_PALETTE.length];
+                  return (
+                    <button
+                      key={ws.id}
+                      className="kg-legend-item"
+                      style={{ '--legend-color': p.base, '--legend-glow': p.glow }}
+                      onClick={() => setSelectedId(prev => prev === ws.id ? null : ws.id)}
+                      title={`${ws.label} — click to focus`}
+                    >
+                      <span className="kg-legend-dot" />
+                      <span className="kg-legend-label">{ws.label}</span>
+                    </button>
+                  );
+                })}
+            </div>
+          )}
         </div>
 
         {/* Detail panel */}
@@ -915,6 +656,14 @@ export function GraphCanvas() {
                 <span className="kg-stat-val">{selectedDetail.node.weight}</span>
                 <span className="kg-stat-label">weight</span>
               </div>
+              {fmtActive(selectedDetail.node.activeS) && (
+                <div className="kg-stat">
+                  <span className="kg-stat-val" style={{ color: '#4ade80' }}>
+                    {fmtActive(selectedDetail.node.activeS)}
+                  </span>
+                  <span className="kg-stat-label">active · 14d</span>
+                </div>
+              )}
             </div>
 
             <div className="kg-detail-local">
@@ -937,7 +686,7 @@ export function GraphCanvas() {
 
             <div className="kg-detail-section-title">Connections</div>
             <div className="kg-detail-connections">
-              {selectedDetail.connections.map(({ node, edgeType, weight }, i) => {
+              {selectedDetail.connections.map(({ node, edgeType }, i) => {
                 const cVis = wsColorMap.get(node.id)?.vis || NODE_VISUAL[node.type] || NODE_VISUAL.url;
                 return (
                   <div key={i} className="kg-detail-row" onClick={() => setSelectedId(node.id)}>
@@ -971,6 +720,9 @@ export function GraphCanvas() {
               {wsName && <><span>·</span><span style={{ color: tVis.hi + 'cc' }}>{wsName}</span></>}
               <span>·</span>
               <span>{tooltip.node.weight} links</span>
+              {fmtActive(tooltip.node.activeS) && (
+                <><span>·</span><span style={{ color: '#4ade80' }}>{fmtActive(tooltip.node.activeS)} active</span></>
+              )}
             </div>
           </div>
         );
@@ -982,6 +734,8 @@ export function GraphCanvas() {
 // ── Modal wrapper ─────────────────────────────────────────────────────────────
 
 export function KnowledgeGraph({ isOpen, onClose }) {
+  const [view, setView] = useState('overview');
+
   useEffect(() => {
     const h = e => { if (e.key === 'Escape' && isOpen) onClose(); };
     window.addEventListener('keydown', h);
@@ -996,13 +750,23 @@ export function KnowledgeGraph({ isOpen, onClose }) {
         <div className="kg-toolbar">
           <div className="kg-title">
             <FontAwesomeIcon icon={faDiagramProject} />
-            Knowledge Graph
+            Activity
+          </div>
+          <div className="kg-view-tabs">
+            <button className={`kg-pill all ${view === 'overview' ? 'active' : ''}`}
+                    onClick={() => setView('overview')}>
+              Overview
+            </button>
+            <button className={`kg-pill all ${view === 'graph' ? 'active' : ''}`}
+                    onClick={() => setView('graph')}>
+              Graph
+            </button>
           </div>
           <button className="kg-close" onClick={onClose}>
             <FontAwesomeIcon icon={faTimes} />
           </button>
         </div>
-        <GraphCanvas />
+        {view === 'overview' ? <ActivityOverview /> : <GraphCanvas />}
       </div>
     </div>
   );

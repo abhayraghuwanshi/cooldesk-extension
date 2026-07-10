@@ -11,5 +11,6 @@ pub mod llm;
 pub mod llm_v2;
 pub mod feedback;
 pub mod llm_v3;
+pub mod sampler;
 
 pub use server::start_server;

@@ -530,6 +530,18 @@ pub async fn get_all_desktop_apps() -> Json<Vec<RunningApp>> {
     Json(crate::system::get_all_desktop_apps_info().await)
 }
 
+#[derive(Debug, serde::Deserialize)]
+pub struct AppUsageQuery {
+    date: Option<String>,
+    days: Option<u32>,
+}
+
+/// Per-app active/media time from the focus sampler.
+/// No params = today (live); ?date=YYYY-MM-DD = that day; ?days=N = last N days + totals.
+pub async fn get_app_usage(Query(query): Query<AppUsageQuery>) -> Json<serde_json::Value> {
+    Json(crate::sidecar::sampler::get_usage(query.date, query.days).await)
+}
+
 /// Search apps by query — fuzzy match against installed+running list
 /// GET /search?q=chrome&limit=10
 #[derive(Debug, serde::Deserialize)]

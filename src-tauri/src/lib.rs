@@ -424,12 +424,16 @@ fn toggle_spotlight(app: tauri::AppHandle) {
                 let m_pos = monitor.position();
                 let m_size = monitor.size();
 
-                // Get physical window size (default to 800x600 if unknown)
-                let w_size = window.outer_size().unwrap_or(tauri::PhysicalSize { width: 800, height: 600 });
+                // Size the (transparent) window to most of the monitor height so the
+                // panel can grow with content — the 800x600 default capped it and made
+                // the workspace section collapse when the tabs grid got tall.
+                let w_width = window.outer_size().map(|s| s.width).unwrap_or(800);
+                let w_height = (m_size.height as f64 * 0.85) as u32;
+                let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w_width, height: w_height }));
 
-                // Multi-monitor aware centering: Center X, and find Y at 1/3 from top
-                let x = m_pos.x + (m_size.width as i32 - w_size.width as i32) / 2;
-                let y = m_pos.y + (m_size.height as i32 - w_size.height as i32) / 3;
+                // Multi-monitor aware centering: Center X, and find Y at 1/3 of the gap from top
+                let x = m_pos.x + (m_size.width as i32 - w_width as i32) / 2;
+                let y = m_pos.y + (m_size.height as i32 - w_height as i32) / 3;
 
                 let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
             }
