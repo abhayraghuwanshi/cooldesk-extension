@@ -215,6 +215,47 @@ pub fn extract_editor_project(app_name: &str, title: &str) -> Option<String> {
     }
 }
 
+const TERMINAL_APPS: &[&str] = &[
+    "windowsterminal", "cmd.exe", "powershell", "pwsh", "alacritty", "wezterm", "conemu",
+];
+
+/// Folder context from non-editor windows: a File Explorer title
+/// ("Docs - File Explorer") or a terminal whose title is a path (the cwd —
+/// keep the last segment).
+pub fn extract_window_folder(app_name: &str, title: &str) -> Option<String> {
+    let name_lower = app_name.to_lowercase();
+    if name_lower.starts_with("explorer") {
+        let folder = title.strip_suffix(" - File Explorer")?.trim();
+        return (!folder.is_empty()).then(|| folder.chars().take(80).collect());
+    }
+    if TERMINAL_APPS.iter().any(|t| name_lower.contains(t)) && title.contains(['\\', '/']) {
+        let seg = title.trim_end_matches(['\\', '/']).rsplit(['\\', '/']).next()?.trim();
+        return (!seg.is_empty()).then(|| seg.chars().take(80).collect());
+    }
+    None
+}
+
+/// Streaming/media sites get their own node type in the graph, so browser
+/// media shows up under the "media" filter instead of as a generic URL.
+const MEDIA_DOMAINS: &[&str] = &[
+    "youtube.com", "netflix.com", "primevideo.com", "hotstar.com", "spotify.com",
+    "twitch.tv", "crunchyroll.com", "sonyliv.com", "disneyplus.com", "hulu.com",
+    "soundcloud.com", "music.apple.com", "jiocinema.com", "zee5.com",
+];
+
+fn is_media_domain(host: &str) -> bool {
+    MEDIA_DOMAINS.iter().any(|d| host == *d || host.ends_with(&format!(".{d}")))
+}
+
+/// Graph node id for a bare domain: media sites get media::, the rest url::.
+pub fn graph_id_for_domain(host: &str) -> String {
+    if is_media_domain(host) {
+        format!("media::{host}")
+    } else {
+        format!("url::{host}")
+    }
+}
+
 /// Called by the background snapshot loop — records all pairwise co-occurrences.
 pub async fn record_session_snapshot(items: Vec<String>) {
     let store_mutex = get_feedback_store().await;
@@ -259,10 +300,11 @@ pub async fn get_graph(State(state): State<Arc<AppState>>) -> Json<GraphResponse
 
             for wu in &ws.urls {
                 let norm = normalize_url_for_graph(&wu.url);
-                let url_id = format!("url::{}", norm);
+                let url_id = graph_id_for_domain(&norm);
+                let node_type = if url_id.starts_with("media::") { "media" } else { "url" };
                 let entry = nodes.entry(url_id.clone()).or_insert_with(|| GraphNode {
                     id: url_id.clone(),
-                    node_type: "url".to_string(),
+                    node_type: node_type.to_string(),
                     label: norm.clone(),
                     title: wu.title.clone(),
                     weight: 0,
@@ -326,15 +368,16 @@ pub async fn get_graph(State(state): State<Arc<AppState>>) -> Json<GraphResponse
         let score = co.affinity_score();
         if score <= 0.0 { continue; }
 
-        let src_id = format!("url::{}", co.url1);
-        let tgt_id = format!("url::{}", co.url2);
+        let src_id = graph_id_for_domain(&co.url1);
+        let tgt_id = graph_id_for_domain(&co.url2);
+        let node_type_of = |id: &str| if id.starts_with("media::") { "media" } else { "url" };
 
         nodes.entry(src_id.clone()).or_insert_with(|| GraphNode {
-            id: src_id.clone(), node_type: "url".to_string(),
+            id: src_id.clone(), node_type: node_type_of(&src_id).to_string(),
             label: co.url1.clone(), title: None, weight: 0,
         });
         nodes.entry(tgt_id.clone()).or_insert_with(|| GraphNode {
-            id: tgt_id.clone(), node_type: "url".to_string(),
+            id: tgt_id.clone(), node_type: node_type_of(&tgt_id).to_string(),
             label: co.url2.clone(), title: None, weight: 0,
         });
 
@@ -371,6 +414,14 @@ pub async fn get_graph(State(state): State<Arc<AppState>>) -> Json<GraphResponse
     }
 
     // ── Pass 4: Cross-type item co-occurrences from session snapshots ──
+    // Stored ids may predate media:: classification — canonicalize so an old
+    // "url::youtube.com" and a new "media::youtube.com" land on ONE node.
+    let canon_item_id = |id: &str| -> String {
+        match id.strip_prefix("url::") {
+            Some(host) if is_media_domain(host) => format!("media::{host}"),
+            _ => id.to_string(),
+        }
+    };
     for co in &item_co_occurrences {
         let score = co.score();
         if score <= 0.0 || co.session_count < 2 { continue; } // filter one-off noise
@@ -387,7 +438,8 @@ pub async fn get_graph(State(state): State<Arc<AppState>>) -> Json<GraphResponse
             id.splitn(2, "::").nth(1).unwrap_or(id).replace('_', " ").to_string()
         };
 
-        for item_id in [&co.item1, &co.item2] {
+        let (item1, item2) = (canon_item_id(&co.item1), canon_item_id(&co.item2));
+        for item_id in [&item1, &item2] {
             let entry = nodes.entry(item_id.clone()).or_insert_with(|| GraphNode {
                 id: item_id.clone(),
                 node_type: node_type_from_id(item_id).to_string(),
@@ -401,8 +453,8 @@ pub async fn get_graph(State(state): State<Arc<AppState>>) -> Json<GraphResponse
         }
 
         edges.push(GraphEdge {
-            source: co.item1.clone(),
-            target: co.item2.clone(),
+            source: item1,
+            target: item2,
             edge_type: "session_co_occurrence".to_string(),
             weight: (score / 5.0).min(1.0),
             last_seen: Some(co.last_seen),
@@ -540,6 +592,21 @@ pub struct AppUsageQuery {
 /// No params = today (live); ?date=YYYY-MM-DD = that day; ?days=N = last N days + totals.
 pub async fn get_app_usage(Query(query): Query<AppUsageQuery>) -> Json<serde_json::Value> {
     Json(crate::sidecar::sampler::get_usage(query.date, query.days).await)
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct SiteUsageQuery {
+    days: Option<i64>,
+}
+
+/// Per-day per-domain browsing dwell (extension activity rollup).
+/// ?days=N = last N days, oldest first (default 7).
+pub async fn get_site_usage(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<SiteUsageQuery>,
+) -> Json<serde_json::Value> {
+    let rows = { state.sync_data.read().await.activity.clone() };
+    Json(crate::sidecar::sites::site_usage(&rows, query.days.unwrap_or(7)))
 }
 
 /// Search apps by query — fuzzy match against installed+running list
@@ -2387,5 +2454,31 @@ pub async fn webapp_frame_check(
             Json(serde_json::json!({ "ok": true, "frameable": frameable, "status": status }))
         }
         Err(e) => Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+    }
+}
+
+#[cfg(test)]
+mod graph_tests {
+    use super::*;
+
+    #[test]
+    fn window_folder_from_explorer_and_terminal() {
+        assert_eq!(extract_window_folder("explorer.exe", "docs - File Explorer"),
+                   Some("docs".to_string()));
+        assert_eq!(extract_window_folder("WindowsTerminal.exe", r"C:\Users\raghu\projects\extension"),
+                   Some("extension".to_string()));
+        // Terminal title that isn't a path (Claude Code task summary) → no folder
+        assert_eq!(extract_window_folder("WindowsTerminal.exe", "Claude Code"), None);
+        // Non-explorer, non-terminal apps never produce folders
+        assert_eq!(extract_window_folder("notepad.exe", r"C:\notes\todo.txt"), None);
+    }
+
+    #[test]
+    fn media_domains_get_media_ids() {
+        assert_eq!(graph_id_for_domain("youtube.com"), "media::youtube.com");
+        assert_eq!(graph_id_for_domain("music.youtube.com"), "media::music.youtube.com");
+        assert_eq!(graph_id_for_domain("github.com"), "url::github.com");
+        // Suffix must be a subdomain boundary, not a substring
+        assert_eq!(graph_id_for_domain("notyoutube.com"), "url::notyoutube.com");
     }
 }

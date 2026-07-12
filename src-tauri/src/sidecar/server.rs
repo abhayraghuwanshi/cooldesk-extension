@@ -113,7 +113,8 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
                         url::Url::parse(&t.url).ok().and_then(|u| {
                             u.host_str().map(|h| {
                                 let h = h.strip_prefix("www.").unwrap_or(h).to_lowercase();
-                                format!("url::{}", h)
+                                // Streaming sites become media:: nodes
+                                crate::sidecar::handlers::graph_id_for_domain(&h)
                             })
                         })
                     })
@@ -130,8 +131,10 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
 
                 let name_lower = app.name.to_lowercase();
 
-                // Folder: extract open project from editor window title
-                if let Some(proj) = crate::sidecar::handlers::extract_editor_project(&app.name, &app.title) {
+                // Folder: editor project title, File Explorer folder, or terminal cwd
+                let folder = crate::sidecar::handlers::extract_editor_project(&app.name, &app.title)
+                    .or_else(|| crate::sidecar::handlers::extract_window_folder(&app.name, &app.title));
+                if let Some(proj) = folder {
                     let id = format!("folder::{}", proj.to_lowercase().replace(' ', "_"));
                     if seen_ids.insert(id.clone()) { items.push(id); }
                 }
@@ -170,6 +173,25 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
     #[cfg(target_os = "windows")]
     tokio::spawn(crate::sidecar::sampler::run_sampler_loop(state.clone()));
 
+    // Site-usage rollup: persist per-day per-domain browsing dwell from the
+    // extension's activity rows (sync-data/activity/sites-YYYY-MM-DD.json),
+    // so Top sites history survives the in-memory 1000-row activity cap.
+    let sites_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+        interval.tick().await; // skip first immediate tick
+        loop {
+            interval.tick().await;
+            let rows = { sites_state.sync_data.read().await.activity.clone() };
+            if !rows.is_empty() {
+                let _ = tokio::task::spawn_blocking(move || {
+                    crate::sidecar::sites::persist_today(&rows)
+                })
+                .await;
+            }
+        }
+    });
+
     // Allowed origins for security - only our extension and Tauri webview
     // TODO: Replace YOUR_EXTENSION_ID with your actual Chrome extension ID
     let allowed_origins: Vec<HeaderValue> = vec![
@@ -204,6 +226,7 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/activity/visible", get(get_visible_apps))
         .route("/activity/all-desktops", get(get_all_desktop_apps))
         .route("/activity/app-usage", get(get_app_usage))
+        .route("/activity/site-usage", get(get_site_usage))
         .route("/notes", get(get_notes).post(post_notes))
         .route("/url-notes", get(get_url_notes).post(post_url_notes))
         .route("/pins", get(get_pins).post(post_pins))

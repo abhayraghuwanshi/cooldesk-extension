@@ -323,10 +323,6 @@ const DOC_EXTENSIONS: &[&str] = &[
     "csv", "md", "txt",
 ];
 
-const TERMINAL_APPS: &[&str] = &[
-    "windowsterminal", "cmd.exe", "powershell", "pwsh", "alacritty", "wezterm", "conemu",
-];
-
 /// Leading decoration some apps prepend to titles — terminal spinners
 /// (braille frames, ✳), bullets, unsaved markers. Stripped so "⠂ Build UI"
 /// and "Build UI" merge into ONE context instead of one per spinner frame.
@@ -362,25 +358,10 @@ fn normalize_context(app_name: &str, title: &str) -> String {
     if let Some(project) = crate::sidecar::handlers::extract_editor_project(app_name, title) {
         return project;
     }
-    let name_lower = app_name.to_lowercase();
 
-    if name_lower.starts_with("explorer") {
-        if let Some(folder) = title.strip_suffix(" - File Explorer") {
-            let folder = folder.trim();
-            if !folder.is_empty() {
-                return folder.chars().take(80).collect();
-            }
-        }
-    }
-
-    // Terminal titles are often the cwd — keep the last path segment
-    if TERMINAL_APPS.iter().any(|t| name_lower.contains(t)) && title.contains(['\\', '/']) {
-        if let Some(seg) = title.trim_end_matches(['\\', '/']).rsplit(['\\', '/']).next() {
-            let seg = seg.trim();
-            if !seg.is_empty() {
-                return seg.chars().take(80).collect();
-            }
-        }
+    // File Explorer folder, or terminal cwd (last path segment)
+    if let Some(folder) = crate::sidecar::handlers::extract_window_folder(app_name, title) {
+        return folder;
     }
 
     if let Some(file) = filename_in_title(title) {
@@ -497,7 +478,7 @@ async fn sample_once(
 }
 
 /// True for hostnames that are local dev servers rather than real sites.
-fn is_local_host(host: &str) -> bool {
+pub(crate) fn is_local_host(host: &str) -> bool {
     host == "localhost"
         || host.ends_with(".localhost")
         || host.ends_with(".local")
