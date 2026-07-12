@@ -1,6 +1,6 @@
 import { faDiagramProject, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { forceCollide } from 'd3-force-3d';
+import { forceCollide, forceX, forceY } from 'd3-force-3d';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { fetchGraph, graphChanged } from '../../services/graphService';
@@ -36,6 +36,11 @@ const WORKSPACE_PALETTE = [
 function makeMoonVis(p) {
   return { base: p.hi, hi: '#ffffff', glow: p.glow, dim: p.dim };
 }
+
+// Nodes that belong to no workspace: neutral gray, so color always means
+// "which project" — never node type.
+const UNSORTED_VIS = { base: '#475569', hi: '#94a3b8', glow: '#64748b', dim: '#47556930' };
+const CLUSTER_UNSORTED = '__unsorted__';
 
 const EDGE_COLORS = {
   co_occurrence:          '#818cf8',
@@ -158,25 +163,74 @@ export function GraphCanvas() {
     return () => window.removeEventListener('mousemove', track);
   }, []);
 
+  // ── Cluster model: every node belongs to a workspace or to "Unsorted" ─────
+  const nodeCluster = useMemo(() => {
+    const wsIds = new Set(rawData.nodes.filter(n => n.type === 'workspace').map(n => n.id));
+    const map = new Map();
+    wsIds.forEach(id => map.set(id, id));
+    rawData.links.forEach(l => {
+      const src = typeof l.source === 'object' ? l.source.id : l.source;
+      const tgt = typeof l.target === 'object' ? l.target.id : l.target;
+      if (wsIds.has(src) && !wsIds.has(tgt) && !map.has(tgt)) map.set(tgt, src);
+      if (wsIds.has(tgt) && !wsIds.has(src) && !map.has(src)) map.set(src, tgt);
+    });
+    return map; // nodes absent from the map are unsorted
+  }, [rawData]);
+
+  const clusterOf = useCallback(
+    id => nodeCluster.get(id) || CLUSTER_UNSORTED,
+    [nodeCluster]
+  );
+
+  // Fixed anchor per cluster, arranged on a ring — deterministic layout, so the
+  // map reads as named regions and never reshuffles between refreshes.
+  const clusterAnchors = useMemo(() => {
+    const wsSorted = rawData.nodes
+      .filter(n => n.type === 'workspace')
+      .sort((a, b) => a.label.localeCompare(b.label))
+      .map(n => n.id);
+    const hasUnsorted = rawData.nodes.some(n => n.type !== 'workspace' && !nodeCluster.has(n.id));
+    const ids = hasUnsorted ? [...wsSorted, CLUSTER_UNSORTED] : wsSorted;
+    const n = ids.length;
+    const map = new Map();
+    if (n === 0) return map;
+    const R = n === 1 ? 0 : Math.max(240, n * 70);
+    ids.forEach((id, i) => {
+      const a = (i / n) * 2 * Math.PI - Math.PI / 2;
+      map.set(id, { x: Math.cos(a) * R, y: Math.sin(a) * R });
+    });
+    return map;
+  }, [rawData, nodeCluster]);
+
   useEffect(() => {
     const fg = fgRef.current;
     if (!fg) return;
-    // Tight clusters: strong enough to separate groups without scattering the
-    // map into empty space (the old -1800/220 values produced a mostly-void canvas).
+    // Pin each workspace at its ring anchor; children gravitate to it.
+    rawData.nodes.forEach(n => {
+      if (n.type === 'workspace') {
+        const a = clusterAnchors.get(n.id);
+        if (a) { n.fx = a.x; n.fy = a.y; }
+      }
+    });
+    const anchorOf = node =>
+      clusterAnchors.get(clusterOf(node.id)) || { x: 0, y: 0 };
     fg.d3Force('charge')?.strength(node =>
-      node.type === 'workspace' ? -500 : -40
+      node.type === 'workspace' ? -320 : -30
     );
     fg.d3Force('link')?.distance(link => {
       const srcType = typeof link.source === 'object' ? link.source.type : null;
       const tgtType = typeof link.target === 'object' ? link.target.type : null;
-      if (srcType === 'workspace' || tgtType === 'workspace') return 80;
-      return 140;
+      if (srcType === 'workspace' || tgtType === 'workspace') return 70;
+      return 110;
     });
+    // Cluster gravity — this is what turns the hairball into readable groups
+    fg.d3Force('x', forceX(node => anchorOf(node).x).strength(node => node.type === 'workspace' ? 0 : 0.08));
+    fg.d3Force('y', forceY(node => anchorOf(node).y).strength(node => node.type === 'workspace' ? 0 : 0.08));
     // Hard collision bubble — nodes can NEVER overlap
-    fg.d3Force('collide', forceCollide(node => nodeRadius(node) + 6));
+    fg.d3Force('collide', forceCollide(node => nodeRadius(node) + 5));
     // Reheat so new forces take effect immediately
     fg.d3ReheatSimulation();
-  }, [rawData]);
+  }, [rawData, clusterAnchors, clusterOf]);
 
   const applyGraphData = useCallback((data, isLiveUpdate = false) => {
     if (!data) return;
@@ -372,12 +426,50 @@ export function GraphCanvas() {
     setTooltip({ x: mousePos.current.x, y: mousePos.current.y, node });
   }, []);
   const handleEngineStop = useCallback(() => {
+    // Workspaces are pre-pinned at their ring anchors; just frame the map.
     if (fgRef.current) fgRef.current.zoomToFit(400, 40);
-    // Pin workspace planets after settle so live refreshes don't shuffle the map.
-    rawData.nodes.forEach(n => {
-      if (n.type === 'workspace' && isFinite(n.x)) { n.fx = n.x; n.fy = n.y; }
+  }, []);
+
+  // ── Cluster bubbles: soft tinted region behind each workspace's nodes ─────
+  const drawClusterBubbles = useCallback((ctx, globalScale) => {
+    const groups = new Map();
+    displayData.nodes.forEach(n => {
+      if (!isFinite(n.x) || !isFinite(n.y)) return;
+      const cid = clusterOf(n.id);
+      if (!groups.has(cid)) groups.set(cid, []);
+      groups.get(cid).push(n);
     });
-  }, [rawData]);
+    groups.forEach((members, cid) => {
+      const isUnsorted = cid === CLUSTER_UNSORTED;
+      if (members.length < 2) return;
+      let cx = 0, cy = 0;
+      members.forEach(m => { cx += m.x; cy += m.y; });
+      cx /= members.length; cy /= members.length;
+      let r = 0;
+      members.forEach(m => {
+        r = Math.max(r, Math.hypot(m.x - cx, m.y - cy) + (m.__r || 6));
+      });
+      r += 24;
+      const base = isUnsorted ? UNSORTED_VIS.base : (wsColorMap.get(cid)?.vis?.base || UNSORTED_VIS.base);
+      ctx.save();
+      ctx.fillStyle   = base + '0c';
+      ctx.strokeStyle = base + '2e';
+      ctx.lineWidth   = 1 / globalScale;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.stroke();
+      // Unsorted has no workspace node to label it — caption the bubble itself
+      if (isUnsorted) {
+        ctx.font         = `600 ${Math.max(10, 12 / globalScale)}px -apple-system, system-ui, sans-serif`;
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillStyle    = 'rgba(148, 163, 184, 0.55)';
+        ctx.fillText(`Unsorted · ${members.length}`, cx, cy - r - 5 / globalScale);
+      }
+      ctx.restore();
+    });
+  }, [displayData, clusterOf, wsColorMap]);
 
   // ── Node canvas renderer ──────────────────────────────────────────────────
   const handleNodeCanvasObject = useCallback((node, ctx, globalScale) => {
@@ -385,7 +477,9 @@ export function GraphCanvas() {
 
     const r   = nodeRadius(node);
     const colorEntry = wsColorMap.get(node.id);
-    const vis = colorEntry?.vis || NODE_VISUAL[node.type] || NODE_VISUAL.url;
+    // Color encodes workspace membership only; unassigned nodes stay gray
+    const vis = colorEntry?.vis
+      || (node.type === 'workspace' ? NODE_VISUAL.workspace : UNSORTED_VIS);
 
     const searchActive = searchMatches !== null;
     const searchHit    = searchActive && searchMatches.has(node.id);
@@ -437,8 +531,8 @@ export function GraphCanvas() {
 
     // ── Labels ──
     // Workspace labels always visible; child labels once mildly zoomed in, or
-    // always for nodes with real usage / selection (what the user cares about).
-    if (isWs || globalScale > 1.1 || node.activeS || isSelected) {
+    // always for nodes that matter (real usage, heavy linking, or selection).
+    if (isWs || globalScale > 1.1 || node.activeS || isSelected || r >= 8) {
       const fs  = isWs ? Math.max(12, 14 / globalScale) : Math.max(8, 9 / globalScale);
       const lbl = node.label.length > 24 ? node.label.slice(0, 23) + '…' : node.label;
       const ty  = node.y + r + (isWs ? 7 : 3) / globalScale;
@@ -478,35 +572,37 @@ export function GraphCanvas() {
     ctx.fill();
   }, []);
 
-  // ── Edge renderer: one clean pass, opacity by weight ─────────────────────
-  const handleLinkCanvasObject = useCallback((link, ctx, globalScale) => {
-    const src = link.source;
-    const tgt = link.target;
-    if (!src || !tgt || !isFinite(src.x) || !isFinite(tgt.x)) return;
+  // ── Edge styling via native accessors (the custom linkCanvasObject renderer
+  // was silently ignored by this react-force-graph version, so links fell back
+  // to the library default rgba(0,0,0,0.15) — black lines on a black canvas).
+  // Bridges between clusters are the story; ties inside a cluster are already
+  // told by the bubble, so they stay quieter.
+  const alphaHex = a => Math.round(a * 255).toString(16).padStart(2, '0');
 
-    // Use workspace-inherited color if available; fall back to edge-type color
-    const srcId   = typeof src === 'object' ? src.id : src;
-    const wsEntry = wsColorMap.get(srcId);
-    const col     = wsEntry?.vis?.base || EDGE_COLORS[link.type] || '#64748b';
-    const w       = Math.max(0.5, (link.weight || 0.3) * 2);
+  const linkEnds = link => [
+    typeof link.source === 'object' ? link.source.id : link.source,
+    typeof link.target === 'object' ? link.target.id : link.target,
+  ];
 
-    let alpha = 0.3;
+  const handleLinkColor = useCallback(link => {
+    const [srcId, tgtId] = linkEnds(link);
+    const cross = clusterOf(srcId) !== clusterOf(tgtId);
+    let alpha = cross ? 0.55 : 0.3;
     if (connectedIds) {
-      const tgtId = typeof tgt === 'object' ? tgt.id : tgt;
       alpha = (connectedIds.has(srcId) && connectedIds.has(tgtId)) ? 0.8 : 0.03;
     }
+    const col = cross
+      ? '#e2e8f0'
+      : (wsColorMap.get(srcId)?.vis?.base || EDGE_COLORS[link.type] || '#64748b');
+    return col + alphaHex(alpha);
+  }, [connectedIds, wsColorMap, clusterOf]);
 
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.lineCap     = 'round';
-    ctx.strokeStyle = col;
-    ctx.lineWidth   = w / globalScale;
-    ctx.beginPath();
-    ctx.moveTo(src.x, src.y);
-    ctx.lineTo(tgt.x, tgt.y);
-    ctx.stroke();
-    ctx.restore();
-  }, [connectedIds, wsColorMap]);
+  const handleLinkWidth = useCallback(link => {
+    const [srcId, tgtId] = linkEnds(link);
+    return clusterOf(srcId) !== clusterOf(tgtId)
+      ? Math.max(1, (link.weight || 0.3) * 2.2)
+      : Math.max(0.7, (link.weight || 0.3) * 2);
+  }, [clusterOf]);
 
   const isEmpty = rawData.nodes.length === 0 && !loading;
 
@@ -578,10 +674,11 @@ export function GraphCanvas() {
               width={dims.w}
               height={dims.h}
               backgroundColor="transparent"
+              onRenderFramePre={drawClusterBubbles}
               nodeCanvasObject={handleNodeCanvasObject}
               nodePointerAreaPaint={nodePointerAreaPaint}
-              linkCanvasObject={handleLinkCanvasObject}
-              linkCanvasObjectMode="replace"
+              linkColor={handleLinkColor}
+              linkWidth={handleLinkWidth}
               onNodeClick={handleNodeClick}
               onNodeHover={handleNodeHover}
               onBackgroundClick={handleBackgroundClick}
@@ -620,9 +717,7 @@ export function GraphCanvas() {
 
         {/* Detail panel */}
         {selectedDetail && (() => {
-          const detailVis = wsColorMap.get(selectedDetail.node.id)?.vis
-                          || NODE_VISUAL[selectedDetail.node.type]
-                          || NODE_VISUAL.url;
+          const detailVis = wsColorMap.get(selectedDetail.node.id)?.vis || UNSORTED_VIS;
           const wsName = nodeToWorkspace.get(selectedDetail.node.id);
           return (
           <div className="kg-detail-panel">
@@ -687,7 +782,7 @@ export function GraphCanvas() {
             <div className="kg-detail-section-title">Connections</div>
             <div className="kg-detail-connections">
               {selectedDetail.connections.map(({ node, edgeType }, i) => {
-                const cVis = wsColorMap.get(node.id)?.vis || NODE_VISUAL[node.type] || NODE_VISUAL.url;
+                const cVis = wsColorMap.get(node.id)?.vis || UNSORTED_VIS;
                 return (
                   <div key={i} className="kg-detail-row" onClick={() => setSelectedId(node.id)}>
                     <span className="kg-detail-dot" style={{ background: cVis.base, boxShadow: `0 0 6px ${cVis.glow}88` }} />
@@ -707,7 +802,7 @@ export function GraphCanvas() {
 
       {/* Tooltip */}
       {tooltip && (() => {
-        const tVis    = wsColorMap.get(tooltip.node.id)?.vis || NODE_VISUAL[tooltip.node.type] || NODE_VISUAL.url;
+        const tVis    = wsColorMap.get(tooltip.node.id)?.vis || UNSORTED_VIS;
         const wsName  = nodeToWorkspace.get(tooltip.node.id);
         return (
           <div className="kg-tooltip"
@@ -734,8 +829,6 @@ export function GraphCanvas() {
 // ── Modal wrapper ─────────────────────────────────────────────────────────────
 
 export function KnowledgeGraph({ isOpen, onClose }) {
-  const [view, setView] = useState('overview');
-
   useEffect(() => {
     const h = e => { if (e.key === 'Escape' && isOpen) onClose(); };
     window.addEventListener('keydown', h);
@@ -750,23 +843,20 @@ export function KnowledgeGraph({ isOpen, onClose }) {
         <div className="kg-toolbar">
           <div className="kg-title">
             <FontAwesomeIcon icon={faDiagramProject} />
-            Activity
-          </div>
-          <div className="kg-view-tabs">
-            <button className={`kg-pill all ${view === 'overview' ? 'active' : ''}`}
-                    onClick={() => setView('overview')}>
-              Overview
-            </button>
-            <button className={`kg-pill all ${view === 'graph' ? 'active' : ''}`}
-                    onClick={() => setView('graph')}>
-              Graph
-            </button>
+            Cool Activity
           </div>
           <button className="kg-close" onClick={onClose}>
             <FontAwesomeIcon icon={faTimes} />
           </button>
         </div>
-        {view === 'overview' ? <ActivityOverview /> : <GraphCanvas />}
+        {/* One scrolling page: overview readout on top, graph stage below */}
+        <div className="kg-scroll">
+          <ActivityOverview />
+          <div className="kg-graph-heading">Knowledge graph</div>
+          <div className="kg-graph-section">
+            <GraphCanvas />
+          </div>
+        </div>
       </div>
     </div>
   );

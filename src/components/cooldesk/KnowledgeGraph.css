@@ -67,7 +67,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 13px 18px;
+  padding: 13px 36px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.045);
   background: rgba(255, 255, 255, 0.018);
   flex-shrink: 0;
@@ -836,3 +836,48 @@
 }
 
 @keyframes kg-spin { to { transform: rotate(360deg); } }
+
+/* ── Combined page: overview on top, graph below, one scroll ──────────────── */
+.kg-toolbar .kg-title { flex: 1; }
+
+.kg-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 1;
+}
+
+/* Inside the combined page the overview sizes to its content; the page scrolls */
+.kg-scroll .ao-root {
+  flex: none;
+  overflow-y: visible;
+}
+
+/* Graph section heading — matches the overview's section-title tier */
+.kg-graph-heading {
+  width: 100%;
+  margin: 2px 0 0;
+  padding: 0 36px 10px;
+  font-size: var(--font-lg, 15px);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text-primary, #eef0f3);
+  font-family: var(--font-family-base, -apple-system, system-ui, sans-serif);
+}
+
+/* The force-graph canvas measures its container, so it needs a fixed-height
+   stage — near full modal height once scrolled into view. */
+.kg-graph-section .kg-topbar {
+  padding-left: 36px;
+  padding-right: 36px;
+}
+
+.kg-graph-section {
+  flex-shrink: 0;
+  height: calc(90vh - 110px);
+  display: flex;
+  flex-direction: column;
+}

@@ -1,95 +1,133 @@
-/* Activity Overview — analytics tab of the Activity view */
+/* Activity Overview — analytics tab of the Activity view.
+   Design language: utilitarian readout. No boxed cards — structure comes from
+   hairline rules, spacing, and type weight. Color appears only where it encodes
+   data (context dots, timeline bars, sparklines).
+   All type sits on the fontUtils scale (--font-xs … --font-3xl) and
+   --font-family-base so the global font settings apply here too. */
 
 .ao-root {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 16px 20px 20px;
+  gap: 26px;
+  padding: 26px 36px 36px;
+  width: 100%;
   overflow-y: auto;
   font-family: var(--font-family-base, -apple-system, system-ui, sans-serif);
-  color: var(--text-primary, #e2e8f0);
+  font-size: var(--font-base, 13px);
+  line-height: 1.5;
+  color: var(--text-primary, #e7e9ee);
   min-height: 0;
 }
 
 .ao-error {
   padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  color: #f87171;
+  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.07);
+  color: #f0918b;
   font-size: var(--font-sm, 12px);
 }
 
-/* ── Stat strip ── */
-.ao-stats {
+/* ── Header row: day navigator ── */
+.ao-day-nav {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
-.ao-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 10px 16px;
-  border-radius: 10px;
-  background: linear-gradient(180deg, rgba(51, 65, 85, 0.42), rgba(30, 41, 59, 0.5));
-  border: 1px solid rgba(100, 116, 139, 0.32);
-  border-top-color: rgba(148, 163, 184, 0.35);
-  min-width: 120px;
-}
-
-.ao-stat-val {
-  font-size: var(--font-xl, 17px);
+/* Page title — top of the hierarchy */
+.ao-day-label {
+  font-size: var(--font-3xl, 22px);
   font-weight: 700;
-  color: var(--text-primary, #f1f5f9);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--text-primary, #f7f8fa);
+  order: -1;
+  margin-right: 6px;
+}
+
+.ao-nav-btn {
+  padding: 3px 10px;
+  font-size: var(--font-md, 13px);
+  line-height: 1.4;
+  border-radius: 6px;
+}
+
+/* ── Stat strip: value on top, quiet label under it ── */
+/* One-line day summary, right of the day navigator */
+.ao-day-summary {
+  margin-left: 16px;
+  padding-left: 22px;
+  border-left: 1px solid rgba(160, 168, 180, 0.14);
+  font-size: var(--font-base, 13px);
+  color: var(--text-secondary, #8b93a1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 200px;
+  min-width: 0;
 }
 
-.ao-stat-val.ao-accent { color: #a5b4fc; }
-
-.ao-stat-label {
-  font-size: var(--font-xs, 11px);
-  color: var(--text-secondary, #94a3b8);
+.ao-day-summary strong {
+  font-size: var(--font-xl, 16px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.015em;
+  color: var(--text-primary, #f0f2f5);
 }
 
-/* ── Sections ── */
+.ao-peak-note {
+  font-size: var(--font-sm, 12px);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary, #8b93a1);
+}
+
+/* ── Sections: heading + hairline rule, no container box ── */
 .ao-section {
-  background: rgba(30, 41, 59, 0.35);
-  border: 1px solid rgba(71, 85, 105, 0.25);
-  border-radius: 12px;
-  padding: 14px 16px;
+  padding: 0;
 }
 
 .ao-section-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid rgba(160, 168, 180, 0.13);
 }
 
 .ao-section-title {
-  font-size: var(--font-xs, 11px);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-secondary, #94a3b8);
+  font-size: var(--font-lg, 15px);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text-primary, #eef0f3);
 }
 
-.ao-section > .ao-section-title { margin-bottom: 10px; }
+.ao-section > .ao-section-title {
+  display: block;
+  margin-bottom: 14px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid rgba(160, 168, 180, 0.13);
+}
 
 /* ── Timeline ── */
 .ao-timeline {
   position: relative;
   display: flex;
   align-items: flex-end;
-  gap: 3px;
-  height: 76px;
-  padding-bottom: 16px;
+  gap: 2px;
+  height: 64px;
+  padding-bottom: 20px;
+}
+
+/* One continuous baseline instead of per-cell dashes */
+.ao-timeline::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 20px;
+  height: 1px;
+  background: rgba(160, 168, 180, 0.16);
 }
 
 .ao-hour {
@@ -101,48 +139,57 @@
   cursor: default;
 }
 
-/* Empty hours are just a baseline tick, not a tall gray box */
 .ao-hour-bar-wrap {
   flex: 1;
   display: flex;
   align-items: flex-end;
-  border-radius: 3px 3px 0 0;
-  background: transparent;
-  border-bottom: 2px solid rgba(148, 163, 184, 0.14);
+  justify-content: center;
 }
 
-.ao-hour:hover .ao-hour-bar-wrap {
-  background: rgba(148, 163, 184, 0.05);
+/* Hover feedback only where there's data to inspect */
+.ao-hour.has-data:hover .ao-hour-bar-wrap {
+  background: rgba(160, 168, 180, 0.05);
+  border-radius: 4px;
 }
 
-.ao-hour.now .ao-hour-bar-wrap {
-  border-bottom-color: rgba(165, 180, 252, 0.7);
+/* Current hour: small tick under the baseline, not a glowing cell */
+.ao-hour.now::after {
+  content: '';
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(226, 232, 240, 0.85);
 }
 
+/* Slim centered bars — cells get wide at full width, bars shouldn't */
 .ao-hour-bar {
-  width: 100%;
-  border-radius: 3px 3px 0 0;
-  opacity: 0.9;
+  width: min(100%, 22px);
+  border-radius: 3px 3px 1px 1px;
+  opacity: 0.85;
   transition: opacity 0.15s;
-  box-shadow: 0 0 10px -2px currentColor;
 }
 
-.ao-hour:hover .ao-hour-bar { opacity: 1; }
+.ao-hour.has-data:hover .ao-hour-bar { opacity: 1; }
 
 .ao-hour-label {
   position: absolute;
   bottom: 0;
   left: 0;
-  font-size: 9px;
-  color: var(--text-secondary, #64748b);
+  font-size: var(--font-xs, 10px);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary, #6d7684);
 }
 
 .ao-timeline-tip {
   position: absolute;
   bottom: calc(100% + 6px);
   transform: translateX(-40%);
-  background: rgba(15, 23, 42, 0.97);
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  background: rgba(16, 18, 23, 0.97);
+  border: 1px solid rgba(160, 168, 180, 0.16);
   border-radius: 8px;
   padding: 8px 10px;
   min-width: 170px;
@@ -152,18 +199,18 @@
 }
 
 .ao-tip-title {
-  font-size: var(--font-xs, 11px);
+  font-size: var(--font-sm, 12px);
   font-weight: 700;
   margin-bottom: 5px;
-  color: var(--text-primary, #f1f5f9);
+  color: var(--text-primary, #f0f2f5);
 }
 
 .ao-tip-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--font-xs, 11px);
-  color: var(--text-secondary, #cbd5e1);
+  font-size: var(--font-sm, 12px);
+  color: var(--text-secondary, #c6ccd6);
   line-height: 1.6;
 }
 
@@ -182,164 +229,266 @@
   max-width: 140px;
 }
 
-.ao-tip-secs { color: var(--text-secondary, #94a3b8); }
+.ao-tip-secs { color: var(--text-secondary, #8b93a1); }
 
 .ao-tip-snap {
   margin-top: 6px;
   padding-top: 6px;
-  border-top: 1px solid rgba(71, 85, 105, 0.35);
-  font-size: 10px;
-  color: var(--text-secondary, #94a3b8);
+  border-top: 1px solid rgba(160, 168, 180, 0.14);
+  font-size: var(--font-xs, 10px);
+  color: var(--text-secondary, #8b93a1);
 }
 
+/* Legend: plain dotted text, no pill boxes */
 .ao-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px 18px;
   margin-top: 8px;
 }
 
 .ao-legend-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border-radius: 99px;
-  background: rgba(51, 65, 85, 0.4);
-  font-size: var(--font-xs, 11px);
-  color: var(--text-secondary, #cbd5e1);
+  gap: 7px;
+  font-size: var(--font-sm, 12px);
+  color: var(--text-secondary, #aab1bc);
 }
 
-.ao-legend-secs { color: var(--text-secondary, #64748b); }
+.ao-legend-secs {
+  color: var(--text-secondary, #6d7684);
+  font-variant-numeric: tabular-nums;
+}
 
-/* ── Columns ── */
-.ao-columns {
+/* ── Layout: capped main column + fixed rail; leftover width is margin ── */
+.ao-layout {
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 26px 40px;
+  align-items: start;
 }
 
-@media (max-width: 760px) {
-  .ao-columns { grid-template-columns: 1fr; }
+.ao-main {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  min-width: 0;
 }
 
-/* ── Projects ── */
+.ao-rail {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+@media (max-width: 1100px) {
+  .ao-layout { grid-template-columns: 1fr; }
+}
+
+/* ── Panels: one quiet luminance step above the canvas — no borders, no tint ── */
+.ao-panel {
+  background: rgba(255, 255, 255, 0.026);
+  border-radius: 14px;
+  padding: 16px 20px 18px;
+}
+
+/* ── Projects: flat rows separated by hairlines ── */
 .ao-project-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
 }
 
 .ao-project-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--accent, #64748b) 7%, rgba(30, 41, 59, 0.45));
-  border: 1px solid color-mix(in srgb, var(--accent, #64748b) 18%, transparent);
-  border-left: 3px solid var(--accent, #64748b);
-  transition: background 0.15s, border-color 0.15s;
+  gap: 12px;
+  padding: 11px 2px;
+  transition: background 0.15s;
+}
+
+.ao-project-card + .ao-project-card {
+  border-top: 1px solid rgba(160, 168, 180, 0.09);
 }
 
 .ao-project-card:hover {
-  background: color-mix(in srgb, var(--accent, #64748b) 12%, rgba(30, 41, 59, 0.5));
-  border-color: color-mix(in srgb, var(--accent, #64748b) 40%, transparent);
+  background: rgba(160, 168, 180, 0.045);
 }
 
-.ao-project-info { flex: 1; min-width: 0; }
-
+/* Fixed name column so the bars start on one vertical line */
 .ao-project-name {
-  font-size: var(--font-sm, 12px);
-  font-weight: 600;
-  color: var(--text-primary, #e2e8f0);
+  flex: 0 0 min(360px, 42%);
+  min-width: 0;
+  font-size: var(--font-base, 13px);
+  font-weight: 550;
+  color: var(--text-primary, #e7e9ee);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.ao-project-sub {
-  font-size: var(--font-xs, 10px);
-  color: var(--text-secondary, #94a3b8);
+/* Share-of-time as a bar instead of "% of tracked time" text */
+.ao-project-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(160, 168, 180, 0.08);
+  overflow: hidden;
 }
 
-.ao-sparkline { flex-shrink: 0; opacity: 0.9; }
+/* Neutral fill: the bar's only message is its length (share of tracked
+   time) — the row's accent color stays on the dot and sparkline */
+.ao-project-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: rgba(160, 168, 180, 0.4);
+}
+
+.ao-project-time {
+  flex-shrink: 0;
+  min-width: 44px;
+  text-align: right;
+  font-size: var(--font-sm, 12px);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary, #8b93a1);
+}
+
+.ao-sparkline { flex-shrink: 0; opacity: 0.75; }
 
 .ao-trend {
-  font-size: var(--font-xs, 11px);
+  font-size: var(--font-xs, 10px);
   font-weight: 700;
-  width: 20px;
+  width: 18px;
   text-align: center;
   flex-shrink: 0;
 }
 
-.ao-trend.up   { color: #4ade80; }
-.ao-trend.down { color: #f87171; }
-.ao-trend.new  { color: #fbbf24; }
-.ao-trend.flat { color: #64748b; }
+.ao-trend.up   { color: #6fbf8f; }
+.ao-trend.down { color: #d98a84; }
+.ao-trend.new  { color: #cfa855; }
+.ao-trend.flat { color: #6d7684; }
 
 /* ── Right now ── */
-.ao-now-group { margin-bottom: 10px; }
+.ao-now-group { margin-bottom: 14px; }
 
 .ao-now-label {
-  font-size: var(--font-xs, 10px);
+  font-size: var(--font-sm, 12px);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-secondary, #64748b);
-  margin-bottom: 5px;
+  color: var(--text-secondary, #8b93a1);
+  margin-bottom: 7px;
 }
 
 .ao-chip-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 6px;
 }
 
 .ao-chip {
-  padding: 3px 10px;
-  border-radius: 99px;
-  background: rgba(51, 65, 85, 0.45);
-  border: 1px solid rgba(71, 85, 105, 0.3);
-  font-size: var(--font-xs, 11px);
-  color: var(--text-primary, #cbd5e1);
+  padding: 4px 11px;
+  border-radius: 6px;
+  background: rgba(160, 168, 180, 0.08);
+  font-size: var(--font-sm, 12px);
+  color: var(--text-primary, #ccd2db);
   white-space: nowrap;
 }
 
 .ao-chip.dev {
-  background: rgba(34, 197, 94, 0.1);
-  border-color: rgba(34, 197, 94, 0.25);
-  color: #4ade80;
+  background: rgba(111, 191, 143, 0.09);
+  color: #8fcfa9;
+}
+
+/* ── Top sites (rail) ── */
+.ao-site-list { display: flex; flex-direction: column; }
+
+.ao-site-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+}
+
+.ao-site-row + .ao-site-row {
+  border-top: 1px solid rgba(160, 168, 180, 0.09);
+}
+
+.ao-site-domain {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-sm, 12px);
+  color: var(--text-primary, #ccd2db);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ao-site-unassigned .ao-site-domain,
+.ao-site-unassigned .ao-site-time {
+  color: var(--text-secondary, #6d7684);
+}
+
+.ao-site-unassigned {
+  margin-top: 2px;
+  border-top: 1px solid rgba(160, 168, 180, 0.09);
+}
+
+.ao-site-time {
+  flex-shrink: 0;
+  min-width: 36px;
+  text-align: right;
+  font-size: var(--font-sm, 12px);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary, #8b93a1);
 }
 
 /* ── Pills / misc ── */
-.ao-range-pills { display: flex; gap: 4px; }
+.ao-range-pills { display: flex; gap: 2px; }
 
 .ao-pill {
   padding: 3px 10px;
-  border-radius: 99px;
+  border-radius: 6px;
   background: transparent;
-  border: 1px solid rgba(71, 85, 105, 0.4);
-  color: var(--text-secondary, #94a3b8);
-  font-size: var(--font-xs, 11px);
+  border: none;
+  color: var(--text-secondary, #8b93a1);
+  font-size: var(--font-sm, 12px);
   font-weight: 600;
+  font-family: inherit;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: color 0.15s, background 0.15s;
 }
 
-.ao-pill:hover { border-color: rgba(148, 163, 184, 0.5); color: #e2e8f0; }
+.ao-pill:hover {
+  color: var(--text-primary, #e7e9ee);
+  background: rgba(160, 168, 180, 0.07);
+}
 
 .ao-pill.active {
-  background: rgba(99, 102, 241, 0.18);
-  border-color: rgba(99, 102, 241, 0.5);
-  color: #a5b4fc;
+  background: rgba(160, 168, 180, 0.13);
+  color: var(--text-primary, #f0f2f5);
+}
+
+.ao-pill:disabled {
+  opacity: 0.3;
+  cursor: default;
+  background: transparent;
 }
 
 .ao-muted {
   font-size: var(--font-sm, 12px);
-  color: var(--text-secondary, #64748b);
+  color: var(--text-secondary, #6d7684);
   padding: 8px 0;
 }
+
+/* ── Embedded mode (inside OverviewDashboard's left column) ── */
+.ao-root.ao-embed {
+  padding: 0 4px; /* match .overview-hero's 4px side inset */
+  max-width: none;
+  margin: 0;
+  overflow-y: visible;
+}
+
+.ao-embed .ao-layout { grid-template-columns: 1fr; }
 
 /* ── Empty state ── */
 .ao-empty {
@@ -350,16 +499,16 @@
   justify-content: center;
   gap: 8px;
   text-align: center;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--text-secondary, #8b93a1);
   padding: 40px 20px;
 }
 
-.ao-empty-icon { font-size: 40px; opacity: 0.4; }
+.ao-empty-icon { font-size: 40px; opacity: 0.35; }
 
 .ao-empty h4 {
   margin: 0;
   font-size: var(--font-lg, 14px);
-  color: var(--text-primary, #e2e8f0);
+  color: var(--text-primary, #e7e9ee);
 }
 
 .ao-empty p {

@@ -545,7 +545,7 @@ export function CoolDeskContainer({
         </div>
 
         <div className="header-right">
-          <button className="cooldesk-settings-btn" onClick={() => setGraphOpen(true)} title="Knowledge Graph (Ctrl+Shift+G)">
+          <button className="cooldesk-settings-btn" onClick={() => setGraphOpen(true)} title="Cool Activity (Ctrl+Shift+G)">
             <FontAwesomeIcon icon={faDiagramProject} />
           </button>
           <button className="cooldesk-settings-btn" onClick={onOpenSettings} title="Settings">
