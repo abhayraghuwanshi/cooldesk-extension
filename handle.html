@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CoolDesk Handle</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            background: transparent !important;
+            overflow: hidden;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        /* The visible tab. Rounded on the inner side, flush to the screen edge on
+           the outer side. Defaults to a right-edge look; .left flips it. */
+        #handle {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #7c3aed, #6d28d9);
+            color: rgba(255, 255, 255, 0.92);
+            border-radius: 10px 0 0 10px;
+            box-shadow: -2px 0 10px rgba(0, 0, 0, 0.35);
+            transition: filter 0.15s ease, transform 0.15s ease;
+        }
+
+        #handle.left {
+            border-radius: 0 10px 10px 0;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.35);
+        }
+
+        #handle:hover {
+            filter: brightness(1.12);
+        }
+
+        #handle:active {
+            transform: scale(0.97);
+        }
+
+        /* Grip dots — a compact, unobtrusive affordance. */
+        .grip {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .grip span {
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: currentColor;
+            opacity: 0.85;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="handle" title="Open CoolDesk">
+        <div class="grip">
+            <span></span><span></span><span></span>
+        </div>
+    </div>
+    <script type="module" src="/src/handle-main.js"></script>
+</body>
+
+</html>

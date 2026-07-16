@@ -47,7 +47,9 @@
       "Bash(npm run *)",
       "Bash(node *)",
       "PowerShell(npx babel --presets @babel/preset-react src/components/GlobalSpotlight.jsx -o NUL 2>&1 | Select-Object -First 5; if \\($LASTEXITCODE -eq 0\\) { 'parse OK' })",
-      "PowerShell(./node_modules/.bin/esbuild.cmd src/components/GlobalSpotlight.jsx --loader:.jsx=jsx --bundle=false --outfile=$env:TEMP\\\\spotlight-check.js --log-level=error; if \\($LASTEXITCODE -eq 0\\) { 'parse OK' } else { 'parse FAILED' })"
+      "PowerShell(./node_modules/.bin/esbuild.cmd src/components/GlobalSpotlight.jsx --loader:.jsx=jsx --bundle=false --outfile=$env:TEMP\\\\spotlight-check.js --log-level=error; if \\($LASTEXITCODE -eq 0\\) { 'parse OK' } else { 'parse FAILED' })",
+      "Bash(npx esbuild *)",
+      "Bash(npx vite *)"
     ],
     "deny": [],
     "ask": [],

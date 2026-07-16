@@ -781,7 +781,7 @@ export function TabManagement() {
   const hasMultipleBrowsers = Object.keys(browserStats).length > 1;
 
   return (
-    <div style={{
+    <div className="tab-management" style={{
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
@@ -791,7 +791,7 @@ export function TabManagement() {
     }}>
       {/* Browser Legend - show when tabs from multiple browsers */}
       {hasMultipleBrowsers && (
-        <div style={{
+        <div className="tab-management__legend" style={{
           display: 'flex',
           alignItems: 'center',
           gap: '12px',
@@ -856,7 +856,7 @@ export function TabManagement() {
         </div>
       )}
 
-      <div style={{
+      <div className="tab-management__toolbar" style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between'

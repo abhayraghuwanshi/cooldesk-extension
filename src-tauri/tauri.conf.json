@@ -31,6 +31,20 @@
         "resizable": false,
         "shadow": false,
         "url": "spotlight.html"
+      },
+      {
+        "label": "handle",
+        "title": "CoolDesk Handle",
+        "width": 22,
+        "height": 132,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "resizable": false,
+        "shadow": false,
+        "url": "handle.html"
       }
     ],
     "security": {

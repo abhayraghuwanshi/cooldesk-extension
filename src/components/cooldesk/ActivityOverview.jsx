@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getHostUrl } from '../../services/syncConfig';
 import './ActivityOverview.css';
 
@@ -108,6 +108,11 @@ export function ActivityOverview({ embedded = false }) {
       .catch(() => {});
   }, []);
 
+  // The sidecar on 4545 may still be binding when this mounts at app startup,
+  // so transient fetch failures are expected — only surface the error banner
+  // after several consecutive misses.
+  const failsRef = useRef(0);
+
   const loadLive = useCallback(async () => {
     try {
       const [todayData, visible, tabsRes] = await Promise.all([
@@ -118,20 +123,36 @@ export function ActivityOverview({ embedded = false }) {
       setToday(todayData);
       setRunningApps(Array.isArray(visible) ? visible : []);
       setTabs(Array.isArray(tabsRes) ? tabsRes : []);
+      failsRef.current = 0;
       setError(null);
+      return true;
     } catch (e) {
-      setError(String(e?.message || e));
+      failsRef.current += 1;
+      if (failsRef.current >= 3) setError(String(e?.message || e));
+      return false;
     }
   }, []);
 
   useEffect(() => {
-    if (dayOffset === 0) { loadLive(); return; }
+    if (dayOffset !== 0) {
+      let cancelled = false;
+      setToday(null);
+      fetchUsage(`?date=${dateStrDaysAgo(dayOffset)}`)
+        .then(d => { if (!cancelled) { setToday(d); setError(null); } })
+        .catch(e => { if (!cancelled) setError(String(e?.message || e)); })
+      return () => { cancelled = true; };
+    }
+    // Live view: retry quickly while the backend comes up, then refresh on the
+    // sampler's 30s cadence so today's numbers stay current.
+    let timer;
     let cancelled = false;
-    setToday(null);
-    fetchUsage(`?date=${dateStrDaysAgo(dayOffset)}`)
-      .then(d => { if (!cancelled) { setToday(d); setError(null); } })
-      .catch(e => { if (!cancelled) setError(String(e?.message || e)); })
-    return () => { cancelled = true; };
+    const tick = async () => {
+      const ok = await loadLive();
+      if (cancelled) return;
+      timer = setTimeout(tick, ok ? 30000 : 3000);
+    };
+    tick();
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [dayOffset, loadLive]);
 
   const dayLabel = useMemo(() => {

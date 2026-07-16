@@ -381,6 +381,52 @@
   }
 }
 
+/* ===== Narrow-panel responsiveness (Workspace Layout dock) =====
+   When CoolDesk is docked to a thin strip, the constraint is the panel's own
+   width, not the viewport — so these use container queries on the panel rather
+   than @media. Adapts identically whether narrow via the dock or a small window. */
+.tab-management {
+  container-type: inline-size;
+  container-name: tabpanel;
+}
+
+@container tabpanel (max-width: 480px) {
+  /* Single column, tighter spacing so cards don't get crushed. */
+  .tab-management .tabs-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 2px;
+  }
+
+  /* Section headers (TabManagement + DevServersPanel). The 20px uppercase
+     titles are too heavy for a thin panel; their size is set inline, so these
+     overrides need !important to win. */
+  .tab-management h3 {
+    font-size: var(--font-lg, 14px) !important;
+    margin-bottom: 6px !important;
+    letter-spacing: 0.03em !important;
+  }
+
+  /* Toolbar (Focus / Auto Group + sync pill) and browser legend: wrap onto
+     multiple rows instead of overflowing the strip. */
+  .tab-management__toolbar,
+  .tab-management__legend {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+}
+
+@container tabpanel (max-width: 320px) {
+  .tab-management .tabs-grid {
+    gap: 6px;
+  }
+
+  /* Tighten button padding so both toolbar buttons still fit a hair-thin panel. */
+  .tab-management__toolbar button {
+    padding: 6px 10px !important;
+  }
+}
+
 /* Recent and Last Active Styles */
 .cooldesk-tab-card.last-active {
   border-color: rgba(96, 165, 250, 0.5) !important;

@@ -2566,6 +2566,116 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   min-width: 0;
 }
 
+/* Narrow drawer / sidebar: keep the collapsed compact card's icons on ONE
+   horizontally-scrolling row (its intended macOS-dock look). At drawer widths
+   the default flex-wrap + vertical overflow piles them into a cramped,
+   vertically-scrolling 2-column block. Only applies while collapsed
+   (:not(.panel-open)) — the expanded categorized rows still wrap normally. */
+@media (max-width: 500px) {
+  .cooldesk-workspace-card.compact:not(.panel-open) .compact-icons-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: none;
+  }
+
+  .cooldesk-workspace-card.compact:not(.panel-open) .compact-icons-container {
+    flex-wrap: nowrap;
+    padding-left: 8px;
+  }
+
+  /* Reclaim horizontal space in the strip: drop the large workspace icon tile
+     and keep just the title so the icon row gets the width. */
+  .cooldesk-workspace-card.compact .compact-workspace-icon {
+    display: none;
+  }
+
+  .cooldesk-workspace-card.compact .compact-workspace-label {
+    max-width: 96px;
+  }
+}
+
+/* Expanded compact card at drawer width: the default horizontal row layout and
+   the two-column context grid crush the links/todos/notes. Re-lay the inner as
+   a grid so the title + collapse button share the top row (button inline in the
+   header, not floating), and the icon rows span full width below. */
+@media (max-width: 500px) {
+  /* Keep the drag-controlled height (do NOT force height:auto — that overrode
+     the inline height and froze the resize). Use plain block flow so the
+     sections just stack in document order (no flex-shrink spilling the icon
+     rows over the STATUS/notes panel), and let the card scroll its own content. */
+  .cooldesk-workspace-card.compact.panel-open {
+    display: block;
+    overflow-y: auto !important;
+  }
+
+  /* Full-round stadium pills read oddly stacked in a vertical list — use a
+     softer rounded-rectangle. */
+  .compact-url-icon.is-labeled {
+    border-radius: 12px;
+  }
+
+  .cooldesk-workspace-card.compact.panel-open .compact-card-inner {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "title btn"
+      "icons icons";
+    gap: 8px 10px;
+    /* Don't let the card shrink this below its content — otherwise the icon rows
+       (overflow: visible) spill down over the STATUS/notes panel. Both this and
+       the context panel take natural height; the card scrolls through them. */
+    flex: none;
+  }
+
+  .cooldesk-workspace-card.compact.panel-open .compact-workspace-stack {
+    grid-area: title;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    justify-self: start;
+  }
+
+  /* Collapse button stays in flow, aligned to the header's right edge. */
+  .cooldesk-workspace-card.compact.panel-open .compact-expand-btn {
+    grid-area: btn;
+    align-self: center;
+    margin-left: 0;
+  }
+
+  .cooldesk-workspace-card.compact.panel-open .compact-icons-scroll {
+    grid-area: icons;
+    width: 100%;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .compact-icons-rows {
+    padding-left: 8px;
+  }
+
+  /* Context panel — card-scoped so these WIN over the base .workspace-context-panel
+     rules, which live later in the file. Natural height (block flow) instead of
+     flex:1 1 0, and the rail+notes two-column grid (220px min first column
+     crushes notes at drawer width) collapsed to a single column. */
+  .cooldesk-workspace-card.compact.panel-open .workspace-context-panel {
+    overflow: visible;
+  }
+
+  .cooldesk-workspace-card.compact.panel-open .wcp-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    height: auto;
+  }
+
+  .cooldesk-workspace-card.compact.panel-open .wcp-rail {
+    overflow: visible;
+  }
+
+  .cooldesk-workspace-card.compact.panel-open .wcp-notes-col {
+    padding-left: 0;
+  }
+}
+
 /* Categorized rows when card is expanded — gives folders/apps/files breathing room */
 .compact-icons-rows {
   display: flex;
@@ -3291,6 +3401,41 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 }
 
 
+/* Docked drawer / very narrow: compact the top bar so CoolSearch keeps a
+   usable width. At these widths the logo + full-size buttons crowd out the
+   search box, so drop the logo and shrink the action buttons. */
+@media (max-width: 420px) {
+  .cooldesk-header {
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  /* Reclaim the logo's space — non-essential inside the strip. */
+  .header-left {
+    display: none;
+  }
+
+  .header-center {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .header-right {
+    gap: 6px;
+  }
+
+  .cooldesk-settings-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+  }
+
+  .cooldesk-settings-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
 /* Sidebar mode (narrow screens below 500px) */
 @media (max-width: 500px) {
   .cooldesk-container {
@@ -3316,6 +3461,12 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 
   .cooldesk-search-input {
     font-size: var(--font-md);
+  }
+
+  /* Let the search box shrink with the header instead of forcing the whole top
+     bar to overflow (the default 200px floor overflows at drawer widths). */
+  .header-center {
+    min-width: 0;
   }
 
   .overview-dashboard-grid {
@@ -3504,6 +3655,10 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   flex-shrink: 0;
   align-self: center;
   margin-left: auto;
+  /* Sit above the resize handle (absolute, bottom, z-index 2). Without this the
+     handle overlaps the button on short cards and swallows the click. */
+  position: relative;
+  z-index: 3;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(148, 163, 184, 0.18);

@@ -12,6 +12,7 @@ mod scanner;
 mod matcher;
 mod tab_uia;
 mod webapp_embed;
+mod dock;
 
 use system::RunningApp;
 
@@ -94,6 +95,259 @@ fn get_launch_at_login(app: tauri::AppHandle) -> bool {
         return intent;
     }
     app.autolaunch().is_enabled().unwrap_or(false)
+}
+
+// ── Workspace dock ─────────────────────────────────────────────────────────
+// Workspace Layout. Two modes:
+//   • "drawer"  — a slim always-on-top handle sits at the screen edge; clicking
+//                 it slides the panel in as a topmost OVERLAY (nothing reflows).
+//                 Blur / click-away collapses back to the handle. This is the
+//                 default: low-friction, on-demand.
+//   • "reserve" — registers a native AppBar (see `dock.rs`) that reserves work
+//                 area so maximized apps fit beside the panel. Heavier: apps
+//                 reflow on every open/close.
+// State lives in its own small config file — same pattern as the autostart
+// intent flag — so it never races the sidecar's SyncData writes.
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+// `default` lets state files from older builds (which lacked `mode`) upgrade
+// gracefully — a missing field falls back to Default instead of failing the
+// whole parse and silently resetting the user's dock.
+#[serde(rename_all = "camelCase", default)]
+struct DockState {
+    /// Whether the dock (handle or reserved strip) is active at all.
+    enabled: bool,
+    /// "drawer" (overlay handle) or "reserve" (AppBar).
+    mode: String,
+    /// "left" or "right".
+    side: String,
+    /// Panel width in physical pixels.
+    width: u32,
+}
+
+impl Default for DockState {
+    fn default() -> Self {
+        Self { enabled: false, mode: "drawer".to_string(), side: "right".to_string(), width: 360 }
+    }
+}
+
+const DOCK_MIN_WIDTH: u32 = 220;
+const DOCK_MAX_WIDTH: u32 = 900;
+// Physical-pixel size of the collapsed edge handle (a vertically-centered tab).
+const HANDLE_W: i32 = 22;
+const HANDLE_H: i32 = 132;
+
+fn dock_state_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    app.path().app_config_dir().ok().map(|dir| dir.join("dock_state.json"))
+}
+
+fn load_dock_state(app: &tauri::AppHandle) -> DockState {
+    let Some(path) = dock_state_path(app) else { return DockState::default() };
+    std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str::<DockState>(&s).ok())
+        .unwrap_or_default()
+}
+
+fn save_dock_state(app: &tauri::AppHandle, state: &DockState) {
+    if let Some(path) = dock_state_path(app) {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(json) = serde_json::to_string_pretty(state) {
+            let _ = std::fs::write(&path, json);
+        }
+    }
+}
+
+/// Primary monitor geometry in physical pixels: (x, y, width, height).
+/// V1 anchors the dock to the primary monitor; multi-monitor targeting is a
+/// later step (ties into "move to the cursor's screen").
+fn primary_geom(app: &tauri::AppHandle) -> Option<(i32, i32, i32, i32)> {
+    let m = app.primary_monitor().ok().flatten()?;
+    let p = m.position();
+    let s = m.size();
+    Some((p.x, p.y, s.width as i32, s.height as i32))
+}
+
+// ── Drawer mode ────────────────────────────────────────────────────────────
+
+/// Slide the panel in: size the main window to a full-height strip at the edge,
+/// make it a borderless topmost overlay, and hide the handle.
+fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
+    if let (Some(main), Some((mx, my, mw, mh))) = (app.get_webview_window("main"), primary_geom(app)) {
+        let w = st.width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH) as i32;
+        let x = if st.side == "left" { mx } else { mx + mw - w };
+        let _ = main.set_decorations(false);
+        let _ = main.set_resizable(false);
+        let _ = main.set_always_on_top(true);
+        let _ = main.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w as u32, height: mh as u32 }));
+        let _ = main.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y: my }));
+        let _ = main.show();
+        let _ = main.set_focus();
+    }
+    if let Some(handle) = app.get_webview_window("handle") {
+        let _ = handle.hide();
+    }
+}
+
+/// Collapse to the handle: hide the panel, show the slim edge tab.
+fn collapse_drawer(app: &tauri::AppHandle, st: &DockState) {
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.hide();
+    }
+    if let (Some(handle), Some((mx, my, mw, mh))) = (app.get_webview_window("handle"), primary_geom(app)) {
+        let x = if st.side == "left" { mx } else { mx + mw - HANDLE_W };
+        let y = my + (mh - HANDLE_H) / 2;
+        let _ = handle.set_always_on_top(true);
+        let _ = handle.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: HANDLE_W as u32, height: HANDLE_H as u32 }));
+        let _ = handle.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
+        let _ = handle.show();
+    }
+}
+
+/// Turn on drawer mode: persist state and show the handle (collapsed).
+fn enable_drawer(app: &tauri::AppHandle, side: String, width: u32) -> DockState {
+    let state = DockState {
+        enabled: true,
+        mode: "drawer".to_string(),
+        side,
+        width: width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH),
+    };
+    save_dock_state(app, &state);
+    collapse_drawer(app, &state);
+    state
+}
+
+// ── Reserve mode (AppBar) ──────────────────────────────────────────────────
+
+/// Register the AppBar and dock the main window into the reserved strip.
+fn apply_dock(app: &tauri::AppHandle, side: String, width: u32) -> Result<DockState, String> {
+    let width = width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH);
+    let state = DockState { enabled: true, mode: "reserve".to_string(), side: side.clone(), width };
+
+    #[cfg(windows)]
+    {
+        // The handle is a drawer concept — make sure it's hidden in reserve mode.
+        if let Some(handle) = app.get_webview_window("handle") {
+            let _ = handle.hide();
+        }
+        let window = app
+            .get_webview_window("main")
+            .ok_or_else(|| "main window not found".to_string())?;
+        let _ = window.set_decorations(false);
+        let _ = window.set_resizable(false);
+        let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
+        let side_right = side != "left";
+        let (x, y, cx, cy) = dock::set_dock(hwnd, side_right, width as i32)?;
+        log::info!(
+            "[Dock] Reserved strip: x={x} y={y} w={cx} h={cy} (side={side}, req_width={width})"
+        );
+        let _ = window.show();
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        return Err("Reserve mode is only supported on Windows".to_string());
+    }
+
+    save_dock_state(app, &state);
+    Ok(state)
+}
+
+/// Turn the dock off entirely: release any AppBar, hide the handle, and restore
+/// the main window to a normal decorated, centered window.
+fn disable_dock(app: &tauri::AppHandle) -> DockState {
+    #[cfg(windows)]
+    dock::remove_dock();
+
+    if let Some(handle) = app.get_webview_window("handle") {
+        let _ = handle.hide();
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_always_on_top(false);
+        let _ = window.set_decorations(true);
+        let _ = window.set_resizable(true);
+        let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 1400.0, height: 900.0 }));
+        let _ = window.center();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+
+    let mut state = load_dock_state(app);
+    state.enabled = false;
+    save_dock_state(app, &state);
+    state
+}
+
+// ── Commands ───────────────────────────────────────────────────────────────
+
+#[tauri::command]
+fn dock_get_state(app: tauri::AppHandle) -> DockState {
+    load_dock_state(&app)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn dock_enable(
+    app: tauri::AppHandle,
+    side: Option<String>,
+    width: Option<u32>,
+    mode: Option<String>,
+) -> Result<DockState, String> {
+    let prev = load_dock_state(&app);
+    let side = side.unwrap_or(prev.side);
+    let width = width.unwrap_or(prev.width);
+    let mode = mode.unwrap_or(prev.mode);
+    if mode == "reserve" {
+        apply_dock(&app, side, width)
+    } else {
+        Ok(enable_drawer(&app, side, width))
+    }
+}
+
+#[tauri::command]
+fn dock_disable(app: tauri::AppHandle) -> DockState {
+    disable_dock(&app)
+}
+
+/// Slide the drawer panel in (called by the handle window's click, the tray, or
+/// the frontend). No-op if the dock isn't in drawer mode.
+#[tauri::command]
+fn dock_expand(app: tauri::AppHandle) -> DockState {
+    let st = load_dock_state(&app);
+    if st.enabled && st.mode == "drawer" {
+        expand_drawer(&app, &st);
+    }
+    st
+}
+
+/// Collapse the drawer panel back to the handle.
+#[tauri::command]
+fn dock_collapse(app: tauri::AppHandle) -> DockState {
+    let st = load_dock_state(&app);
+    if st.enabled && st.mode == "drawer" {
+        collapse_drawer(&app, &st);
+    }
+    st
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn dock_set_width(app: tauri::AppHandle, width: u32) -> Result<DockState, String> {
+    let mut state = load_dock_state(&app);
+    state.width = width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH);
+    save_dock_state(&app, &state);
+
+    if state.enabled {
+        if state.mode == "reserve" {
+            return apply_dock(&app, state.side, state.width);
+        }
+        // Drawer: if the panel is currently open, re-lay it out at the new width.
+        if let Some(main) = app.get_webview_window("main") {
+            if main.is_visible().unwrap_or(false) {
+                expand_drawer(&app, &state);
+            }
+        }
+    }
+    Ok(state)
 }
 
 #[derive(serde::Serialize)]
@@ -1268,7 +1522,13 @@ pub fn run() {
         run_winget_upgrade,
         kill_process_on_port,
         list_listening_ports,
-        kill_process
+        kill_process,
+        dock_enable,
+        dock_disable,
+        dock_expand,
+        dock_collapse,
+        dock_set_width,
+        dock_get_state
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {
@@ -1330,21 +1590,51 @@ pub fn run() {
           }
       });
 
-      // Hide main window on close instead of quitting, show on dock click
+      // Re-apply the workspace dock if the user left it enabled. Windows are
+      // already created by the time setup runs.
+      {
+          let app_handle = app.handle();
+          let dock_state = load_dock_state(app_handle);
+          if dock_state.enabled {
+              if dock_state.mode == "reserve" {
+                  if let Err(e) = apply_dock(app_handle, dock_state.side.clone(), dock_state.width) {
+                      log::warn!("[Dock] Failed to re-apply reserve dock on startup: {}", e);
+                  }
+              } else {
+                  // Drawer: start collapsed, showing only the handle.
+                  collapse_drawer(app_handle, &dock_state);
+                  log::info!("[Dock] Restored drawer handle on startup ({})", dock_state.side);
+              }
+          }
+      }
+
+      // Main window events: hide-on-close, and (in drawer mode) collapse to the
+      // handle when the panel loses focus — the "click away to hide" behavior.
       if let Some(main_window) = app.get_webview_window("main") {
           let win = main_window.clone();
           main_window.on_window_event(move |event| {
-              if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                  api.prevent_close();
-                  win.hide().unwrap();
+              match event {
+                  tauri::WindowEvent::CloseRequested { api, .. } => {
+                      api.prevent_close();
+                      let _ = win.hide();
+                  }
+                  tauri::WindowEvent::Focused(false) => {
+                      let app = win.app_handle();
+                      let st = load_dock_state(app);
+                      if st.enabled && st.mode == "drawer" && win.is_visible().unwrap_or(false) {
+                          collapse_drawer(app, &st);
+                      }
+                  }
+                  _ => {}
               }
           });
       }
 
       // System tray icon — lets users show/hide the window and quit cleanly
       let show_item = MenuItem::with_id(app, "show", "Show CoolDesk", true, None::<&str>)?;
+      let dock_item = MenuItem::with_id(app, "toggle_dock", "Toggle Workspace Dock", true, None::<&str>)?;
       let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-      let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+      let tray_menu = Menu::with_items(app, &[&show_item, &dock_item, &quit_item])?;
 
       TrayIconBuilder::new()
           .icon(app.default_window_icon().unwrap().clone())
@@ -1352,9 +1642,22 @@ pub fn run() {
           .tooltip("CoolDesk")
           .on_menu_event(|app, event| match event.id.as_ref() {
               "show" => {
-                  if let Some(window) = app.get_webview_window("main") {
+                  // In drawer mode, "show" means slide the panel in.
+                  let st = load_dock_state(app);
+                  if st.enabled && st.mode == "drawer" {
+                      expand_drawer(app, &st);
+                  } else if let Some(window) = app.get_webview_window("main") {
                       let _ = window.show();
                       let _ = window.set_focus();
+                  }
+              }
+              "toggle_dock" => {
+                  // Toggle the drawer handle on/off.
+                  let state = load_dock_state(app);
+                  if state.enabled {
+                      disable_dock(app);
+                  } else {
+                      enable_drawer(app, state.side.clone(), state.width);
                   }
               }
               "quit" => {
@@ -1365,7 +1668,17 @@ pub fn run() {
           .on_tray_icon_event(|tray: &tauri::tray::TrayIcon, event: tauri::tray::TrayIconEvent| {
               if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, button_state: tauri::tray::MouseButtonState::Up, .. } = event {
                   let app = tray.app_handle();
-                  if let Some(window) = app.get_webview_window("main") {
+                  let st = load_dock_state(app);
+                  if st.enabled && st.mode == "drawer" {
+                      // Drawer: toggle the panel open/closed.
+                      if let Some(window) = app.get_webview_window("main") {
+                          if window.is_visible().unwrap_or(false) {
+                              collapse_drawer(app, &st);
+                          } else {
+                              expand_drawer(app, &st);
+                          }
+                      }
+                  } else if let Some(window) = app.get_webview_window("main") {
                       if window.is_visible().unwrap_or(false) {
                           let _ = window.hide();
                       } else {
@@ -1411,6 +1724,9 @@ pub fn run() {
             // Glued --app browser windows aren't our children — close them
             // explicitly so quitting CoolDesk doesn't orphan them.
             webapp_embed::close_all();
+            // Release any AppBar reservation so we don't leave a reserved strip
+            // behind (no-op if reserve mode was never active this run).
+            dock::remove_dock();
         }
     });
 }

@@ -35,6 +35,7 @@ export default defineConfig(({ mode }) => {
           input: {
             main: resolve(__dirname, 'index.html'),
             spotlight: resolve(__dirname, 'spotlight.html'),
+            handle: resolve(__dirname, 'handle.html'),
           }
         }
       },
@@ -72,6 +73,7 @@ export default defineConfig(({ mode }) => {
           input: {
             main: resolve(__dirname, 'index.html'),
             spotlight: resolve(__dirname, 'spotlight.html'),
+            handle: resolve(__dirname, 'handle.html'),
           },
           output: {
             // Split only libs already on the EAGER path into stable vendor chunks.
