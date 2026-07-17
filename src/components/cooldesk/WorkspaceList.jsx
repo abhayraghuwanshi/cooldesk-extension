@@ -1,13 +1,20 @@
-import { faBriefcase, faDesktop, faGamepad, faGraduationCap, faRobot, faRocket, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faBriefcase, faChevronDown, faChevronLeft, faDesktop, faGamepad, faGraduationCap, faRobot, faRocket, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { deleteWorkspace, getUrlAnalytics } from '../../db/index.js';
 import { clearWorkspaceSuggestions } from '../../services/appCategorizationService.js';
+import { useIsSidebarWidth } from '../../hooks/useIsSidebarWidth.js';
 import '../../styles/cooldesk.css';
 import { defaultFontFamily } from '../../utils/fontUtils';
 import { ShareToTeamModal } from '../popups/ShareToTeamModal';
 import { WorkspaceCard } from './WorkspaceCard';
+import { WorkspaceContextPanel } from './WorkspaceContextPanel.jsx';
 import { AppGrid } from './AppGrid';
+
+// Same desktop-app detection as WorkspaceCard: positive signal only, since
+// WebView2 populates chrome.runtime inside the Tauri app.
+const isDesktopApp = typeof window !== 'undefined' &&
+    !!(window.__TAURI__ || window.__TAURI_INTERNALS__ || window.electronAPI);
 
 // Debounce utility
 function debounce(func, wait) {
@@ -100,6 +107,29 @@ export function WorkspaceList({
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const [activeMode, setActiveMode] = useState('all');
     const [isPending, startTransition] = useTransition();
+
+    // Narrow / sidebar width: collapse the mode chip row into a single dropdown
+    const isNarrow = useIsSidebarWidth();
+    const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
+    const modeMenuRef = useRef(null);
+
+    // Close the mode dropdown on outside click
+    useEffect(() => {
+        if (!isModeMenuOpen) return;
+        const onDocClick = (e) => {
+            if (modeMenuRef.current && !modeMenuRef.current.contains(e.target)) {
+                setIsModeMenuOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', onDocClick);
+        return () => document.removeEventListener('mousedown', onDocClick);
+    }, [isModeMenuOpen]);
+
+    // Narrow mode: the expanded workspace takes over the list as a full detail view
+    const expandedDetailWorkspace = useMemo(() => {
+        if (!isNarrow || !expandedWorkspaceId) return null;
+        return savedWorkspaces.find(w => w.id === expandedWorkspaceId) || null;
+    }, [isNarrow, expandedWorkspaceId, savedWorkspaces]);
     // Track which workspace app banners have been dismissed in this session
     const [dismissedBanners, setDismissedBanners] = useState(new Set());
 
@@ -407,6 +437,38 @@ export function WorkspaceList({
                 paddingRight: '4px',
                 minHeight: 0 // Crucial for nested flex scrolling
             }}>
+                {expandedDetailWorkspace ? (
+                    /* Sidebar width: single workspace opened in full, in-depth view.
+                       stopPropagation keeps the container's outside-click-close from
+                       firing for clicks inside the detail view (e.g. the back button). */
+                    <div className="workspace-detail-view" onMouseDown={(e) => e.stopPropagation()}>
+                        <button
+                            className="workspace-detail-back"
+                            onClick={() => onWorkspaceClick?.(expandedDetailWorkspace)}
+                        >
+                            <FontAwesomeIcon icon={faChevronLeft} />
+                            All Workspaces
+                        </button>
+                        <WorkspaceCard
+                            workspace={expandedDetailWorkspace}
+                            onClick={onWorkspaceClick}
+                            isExpanded={true}
+                            isActive={activeWorkspaceId === expandedDetailWorkspace.id}
+                            compact={true}
+                            fullView={true}
+                            isPinned={pinnedWorkspaces.includes(expandedDetailWorkspace.name)}
+                            onPin={() => onTogglePin && onTogglePin(expandedDetailWorkspace.name)}
+                            onDelete={handleDeleteWorkspace}
+                            onAddUrl={onAddUrl}
+                        />
+                        {/* Status / tasks / notes as their own section below the
+                            items — keeps them out of the card's layout entirely. */}
+                        {isDesktopApp && (
+                            <WorkspaceContextPanel workspace={expandedDetailWorkspace} />
+                        )}
+                    </div>
+                ) : (
+                    <>
                 {/* App Suggestion Banners */}
                 {visibleBanners.length > 0 && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -474,38 +536,91 @@ export function WorkspaceList({
                     marginBottom: '20px',
                     padding: '0 4px'
                 }}>
-                    <div className="mode-selector-container">
-                        <button
-                            className={`mode-item ${activeMode === 'all' ? 'active' : ''}`}
-                            onClick={() => handleModeChange('all')}
-                            title="All Workspaces"
-                        >
-                            <span className="mode-icon">
-                                <span style={{ fontSize: '14px', fontWeight: 700 }}>ALL</span>
-                            </span>
-                            {activeMode === 'all' && <span className="mode-label">All</span>}
-                        </button>
+                    {isNarrow ? (
+                        /* Sidebar width: single dropdown instead of the chip row */
+                        <div className="mode-dropdown" ref={modeMenuRef}>
+                            <button
+                                className="mode-dropdown-trigger"
+                                onClick={() => setIsModeMenuOpen(open => !open)}
+                                style={{ '--mode-color': activeMode === 'all' ? undefined : modeConfigs[activeMode]?.theme }}
+                            >
+                                <span className="mode-icon">
+                                    {activeMode === 'all' ? (
+                                        <span style={{ fontSize: '12px', fontWeight: 700 }}>ALL</span>
+                                    ) : (
+                                        <FontAwesomeIcon icon={modeConfigs[activeMode].icon} />
+                                    )}
+                                </span>
+                                <span className="mode-label">
+                                    {activeMode === 'all' ? 'All Workspaces' : modeConfigs[activeMode].label}
+                                </span>
+                                <FontAwesomeIcon
+                                    icon={faChevronDown}
+                                    className={`mode-dropdown-chevron ${isModeMenuOpen ? 'open' : ''}`}
+                                />
+                            </button>
 
-                        {Object.entries(modeConfigs).map(([key, config]) => {
-                            const isActive = activeMode === key;
-                            return (
-                                <button
-                                    key={key}
-                                    className={`mode-item ${isActive ? 'active' : ''}`}
-                                    onClick={() => handleModeChange(key)}
-                                    title={config.label}
-                                    style={{
-                                        '--mode-color': config.theme
-                                    }}
-                                >
-                                    <span className="mode-icon">
-                                        <FontAwesomeIcon icon={config.icon} />
-                                    </span>
-                                    {isActive && <span className="mode-label">{config.label}</span>}
-                                </button>
-                            );
-                        })}
-                    </div>
+                            {isModeMenuOpen && (
+                                <div className="mode-dropdown-menu">
+                                    <button
+                                        className={`mode-dropdown-item ${activeMode === 'all' ? 'active' : ''}`}
+                                        onClick={() => { handleModeChange('all'); setIsModeMenuOpen(false); }}
+                                    >
+                                        <span className="mode-icon">
+                                            <span style={{ fontSize: '12px', fontWeight: 700 }}>ALL</span>
+                                        </span>
+                                        <span className="mode-label">All Workspaces</span>
+                                    </button>
+                                    {Object.entries(modeConfigs).map(([key, config]) => (
+                                        <button
+                                            key={key}
+                                            className={`mode-dropdown-item ${activeMode === key ? 'active' : ''}`}
+                                            style={{ '--mode-color': config.theme }}
+                                            onClick={() => { handleModeChange(key); setIsModeMenuOpen(false); }}
+                                        >
+                                            <span className="mode-icon">
+                                                <FontAwesomeIcon icon={config.icon} />
+                                            </span>
+                                            <span className="mode-label">{config.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="mode-selector-container">
+                            <button
+                                className={`mode-item ${activeMode === 'all' ? 'active' : ''}`}
+                                onClick={() => handleModeChange('all')}
+                                title="All Workspaces"
+                            >
+                                <span className="mode-icon">
+                                    <span style={{ fontSize: '14px', fontWeight: 700 }}>ALL</span>
+                                </span>
+                                {activeMode === 'all' && <span className="mode-label">All</span>}
+                            </button>
+
+                            {Object.entries(modeConfigs).map(([key, config]) => {
+                                const isActive = activeMode === key;
+                                return (
+                                    <button
+                                        key={key}
+                                        className={`mode-item ${isActive ? 'active' : ''}`}
+                                        onClick={() => handleModeChange(key)}
+                                        title={config.label}
+                                        style={{
+                                            '--mode-color': config.theme
+                                        }}
+                                    >
+                                        <span className="mode-icon">
+                                            <FontAwesomeIcon icon={config.icon} />
+                                        </span>
+                                        {isActive && <span className="mode-label">{config.label}</span>}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
 
                     {/* Active Mode Greeting */}
                     <div style={{
@@ -696,6 +811,8 @@ export function WorkspaceList({
                         </div>
                     </div>
                 )
+                )}
+                    </>
                 )}
             </div>
             {/* Share Modal */}

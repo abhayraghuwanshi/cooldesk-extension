@@ -51,7 +51,9 @@
       "Bash(npx esbuild *)",
       "Bash(npx vite *)",
       "Bash(git checkout *)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "PowerShell(npx esbuild src/components/cooldesk/WorkspaceCard.jsx --loader:.jsx=jsx --outfile=NUL)",
+      "PowerShell(npx vite build 2>&1 | Select-Object -Last 8)"
     ],
     "deny": [],
     "ask": [],

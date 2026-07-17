@@ -2566,21 +2566,56 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   min-width: 0;
 }
 
-/* Narrow drawer / sidebar: keep the collapsed compact card's icons on ONE
-   horizontally-scrolling row (its intended macOS-dock look). At drawer widths
-   the default flex-wrap + vertical overflow piles them into a cramped,
-   vertically-scrolling 2-column block. Only applies while collapsed
-   (:not(.panel-open)) — the expanded categorized rows still wrap normally. */
+/* Collapsed compact rows: ONE horizontally-scrolling line at every width (the
+   intended macOS-dock look) — flex-wrap piles many items into a tall
+   vertically-scrolling block instead. Only while collapsed (:not(.panel-open));
+   the expanded categorized rows still wrap normally. */
+.cooldesk-workspace-card.compact:not(.panel-open) .compact-icons-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-height: none;
+  width: 100%;
+  /* No visible scrollbar: it renders right on the card's bottom edge, colliding
+     with the resize drag-handle. Wheel / trackpad / drag scrolling still works. */
+  scrollbar-width: none;
+}
+
+.cooldesk-workspace-card.compact:not(.panel-open) .compact-icons-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.cooldesk-workspace-card.compact:not(.panel-open) .compact-icons-container {
+  flex-wrap: nowrap;
+  padding-left: 8px;
+}
+
 @media (max-width: 500px) {
-  .cooldesk-workspace-card.compact:not(.panel-open) .compact-icons-scroll {
-    overflow-x: auto;
-    overflow-y: hidden;
-    max-height: none;
+  /* Tighter leading padding once the title stacks above the row */
+  .cooldesk-workspace-card.compact:not(.panel-open) .compact-icons-container {
+    padding-left: 2px;
   }
 
-  .cooldesk-workspace-card.compact:not(.panel-open) .compact-icons-container {
-    flex-wrap: nowrap;
-    padding-left: 8px;
+  /* Stack the title above the icon row instead of beside it — side-by-side it
+     eats a fixed column of width the scrollable icons could use. */
+  .cooldesk-workspace-card.compact:not(.panel-open) .compact-card-inner {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .cooldesk-workspace-card.compact:not(.panel-open) .compact-workspace-stack {
+    flex-direction: row;
+    align-self: flex-start;
+    padding-left: 2px;
+  }
+
+  .cooldesk-workspace-card.compact:not(.panel-open) .compact-workspace-label {
+    max-width: none;
+    font-size: var(--font-xs, 10px);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary, #94A3B8);
+    opacity: 0.85;
   }
 
   /* Reclaim horizontal space in the strip: drop the large workspace icon tile
@@ -2588,6 +2623,7 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   .cooldesk-workspace-card.compact .compact-workspace-icon {
     display: none;
   }
+
 
   .cooldesk-workspace-card.compact .compact-workspace-label {
     max-width: 96px;
@@ -3426,39 +3462,31 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 }
 
 
-/* Docked drawer / very narrow: compact the top bar so CoolSearch keeps a
-   usable width. At these widths the logo + full-size buttons crowd out the
-   search box, so drop the logo and shrink the action buttons. */
-@media (max-width: 420px) {
-  .cooldesk-header {
-    gap: 8px;
-    margin-top: 12px;
-  }
+/* Corner control bar for sidebar widths — hidden while the full header shows.
+   The button styling lives outside the media query so the wallpaper override
+   glass look composes with it either way. */
+.sidebar-control-bar {
+  display: none;
+}
 
-  /* Reclaim the logo's space — non-essential inside the strip. */
-  .header-left {
-    display: none;
-  }
+.sidebar-control-btn {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #94A3B8);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+}
 
-  .header-center {
-    min-width: 0;
-    flex: 1;
-  }
-
-  .header-right {
-    gap: 6px;
-  }
-
-  .cooldesk-settings-btn {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-  }
-
-  .cooldesk-settings-btn svg {
-    width: 16px;
-    height: 16px;
-  }
+.sidebar-control-btn:hover {
+  color: var(--text-primary, #E5E7EB);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* Sidebar mode (narrow screens below 500px) */
@@ -3467,6 +3495,29 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
     padding: 8px;
     width: 100vw;
     /* Full width */
+  }
+
+  /* Sidebar has its own navigation — drop the whole top bar. */
+  .cooldesk-header {
+    display: none;
+  }
+
+  /* Corner control bar stands in for the hidden header. */
+  .sidebar-control-bar {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 10005;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.72);
+    border: 1px solid var(--border-primary, rgba(148, 163, 184, 0.18));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
   }
 
   .cooldesk-logo-icon {
@@ -3535,12 +3586,10 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
     gap: 8px;
   }
 
-  /* Small title row at top */
-  .cooldesk-list-view .cooldesk-workspace-card.compact>div:first-child {
-    flex-direction: row !important;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
+  /* Title-above-icons layout for the strip lives in the earlier
+     :not(.panel-open) .compact-card-inner rules — no row override here
+     (a previous `flex-direction: row !important` on >div:first-child
+     was clobbering that column layout). */
 
   /* Smaller workspace icon in sidebar */
   .cooldesk-list-view .cooldesk-workspace-card.compact .workspace-icon {
@@ -3670,7 +3719,216 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   white-space: nowrap;
 }
 
+/* Narrow / sidebar width: mode selector collapses into a single dropdown */
+.mode-dropdown {
+  position: relative;
+}
+
+.mode-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--glass-bg, rgba(30, 41, 59, 0.5));
+  border: 1px solid var(--border-primary, rgba(148, 163, 184, 0.15));
+  border-radius: 12px;
+  color: var(--mode-color, var(--text-primary, #E5E7EB));
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--font-sm, 13px);
+  font-weight: 600;
+}
+
+.mode-dropdown-trigger .mode-label {
+  flex: 1;
+  text-align: left;
+}
+
+.mode-dropdown-chevron {
+  font-size: 11px;
+  opacity: 0.6;
+  transition: transform 0.2s ease;
+}
+
+.mode-dropdown-chevron.open {
+  transform: rotate(180deg);
+}
+
+.mode-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--bg-secondary, rgba(15, 23, 42, 0.97));
+  border: 1px solid var(--border-primary, rgba(148, 163, 184, 0.15));
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+
+.mode-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text-secondary, #94A3B8);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--font-sm, 13px);
+  font-weight: 500;
+  text-align: left;
+}
+
+.mode-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #E5E7EB);
+}
+
+/* The wallpaper-enabled global button override forces background/border, so
+   the active state signals through text color, which it leaves alone. */
+.mode-dropdown-item.active {
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--mode-color, #A78BFA);
+}
+
+.mode-dropdown-item .mode-icon {
+  width: 18px;
+  justify-content: center;
+  font-size: 14px;
+}
+
+/* ============================================
+   WORKSPACE DETAIL VIEW — narrow / sidebar mode
+   Expanded workspace takes over the list in full
+   ============================================ */
+
+.workspace-detail-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.workspace-detail-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  padding: 8px 14px;
+  background: var(--glass-bg, rgba(30, 41, 59, 0.5));
+  border: 1px solid var(--border-primary, rgba(148, 163, 184, 0.15));
+  border-radius: 10px;
+  color: var(--text-secondary, #94A3B8);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--font-sm, 13px);
+  font-weight: 600;
+}
+
+.workspace-detail-back:hover {
+  color: var(--text-primary, #E5E7EB);
+}
+
+/* Full-view card: content defines height, no internal scroll caps —
+   the detail view's outer container is what scrolls. The !important overrides
+   the drawer-width .panel-open rule that turns the card into its own
+   scroll container (overflow-y: auto !important). */
+.cooldesk-workspace-card.compact.full-view {
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.cooldesk-workspace-card.compact.full-view .compact-icons-scroll {
+  max-height: none;
+  overflow: visible;
+}
+
+/* Detail view: uniform full-width list rows instead of ragged intrinsic-width
+   pills — one aligned edge reads far cleaner in a single narrow column.
+   width needs !important to beat the base is-labeled `width: auto !important`. */
+.cooldesk-workspace-card.compact.full-view .compact-icons-container {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.cooldesk-workspace-card.compact.full-view .compact-url-icon.is-labeled {
+  width: 100% !important;
+  max-width: none;
+  border-radius: 12px;
+  padding: 7px 12px 7px 8px;
+}
+
+/* Symmetric gutters: the base 24px left indents (rows + container) exist to
+   tuck wrapped pills under the section label — with full-width rows they just
+   shift everything right of center. */
+.cooldesk-workspace-card.compact.full-view .compact-icons-rows {
+  padding: 6px 8px;
+}
+
+.cooldesk-workspace-card.compact.full-view .compact-icons-container {
+  padding: 4px 0;
+}
+
+/* Context panel rendered as its own section below the card (not inside it).
+   flex: none guards against the base .workspace-context-panel flex: 1 1 0,
+   which collapses the panel's box to zero height in an auto-height column
+   and lets its content paint over the neighbors. */
+.workspace-detail-view .workspace-context-panel {
+  flex: none;
+  height: auto;
+  overflow: visible;
+  border: 1px solid var(--border-primary, rgba(148, 163, 184, 0.15));
+  border-radius: 14px;
+  background: var(--glass-bg, rgba(30, 41, 59, 0.5));
+}
+
+/* Single column: the two-column rail+notes grid crushes notes at this width */
+.workspace-detail-view .wcp-grid {
+  grid-template-columns: 1fr;
+  gap: 14px;
+  height: auto;
+}
+
+.workspace-detail-view .wcp-rail {
+  overflow: visible;
+}
+
+/* The ≤720px rule stacks the status pills for the cramped in-card rail; the
+   detail-view panel is full width, so keep them as one compact segmented row. */
+.workspace-detail-view .wcp-status-seg {
+  flex-direction: row;
+}
+
+.workspace-detail-view .wcp-notes-col {
+  padding-left: 0;
+}
+
+/* The narrow-mode strip hides the big workspace icon tile to save width;
+   in the full detail view there is room, so bring it back. */
+@media (max-width: 500px) {
+  .cooldesk-workspace-card.compact.full-view .compact-workspace-icon {
+    display: flex;
+  }
+}
+
 /* ── Expand / collapse button on the compact workspace card ─────────────── */
+
+/* Redundant while collapsed at any width — clicking the card itself expands —
+   and it steals width from the icon row. It stays only in the opened card,
+   where it reads as the collapse control. */
+.cooldesk-workspace-card.compact:not(.panel-open) .compact-expand-btn {
+  display: none;
+}
+
 .compact-expand-btn {
   display: flex;
   align-items: center;
@@ -5384,12 +5642,15 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   flex-direction: column; /* beats .cooldesk-list-view .cooldesk-workspace-card (row) at line 2828 */
   align-items: stretch; /* override the default center-align so panel fills width */
 }
-.cooldesk-workspace-card.compact.panel-open .compact-card-inner {
+/* .full-view is exempt: the detail view has no height budget to protect, and
+   these caps (with no overflow set on the inner) make long item lists spill
+   over whatever renders below. */
+.cooldesk-workspace-card.compact.panel-open:not(.full-view) .compact-card-inner {
   flex: 0 0 auto;
   align-items: flex-start; /* let the multi-row icons grow downward, not stretch vertically */
   max-height: 320px;       /* room for ~4 categorized rows of labeled pills */
 }
-.cooldesk-workspace-card.compact.panel-open .compact-icons-scroll {
+.cooldesk-workspace-card.compact.panel-open:not(.full-view) .compact-icons-scroll {
   max-height: 300px;
 }
 @keyframes wcp-in {

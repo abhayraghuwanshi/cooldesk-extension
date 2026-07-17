@@ -149,7 +149,7 @@ const isDesktopApp = typeof window !== 'undefined' &&
   !!(window.__TAURI__ || window.__TAURI_INTERNALS__ || window.electronAPI);
 
 // Memoized WorkspaceCard to prevent unnecessary re-renders
-export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, isPinned = false, onPin, onDelete, onAddUrl, onUrlAction, deferAnalytics = false, ...rest }) {
+export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, fullView = false, isPinned = false, onPin, onDelete, onAddUrl, onUrlAction, deferAnalytics = false, ...rest }) {
   if (!workspace) return null;
 
   const [popoverState, setPopoverState] = useState({ index: null, rect: null });
@@ -184,6 +184,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   // Show panel when parent says so, OR when the user has dragged the card
   // tall enough to render meaningful content.
   const contextPanelVisible =
+    fullView ||
     isExpanded ||
     (hasUserResized && cardHeight !== null && cardHeight >= PANEL_MIN_HEIGHT);
 
@@ -488,14 +489,15 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     }
   };
 
-  // Group URLs by domain/entity for compact view
+  // Group URLs by domain/entity for compact view.
+  // Drafts (AI-suggested "Upcoming" links) are excluded — they'd show up as
+  // real workspace links the user never added.
   const groupedItems = useMemo(() => {
     if (!compact) return [];
 
     // 1. Bucket by specific Entity (Owner/Workspace)
     const entityGroups = {};
-    // Use sortedUrls instead of urls
-    sortedUrls.forEach(urlObj => {
+    sortedUrls.filter(u => u.status !== 'draft').forEach(urlObj => {
       const info = getGroupingInfo(urlObj.url);
       if (!entityGroups[info.key]) {
         entityGroups[info.key] = {
@@ -576,6 +578,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   const fileApps = useMemo(() => apps.filter(app => app.appType?.toLowerCase() === 'file'), [apps]);
 
   const handleCardClick = () => {
+    if (fullView) return; // detail view: card body is not a collapse target
     onClick?.(workspace);
   };
 
@@ -643,20 +646,28 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
 
   const displayLinks = activeUrls;
 
-  const cardStyle = cardHeight !== null
+  const cardStyle = fullView
     ? {
+      // Detail view: content defines the height, the outer view scrolls.
       position: 'relative',
-      height: cardHeight,
+      height: 'auto',
       maxHeight: 'none',
-      overflow: 'hidden',
-      transition: isDragging ? 'none' : undefined,
+      overflow: 'visible',
     }
-    : { position: 'relative' }; // CSS class controls height (compact auto)
+    : cardHeight !== null
+      ? {
+        position: 'relative',
+        height: cardHeight,
+        maxHeight: 'none',
+        overflow: 'hidden',
+        transition: isDragging ? 'none' : undefined,
+      }
+      : { position: 'relative' }; // CSS class controls height (compact auto)
 
   return (
     <div
       ref={cardRef}
-      className={`cooldesk-workspace-card ${isActive ? 'active' : ''} ${compact ? 'compact' : ''} ${contextPanelVisible ? 'panel-open' : ''}`}
+      className={`cooldesk-workspace-card ${isActive ? 'active' : ''} ${compact ? 'compact' : ''} ${contextPanelVisible ? 'panel-open' : ''} ${fullView ? 'full-view' : ''}`}
       onClick={handleCardClick}
       onContextMenu={handleContextMenu}
       style={cardStyle}
@@ -708,8 +719,11 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
             <div className="compact-workspace-label">{name}</div>
           </div>
 
-          {/* URL Favicons + Apps. Single-row when collapsed; categorized rows when expanded. */}
-          <div className="compact-icons-scroll" onClick={(e) => e.stopPropagation()}>
+          {/* URL Favicons + Apps. Single-row when collapsed; categorized rows when
+              expanded. No stopPropagation here: each icon stops its own click, and
+              empty-row clicks must bubble so tapping the card expands it — the row
+              spans nearly the whole card now that the title sits above it. */}
+          <div className="compact-icons-scroll">
             {(() => {
               const renderLinkIcon = (item, idx, showLabel = false) => {
                 const isGroup = item.type === 'group';
@@ -805,9 +819,27 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
               };
 
               if (contextPanelVisible) {
-                // Expanded: categorized rows with name pills so folders/apps/files are distinguishable
+                // Expanded: categorized rows with name pills so folders/apps/files are distinguishable.
+                // Each link group (e.g. all Google links) becomes its own section with
+                // the links laid out flat — one click to open, no popover indirection.
+                const linkGroups = groupedItems.filter(item => item.type === 'group');
+                const singleLinks = groupedItems.filter(item => item.type !== 'group');
+                const linkRows = [
+                  ...linkGroups.map(group => ({
+                    key: `group-${group.key}`,
+                    label: group.subLabel && group.subLabel !== group.label
+                      ? `${group.label} · ${group.subLabel}`
+                      : group.label,
+                    icon: faLink,
+                    accent: '#60a5fa',
+                    items: group.urls,
+                    render: renderLinkIcon
+                  })),
+                  { key: 'links', label: linkGroups.length > 0 ? 'Other Links' : 'Links', icon: faLink, accent: '#60a5fa', items: singleLinks, render: renderLinkIcon },
+                ];
+
                 const ROWS = [
-                  { key: 'links', label: 'Links', icon: faLink, accent: '#60a5fa', items: groupedItems, render: renderLinkIcon },
+                  ...linkRows,
                   { key: 'editors', label: 'Editors', icon: faCode, accent: '#38bdf8', items: editorApps, render: renderAppIcon },
                   { key: 'apps', label: 'Apps', icon: faDesktop, accent: '#8b5cf6', items: desktopApps, render: renderAppIcon },
                   { key: 'folders', label: 'Folders', icon: faFolderOpen, accent: '#facc15', items: folderApps, render: renderAppIcon },
@@ -832,10 +864,12 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                 );
               }
 
-              // Collapsed: single combined row, icon-only (original behavior)
+              // Collapsed: single combined row, icon-only. Every URL gets its own
+              // icon — the row scrolls horizontally at all widths, so domain-group
+              // stacks would only hide links behind an extra popover hop.
               return (
                 <div className="compact-icons-container">
-                  {groupedItems.map((item, idx) => renderLinkIcon(item, idx, false))}
+                  {activeUrls.map((item, idx) => renderLinkIcon(item, idx, false))}
                   {apps.map((app, idx) => renderAppIcon(app, idx, false))}
                 </div>
               );
@@ -1174,12 +1208,14 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
         </>
       )}
 
-      {/* ── Context panel + resize handle — App only, not in extension ─── */}
-      {isDesktopApp && contextPanelVisible && (
+      {/* ── Context panel + resize handle — App only, not in extension ───
+           In fullView the detail view renders the panel as a sibling section
+           below the card, so it must not also render inside it. */}
+      {isDesktopApp && contextPanelVisible && !fullView && (
         <WorkspaceContextPanel workspace={workspace} />
       )}
 
-      {isDesktopApp && (
+      {isDesktopApp && !fullView && (
         <div
           className="workspace-resize-handle"
           onMouseDown={handleResizeMouseDown}

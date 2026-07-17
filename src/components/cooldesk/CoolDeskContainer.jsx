@@ -1,4 +1,4 @@
-import { faDiagramProject, faGear } from '@fortawesome/free-solid-svg-icons';
+import { faDiagramProject, faDownLeftAndUpRightToCenter, faEllipsisVertical, faGear, faUpRightAndDownLeftFromCenter, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import logo from '../../../logo-2.png';
@@ -141,6 +141,30 @@ export function CoolDeskContainer({
   });
 
   const [graphOpen, setGraphOpen] = useState(false);
+  // Sidebar-width corner control bar (replaces the hidden top header)
+  const [sidebarControlsOpen, setSidebarControlsOpen] = useState(false);
+
+  const handleExitDock = useCallback(async () => {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('dock_disable');
+    } catch (e) {
+      console.error('[CoolDesk] Failed to exit dock mode:', e);
+    }
+  }, []);
+
+  // Re-enter sidebar mode from the full app: enable the drawer (previous
+  // side/width persist in dock state) and slide it in right away instead of
+  // leaving just the collapsed edge handle.
+  const handleEnterDock = useCallback(async () => {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('dock_enable', { mode: 'drawer' });
+      await invoke('dock_expand');
+    } catch (e) {
+      console.error('[CoolDesk] Failed to enter dock mode:', e);
+    }
+  }, []);
 
   const handleOpenAIManager = useCallback((workspace = null) => {
     setAiManagerState({
@@ -545,6 +569,11 @@ export function CoolDeskContainer({
         </div>
 
         <div className="header-right">
+          {isDesktopApp && (
+            <button className="cooldesk-settings-btn" onClick={handleEnterDock} title="Dock as sidebar">
+              <FontAwesomeIcon icon={faDownLeftAndUpRightToCenter} />
+            </button>
+          )}
           <button className="cooldesk-settings-btn" onClick={() => setGraphOpen(true)} title="Cool Activity (Ctrl+Shift+G)">
             <FontAwesomeIcon icon={faDiagramProject} />
           </button>
@@ -552,6 +581,34 @@ export function CoolDeskContainer({
             <FontAwesomeIcon icon={faGear} />
           </button>
         </div>
+      </div>
+
+      {/* Corner control bar — only visible at sidebar widths (CSS), where the
+          top header above is hidden. Collapsed it's a single dots button;
+          expanded it offers the header's actions plus "back to full app". */}
+      <div className="sidebar-control-bar">
+        {sidebarControlsOpen && (
+          <>
+            <button className="sidebar-control-btn" onClick={() => setGraphOpen(true)} title="Cool Activity">
+              <FontAwesomeIcon icon={faDiagramProject} />
+            </button>
+            <button className="sidebar-control-btn" onClick={onOpenSettings} title="Settings">
+              <FontAwesomeIcon icon={faGear} />
+            </button>
+            {isDesktopApp && (
+              <button className="sidebar-control-btn" onClick={handleExitDock} title="Back to full app">
+                <FontAwesomeIcon icon={faUpRightAndDownLeftFromCenter} />
+              </button>
+            )}
+          </>
+        )}
+        <button
+          className="sidebar-control-btn sidebar-control-toggle"
+          onClick={() => setSidebarControlsOpen(open => !open)}
+          title={sidebarControlsOpen ? 'Hide controls' : 'Show controls'}
+        >
+          <FontAwesomeIcon icon={sidebarControlsOpen ? faXmark : faEllipsisVertical} />
+        </button>
       </div>
 
       {/* Spatial Workspace Shell - Takes remaining height */}

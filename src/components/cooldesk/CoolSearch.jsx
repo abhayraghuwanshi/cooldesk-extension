@@ -11,6 +11,7 @@ import annyang from 'annyang';
 import Fuse from 'fuse.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { TEAM_FEATURE_ENABLED } from '../../config/features.js';
+import { useIsSidebarWidth } from '../../hooks/useIsSidebarWidth.js';
 import { CommandExecutor } from '../../services/commandExecutor.js';
 import { CommandParser } from '../../services/commandParser.js';
 import * as LocalAI from '../../services/localAIService.js';
@@ -156,6 +157,8 @@ function renderInlineMarkdown(text) {
 
 export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placeholder = "Search or type / for commands...", isDesktopApp = false }) {
   const [searchValue, setSearchValue] = useState('');
+  // Sidebar/docked-drawer width: the search box has no room — hide entirely.
+  const isSidebarSize = useIsSidebarWidth();
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
 
@@ -1934,6 +1937,11 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
   }, [commandSuggestions, searchSuggestions]);
 
   const isResultsOpen = sortedSuggestions.length > 0;
+
+  // Sidebar / docked-drawer width: no room for the search UI, render nothing.
+  if (isSidebarSize) {
+    return null;
+  }
 
   return (
     <div className={`cooldesk-search-container mode-${commandMode}`} style={{

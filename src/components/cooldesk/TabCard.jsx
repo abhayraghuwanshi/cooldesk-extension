@@ -1,5 +1,5 @@
 
-import { faBolt, faChevronDown, faClock, faDesktop, faExternalLinkAlt, faGlobe, faMagic, faPowerOff, faTasks, faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faBolt, faChevronDown, faClock, faDesktop, faExternalLinkAlt, faFolderOpen, faGlobe, faMagic, faPowerOff, faTasks, faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useRef, useState } from 'react';
 import { getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
@@ -425,6 +425,37 @@ export const AppCard = memo(function AppCard({ app, onClick, onKill = null }) {
             {confirmKill && <span>Quit?</span>}
           </button>
         )}
+      </div>
+    </div>
+  );
+});
+
+/**
+ * FolderCard - Card for frequently visited folders (Windows Quick Access).
+ * Click opens the folder in the system file manager.
+ */
+export const FolderCard = memo(function FolderCard({ folder, onClick }) {
+  if (!folder?.path) return null;
+
+  const { name, path } = folder;
+  const colorClass = ICON_COLORS[Math.abs(path.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % ICON_COLORS.length];
+  // Compact the path for display: "C:\Users\me\projects\app" → "~\projects\app"
+  const shortPath = path.replace(/^[A-Za-z]:\\Users\\[^\\]+/i, '~');
+
+  return (
+    <div className="cooldesk-tab-card app-card" onClick={() => onClick?.(folder)}>
+      <div className="tab-card-header">
+        <div className={`tab-icon ${colorClass}`}>
+          <FontAwesomeIcon icon={faFolderOpen} />
+        </div>
+        <div className="tab-info">
+          <div className="tab-title" title={name}>
+            {name}
+          </div>
+          <div className="tab-hostname" title={path}>
+            {shortPath}
+          </div>
+        </div>
       </div>
     </div>
   );

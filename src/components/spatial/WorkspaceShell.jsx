@@ -192,9 +192,28 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
     const GESTURE_TIMEOUT = 150; // Ms before considering gesture ended
     const MIN_SWITCH_COOLDOWN = 600; // Increased to 600ms to prevent double-skipping
 
+    // Wheel events inside an element that scrolls horizontally itself (icon
+    // rows, chip strips…) must scroll that element, not switch faces.
+    const isInsideHorizontalScroller = (target) => {
+      let el = target instanceof Element ? target : null;
+      while (el && el !== document.body) {
+        if (el.scrollWidth > el.clientWidth + 1) {
+          const { overflowX } = getComputedStyle(el);
+          if (overflowX === 'auto' || overflowX === 'scroll') return true;
+        }
+        el = el.parentElement;
+      }
+      return false;
+    };
+
     const handleWheel = (e) => {
       // Ignore zoom gestures (pinch-to-zoom sends Ctrl + Wheel)
       if (e.ctrlKey) return;
+
+      if (isInsideHorizontalScroller(e.target)) {
+        wheelStateRef.current.accumulator = 0;
+        return;
+      }
 
       const isMouseWheel = e.deltaMode !== 0; // 1 = lines, 2 = pages (mouse wheel)
       const THRESHOLD = isMouseWheel ? 50 : 300; // Increased for trackpads to require more energy

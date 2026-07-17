@@ -258,11 +258,12 @@
 .face-indicator:hover {
   bottom: 17px;
   gap: 8px;
+  /* Hug the dots — a hard min-width leaves a mostly-empty pill now that
+     there are only 3-4 dots and the label floats above, out of layout. */
   width: auto;
-  min-width: 380px;
   max-width: 90vw;
   height: 56px;
-  padding: 0 24px;
+  padding: 0 20px;
   border-radius: 30px;
   background: var(--glass-bg, rgba(15, 23, 42, 0.95));
   backdrop-filter: blur(32px);
@@ -328,6 +329,70 @@
 
 .face-icon {
   pointer-events: none;
+}
+
+/* Sidebar / drawer width: the orb-to-pill hover expansion (380px min-width,
+   thick accent border, radial glow, lens flare) overflows the drawer and reads
+   as noise. Pin the indicator to one small, quiet, always-visible dock state —
+   same in rest and hover — with just a faint hue accent for the current face. */
+@media (max-width: 500px) {
+  .face-indicator,
+  .face-indicator:hover {
+    bottom: 8px;
+    gap: 6px;
+    width: auto;
+    min-width: 0;
+    max-width: calc(100vw - 24px);
+    height: 38px;
+    padding: 0 8px;
+    border-radius: 19px;
+    border: 1px solid hsla(var(--face-hue), 60%, 65%, 0.25);
+    background: rgba(15, 23, 42, 0.82);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+    animation: none;
+  }
+
+  /* No radial glow / lens flare in the drawer */
+  .face-indicator::before,
+  .face-indicator::after {
+    display: none;
+  }
+
+  /* The floating title bubble is oversized here and duplicates context */
+  .face-label {
+    display: none;
+  }
+
+  .face-indicator .face-dot,
+  .face-indicator:hover .face-dot {
+    width: 26px;
+    height: 26px;
+    margin: 0;
+    opacity: 0.55;
+    font-size: var(--font-md, 12px);
+    transform: none;
+  }
+
+  .face-indicator .face-dot.active,
+  .face-indicator:hover .face-dot.active {
+    width: 26px;
+    height: 26px;
+    opacity: 1 !important;
+    font-size: var(--font-md, 12px);
+    background: hsla(var(--face-hue), 70%, 60%, 0.28);
+    box-shadow: none;
+    transform: none;
+  }
+
+  /* No dock-style lift — a subtle brighten is enough at this size */
+  .face-indicator .face-dot:hover {
+    transform: none;
+    margin: 0;
+    opacity: 1 !important;
+    background: rgba(255, 255, 255, 0.12);
+  }
 }
 
 

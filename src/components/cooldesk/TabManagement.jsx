@@ -1,4 +1,4 @@
-import { faBrain, faClock, faCode, faDesktop, faSync, faTasks, faToggleOff, faToggleOn, faWifi } from '@fortawesome/free-solid-svg-icons';
+import { faBrain, faClock, faCode, faDesktop, faFolderOpen, faSync, faTasks, faToggleOff, faToggleOn, faWifi } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { recordFeedbackEvent } from '../../services/feedbackService.js';
@@ -9,7 +9,7 @@ import { isHostSyncEnabled } from '../../services/syncConfig.js';
 import { runningAppsService } from '../../services/runningAppsService.js';
 import { enrichRunningAppsWithIcons, getBaseDomainFromUrl } from '../../utils/helpers.js';
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
-import { AppCard, TabCard, TabGroupCard, TaskGroupCard } from './TabCard';
+import { AppCard, FolderCard, TabCard, TabGroupCard, TaskGroupCard } from './TabCard';
 import { DevServersPanel } from './DevServersPanel';
 
 // Chrome native tab group colors (matches Chrome's palette)
@@ -98,6 +98,7 @@ export function TabManagement() {
   const [isPending, startTransition] = useTransition();
   const [runningApps, setRunningApps] = useState([]);
   const [chromeTabGroups, setChromeTabGroups] = useState({});
+  const [frequentFolders, setFrequentFolders] = useState([]);
 
   // Task-First Tab Modeling state
   const [taskViewEnabled, setTaskViewEnabled] = useState(false);
@@ -359,6 +360,22 @@ export function TabManagement() {
     };
   }, []); // Empty deps - only run on mount
 
+  // Load frequently visited folders from Windows Quick Access (Tauri desktop only)
+  useEffect(() => {
+    if (!isTauriApp) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const folders = await invoke('get_frequent_folders');
+        if (!cancelled && Array.isArray(folders)) setFrequentFolders(folders);
+      } catch (error) {
+        console.warn('[TabManagement] Failed to load frequent folders:', error);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isTauriApp]);
+
   // Subscribe to running apps (uses centralized service to avoid duplicate API calls)
   useEffect(() => {
     if (!window.electronAPI?.getRunningApps) return;
@@ -594,6 +611,15 @@ export function TabManagement() {
       setRunningApps(prev => prev.filter(a => a.pid !== app.pid));
     } catch (error) {
       console.error('[TabManagement] Failed to kill app', app.pid, ':', error);
+    }
+  }, []);
+
+  const handleFolderClick = useCallback(async (folder) => {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('open_folder', { path: folder.path });
+    } catch (error) {
+      console.error('[TabManagement] Failed to open folder:', folder?.path, error);
     }
   }, []);
 
@@ -1155,7 +1181,37 @@ export function TabManagement() {
           </div>
         ) : (
           <>
-            {/* 1. Pinned Tabs Section */}
+            {/* 1. Active Apps Section (desktop only) */}
+            {runningApps.length > 0 && (
+              <div>
+                <h3 style={{
+                  fontSize: 'var(--font-2xl, 20px)',
+                  fontWeight: 600,
+                  color: 'var(--text-secondary, #94A3B8)',
+                  marginBottom: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <FontAwesomeIcon icon={faDesktop} style={{ opacity: 0.6 }} />
+                  Active Apps ({runningApps.length})
+                </h3>
+                <div className="tabs-grid">
+                  {runningApps.map(app => (
+                    <AppCard
+                      key={app.id || app.pid}
+                      app={app}
+                      onClick={handleAppClick}
+                      onKill={isTauriApp ? handleKillApp : null}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 2. Pinned Tabs Section */}
             {partitionedTabs.pinned.length > 0 && (
               <div>
                 <h3 style={{
@@ -1185,7 +1241,7 @@ export function TabManagement() {
               </div>
             )}
 
-            {/* 1b. Local Dev Section (localhost / loopback / LAN dev servers) */}
+            {/* 3. Local Dev Section (localhost / loopback / LAN dev servers) */}
             {partitionedTabs.localhost.length > 0 && (
               <div>
                 <h3 style={{
@@ -1220,15 +1276,7 @@ export function TabManagement() {
               </div>
             )}
 
-            {/* 1c. Dev Servers panel — port-driven list of listening processes (Tauri only) */}
-            {isTauriApp && (
-              <DevServersPanel
-                tabs={partitionedTabs.localhost}
-                onTabClick={handleTabClick}
-              />
-            )}
-
-            {/* 2. Chrome Native Tab Groups (Extension only) */}
+            {/* 4. Chrome Native Tab Groups (Extension only) */}
             {!taskViewEnabled && partitionedTabs.hasChromeGroups && (
               <div>
                 <h3 style={{
@@ -1264,37 +1312,7 @@ export function TabManagement() {
               </div>
             )}
 
-            {/* 3. Active Apps Section (Electron only) */}
-            {runningApps.length > 0 && (
-              <div>
-                <h3 style={{
-                  fontSize: 'var(--font-2xl, 20px)',
-                  fontWeight: 600,
-                  color: 'var(--text-secondary, #94A3B8)',
-                  marginBottom: '8px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}>
-                  <FontAwesomeIcon icon={faDesktop} style={{ opacity: 0.6 }} />
-                  Active Apps ({runningApps.length})
-                </h3>
-                <div className="tabs-grid">
-                  {runningApps.map(app => (
-                    <AppCard
-                      key={app.id || app.pid}
-                      app={app}
-                      onClick={handleAppClick}
-                      onKill={isTauriApp ? handleKillApp : null}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 3. Grouped by Task Section (Task-First Tab Modeling) */}
+            {/* 5. Grouped by Task Section (Task-First Tab Modeling) */}
             {taskViewEnabled && partitionedByTask && partitionedByTask.length > 0 && (
               <div>
                 <h3 style={{
@@ -1339,7 +1357,7 @@ export function TabManagement() {
               </div>
             )}
 
-            {/* 4. Grouped by Domain Section (only when task view is disabled) */}
+            {/* 6. Grouped by Domain Section (only when task view is disabled) */}
             {!taskViewEnabled && partitionedTabs.hasGroups && (
               <div>
                 <h3 style={{
@@ -1370,7 +1388,7 @@ export function TabManagement() {
               </div>
             )}
 
-            {/* 5. Recent (Ungrouped) Section - only when task view is disabled */}
+            {/* 7. Recent (Ungrouped) Section - only when task view is disabled */}
             {!taskViewEnabled && partitionedTabs.recent.length > 0 && (
               <div>
                 <h3 style={{
@@ -1405,7 +1423,7 @@ export function TabManagement() {
               </div>
             )}
 
-            {/* 6. Other Tabs Section - only when task view is disabled */}
+            {/* 8. Other Tabs Section - only when task view is disabled */}
             {!taskViewEnabled && partitionedTabs.others.length > 0 && (
               <div>
                 <h3 style={{
@@ -1459,6 +1477,43 @@ export function TabManagement() {
                   </div>
                 )}
               </div>
+            )}
+
+            {/* 9. Popular Folders (ranked from Recent Items activity, Tauri only) */}
+            {frequentFolders.length > 0 && (
+              <div>
+                <h3 style={{
+                  fontSize: 'var(--font-2xl, 20px)',
+                  fontWeight: 600,
+                  color: 'var(--text-secondary, #94A3B8)',
+                  marginBottom: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <FontAwesomeIcon icon={faFolderOpen} style={{ opacity: 0.6 }} />
+                  Popular Folders ({Math.min(frequentFolders.length, 6)})
+                </h3>
+                <div className="tabs-grid">
+                  {frequentFolders.slice(0, 6).map(folder => (
+                    <FolderCard
+                      key={folder.path}
+                      folder={folder}
+                      onClick={handleFolderClick}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 10. Dev Servers panel — port-driven list of listening processes (Tauri only) */}
+            {isTauriApp && (
+              <DevServersPanel
+                tabs={partitionedTabs.localhost}
+                onTabClick={handleTabClick}
+              />
             )}
 
             {/* Empty State */}

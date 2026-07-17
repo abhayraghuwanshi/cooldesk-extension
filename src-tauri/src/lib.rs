@@ -975,6 +975,235 @@ async fn open_folder(path: String) -> Result<(), String> {
 }
 
 #[derive(serde::Serialize)]
+pub struct FrequentFolder {
+    pub name: String,
+    pub path: String,
+}
+
+/// Folders the user actually works in, ranked by recent activity. Primary
+/// source is the Recent Items shortcuts (real per-file/folder usage); Quick
+/// Access "Frequent Places" only tops the list up on fresh machines.
+#[tauri::command]
+async fn get_frequent_folders() -> Vec<FrequentFolder> {
+    #[cfg(target_os = "windows")]
+    {
+        tauri::async_runtime::spawn_blocking(|| unsafe {
+            let mut folders = list_recent_folders();
+            if folders.len() < 6 {
+                let have: std::collections::HashSet<String> =
+                    folders.iter().map(|f| f.path.to_lowercase()).collect();
+                folders.extend(
+                    list_quick_access_folders()
+                        .into_iter()
+                        .filter(|f| !have.contains(&f.path.to_lowercase())),
+                );
+                folders.truncate(12);
+            }
+            folders
+        })
+        .await
+        .unwrap_or_default()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Vec::new()
+    }
+}
+
+/// Rank folders by *actual use*: every file/folder the user opens drops a .lnk
+/// into %APPDATA%\Microsoft\Windows\Recent, refreshed on re-open. A recency-
+/// weighted count of those shortcuts per parent folder surfaces real working
+/// folders (projects, repos) instead of the default libraries that dominate
+/// Quick Access. Default libraries, AppData, and temp dirs are excluded.
+#[cfg(target_os = "windows")]
+unsafe fn list_recent_folders() -> Vec<FrequentFolder> {
+    use std::collections::HashMap;
+    use windows::core::{Interface, HSTRING};
+    use windows::Win32::Storage::FileSystem::WIN32_FIND_DATAW;
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, IPersistFile, CLSCTX_INPROC_SERVER,
+        COINIT_APARTMENTTHREADED, STGM_READ,
+    };
+    use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
+
+    let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+
+    let appdata = match std::env::var("APPDATA") {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+    let recent_dir = std::path::PathBuf::from(appdata).join("Microsoft\\Windows\\Recent");
+    let entries = match std::fs::read_dir(&recent_dir) {
+        Ok(e) => e,
+        Err(_) => return Vec::new(),
+    };
+
+    // One ShellLink instance reused to resolve every shortcut.
+    let link: IShellLinkW = match CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) {
+        Ok(l) => l,
+        Err(_) => return Vec::new(),
+    };
+    let persist: IPersistFile = match link.cast() {
+        Ok(p) => p,
+        Err(_) => return Vec::new(),
+    };
+
+    // Destination folders, not "work" folders — the default libraries (local
+    // and OneDrive-redirected) drown out project folders if kept.
+    let user = std::env::var("USERPROFILE").unwrap_or_default().to_lowercase();
+    let mut excluded: Vec<String> = vec![user.clone(), format!("{user}\\onedrive")];
+    for base in [user.clone(), format!("{user}\\onedrive")] {
+        for lib in ["desktop", "downloads", "documents", "pictures", "music", "videos"] {
+            excluded.push(format!("{base}\\{lib}"));
+        }
+    }
+
+    let now = std::time::SystemTime::now();
+    // lowercased path -> (display path, recency-weighted score)
+    let mut scores: HashMap<String, (String, f64)> = HashMap::new();
+
+    for entry in entries.flatten() {
+        let lnk_path = entry.path();
+        if lnk_path
+            .extension()
+            .map_or(true, |e| !e.eq_ignore_ascii_case("lnk"))
+        {
+            continue;
+        }
+        let age_days = entry
+            .metadata()
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|m| now.duration_since(m).ok())
+            .map(|d| d.as_secs_f64() / 86_400.0)
+            .unwrap_or(f64::MAX);
+        if age_days > 30.0 {
+            continue;
+        }
+
+        if persist
+            .Load(&HSTRING::from(lnk_path.as_os_str()), STGM_READ)
+            .is_err()
+        {
+            continue;
+        }
+        let mut buf = [0u16; 520];
+        let mut fd = WIN32_FIND_DATAW::default();
+        if link.GetPath(&mut buf, &mut fd, 0).is_err() {
+            continue;
+        }
+        let len = buf.iter().position(|&c| c == 0).unwrap_or(0);
+        if len == 0 {
+            continue;
+        }
+        let target = String::from_utf16_lossy(&buf[..len]);
+
+        // The folder being "used": the target itself if it's a folder, else its parent.
+        let target_path = std::path::Path::new(&target);
+        let folder = if target_path.is_dir() {
+            target_path.to_path_buf()
+        } else if target_path.is_file() {
+            match target_path.parent() {
+                Some(p) => p.to_path_buf(),
+                None => continue,
+            }
+        } else {
+            continue; // target no longer exists
+        };
+
+        let folder_str = folder.to_string_lossy().to_string();
+        if folder_str.len() <= 3 {
+            continue; // drive roots
+        }
+        let lower = folder_str.to_lowercase();
+        if excluded.iter().any(|e| e == &lower) {
+            continue;
+        }
+        if lower.split('\\').any(|seg| {
+            seg.starts_with('.') // .claude, .codex, .git, ... — tool internals
+                || seg == "appdata"
+                || seg == "temp"
+                || seg == "tmp"
+                || seg == "node_modules"
+                || seg == "$recycle.bin"
+        }) {
+            continue;
+        }
+
+        // Recency-weighted count: today ≈ 1.0, a week old ≈ 0.3, a month ≈ 0.09.
+        let weight = 1.0 / (1.0 + age_days / 3.0);
+        let slot = scores.entry(lower).or_insert_with(|| (folder_str, 0.0));
+        slot.1 += weight;
+    }
+
+    let mut ranked: Vec<(String, f64)> = scores.into_values().collect();
+    ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    ranked.truncate(12);
+    ranked
+        .into_iter()
+        .map(|(path, _)| {
+            let name = std::path::Path::new(&path)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| path.clone());
+            FrequentFolder { name, path }
+        })
+        .collect()
+}
+
+/// Windows Quick Access "Frequent Places" — fallback when Recent Items is
+/// empty/sparse (fresh machine). Virtual items and dead paths are skipped.
+#[cfg(target_os = "windows")]
+unsafe fn list_quick_access_folders() -> Vec<FrequentFolder> {
+    use windows::core::HSTRING;
+    use windows::Win32::System::Com::{CoInitializeEx, CoTaskMemFree, COINIT_APARTMENTTHREADED};
+    use windows::Win32::UI::Shell::{
+        BHID_EnumItems, IEnumShellItems, IShellItem, SHCreateItemFromParsingName, SIGDN,
+        SIGDN_FILESYSPATH, SIGDN_NORMALDISPLAY,
+    };
+
+    unsafe fn display_name(item: &IShellItem, sigdn: SIGDN) -> Option<String> {
+        let pw = item.GetDisplayName(sigdn).ok()?;
+        let s = pw.to_string().ok();
+        CoTaskMemFree(Some(pw.as_ptr() as *const std::ffi::c_void));
+        s
+    }
+
+    let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+
+    let mut out = Vec::new();
+    let parse = HSTRING::from("shell:::{3936E9E4-D92C-4EEE-A85A-BC16D5EA0819}");
+    let root: IShellItem = match SHCreateItemFromParsingName(&parse, None) {
+        Ok(item) => item,
+        Err(_) => return out,
+    };
+    let enum_items: IEnumShellItems = match root.BindToHandler(None, &BHID_EnumItems) {
+        Ok(e) => e,
+        Err(_) => return out,
+    };
+
+    loop {
+        let mut items: [Option<IShellItem>; 1] = [None];
+        let mut fetched = 0u32;
+        if !enum_items.Next(&mut items, Some(&mut fetched)).is_ok() || fetched == 0 {
+            break;
+        }
+        let Some(item) = items[0].take() else { break };
+        // Only real filesystem folders — virtual entries have no FILESYSPATH.
+        let Some(path) = display_name(&item, SIGDN_FILESYSPATH) else { continue };
+        if !std::path::Path::new(&path).is_dir() {
+            continue;
+        }
+        let name = display_name(&item, SIGDN_NORMALDISPLAY).unwrap_or_else(|| path.clone());
+        out.push(FrequentFolder { name, path });
+        if out.len() >= 12 {
+            break;
+        }
+    }
+    out
+}
+
+#[derive(serde::Serialize)]
 pub struct SearchFileResult {
     pub path: String,
     pub date: String,
@@ -1512,6 +1741,7 @@ pub fn run() {
         webapp_embed::webapp_embed_set_bounds,
         webapp_embed::webapp_embed_close,
         open_folder,
+        get_frequent_folders,
         search_files,
         list_dir,
         get_focused_app,
