@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>CoolDesk Custom Widget</title>
+</head>
+
+<body>
+  <script>
+    // Sandboxed host for user-authored widgets (manifest "sandbox.pages").
+    // Runs with the relaxed sandbox CSP so pasted inline scripts work, in an
+    // opaque origin with no chrome.* APIs and no access to the extension DOM.
+    //
+    // The board sends two messages after load:
+    //   {type:'cooldesk:init'}           + a MessagePort (storage relay)
+    //   {type:'cooldesk:custom-widget', html, theme}
+    // Once both arrived we seed a synchronous cooldesk.store from the host
+    // snapshot and document.write the user's HTML. window.cooldesk survives
+    // document.open(), so the widget sees the same API official widgets get.
+    (function () {
+      var port = null, spec = null, booted = false;
+      var pending = new Map(), seq = 0;
+
+      function call(method, args) {
+        if (!port) return Promise.reject(new Error('no-host'));
+        var id = ++seq;
+        return new Promise(function (resolve, reject) {
+          pending.set(id, { resolve: resolve, reject: reject });
+          port.postMessage({ id: id, method: method, args: args || {} });
+        });
+      }
+
+      function boot() {
+        if (booted || !port || !spec) return;
+        booted = true;
+        call('store.snapshot', {}).catch(function () { return {}; }).then(function (snap) {
+          var data = snap || {};
+          window.cooldesk = {
+            version: 2,
+            hosted: true,
+            custom: true,
+            call: call,
+            get: function (key, fallback) { return fallback; },
+            store: {
+              get: function (key, fallback) { return key in data ? data[key] : fallback; },
+              set: function (key, value) {
+                data[key] = value;
+                call('store.set', { key: key, value: value }).catch(function () { });
+              }
+            }
+          };
+          document.open();
+          document.write(spec.html);
+          document.close();
+          document.documentElement.dataset.theme = spec.theme === 'light' ? 'light' : 'dark';
+        });
+      }
+
+      window.addEventListener('message', function (e) {
+        var d = e.data || {};
+        if (d.type === 'cooldesk:init' && e.ports && e.ports[0]) {
+          port = e.ports[0];
+          port.onmessage = function (ev) {
+            var m = ev.data || {};
+            var p = pending.get(m.id);
+            if (p) {
+              pending.delete(m.id);
+              if (m.error) p.reject(new Error(m.error));
+              else p.resolve(m.result);
+            }
+          };
+          port.postMessage({ id: 0, method: 'ready', args: { version: 2, custom: true } });
+        } else if (d.type === 'cooldesk:custom-widget' && typeof d.html === 'string') {
+          spec = d;
+        }
+        boot();
+      });
+    })();
+  </script>
+</body>
+
+</html>

@@ -77,15 +77,43 @@ const getPlatformInfo = (chat) => {
     };
 };
 
+// Stale-while-revalidate snapshot: every new tab is a fresh document, so the
+// last render's data is kept in localStorage and painted instantly while the
+// real fetch runs in the background. Feed items are plain JSON (favicons are
+// URLs, platform info is data) so a round-trip through storage is lossless.
+const FEED_SNAPSHOT_KEY = 'cooldesk-feed-snapshot';
+
+function readFeedSnapshot() {
+    try {
+        const s = JSON.parse(localStorage.getItem(FEED_SNAPSHOT_KEY) || 'null');
+        return s && Array.isArray(s.links) && Array.isArray(s.feed) ? s : null;
+    } catch {
+        return null;
+    }
+}
+
+function writeFeedSnapshot(links, feed) {
+    try {
+        localStorage.setItem(FEED_SNAPSHOT_KEY, JSON.stringify({
+            links: links.slice(0, 30),
+            feed: feed.slice(0, 150),
+            at: Date.now(),
+        }));
+    } catch { /* storage full or unavailable */ }
+}
+
 export function ActivityFeed() {
     // Detect if running in Tauri/Electron app
     const isDesktopApp = isElectronApp();
 
-    const [quickLinks, setQuickLinks] = useState([]);
-    const [feedItems, setFeedItems] = useState([]);
+    const bootSnapshot = useMemo(readFeedSnapshot, []);
+    const [quickLinks, setQuickLinks] = useState(bootSnapshot ? bootSnapshot.links : []);
+    const [feedItems, setFeedItems] = useState(bootSnapshot ? bootSnapshot.feed : []);
     const [calendarEvents, setCalendarEvents] = useState([]);
     const [activeTab, setActiveTab] = useState('all');
-    const [isLoading, setIsLoading] = useState(true);
+    // With a snapshot on screen there is nothing to spin about — the refresh
+    // swaps in silently when it lands.
+    const [isLoading, setIsLoading] = useState(!bootSnapshot);
     // Apps the user has removed from the Search launcher (persisted)
     const [hiddenSearchApps, setHiddenSearchApps] = useState(() => {
         try { return new Set(JSON.parse(localStorage.getItem('searchHiddenApps') || '[]')); } catch { return new Set(); }
@@ -440,6 +468,7 @@ export function ActivityFeed() {
                 Promise.all([loadQuickLinks(), loadFeed()]).then(([links, feed]) => {
                     setQuickLinks(links);
                     setFeedItems(feed);
+                    writeFeedSnapshot(links, feed);
                 }).catch(console.error);
             } else {
                 // Schedule for later
@@ -450,6 +479,7 @@ export function ActivityFeed() {
                     Promise.all([loadQuickLinks(), loadFeed()]).then(([links, feed]) => {
                         setQuickLinks(links);
                         setFeedItems(feed);
+                        writeFeedSnapshot(links, feed);
                     }).catch(console.error);
                 }, THROTTLE_MS - timeSinceLastCall);
             }
@@ -459,10 +489,10 @@ export function ActivityFeed() {
 
     useEffect(() => {
         const loadAll = async () => {
-            setIsLoading(true);
             const [links, feed] = await Promise.all([loadQuickLinks(), loadFeed()]);
             setQuickLinks(links);
             setFeedItems(feed);
+            writeFeedSnapshot(links, feed);
             setIsLoading(false);
         };
         loadAll();
@@ -1178,7 +1208,7 @@ export function ActivityFeed() {
     return (
         <div className="cooldesk-panel" style={{ padding: 0, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {/* Header: Favorites */}
-            <div style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
+            <div>
                 <div style={{
                     padding: '16px 16px 12px 16px',
                     fontSize: 'var(--font-sm)',
@@ -1302,14 +1332,15 @@ export function ActivityFeed() {
             {/* Feed Tabs & List */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '0', display: 'flex', flexDirection: 'column' }}>
                 <div style={{
-                    padding: '16px',
+                    padding: '4px 16px 12px',
                     position: 'sticky',
                     top: 0,
-                    // background: 'var(--glass-bg, rgba(15, 23, 42, 0.95))',
+                    // Solid-enough backing: rows scrolling underneath must not
+                    // bleed through the segmented control.
+                    background: 'rgba(11, 11, 14, 0.85)',
                     zIndex: 10,
                     backdropFilter: 'blur(12px)',
-                    // borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
-                    // borderRadius: '12px'
+                    WebkitBackdropFilter: 'blur(12px)',
                 }}>
                     {/* Modern Pill-Style Segmented Control */}
                     <div style={{

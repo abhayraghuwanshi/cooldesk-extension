@@ -127,6 +127,8 @@ export default defineConfig(({ mode }) => {
         input: {
           // Extension uses lightweight entry point
           main: resolve(__dirname, 'extension.html'),
+          // Sandboxed host page for user-authored widgets (manifest sandbox.pages)
+          'widget-sandbox': resolve(__dirname, 'widget-sandbox.html'),
         },
         output: {
           //   manualChunks: (id) => {

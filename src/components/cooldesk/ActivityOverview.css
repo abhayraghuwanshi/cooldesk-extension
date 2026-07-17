@@ -482,13 +482,24 @@
 
 /* ── Embedded mode (inside OverviewDashboard's left column) ── */
 .ao-root.ao-embed {
-  padding: 0 4px; /* match .overview-hero's 4px side inset */
+  padding: 0; /* the overview column's own padding sets the grid edge */
   max-width: none;
   margin: 0;
   overflow-y: visible;
+  /* Size to content inside the scrolling overview column — flex:1 + overflow
+     visible would shrink the box and paint over whatever sits below it. */
+  flex: 0 0 auto;
 }
 
 .ao-embed .ao-layout { grid-template-columns: 1fr; }
+
+/* Embedded on the overview page: drop hairline underlines — spacing and type
+   weight carry the structure there (the Cool Activity modal keeps them). */
+.ao-embed .ao-section > .ao-section-title,
+.ao-embed .ao-section-head {
+  border-bottom: none;
+  padding-bottom: 0;
+}
 
 /* ── Empty state ── */
 .ao-empty {

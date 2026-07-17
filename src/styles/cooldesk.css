@@ -3125,13 +3125,19 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 /* OverviewDashboard Responsive Layout */
 .overview-dashboard-grid {
   display: grid;
-  grid-template-columns: minmax(300px, 0.85fr) 1.15fr;
-  gap: 20px;
-  height: calc(100vh - 48px);
+  /* Activity feed is the hero: widgets stay a compact rail on the left. */
+  grid-template-columns: minmax(300px, 0.72fr) 1.28fr;
+  gap: 24px;
+  /* 64px of air above (also clears the floating settings gear), 32px below. */
+  height: calc(100vh - 96px);
   min-height: 0;
   overflow: hidden;
   padding-right: 4px;
-  margin-top: 24px;
+  margin-top: 64px;
+  /* Readable line lengths on ultrawide monitors — cap and center. */
+  max-width: 1680px;
+  margin-left: auto;
+  margin-right: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.2) transparent;
 }
@@ -3284,7 +3290,13 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0 16px 0 4px;
+  /* Quiet translucent slab so the widget rail separates from busy wallpapers.
+     Same radius + edge padding as the feed card so both columns share a grid. */
+  background: rgba(11, 11, 14, 0.35);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: 14px;
+  padding: 16px;
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.2) transparent;
 }
@@ -3325,12 +3337,25 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   min-height: 0;
   max-height: none;
   overflow: hidden;
-  border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  background: rgba(15, 23, 42, 0.3);
+  /* One widget-style card — no border, separation comes from luminance. */
+  border-radius: 14px;
+  background: rgba(11, 11, 14, 0.55);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   min-width: 0;
   width: 100%;
   box-sizing: border-box;
+}
+
+/* The feed's inner panel must not stack a second glass layer on the card
+   (extra specificity so it also beats the wallpaper-enhancements override). */
+.overview-activity-column .cooldesk-panel,
+.wallpaper-enabled .overview-activity-column .cooldesk-panel {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important;
+  min-height: 0;
 }
 
 /* Responsive for medium screens (1200px and below) */
@@ -3338,7 +3363,7 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   .overview-dashboard-grid {
     grid-template-columns: 1fr;
     gap: 16px;
-    height: calc(100vh - 48px);
+    height: calc(100vh - 96px);
     overflow-y: auto;
     overflow-x: hidden;
   }
@@ -3347,7 +3372,7 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
     height: auto;
     overflow: visible;
     overflow-x: hidden;
-    padding-right: 0;
+    padding-right: 16px;
   }
 
   .overview-activity-column {
@@ -3372,7 +3397,7 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
     grid-template-columns: 1fr;
     gap: 12px;
     padding-right: 0;
-    height: calc(100vh - 48px);
+    height: calc(100vh - 96px);
     overflow-y: auto;
     overflow-x: hidden;
   }
@@ -3381,7 +3406,7 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
     gap: 12px;
     height: auto;
     overflow: visible;
-    padding-right: 0;
+    padding-right: 16px;
   }
 
   .overview-notes-section {
@@ -3482,7 +3507,7 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
     gap: 12px;
     height: auto;
     overflow: visible;
-    padding-right: 0;
+    padding-right: 16px;
   }
 
   .overview-notes-section {

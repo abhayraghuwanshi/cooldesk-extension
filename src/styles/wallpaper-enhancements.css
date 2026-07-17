@@ -401,7 +401,7 @@
 .wallpaper-enabled .cooldesk-settings-btn,
 .wallpaper-enabled .cooldesk-voice-btn,
 .wallpaper-enabled .workspace-add-url-btn,
-.wallpaper-enabled button:not([class*="awm-"]) {
+.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]) {
     background: linear-gradient(135deg,
             rgba(25, 25, 30, 0.76) 0%,
             rgba(20, 20, 25, 0.7) 100%) !important;
@@ -417,7 +417,7 @@
 .wallpaper-enabled .cooldesk-settings-btn:hover,
 .wallpaper-enabled .cooldesk-voice-btn:hover,
 .wallpaper-enabled .workspace-add-url-btn:hover,
-.wallpaper-enabled button:not([class*="awm-"]):hover {
+.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):hover {
     background: linear-gradient(135deg,
             rgba(40, 40, 45, 0.84) 0%,
             rgba(30, 30, 35, 0.78) 100%) !important;

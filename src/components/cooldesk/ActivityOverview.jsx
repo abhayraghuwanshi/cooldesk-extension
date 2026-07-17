@@ -76,7 +76,7 @@ function dateStrDaysAgo(offset) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export function ActivityOverview({ embedded = false }) {
+export function ActivityOverview({ embedded = false, hideWhenEmpty = false }) {
   const [today, setToday] = useState(null);
   const [range, setRange] = useState(14);
   const [rangeData, setRangeData] = useState(null);
@@ -349,6 +349,10 @@ export function ActivityOverview({ embedded = false }) {
 
   const isEmpty = !today || Object.keys(today.apps || {}).length === 0;
   const maxHourSecs = Math.max(...timeline.hours.map(h => h.total), 1800);
+
+  // On the overview page the section earns its space only when there is data
+  // (needs the desktop app on :4545) — otherwise disappear entirely.
+  if (hideWhenEmpty && isEmpty && dayOffset === 0) return null;
 
   return (
     <div className={`ao-root ${embedded ? 'ao-embed' : ''}`}>

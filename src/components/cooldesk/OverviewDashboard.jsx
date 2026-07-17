@@ -1,44 +1,29 @@
-import { lazy, memo, Suspense, useEffect, useState } from 'react';
+import { memo } from 'react';
 import '../../styles/cooldesk.css';
+import { ActivityFeed } from './ActivityFeed';
 import { ActivityOverview } from './ActivityOverview';
+import { WidgetBoard } from './WidgetBoard';
 
-const ActivityFeed = lazy(() => import('./ActivityFeed').then(m => ({ default: m.ActivityFeed })));
-
-// Thin composition layer: clock hero + the shared ActivityOverview (same
-// component the Knowledge Graph modal's Overview tab renders) + ActivityFeed.
+// Thin composition layer: widget board (clock/date live there as widgets now)
+// + the shared ActivityOverview (same component the Knowledge Graph modal's
+// Overview tab renders) + ActivityFeed.
+//
+// Everything imports statically on purpose: these ARE the page. Lazy chunks
+// here just staged the mount (board after activity, feed after both) and
+// produced ~0.7 CLS as each arrival re-laid the grid. The bundle loads from
+// disk, so splitting it saved no network.
 const OverviewDashboard = memo(function OverviewDashboard() {
-    const [time, setTime] = useState(new Date());
-
-    useEffect(() => {
-        const timer = setInterval(() => setTime(new Date()), 1000);
-        return () => clearInterval(timer);
-    }, []);
-
-    const hour = time.getHours();
-    const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-
     return (
         <div className="overview-dashboard-grid">
-            {/* Left: clock hero + shared activity overview */}
+            {/* Left: widget board + shared activity overview */}
             <div className="overview-left-column">
-                <div className="overview-hero">
-                    <div className="overview-clock">
-                        {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                    <div className="overview-date">
-                        {time.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
-                    </div>
-                    <div className="overview-greeting">{greeting}</div>
-                </div>
-
-                <ActivityOverview embedded />
+                <WidgetBoard />
+                <ActivityOverview embedded hideWhenEmpty />
             </div>
 
             {/* Right: Activity Feed — unchanged */}
             <div className="overview-activity-column">
-                <Suspense fallback={<div style={{ minHeight: 400 }} />}>
-                    <ActivityFeed />
-                </Suspense>
+                <ActivityFeed />
             </div>
         </div>
     );
