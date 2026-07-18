@@ -25,15 +25,6 @@ const CHROME_GROUP_COLORS = {
   orange: '#FF9800'
 };
 
-// Browser colors matching TabCard.jsx
-const BROWSER_INFO = {
-  chrome: { name: 'Chrome', color: '#4285F4' },
-  edge: { name: 'Edge', color: '#0078D4' },
-  firefox: { name: 'Firefox', color: '#FF7139' },
-  safari: { name: 'Safari', color: '#006CFF' },
-  other: { name: 'Other', color: '#94A3B8' }
-};
-
 // Detect current browser from user agent
 function detectBrowser() {
   const ua = navigator.userAgent;
@@ -790,22 +781,6 @@ export function TabManagement() {
     return taskGroups.sort((a, b) => b.task.lastUpdated - a.task.lastUpdated);
   }, [taskViewEnabled, tasks, filteredTabs]);
 
-  // Compute browser statistics from tabs
-  const browserStats = useMemo(() => {
-    const stats = {};
-    for (const tab of tabs) {
-      const browser = tab.browser || 'other';
-      if (!stats[browser]) {
-        stats[browser] = 0;
-      }
-      stats[browser]++;
-    }
-    return stats;
-  }, [tabs]);
-
-  // Check if we have tabs from multiple browsers
-  const hasMultipleBrowsers = Object.keys(browserStats).length > 1;
-
   return (
     <div className="tab-management" style={{
       display: 'flex',
@@ -815,73 +790,6 @@ export function TabManagement() {
       overflow: 'hidden',
       border: '1px solid transparent'
     }}>
-      {/* Browser Legend - show when tabs from multiple browsers */}
-      {hasMultipleBrowsers && (
-        <div className="tab-management__legend" style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          marginBottom: '12px',
-          padding: '8px 12px',
-          background: 'rgba(30, 41, 59, 0.6)',
-          borderRadius: '8px',
-          border: '1px solid rgba(71, 85, 105, 0.3)'
-        }}>
-          <span style={{
-            fontSize: 'var(--font-xs, 11px)',
-            color: 'var(--text-secondary, #94A3B8)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            fontWeight: 500
-          }}>
-            Browsers:
-          </span>
-          {Object.entries(browserStats).map(([browser, count]) => {
-            const info = BROWSER_INFO[browser] || BROWSER_INFO.other;
-            return (
-              <div
-                key={browser}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '4px 10px',
-                  background: `${info.color}15`,
-                  borderRadius: '6px',
-                  borderLeft: `3px solid ${info.color}`
-                }}
-              >
-                <div style={{
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: '50%',
-                  background: '#22C55E', // Green dot for connected
-                  boxShadow: '0 0 6px #22C55E', // Glow effect
-                  // A CSS animation class can make it pulse, but static glow is clean
-                  marginRight: '2px'
-                }} title="Connected" />
-                <span style={{
-                  fontSize: 'var(--font-sm, 12px)',
-                  fontWeight: 600,
-                  color: info.color
-                }} title={`${info.name} is Connected and Syncing`}>
-                  {info.name}
-                </span>
-                <span style={{
-                  fontSize: 'var(--font-xs, 11px)',
-                  color: 'var(--text-secondary, #94A3B8)',
-                  background: 'rgba(0, 0, 0, 0.2)',
-                  padding: '2px 6px',
-                  borderRadius: '4px'
-                }} title={`${count} open tabs`}>
-                  {count}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
       <div className="tab-management__toolbar" style={{
         display: 'flex',
         alignItems: 'center',

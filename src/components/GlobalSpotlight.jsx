@@ -1,5 +1,5 @@
 import { faChrome, faCss3Alt, faDiscord, faEdge, faFirefox, faGithub, faGolang, faHtml5, faJava, faJs, faMarkdown, faNodeJs, faPhp, faPython, faReact, faRust, faSlack, faSpotify, faSwift, faVuejs } from '@fortawesome/free-brands-svg-icons';
-import { faBriefcase, faCalculator, faChartLine, faCloud, faCode, faCog, faComments, faDatabase, faDesktop, faEnvelope, faFile, faFileCode, faFileCsv, faFileExcel, faFileLines, faFilePdf, faFilePowerpoint, faFileWord, faFileZipper, faFlask, faFolder, faFolderOpen, faFont, faGamepad, faGlobe, faGraduationCap, faHashtag, faHeartPulse, faHistory, faHome, faImage, faLightbulb, faLink, faMicrochip, faMusic, faNewspaper, faPalette, faPlane, faRobot, faSearch, faShoppingBag, faStar, faStickyNote, faTasks, faTerminal, faThumbtack, faTools, faUtensils, faVial, faVideo } from '@fortawesome/free-solid-svg-icons';
+import { faBriefcase, faCalculator, faChartLine, faCloud, faCode, faCog, faComments, faDatabase, faDesktop, faEnvelope, faFile, faFileCode, faFileCsv, faFileExcel, faFileLines, faFilePdf, faFilePowerpoint, faFileWord, faFileZipper, faFlask, faFolder, faFolderOpen, faFont, faGamepad, faGlobe, faGraduationCap, faHashtag, faHeartPulse, faHistory, faHome, faImage, faLightbulb, faLink, faMicrochip, faMicrophone, faMusic, faNewspaper, faPalette, faPlane, faRobot, faSearch, faShoppingBag, faStar, faStickyNote, faTasks, faTerminal, faThumbtack, faTools, faUtensils, faVial, faVideo } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
     SiC, SiClojure, SiCplusplus, SiCss, SiDart, SiDocker, SiElixir, SiGnubash, SiGo,
@@ -20,6 +20,9 @@ import { isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElec
 import { searchWindowsSettings } from '../data/windowsSettings';
 import { searchWindowsTools } from '../data/windowsTools';
 import { enrichRunningAppsWithIcons, getBaseDomainFromUrl, getFaviconUrl } from '../utils/helpers';
+import { useIsSidebarWidth } from '../hooks/useIsSidebarWidth';
+import { useSlashCommands } from '../hooks/useSlashCommands';
+import { useVoiceCommands } from '../hooks/useVoiceCommands';
 import './GlobalSpotlight.css';
 
 
@@ -216,8 +219,33 @@ function useOnClickOutside(ref, handler) {
     }, [ref, handler]);
 }
 
-export function GlobalSpotlight() {
+// The one search component for every surface.
+//   variant="overlay"  — the dedicated Alt+K spotlight window (default; closes
+//                        via SPOTLIGHT_HIDE like before)
+//   variant="embedded" — lives inline (CoolDesk header); results render in an
+//                        anchored dropdown and closing just collapses it
+// Optional capabilities are activated per surface:
+//   enableVoice / enableSlashCommands — mic + /nav & !bang command palette
+//   onNavigate / onWorkspaceNavigate  — host face/workspace switching
+//   sections — hide idle sections ({ context, pins, workspaces, footer })
+export function GlobalSpotlight({
+    variant = 'overlay',
+    onNavigate = null,
+    onWorkspaceNavigate = null,
+    isDesktopApp = false,
+    enableVoice = false,
+    enableSlashCommands = false,
+    placeholder = null,
+    sections: sectionsProp = null,
+} = {}) {
+    const isEmbedded = variant === 'embedded';
+    const sections = { context: true, pins: true, workspaces: true, footer: true, ...(sectionsProp || {}) };
     const [query, setQuery] = useState('');
+    // Embedded: the idle/results panel drops down only while the search is engaged
+    const [panelOpen, setPanelOpen] = useState(false);
+    // Command/voice feedback toast ({ message, type })
+    const [feedback, setFeedback] = useState(null);
+    const feedbackTimeoutRef = useRef(null);
     const [results, setResults] = useState([]);
     const [selectedIndex, setSelectedIndex] = useState(-1);
     const [selectedPinIndex, setSelectedPinIndex] = useState(-1);
@@ -273,6 +301,30 @@ export function GlobalSpotlight() {
     // back when a reload (timer or tabs-synced event) fires before propagation.
     const pendingClosedTabsRef = useRef(new Set());
 
+    // Sidebar/docked-drawer width: the embedded search has no room — hide entirely
+    const isSidebarSize = useIsSidebarWidth();
+
+    // Feedback toast shared by slash commands and voice
+    const showFeedback = useCallback((message, type = 'success') => {
+        setFeedback({ message, type });
+        if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
+        if (type !== 'help') {
+            feedbackTimeoutRef.current = setTimeout(() => setFeedback(null), 3000);
+        }
+    }, []);
+    useEffect(() => () => {
+        if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
+    }, []);
+
+    // Opt-in capabilities (activated per surface via props)
+    const slash = useSlashCommands({ enabled: enableSlashCommands, isDesktopApp, onNavigate, showFeedback });
+    const voice = useVoiceCommands({
+        enabled: enableVoice,
+        onNavigate,
+        onSearch: (term) => { setQuery(term); setPanelOpen(true); },
+        showFeedback,
+    });
+
     // Close workspace dropdown when clicking outside
     useEffect(() => {
         if (!wsDropdownOpen) return;
@@ -321,6 +373,7 @@ export function GlobalSpotlight() {
         // Each focus ≈ one spotlight open — count it (count only, never the
         // query). Read + reset by the daily update-check ping.
         const handleFocus = () => {
+            if (isEmbedded) return; // embedded: never steal focus / count opens
             recordSpotlightOpen();
             if (inputRef.current) {
                 // Determine if we need to select all text
@@ -383,7 +436,7 @@ export function GlobalSpotlight() {
 
         // Listen for spotlight-shown event from Electron (when Alt+K is pressed)
         let unsubscribeSpotlight = null;
-        if (window.electronAPI?.subscribe) {
+        if (!isEmbedded && window.electronAPI?.subscribe) {
             unsubscribeSpotlight = window.electronAPI.subscribe('spotlight-shown', () => {
                 console.log('[Spotlight] spotlight-shown event received');
                 // Reset state and focus input
@@ -677,6 +730,7 @@ export function GlobalSpotlight() {
 
     // Load Pinned Items
     const loadPinnedItems = async () => {
+        if (!sections.pins) return; // section hidden — keep nav math consistent
         try {
             const data = await storageGet(['spotlight_pins']);
             setPinnedItems(data.spotlight_pins || []);
@@ -687,6 +741,7 @@ export function GlobalSpotlight() {
 
     // Load Workspaces from own DB
     const loadWorkspaces = useCallback(async () => {
+        if (!sections.workspaces) return; // section hidden — keep nav math consistent
         try {
             const { listWorkspaces } = await import('../db/index.js');
             const res = await listWorkspaces();
@@ -957,6 +1012,16 @@ export function GlobalSpotlight() {
         // Reset pin selection when searching
         setSelectedPinIndex(-1);
 
+        // Slash/bang command palette (when the surface enables it): "/..." and
+        // "!..." queries list matching commands instead of running a search.
+        const commandItems = slash.getSuggestions(trimmedQuery);
+        if (commandItems) {
+            setResults(commandItems);
+            setSelectedIndex(commandItems.length > 0 ? 0 : -1);
+            setLoading(false);
+            return;
+        }
+
         // Scoped search (/u /a /f): strip the prefix, search with the bare term
         const { scope, term: scopedTerm } = parseScopedQuery(trimmedQuery);
         if (scope && !scopedTerm) {
@@ -1086,7 +1151,7 @@ export function GlobalSpotlight() {
         }, debounceMs);
 
         return () => clearTimeout(timeoutId);
-    }, [query, deepSearch, commandMode]);
+    }, [query, deepSearch, commandMode, slash]);
 
     // --- Folder tree helpers ---
     // Base rows = search results capped to the visible window; folders among
@@ -1153,8 +1218,9 @@ export function GlobalSpotlight() {
     // appended so "show all" is reachable by keyboard too; Enter on it toggles
     // the row (handled in handleKeyDown, never sent to handleSelect).
     const contextGroups = useMemo(() => {
-        const apps = contextItems.filter(i => i.type === 'app');
-        const tabs = contextItems.filter(i => i.type === 'tab');
+        const source = sections.context ? contextItems : [];
+        const apps = source.filter(i => i.type === 'app');
+        const tabs = source.filter(i => i.type === 'tab');
         const visibleApps = apps.slice(0, showAllApps ? apps.length : 4);
         const visibleTabs = tabs.slice(0, showAllTabs ? tabs.length : 8);
         const visibleList = [...visibleApps];
@@ -1385,6 +1451,14 @@ export function GlobalSpotlight() {
             selectVisualIndex(currentIndex === -1 ? totalItems - 1 : currentIndex - 1);
         } else if (e.key === 'Enter') {
             e.preventDefault();
+            // A fully typed command runs as typed — it beats the highlighted
+            // suggestion (e.g. "!go yt" with the "!go <shortcut>" row selected).
+            const typed = query.trim();
+            if (slash.isDirectCommand(typed)) {
+                handleClose();
+                slash.execute(typed);
+                return;
+            }
             // Exactly one action per Enter, in priority order:
             // selected item → typed URL → top result → Google search fallback
             if (currentIndex >= 0 && currentIndex < totalItems) {
@@ -1465,6 +1539,28 @@ export function GlobalSpotlight() {
     };
 
     const handleSelect = async (item) => {
+        if (!item) return;
+
+        // Command palette rows: templates insert their prefix into the input,
+        // complete commands execute via the slash hook.
+        if (item.type === 'command') {
+            if (item.insert != null) {
+                setQuery(item.insert);
+                inputRef.current?.focus();
+                return;
+            }
+            handleClose();
+            slash.execute(item.command);
+            return;
+        }
+
+        // Workspace rows navigate the host's workspace view when it has one
+        if (item.type === 'workspace' && onWorkspaceNavigate) {
+            handleClose();
+            onWorkspaceNavigate(item.title || item.name);
+            return;
+        }
+
         // Close immediately for snappy feel
         handleClose();
 
@@ -1763,25 +1859,51 @@ export function GlobalSpotlight() {
         setResults([]);
         setExpandedPaths(new Set());
         setTreeChildren({});
+        if (isEmbedded) {
+            // Inline surface: collapse the dropdown, never hide any window
+            setPanelOpen(false);
+            inputRef.current?.blur();
+            return;
+        }
         if (window.electronAPI && window.electronAPI.sendMessage) {
             window.electronAPI.sendMessage({ type: 'SPOTLIGHT_HIDE' });
         }
-    }, []);
+    }, [isEmbedded]);
 
     // Handle Escape key to close (workspace picker first, then the spotlight)
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (e.key === 'Escape') {
                 if (wsDropdownOpen) setWsDropdownOpen(false);
-                else handleClose();
+                else if (!isEmbedded || panelOpen) handleClose();
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [handleClose, wsDropdownOpen]);
+    }, [handleClose, wsDropdownOpen, isEmbedded, panelOpen]);
 
-    // Close on click outside
-    useOnClickOutside(containerRef, handleClose);
+    // Embedded: '/' anywhere on the page focuses the search (like the old header search)
+    useEffect(() => {
+        if (!isEmbedded) return;
+        const handleGlobalKeys = (e) => {
+            if (e.key === '/' &&
+                document.activeElement.tagName !== 'INPUT' &&
+                document.activeElement.tagName !== 'TEXTAREA' &&
+                !document.activeElement.isContentEditable) {
+                e.preventDefault();
+                inputRef.current?.focus();
+            }
+        };
+        window.addEventListener('keydown', handleGlobalKeys);
+        return () => window.removeEventListener('keydown', handleGlobalKeys);
+    }, [isEmbedded]);
+
+    // Close on click outside (embedded: only while the dropdown is open)
+    const handleClickOutside = useCallback(() => {
+        if (isEmbedded && !panelOpen) return;
+        handleClose();
+    }, [isEmbedded, panelOpen, handleClose]);
+    useOnClickOutside(containerRef, handleClickOutside);
 
     // Format URL helper
     const formatUrl = (url) => {
@@ -1803,6 +1925,7 @@ export function GlobalSpotlight() {
         if (item.type === 'app') return item.isRunning ? 'Running' : 'App';
         if (item.type === 'setting') return 'Setting';
         if (item.type === 'tool') return 'Tool';
+        if (item.type === 'command') return item.category || 'Command';
         return item.category || 'Link';
     };
 
@@ -1812,11 +1935,20 @@ export function GlobalSpotlight() {
         && wsNavItems.length === 0 && workspaces.length > 0
         && selectedPinIndex === pinnedItems.length + contextGroups.visibleList.length;
 
+    // Sidebar / docked-drawer width: no room for the embedded search UI
+    if (isEmbedded && isSidebarSize) {
+        return null;
+    }
+
+    // Embedded: everything below the input renders in an anchored dropdown,
+    // and only while the search is engaged.
+    const bodyVisible = !isEmbedded || panelOpen;
+
     return (
-        <div className="spotlight-overlay">
+        <div className={isEmbedded ? 'spotlight-embedded' : 'spotlight-overlay'}>
             <div className="spotlight-container" ref={containerRef}>
                 {/* Search Header */}
-                <div className="spotlight-search-box">
+                <div className={`spotlight-search-box${voice.isListening ? ' listening' : ''}`}>
                     <span className="spotlight-prompt">{'>'}</span>
                     {(() => {
                         const { scope } = parseScopedQuery(query.trim());
@@ -1825,11 +1957,12 @@ export function GlobalSpotlight() {
                     <input
                         ref={inputRef}
                         className="spotlight-input"
-                        placeholder="Almighty Search..."
+                        placeholder={placeholder || (isEmbedded ? 'Search or type / for commands...' : 'Almighty Search...')}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        autoFocus
+                        onFocus={() => { if (isEmbedded) setPanelOpen(true); }}
+                        autoFocus={!isEmbedded}
                         spellCheck={false}
                     />
                     {loading && <div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.2)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>}
@@ -1870,16 +2003,53 @@ export function GlobalSpotlight() {
                     >
                         ✨ Deep
                     </button> */}
-                    <button
-                        className="spotlight-close-btn"
-                        onClick={handleClose}
-                        onKeyDown={handleButtonKeyDown}
-                        title="Close (Esc)"
-                    >
-                        ×
-                    </button>
+                    {enableVoice && voice.voiceSupported && (
+                        <button
+                            className={`spotlight-voice-btn${voice.isListening ? ' listening' : ''}`}
+                            onClick={() => voice.toggleVoice()}
+                            onKeyDown={handleButtonKeyDown}
+                            title={voice.isListening ? 'Stop voice input' : 'Voice commands'}
+                        >
+                            {voice.isListening ? (
+                                <span className="voice-waveform">
+                                    {voice.waveformData.map((v, i) => (
+                                        <span key={i} style={{ height: `${4 + v * 10}px` }} />
+                                    ))}
+                                </span>
+                            ) : (
+                                <FontAwesomeIcon icon={faMicrophone} />
+                            )}
+                        </button>
+                    )}
+                    {!isEmbedded && (
+                        <button
+                            className="spotlight-close-btn"
+                            onClick={handleClose}
+                            onKeyDown={handleButtonKeyDown}
+                            title="Close (Esc)"
+                        >
+                            ×
+                        </button>
+                    )}
                 </div>
 
+                {/* Command / voice feedback toast — floats under the pill when
+                    the dropdown is closed, renders as a row inside it when open */}
+                {feedback && !bodyVisible && (
+                    <div className={`spotlight-feedback spotlight-feedback--floating ${feedback.type || 'info'}`}>
+                        <span className="spotlight-feedback-msg">{feedback.message}</span>
+                        <button className="spotlight-feedback-close" onClick={() => setFeedback(null)}>×</button>
+                    </div>
+                )}
+
+                {bodyVisible && (
+                <div className="spotlight-body">
+                {feedback && (
+                    <div className={`spotlight-feedback ${feedback.type || 'info'}`}>
+                        <span className="spotlight-feedback-msg">{feedback.message}</span>
+                        <button className="spotlight-feedback-close" onClick={() => setFeedback(null)}>×</button>
+                    </div>
+                )}
                 {/* AI Chat Mode */}
                 {commandMode === 'ai' && (
                     <div className="spotlight-ai-mode">
@@ -1966,7 +2136,7 @@ export function GlobalSpotlight() {
                 )}
 
                 {/* Recommendations Section - Shows when query is empty */}
-                {!query.trim() && !commandMode && contextItems.length > 0 && (() => {
+                {sections.context && !query.trim() && !commandMode && contextItems.length > 0 && (() => {
                     // Grouped/sliced in contextGroups so keyboard nav walks the same visible list
                     const { apps, tabs, visibleApps, visibleTabs } = contextGroups;
                     let flatIndex = pinnedItems.length; // Start after pinned items
@@ -2059,7 +2229,7 @@ export function GlobalSpotlight() {
                 })()}
 
                 {/* Pinned Items Section */}
-                {!query.trim() && !commandMode && pinnedItems.length > 0 && (
+                {sections.pins && !query.trim() && !commandMode && pinnedItems.length > 0 && (
                     <div className="spotlight-pins">
                         <div className="spotlight-pins-header">
                             <span className="spotlight-pins-title">Pinned</span>
@@ -2083,7 +2253,7 @@ export function GlobalSpotlight() {
                 )}
 
                 {/* Workspaces Section */}
-                {!query.trim() && !commandMode && (
+                {sections.workspaces && !query.trim() && !commandMode && (
                     <div className="spotlight-pins spotlight-pins--workspace">
                         {workspaces.length > 0 && (
                             <div className="spotlight-pins-header">
@@ -2232,6 +2402,7 @@ export function GlobalSpotlight() {
                 )}
 
                 {/* Footer */}
+                {sections.footer && (
                 <div className="spotlight-footer">
                     <div className="shortcut-hint"><span className="shortcut-key">↵</span> Open</div>
                     <div className="shortcut-hint"><span className="shortcut-key">↑↓</span> Navigate</div>
@@ -2249,6 +2420,9 @@ export function GlobalSpotlight() {
                     <div className="shortcut-hint"><span className="shortcut-key">Esc</span> Close</div>
                     <div className="shortcut-hint" style={{ marginLeft: 'auto' }}><span className="shortcut-key">⌘P</span> Pin</div>
                 </div>
+                )}
+                </div>
+                )}
             </div>
             <style>{`
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -2459,6 +2633,7 @@ function getIcon(type, name) {
         case 'folder': return faFolderOpen;
         case 'setting': return faCog;
         case 'tool': return faTools;
+        case 'command': return faTerminal;
         default: return faLink;
     }
 }

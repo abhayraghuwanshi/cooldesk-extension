@@ -1,5 +1,5 @@
 
-import { faBolt, faChevronDown, faClock, faDesktop, faExternalLinkAlt, faFolderOpen, faGlobe, faMagic, faPowerOff, faTasks, faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faBolt, faChevronDown, faClock, faDesktop, faExternalLinkAlt, faFile, faFolder, faFolderOpen, faGlobe, faMagic, faPowerOff, faTasks, faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useRef, useState } from 'react';
 import { getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
@@ -430,11 +430,32 @@ export const AppCard = memo(function AppCard({ app, onClick, onKill = null }) {
   );
 });
 
+// List a directory's entries ({ path, date, is_dir }) — Electron shim if
+// present, otherwise the Tauri `list_dir` command. Same source Spotlight's
+// folder tree uses, so both render identical contents.
+async function listDirAny(path) {
+  if (window.electronAPI?.listDir) return window.electronAPI.listDir(path);
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke('list_dir', { path });
+}
+
+function baseName(p) {
+  const parts = p.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] || p;
+}
+
 /**
- * FolderCard - Card for frequently visited folders (Windows Quick Access).
- * Click opens the folder in the system file manager.
+ * FolderCard - Card for frequently visited folders. Header click opens the
+ * folder in the system file manager; the card expands inline to browse its
+ * contents (Spotlight-style tree: subfolders drill deeper, files open on click).
  */
 export const FolderCard = memo(function FolderCard({ folder, onClick }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  // Nested subfolders currently open inside the tree
+  const [openPaths, setOpenPaths] = useState(() => new Set());
+  // path -> children entries, loaded once per folder then cached
+  const [childrenCache, setChildrenCache] = useState({});
+
   if (!folder?.path) return null;
 
   const { name, path } = folder;
@@ -442,21 +463,155 @@ export const FolderCard = memo(function FolderCard({ folder, onClick }) {
   // Compact the path for display: "C:\Users\me\projects\app" → "~\projects\app"
   const shortPath = path.replace(/^[A-Za-z]:\\Users\\[^\\]+/i, '~');
 
+  const loadChildren = (p) => {
+    if (childrenCache[p]) return;
+    listDirAny(p)
+      .then(items => setChildrenCache(prev => ({ ...prev, [p]: Array.isArray(items) ? items : [] })))
+      .catch(() => setChildrenCache(prev => ({ ...prev, [p]: [] })));
+  };
+
+  const toggleCard = (e) => {
+    e.stopPropagation();
+    const next = !isExpanded;
+    setIsExpanded(next);
+    if (next) loadChildren(path);
+  };
+
+  const toggleDir = (e, p) => {
+    e.stopPropagation();
+    setOpenPaths(prev => {
+      const next = new Set(prev);
+      if (next.has(p)) {
+        next.delete(p);
+      } else {
+        next.add(p);
+        loadChildren(p);
+      }
+      return next;
+    });
+  };
+
+  // Open any path (folder or file) with the system handler.
+  const openPath = (e, p) => {
+    e.stopPropagation();
+    onClick?.({ name: baseName(p), path: p });
+  };
+
+  // Flatten the tree (children of expanded folders, recursively) into rows.
+  const MAX_PER_LEVEL = 15;
+  const rows = [];
+  const walk = (p, depth) => {
+    const kids = childrenCache[p];
+    if (!kids) return;
+    kids.slice(0, MAX_PER_LEVEL).forEach(k => {
+      rows.push({ ...k, depth });
+      if (k.is_dir && openPaths.has(k.path)) walk(k.path, depth + 1);
+    });
+    if (kids.length > MAX_PER_LEVEL) {
+      rows.push({ path: p, more: kids.length - MAX_PER_LEVEL, depth });
+    }
+  };
+  if (isExpanded) walk(path, 0);
+  const loading = isExpanded && !childrenCache[path];
+
   return (
-    <div className="cooldesk-tab-card app-card" onClick={() => onClick?.(folder)}>
-      <div className="tab-card-header">
-        <div className={`tab-icon ${colorClass}`}>
+    <div className={`cooldesk-tab-group-card ${isExpanded ? 'expanded' : ''}`}>
+      <div className="tab-group-header" onClick={(e) => openPath(e, path)} style={{ cursor: 'pointer' }} title={path}>
+        <div className={`tab-group-icon ${colorClass}`}>
           <FontAwesomeIcon icon={faFolderOpen} />
         </div>
-        <div className="tab-info">
-          <div className="tab-title" title={name}>
-            {name}
-          </div>
-          <div className="tab-hostname" title={path}>
-            {shortPath}
-          </div>
+        <div className="tab-group-info">
+          <div className="tab-group-domain">{name}</div>
+          <div className="tab-group-subtitle">{shortPath}</div>
         </div>
       </div>
+
+      <button
+        className={`tab-group-expand-btn ${isExpanded ? 'expanded' : ''}`}
+        onClick={toggleCard}
+        title={isExpanded ? 'Hide folder contents' : 'Browse folder contents'}
+      >
+        <span className="expand-btn-text">
+          {isExpanded ? 'Hide contents' : 'Browse contents'}
+        </span>
+        <FontAwesomeIcon icon={faChevronDown} className="expand-btn-icon" />
+      </button>
+
+      {isExpanded && (
+        <div className="tab-group-tabs">
+          {loading && (
+            <div style={{ padding: '8px 10px', fontSize: 'var(--font-xs, 11px)', color: 'var(--text-secondary, #64748B)' }}>
+              Loading…
+            </div>
+          )}
+          {!loading && rows.length === 0 && (
+            <div style={{ padding: '8px 10px', fontSize: 'var(--font-xs, 11px)', color: 'var(--text-secondary, #64748B)' }}>
+              Empty folder
+            </div>
+          )}
+          {rows.map((row, idx) => {
+            // One guide line per ancestor level keeps the hierarchy readable.
+            const guides = Array.from({ length: row.depth }, (_, i) => (
+              <span key={i} className="folder-tree-guide" />
+            ));
+            if (row.more) {
+              return (
+                <div
+                  key={`more-${row.path}-${idx}`}
+                  className="tab-group-item folder-tree-row"
+                  style={{ opacity: 0.7 }}
+                  onClick={(e) => openPath(e, row.path)}
+                  title="Open in file manager to see everything"
+                >
+                  {guides}
+                  <span className="folder-tree-caret" />
+                  <div className="tab-group-item-text">+{row.more} more…</div>
+                </div>
+              );
+            }
+            const isOpen = row.is_dir && openPaths.has(row.path);
+            return (
+              <div
+                key={row.path}
+                className="tab-group-item folder-tree-row"
+                onClick={(e) => (row.is_dir ? toggleDir(e, row.path) : openPath(e, row.path))}
+                title={row.path}
+              >
+                {guides}
+                <span className="folder-tree-caret">
+                  {row.is_dir && (
+                    <FontAwesomeIcon
+                      icon={faChevronDown}
+                      style={{
+                        fontSize: '9px',
+                        opacity: 0.7,
+                        transform: isOpen ? 'none' : 'rotate(-90deg)',
+                        transition: 'transform 0.15s ease'
+                      }}
+                    />
+                  )}
+                </span>
+                <div className="tab-group-item-icon">
+                  <FontAwesomeIcon
+                    icon={row.is_dir ? (isOpen ? faFolderOpen : faFolder) : faFile}
+                    style={{ color: row.is_dir ? '#FACC15' : '#94A3B8' }}
+                  />
+                </div>
+                <div className="tab-group-item-text">{baseName(row.path)}</div>
+                {row.is_dir && (
+                  <button
+                    className="tab-group-item-close"
+                    onClick={(e) => openPath(e, row.path)}
+                    title="Open in file manager"
+                  >
+                    <FontAwesomeIcon icon={faExternalLinkAlt} style={{ fontSize: '9px' }} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 });

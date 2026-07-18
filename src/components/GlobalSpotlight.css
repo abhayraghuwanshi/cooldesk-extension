@@ -1,7 +1,10 @@
 /* Global Spotlight - Compact Modern Design */
 /* Inspired by Raycast, Spotlight, Linear */
 
-html, body {
+/* Window chrome for the dedicated spotlight window ONLY — spotlight-main.jsx
+   adds .spotlight-window to <body>. Never applies when this stylesheet is
+   pulled in by an embedded surface (CoolDesk header). */
+body.spotlight-window {
   background: transparent !important;
   margin: 0;
   padding: 0;
@@ -1220,4 +1223,191 @@ html, body {
 .ws-tab.active .ws-tab-count {
   background: rgba(139, 92, 246, 0.25);
   color: rgba(196, 181, 253, 0.7);
+}
+
+/* ============================================
+   COMMAND / VOICE FEEDBACK TOAST
+   ============================================ */
+.spotlight-feedback {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  flex-shrink: 0;
+  color: #60A5FA;
+  background: rgba(59, 130, 246, 0.12);
+  border-bottom: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.spotlight-feedback.success {
+  color: #4ADE80;
+  background: rgba(34, 197, 94, 0.12);
+  border-bottom-color: rgba(34, 197, 94, 0.25);
+}
+
+.spotlight-feedback.error {
+  color: #F87171;
+  background: rgba(239, 68, 68, 0.12);
+  border-bottom-color: rgba(239, 68, 68, 0.25);
+}
+
+.spotlight-feedback-msg {
+  flex: 1;
+  white-space: pre-wrap;
+}
+
+.spotlight-feedback-close {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 4px;
+  opacity: 0.6;
+  font-size: 14px;
+}
+
+.spotlight-feedback-close:hover {
+  opacity: 1;
+}
+
+/* ============================================
+   VOICE BUTTON (enableVoice surfaces)
+   ============================================ */
+.spotlight-voice-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 14px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.spotlight-voice-btn:hover {
+  color: #a78bfa;
+  background: rgba(139, 92, 246, 0.12);
+}
+
+.spotlight-voice-btn.listening {
+  color: #a78bfa;
+  background: rgba(139, 92, 246, 0.16);
+}
+
+.voice-waveform {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 16px;
+}
+
+.voice-waveform span {
+  width: 2px;
+  min-height: 3px;
+  background: #a78bfa;
+  border-radius: 1px;
+  transition: height 0.1s ease;
+}
+
+.spotlight-search-box.listening {
+  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.35);
+}
+
+/* ============================================
+   EMBEDDED VARIANT (inline header search)
+   The same component skinned as a header pill: the input row matches the
+   44px header controls, everything below it drops down as an anchored panel.
+   ============================================ */
+
+/* Overlay default: the body wrapper is layout-transparent */
+.spotlight-body {
+  display: contents;
+}
+
+.spotlight-embedded {
+  position: relative;
+  width: 100%;
+}
+
+.spotlight-embedded .spotlight-container {
+  position: static;
+  max-width: none;
+  margin: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+  animation: none;
+  max-height: none;
+}
+
+/* Header pill — mirrors .cooldesk-search-box sizing/colors so it aligns with
+   the logo and header buttons (--header-item from cooldesk.css). */
+.spotlight-embedded .spotlight-search-box {
+  padding: 0 12px;
+  min-height: var(--header-item, 44px);
+  background: rgba(18, 18, 24, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.spotlight-embedded .spotlight-search-box:hover {
+  background: rgba(24, 24, 32, 0.8);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.spotlight-embedded .spotlight-search-box:focus-within {
+  background: rgba(12, 12, 16, 0.92);
+  border-color: rgba(139, 92, 246, 0.65);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.14), 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+
+/* Everything below the input becomes an anchored dropdown panel */
+.spotlight-embedded .spotlight-body {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 10003;
+  background: rgb(22, 22, 26);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3), 0 16px 48px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  max-height: min(70vh, 560px);
+  animation: spotlightEnter 0.15s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Feedback toast floats under the pill when the dropdown is closed */
+.spotlight-embedded .spotlight-feedback--floating {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 10004;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 10px;
+}
+
+.spotlight-embedded .spotlight-feedback--floating.success {
+  border-color: rgba(34, 197, 94, 0.25);
+}
+
+.spotlight-embedded .spotlight-feedback--floating.error {
+  border-color: rgba(239, 68, 68, 0.25);
 }

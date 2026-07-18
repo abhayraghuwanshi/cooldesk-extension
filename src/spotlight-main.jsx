@@ -10,6 +10,10 @@ import { initChromePolyfill } from './services/chromePolyfill';
 import './electron-shim';
 initChromePolyfill();
 
+// GlobalSpotlight.css scopes its window chrome (transparent bg, no scroll) to
+// this class so the shared component can also be embedded in the main app.
+document.body.classList.add('spotlight-window');
+
 // Lazy load GlobalSpotlight to keep initial bundle small
 const GlobalSpotlight = React.lazy(() =>
     import('./components/GlobalSpotlight').then(module => ({ default: module.GlobalSpotlight }))

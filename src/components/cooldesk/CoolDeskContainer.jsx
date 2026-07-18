@@ -13,7 +13,7 @@ import '../../styles/spatial.css';
 import '../../styles/tabCard.css';
 import { Face, WorkspaceShell } from '../spatial/WorkspaceShell';
 import AIWorkspaceManager from './AIWorkspaceManager';
-import { CoolSearch } from './CoolSearch';
+import { GlobalSpotlight } from '../GlobalSpotlight';
 import { GlobalAddButton } from './GlobalAddButton';
 import { OverviewDashboard } from './OverviewDashboard';
 // Lazy load WorkspaceList (Face 2)
@@ -428,10 +428,6 @@ export function CoolDeskContainer({
     onCreateWorkspace?.();
   };
 
-  const handleSearch = (query) => {
-    onSearch?.(query);
-  };
-
   const handleFaceChange = (face) => {
     setActiveFace(face);
     localStorage.setItem('cooldesk-active-face', face);
@@ -547,8 +543,8 @@ export function CoolDeskContainer({
               src={logo}
               alt="CoolDesk Logo"
               className="cooldesk-logo-icon"
-              width="48"
-              height="48"
+              width="44"
+              height="44"
               decoding="async"
               fetchPriority="high"
               style={{
@@ -560,11 +556,15 @@ export function CoolDeskContainer({
         </div>
 
         <div className="header-center">
-          <CoolSearch
-            onSearch={handleSearch}
+          {/* Same spotlight as Alt+K, embedded as the header search; voice and
+              slash commands are activated for this surface via props. */}
+          <GlobalSpotlight
+            variant="embedded"
             onWorkspaceNavigate={handleWorkspaceNavigate}
             onNavigate={handleNavigate}
             isDesktopApp={isDesktopApp}
+            enableVoice
+            enableSlashCommands
           />
         </div>
 

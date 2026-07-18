@@ -87,7 +87,8 @@
 }
 
 /* === SEARCH BOX === */
-.wallpaper-enabled .cooldesk-search-box {
+.wallpaper-enabled .cooldesk-search-box,
+.wallpaper-enabled .spotlight-embedded .spotlight-search-box {
     background: linear-gradient(135deg,
             rgba(20, 20, 25, 0.8) 0%,
             rgba(10, 10, 15, 0.75) 100%) !important;
@@ -258,7 +259,9 @@
 }
 
 .wallpaper-enabled .cooldesk-search-box:hover,
-.wallpaper-enabled .cooldesk-search-box:focus-within {
+.wallpaper-enabled .cooldesk-search-box:focus-within,
+.wallpaper-enabled .spotlight-embedded .spotlight-search-box:hover,
+.wallpaper-enabled .spotlight-embedded .spotlight-search-box:focus-within {
     background: linear-gradient(135deg,
             rgba(25, 25, 30, 0.85) 0%,
             rgba(15, 15, 20, 0.8) 100%) !important;
@@ -401,7 +404,7 @@
 .wallpaper-enabled .cooldesk-settings-btn,
 .wallpaper-enabled .cooldesk-voice-btn,
 .wallpaper-enabled .workspace-add-url-btn,
-.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]) {
+.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):not([class*="spotlight-"]):not([class*="ws-dropdown"]):not([class*="tree-chevron"]) {
     background: linear-gradient(135deg,
             rgba(25, 25, 30, 0.76) 0%,
             rgba(20, 20, 25, 0.7) 100%) !important;
@@ -417,7 +420,7 @@
 .wallpaper-enabled .cooldesk-settings-btn:hover,
 .wallpaper-enabled .cooldesk-voice-btn:hover,
 .wallpaper-enabled .workspace-add-url-btn:hover,
-.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):hover {
+.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):not([class*="spotlight-"]):not([class*="ws-dropdown"]):not([class*="tree-chevron"]):hover {
     background: linear-gradient(135deg,
             rgba(40, 40, 45, 0.84) 0%,
             rgba(30, 30, 35, 0.78) 100%) !important;
