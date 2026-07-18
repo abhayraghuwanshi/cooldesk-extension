@@ -118,23 +118,49 @@ struct DockState {
     enabled: bool,
     /// "drawer" (overlay handle) or "reserve" (AppBar).
     mode: String,
-    /// "left" or "right".
+    /// "left", "right", "top" or "bottom". Top/bottom render the horizontal
+    /// taskbar-style workspace bar instead of the sidebar panel.
     side: String,
-    /// Panel width in physical pixels.
+    /// Panel width in physical pixels (vertical docks).
     width: u32,
+    /// Bar thickness in physical pixels (horizontal docks).
+    bar_height: u32,
 }
 
 impl Default for DockState {
     fn default() -> Self {
-        Self { enabled: false, mode: "drawer".to_string(), side: "right".to_string(), width: 360 }
+        Self {
+            enabled: false,
+            mode: "drawer".to_string(),
+            side: "right".to_string(),
+            width: 360,
+            bar_height: 72,
+        }
     }
 }
 
 const DOCK_MIN_WIDTH: u32 = 220;
 const DOCK_MAX_WIDTH: u32 = 900;
-// Physical-pixel size of the collapsed edge handle (a vertically-centered tab).
+const BAR_MIN_HEIGHT: u32 = 40;
+const BAR_MAX_HEIGHT: u32 = 220;
+// Physical-pixel size of the collapsed edge handle (a centered tab; the long
+// side runs along the docked edge, so it's rotated for top/bottom docks).
 const HANDLE_W: i32 = 22;
 const HANDLE_H: i32 = 132;
+
+fn dock_is_horizontal(side: &str) -> bool {
+    side == "top" || side == "bottom"
+}
+
+/// The edge-appropriate thickness for a dock state: panel width for vertical
+/// docks, bar height for horizontal ones.
+fn dock_thickness(st: &DockState) -> u32 {
+    if dock_is_horizontal(&st.side) { st.bar_height } else { st.width }
+}
+
+fn emit_dock_state(app: &tauri::AppHandle, state: &DockState) {
+    let _ = app.emit("dock-state-changed", state);
+}
 
 fn dock_state_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
     app.path().app_config_dir().ok().map(|dir| dir.join("dock_state.json"))
@@ -171,47 +197,93 @@ fn primary_geom(app: &tauri::AppHandle) -> Option<(i32, i32, i32, i32)> {
 
 // ── Drawer mode ────────────────────────────────────────────────────────────
 
-/// Slide the panel in: size the main window to a full-height strip at the edge,
-/// make it a borderless topmost overlay, and hide the handle.
+/// Geometry the drawer lays out against. Horizontal (top/bottom) docks use the
+/// monitor *work area* so the bar sits above the Windows taskbar instead of
+/// covering it; vertical docks keep the historical full-monitor strip.
+fn drawer_geom(app: &tauri::AppHandle, win: &tauri::WebviewWindow, horizontal: bool) -> Option<(i32, i32, i32, i32)> {
+    #[cfg(windows)]
+    if horizontal {
+        if let Ok(hwnd) = win.hwnd() {
+            if let Some(geom) = dock::work_area(hwnd.0 as isize) {
+                return Some(geom);
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = (win, horizontal);
+    primary_geom(app)
+}
+
+/// Slide the panel in: size the main window to a strip at the docked edge
+/// (full-height sidebar or full-width bar), make it a borderless topmost
+/// overlay, and hide the handle.
 fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
-    if let (Some(main), Some((mx, my, mw, mh))) = (app.get_webview_window("main"), primary_geom(app)) {
-        let w = st.width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH) as i32;
-        let x = if st.side == "left" { mx } else { mx + mw - w };
-        let _ = main.set_decorations(false);
-        let _ = main.set_resizable(false);
-        let _ = main.set_always_on_top(true);
-        let _ = main.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w as u32, height: mh as u32 }));
-        let _ = main.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y: my }));
-        let _ = main.show();
-        let _ = main.set_focus();
+    let horizontal = dock_is_horizontal(&st.side);
+    if let Some(main) = app.get_webview_window("main") {
+        if let Some((mx, my, mw, mh)) = drawer_geom(app, &main, horizontal) {
+            let (x, y, w, h) = if horizontal {
+                let h = st.bar_height.clamp(BAR_MIN_HEIGHT, BAR_MAX_HEIGHT) as i32;
+                let y = if st.side == "top" { my } else { my + mh - h };
+                (mx, y, mw, h)
+            } else {
+                let w = st.width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH) as i32;
+                let x = if st.side == "left" { mx } else { mx + mw - w };
+                (x, my, w, mh)
+            };
+            let _ = main.set_decorations(false);
+            let _ = main.set_resizable(false);
+            let _ = main.set_always_on_top(true);
+            let _ = main.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w as u32, height: h as u32 }));
+            let _ = main.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
+            let _ = main.show();
+            let _ = main.set_focus();
+        }
     }
     if let Some(handle) = app.get_webview_window("handle") {
         let _ = handle.hide();
     }
 }
 
-/// Collapse to the handle: hide the panel, show the slim edge tab.
+/// Collapse to the handle: hide the panel, show the slim edge tab (vertical tab
+/// on left/right, horizontal tab on top/bottom).
 fn collapse_drawer(app: &tauri::AppHandle, st: &DockState) {
     if let Some(main) = app.get_webview_window("main") {
         let _ = main.hide();
     }
-    if let (Some(handle), Some((mx, my, mw, mh))) = (app.get_webview_window("handle"), primary_geom(app)) {
-        let x = if st.side == "left" { mx } else { mx + mw - HANDLE_W };
-        let y = my + (mh - HANDLE_H) / 2;
-        let _ = handle.set_always_on_top(true);
-        let _ = handle.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: HANDLE_W as u32, height: HANDLE_H as u32 }));
-        let _ = handle.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
-        let _ = handle.show();
+    let horizontal = dock_is_horizontal(&st.side);
+    if let Some(handle) = app.get_webview_window("handle") {
+        if let Some((mx, my, mw, mh)) = drawer_geom(app, &handle, horizontal) {
+            let (x, y, w, h) = if horizontal {
+                // Rotated tab: the long side runs along the edge.
+                let (w, h) = (HANDLE_H, HANDLE_W);
+                let x = mx + (mw - w) / 2;
+                let y = if st.side == "top" { my } else { my + mh - h };
+                (x, y, w, h)
+            } else {
+                let x = if st.side == "left" { mx } else { mx + mw - HANDLE_W };
+                let y = my + (mh - HANDLE_H) / 2;
+                (x, y, HANDLE_W, HANDLE_H)
+            };
+            let _ = handle.set_always_on_top(true);
+            let _ = handle.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w as u32, height: h as u32 }));
+            let _ = handle.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
+            let _ = handle.show();
+        }
     }
 }
 
 /// Turn on drawer mode: persist state and show the handle (collapsed).
-fn enable_drawer(app: &tauri::AppHandle, side: String, width: u32) -> DockState {
+/// `thickness` is the panel width for vertical sides, the bar height for
+/// top/bottom; the other dimension's stored value is preserved.
+fn enable_drawer(app: &tauri::AppHandle, side: String, thickness: u32) -> DockState {
+    let prev = load_dock_state(app);
+    let horizontal = dock_is_horizontal(&side);
     let state = DockState {
         enabled: true,
         mode: "drawer".to_string(),
+        width: if horizontal { prev.width } else { thickness.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH) },
+        bar_height: if horizontal { thickness.clamp(BAR_MIN_HEIGHT, BAR_MAX_HEIGHT) } else { prev.bar_height },
         side,
-        width: width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH),
     };
     save_dock_state(app, &state);
     collapse_drawer(app, &state);
@@ -221,9 +293,23 @@ fn enable_drawer(app: &tauri::AppHandle, side: String, width: u32) -> DockState 
 // ── Reserve mode (AppBar) ──────────────────────────────────────────────────
 
 /// Register the AppBar and dock the main window into the reserved strip.
-fn apply_dock(app: &tauri::AppHandle, side: String, width: u32) -> Result<DockState, String> {
-    let width = width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH);
-    let state = DockState { enabled: true, mode: "reserve".to_string(), side: side.clone(), width };
+/// `thickness` is the panel width for vertical sides, the bar height for
+/// top/bottom.
+fn apply_dock(app: &tauri::AppHandle, side: String, thickness: u32) -> Result<DockState, String> {
+    let horizontal = dock_is_horizontal(&side);
+    let thickness = if horizontal {
+        thickness.clamp(BAR_MIN_HEIGHT, BAR_MAX_HEIGHT)
+    } else {
+        thickness.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH)
+    };
+    let prev = load_dock_state(app);
+    let state = DockState {
+        enabled: true,
+        mode: "reserve".to_string(),
+        side: side.clone(),
+        width: if horizontal { prev.width } else { thickness },
+        bar_height: if horizontal { thickness } else { prev.bar_height },
+    };
 
     #[cfg(windows)]
     {
@@ -237,10 +323,9 @@ fn apply_dock(app: &tauri::AppHandle, side: String, width: u32) -> Result<DockSt
         let _ = window.set_decorations(false);
         let _ = window.set_resizable(false);
         let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
-        let side_right = side != "left";
-        let (x, y, cx, cy) = dock::set_dock(hwnd, side_right, width as i32)?;
+        let (x, y, cx, cy) = dock::set_dock(hwnd, &side, thickness as i32)?;
         log::info!(
-            "[Dock] Reserved strip: x={x} y={y} w={cx} h={cy} (side={side}, req_width={width})"
+            "[Dock] Reserved strip: x={x} y={y} w={cx} h={cy} (side={side}, thickness={thickness})"
         );
         let _ = window.show();
     }
@@ -294,19 +379,31 @@ fn dock_enable(
     mode: Option<String>,
 ) -> Result<DockState, String> {
     let prev = load_dock_state(&app);
-    let side = side.unwrap_or(prev.side);
-    let width = width.unwrap_or(prev.width);
+    let side = match side.as_deref() {
+        Some("left") => "left".to_string(),
+        Some("right") => "right".to_string(),
+        Some("top") => "top".to_string(),
+        Some("bottom") => "bottom".to_string(),
+        _ => prev.side.clone(),
+    };
+    // `width` is the thickness of the requested edge; default to the stored
+    // value for that orientation, not the other one's.
+    let thickness = width.unwrap_or(if dock_is_horizontal(&side) { prev.bar_height } else { prev.width });
     let mode = mode.unwrap_or(prev.mode);
-    if mode == "reserve" {
-        apply_dock(&app, side, width)
+    let state = if mode == "reserve" {
+        apply_dock(&app, side, thickness)?
     } else {
-        Ok(enable_drawer(&app, side, width))
-    }
+        enable_drawer(&app, side, thickness)
+    };
+    emit_dock_state(&app, &state);
+    Ok(state)
 }
 
 #[tauri::command]
 fn dock_disable(app: tauri::AppHandle) -> DockState {
-    disable_dock(&app)
+    let state = disable_dock(&app);
+    emit_dock_state(&app, &state);
+    state
 }
 
 /// Slide the drawer panel in (called by the handle window's click, the tray, or
@@ -330,23 +427,32 @@ fn dock_collapse(app: tauri::AppHandle) -> DockState {
     st
 }
 
+/// Resize the docked edge: sets the panel width for vertical docks, the bar
+/// height for horizontal ones.
 #[tauri::command(rename_all = "snake_case")]
 fn dock_set_width(app: tauri::AppHandle, width: u32) -> Result<DockState, String> {
     let mut state = load_dock_state(&app);
-    state.width = width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH);
+    if dock_is_horizontal(&state.side) {
+        state.bar_height = width.clamp(BAR_MIN_HEIGHT, BAR_MAX_HEIGHT);
+    } else {
+        state.width = width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH);
+    }
     save_dock_state(&app, &state);
 
     if state.enabled {
         if state.mode == "reserve" {
-            return apply_dock(&app, state.side, state.width);
+            let state = apply_dock(&app, state.side.clone(), dock_thickness(&state))?;
+            emit_dock_state(&app, &state);
+            return Ok(state);
         }
-        // Drawer: if the panel is currently open, re-lay it out at the new width.
+        // Drawer: if the panel is currently open, re-lay it out at the new size.
         if let Some(main) = app.get_webview_window("main") {
             if main.is_visible().unwrap_or(false) {
                 expand_drawer(&app, &state);
             }
         }
     }
+    emit_dock_state(&app, &state);
     Ok(state)
 }
 
@@ -1827,7 +1933,7 @@ pub fn run() {
           let dock_state = load_dock_state(app_handle);
           if dock_state.enabled {
               if dock_state.mode == "reserve" {
-                  if let Err(e) = apply_dock(app_handle, dock_state.side.clone(), dock_state.width) {
+                  if let Err(e) = apply_dock(app_handle, dock_state.side.clone(), dock_thickness(&dock_state)) {
                       log::warn!("[Dock] Failed to re-apply reserve dock on startup: {}", e);
                   }
               } else {
@@ -1884,11 +1990,12 @@ pub fn run() {
               "toggle_dock" => {
                   // Toggle the drawer handle on/off.
                   let state = load_dock_state(app);
-                  if state.enabled {
-                      disable_dock(app);
+                  let new_state = if state.enabled {
+                      disable_dock(app)
                   } else {
-                      enable_drawer(app, state.side.clone(), state.width);
-                  }
+                      enable_drawer(app, state.side.clone(), dock_thickness(&state))
+                  };
+                  emit_dock_state(app, &new_state);
               }
               "quit" => {
                   app.exit(0);

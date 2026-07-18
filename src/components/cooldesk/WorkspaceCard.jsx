@@ -17,6 +17,7 @@ import {
   faFutbol,
   faGamepad,
   faGraduationCap,
+  faGripLines,
   faHashtag,
   faHeartPulse,
   faHome,
@@ -1239,6 +1240,20 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
             >
               <FontAwesomeIcon icon={faThumbtack} style={{ color: isPinned ? '#FDE047' : undefined }} />
               {isPinned ? 'Unpin' : 'Pin'}
+            </button>
+          )}
+          {isDesktopApp && (
+            <button
+              className="context-menu-item"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('cooldesk-dock-workspace', {
+                  detail: { id: workspace.id, name: workspace.name },
+                }));
+                setContextMenu(null);
+              }}
+            >
+              <FontAwesomeIcon icon={faGripLines} />
+              Activate as dock
             </button>
           )}
           {onDelete && (

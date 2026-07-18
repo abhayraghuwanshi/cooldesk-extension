@@ -85,9 +85,9 @@ function sanitizeTiles(arr) {
     }));
 }
 
-function loadLayouts() {
+function loadLayouts(storageKey, defaultBoard, migrateV1) {
     try {
-        const raw = localStorage.getItem(STORAGE_KEY);
+        const raw = localStorage.getItem(storageKey);
         if (raw) {
             const s = JSON.parse(raw);
             if (s && s.layouts && typeof s.layouts === 'object') {
@@ -100,11 +100,13 @@ function loadLayouts() {
                 }
             }
         }
-        // Migrate the single-board era in place.
-        const v1 = JSON.parse(localStorage.getItem(STORAGE_KEY_V1) || 'null');
-        if (Array.isArray(v1)) return { active: 'Home', layouts: { Home: sanitizeTiles(v1) } };
+        // Migrate the single-board era in place (main board only).
+        if (migrateV1) {
+            const v1 = JSON.parse(localStorage.getItem(STORAGE_KEY_V1) || 'null');
+            if (Array.isArray(v1)) return { active: 'Home', layouts: { Home: sanitizeTiles(v1) } };
+        }
     } catch { /* fall through to default */ }
-    return { active: 'Home', layouts: { Home: DEFAULT_BOARD } };
+    return { active: 'Home', layouts: { Home: defaultBoard } };
 }
 
 // A category-seeded layout starts with that category's first four widgets.
@@ -416,14 +418,30 @@ function WidgetPicker({ board, theme, customs, onAdd, onRemove, onClose, onCreat
     );
 }
 
-const WidgetBoard = memo(function WidgetBoard() {
-    const [state, setState] = useState(loadLayouts);
+// `storageArea` gives a surface (e.g. the Tabs page) its own independently
+// saved board; omitted = the original overview board. `compact` renders the
+// strip variant: no layout tabs, collapsible, responsive columns — for
+// reserving a widget area at the top of another view.
+const WidgetBoard = memo(function WidgetBoard({ storageArea, compact = false, defaultBoard = DEFAULT_BOARD }) {
+    const storageKey = storageArea ? `${STORAGE_KEY}:${storageArea}` : STORAGE_KEY;
+    const collapseKey = `${storageKey}:collapsed`;
+    const [state, setState] = useState(() => loadLayouts(storageKey, defaultBoard, !storageArea));
     const [customs, setCustoms] = useState(loadCustomWidgets);
     const [showPicker, setShowPicker] = useState(false);
     const [showLayoutMenu, setShowLayoutMenu] = useState(false);
     const [newLayoutName, setNewLayoutName] = useState('');
     const [draggingId, setDraggingId] = useState(null);
+    const [collapsed, setCollapsed] = useState(() => {
+        try { return compact && localStorage.getItem(collapseKey) === '1'; } catch { return false; }
+    });
     const theme = useMemo(currentTheme, []);
+
+    const toggleCollapsed = useCallback(() => {
+        setCollapsed(prev => {
+            try { localStorage.setItem(collapseKey, prev ? '0' : '1'); } catch { /* ignore */ }
+            return !prev;
+        });
+    }, [collapseKey]);
 
     const board = state.layouts[state.active] || [];
     const layoutNames = Object.keys(state.layouts);
@@ -434,10 +452,10 @@ const WidgetBoard = memo(function WidgetBoard() {
 
     useEffect(() => {
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-            localStorage.removeItem(STORAGE_KEY_V1);
+            localStorage.setItem(storageKey, JSON.stringify(state));
+            if (!storageArea) localStorage.removeItem(STORAGE_KEY_V1);
         } catch { /* storage unavailable */ }
-    }, [state]);
+    }, [state, storageKey, storageArea]);
 
     // All tile mutations operate on the active layout inside the map.
     const setBoard = useCallback((updater) => {
@@ -533,15 +551,27 @@ const WidgetBoard = memo(function WidgetBoard() {
     const unusedCategories = WIDGET_CATEGORIES.filter(c => !state.layouts[c]);
 
     return (
-        <div className="wgb-root">
+        <div className={`wgb-root ${compact ? 'wgb-root-compact' : ''}`}>
             <div className="wgb-head">
                 <span className="wgb-title">Widgets</span>
-                <button className="wgb-pill wgb-add-btn" onClick={() => setShowPicker(true)}>
-                    ＋ Add widget
-                </button>
+                <div className="wgb-head-actions">
+                    <button className="wgb-pill wgb-add-btn" onClick={() => setShowPicker(true)}>
+                        ＋ Add widget
+                    </button>
+                    {compact && (
+                        <button
+                            className="wgb-pill wgb-collapse-btn"
+                            title={collapsed ? 'Show widgets' : 'Hide widgets'}
+                            onClick={toggleCollapsed}
+                        >
+                            {collapsed ? '▾' : '▴'}
+                        </button>
+                    )}
+                </div>
             </div>
 
-            {/* Layout tabs: each is an independently saved board. */}
+            {/* Layout tabs: each is an independently saved board (full board only). */}
+            {!compact && (
             <div className="wgb-layouts">
                 {layoutNames.map(name => (
                     <span key={name} className={`wgb-pill wgb-layout-pill ${state.active === name ? 'active' : ''}`}
@@ -587,13 +617,14 @@ const WidgetBoard = memo(function WidgetBoard() {
                     </>
                 )}
             </div>
+            )}
 
-            {board.length === 0 ? (
+            {collapsed ? null : board.length === 0 ? (
                 <button className="wgb-empty" onClick={() => setShowPicker(true)}>
                     ＋ Add widgets from the store
                 </button>
             ) : (
-                <div className={`wgb-grid ${draggingId ? 'wgb-grid-dragging' : ''}`}>
+                <div className={`wgb-grid ${compact ? 'wgb-grid-strip' : ''} ${draggingId ? 'wgb-grid-dragging' : ''}`}>
                     {board.map(tile => (
                         <WidgetTile
                             key={tile.id}

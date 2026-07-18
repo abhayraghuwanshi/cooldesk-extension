@@ -37,6 +37,50 @@
             box-shadow: 2px 0 10px rgba(0, 0, 0, 0.35);
         }
 
+        /* Horizontal docks: an OS-style grabber instead of the purple pill —
+           slim translucent dark tab with a thin grip line, accent on hover. */
+        #handle.top,
+        #handle.bottom {
+            background: rgba(22, 18, 30, 0.82);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            box-sizing: border-box;
+            color: rgba(255, 255, 255, 0.65);
+        }
+
+        #handle.top {
+            border-top: none;
+            border-radius: 0 0 10px 10px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        #handle.bottom {
+            border-bottom: none;
+            border-radius: 10px 10px 0 0;
+            box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        #handle.top:hover,
+        #handle.bottom:hover {
+            background: rgba(109, 40, 217, 0.85);
+            color: rgba(255, 255, 255, 0.95);
+        }
+
+        /* Swap the grip dots for a single thin horizontal line. */
+        #handle.top .grip,
+        #handle.bottom .grip {
+            width: 28px;
+            height: 3px;
+            border-radius: 2px;
+            background: currentColor;
+            opacity: 0.8;
+            gap: 0;
+        }
+
+        #handle.top .grip span,
+        #handle.bottom .grip span {
+            display: none;
+        }
+
         #handle:hover {
             filter: brightness(1.12);
         }

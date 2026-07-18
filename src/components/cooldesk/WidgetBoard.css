@@ -19,6 +19,45 @@
     margin-bottom: 12px;
 }
 
+.wgb-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* ── Compact strip variant — a reserved widget area at the top of another
+      view (e.g. the Tabs page). No layout tabs, collapsible, and the grid
+      flows into as many columns as the width allows. ── */
+.wgb-root-compact {
+    /* Breathing room below the toolbar; the parent's gap spaces the bottom. */
+    margin: 10px 0 0;
+}
+
+.wgb-root-compact .wgb-head {
+    margin-bottom: 8px;
+}
+
+/* Match the Tabs page section headers (Active Apps, Pinned, …). */
+.wgb-root-compact .wgb-title {
+    font-size: var(--font-2xl, 20px);
+    font-weight: 600;
+    color: var(--text-secondary, #94A3B8);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.wgb-grid-strip {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+/* Very small windows (sidebar dock, tiny resize): the widget strip would
+   crowd out the tabs — drop it entirely. */
+@media (max-width: 640px), (max-height: 520px) {
+    .wgb-root-compact {
+        display: none;
+    }
+}
+
 .wgb-title {
     font-size: var(--font-lg, 15px);
     font-weight: 650;

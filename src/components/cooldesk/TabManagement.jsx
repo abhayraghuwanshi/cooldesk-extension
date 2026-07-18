@@ -11,6 +11,13 @@ import { enrichRunningAppsWithIcons, getBaseDomainFromUrl } from '../../utils/he
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
 import { AppCard, FolderCard, TabCard, TabGroupCard, TaskGroupCard } from './TabCard';
 import { DevServersPanel } from './DevServersPanel';
+import { WidgetBoard } from './WidgetBoard';
+
+// The Tabs page gets its own widget strip (independent of the overview board).
+const TABS_WIDGET_DEFAULT = [
+  { id: 'clock', size: 's' },
+  { id: 'todo', size: 's' },
+];
 
 // Chrome native tab group colors (matches Chrome's palette)
 const CHROME_GROUP_COLORS = {
@@ -1072,6 +1079,9 @@ export function TabManagement() {
         flexDirection: 'column',
         gap: '12px'
       }}>
+        {/* Reserved widget area — same store as the overview board, its own layout. */}
+        <WidgetBoard storageArea="tabs" compact defaultBoard={TABS_WIDGET_DEFAULT} />
+
         {tabsLoading ? (
           <div style={{
             display: 'flex',

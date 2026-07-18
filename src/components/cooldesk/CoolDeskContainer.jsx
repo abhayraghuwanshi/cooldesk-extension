@@ -1,4 +1,4 @@
-import { faDiagramProject, faDownLeftAndUpRightToCenter, faEllipsisVertical, faGear, faUpRightAndDownLeftFromCenter, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faDiagramProject, faDownLeftAndUpRightToCenter, faEllipsisVertical, faGear, faGripLines, faUpRightAndDownLeftFromCenter, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import logo from '../../../logo-2.png';
@@ -16,6 +16,8 @@ import AIWorkspaceManager from './AIWorkspaceManager';
 import { GlobalSpotlight } from '../GlobalSpotlight';
 import { GlobalAddButton } from './GlobalAddButton';
 import { OverviewDashboard } from './OverviewDashboard';
+import { WorkspaceDockBar } from './WorkspaceDockBar';
+import { useDockState } from '../../hooks/useDockState';
 // Lazy load WorkspaceList (Face 2)
 const WorkspaceList = lazy(() => import('./WorkspaceList').then(m => ({ default: m.WorkspaceList })));
 
@@ -144,6 +146,9 @@ export function CoolDeskContainer({
   // Sidebar-width corner control bar (replaces the hidden top header)
   const [sidebarControlsOpen, setSidebarControlsOpen] = useState(false);
 
+  // Backend dock state — drives the horizontal-bar render mode below.
+  const dockState = useDockState();
+
   const handleExitDock = useCallback(async () => {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
@@ -153,18 +158,34 @@ export function CoolDeskContainer({
     }
   }, []);
 
-  // Re-enter sidebar mode from the full app: enable the drawer (previous
-  // side/width persist in dock state) and slide it in right away instead of
-  // leaving just the collapsed edge handle.
-  const handleEnterDock = useCallback(async () => {
+  // Activate a workspace as a taskbar-style bottom bar: make it current, then
+  // dock the main window to the bottom edge and slide it in.
+  const handleDockWorkspace = useCallback(async (workspace) => {
+    if (workspace) setCurrentWorkspace(workspace);
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('dock_enable', { mode: 'drawer' });
+      await invoke('dock_enable', { mode: 'drawer', side: 'bottom' });
+      await invoke('dock_expand');
+    } catch (e) {
+      console.error('[CoolDesk] Failed to dock workspace as bar:', e);
+    }
+  }, []);
+
+  // Re-enter sidebar mode from the full app and slide it in right away instead
+  // of leaving just the collapsed edge handle. Side must be explicit: the saved
+  // side may be "bottom" from the bar mode, and falling back to it would turn
+  // this button into a second bottom-bar button. Keep the user's last vertical
+  // side, defaulting to right.
+  const handleEnterDock = useCallback(async () => {
+    const side = dockState?.side === 'left' ? 'left' : 'right';
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('dock_enable', { mode: 'drawer', side });
       await invoke('dock_expand');
     } catch (e) {
       console.error('[CoolDesk] Failed to enter dock mode:', e);
     }
-  }, []);
+  }, [dockState]);
 
   const handleOpenAIManager = useCallback((workspace = null) => {
     setAiManagerState({
@@ -235,6 +256,18 @@ export function CoolDeskContainer({
     window.addEventListener('cooldesk-navigate', handler);
     return () => window.removeEventListener('cooldesk-navigate', handler);
   }, []);
+
+  // "Activate as dock" from a workspace card's context menu (custom event so it
+  // doesn't need prop-drilling through WorkspaceList's three card call sites).
+  useEffect(() => {
+    const handler = (e) => {
+      const { id, name } = e.detail || {};
+      const workspace = savedWorkspaces.find((w) => (id && w.id === id) || (name && w.name === name));
+      if (workspace) handleDockWorkspace(workspace);
+    };
+    window.addEventListener('cooldesk-dock-workspace', handler);
+    return () => window.removeEventListener('cooldesk-dock-workspace', handler);
+  }, [savedWorkspaces, handleDockWorkspace]);
 
   // Tab management state
   const [tabs, setTabs] = useState([]);
@@ -518,6 +551,19 @@ export function CoolDeskContainer({
     }
   }, [visitedFaces, p2pInitialized]);
 
+  // Horizontal dock mode: while docked to the top/bottom edge, the main window
+  // is a ~96px-tall strip — render only the taskbar-style workspace bar.
+  if (isDesktopApp && dockState?.enabled && (dockState.side === 'top' || dockState.side === 'bottom')) {
+    return (
+      <WorkspaceDockBar
+        workspaces={savedWorkspaces}
+        activeWorkspace={currentWorkspace}
+        onSelectWorkspace={setCurrentWorkspace}
+        side={dockState.side}
+      />
+    );
+  }
+
   return (
     <div className={`cooldesk-container ${themeClass}`}>
       {/* Wallpaper Background Overlay (Blur) handled by React, Image handled by Body CSS */}
@@ -572,6 +618,11 @@ export function CoolDeskContainer({
           {isDesktopApp && (
             <button className="cooldesk-settings-btn" onClick={handleEnterDock} title="Dock as sidebar">
               <FontAwesomeIcon icon={faDownLeftAndUpRightToCenter} />
+            </button>
+          )}
+          {isDesktopApp && (
+            <button className="cooldesk-settings-btn" onClick={() => handleDockWorkspace(currentWorkspace)} title="Dock as bottom bar">
+              <FontAwesomeIcon icon={faGripLines} />
             </button>
           )}
           <button className="cooldesk-settings-btn" onClick={() => setGraphOpen(true)} title="Cool Activity (Ctrl+Shift+G)">
