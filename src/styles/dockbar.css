@@ -3,7 +3,9 @@
 
 .dockbar {
   /* The bar mounts inside App's .popup-wrap with siblings (UpdateBanner etc.),
-     so it must pin itself over the whole window rather than rely on flow. */
+     so it must pin itself over the whole window rather than rely on flow.
+     Visual grammar matches the edge handle (handle.html): translucent dark
+     glass, hairline border, rounded corners on the inner edge. */
   position: fixed;
   inset: 0;
   z-index: 9999;
@@ -12,7 +14,7 @@
   gap: 8px;
   box-sizing: border-box;
   padding: 5px 10px;
-  background: rgba(18, 14, 26, 0.97);
+  background: rgba(22, 18, 30, 0.88);
   backdrop-filter: blur(18px);
   font-family: var(--font-family-base, -apple-system, 'Segoe UI', sans-serif);
   overflow: hidden;
@@ -20,11 +22,13 @@
 }
 
 .dockbar--bottom {
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px 10px 0 0;
 }
 
 .dockbar--top {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0 0 10px 10px;
 }
 
 /* Workspace chip — compact pill, click cycles workspaces. */
@@ -35,16 +39,17 @@
   flex: 0 0 auto;
   max-width: 170px;
   padding: 4px 10px 4px 6px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.92);
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: background 0.12s ease, border-color 0.12s ease;
 }
 
 .dockbar-ws-chip:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(42, 34, 56, 0.92);
+  border-color: rgba(167, 139, 250, 0.45);
 }
 
 .dockbar-ws-logo {
@@ -115,7 +120,8 @@
 
 .dockbar-item:hover {
   transform: translateY(-3px) scale(1.05);
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(42, 34, 56, 0.95);
+  box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.35);
 }
 
 .dockbar--top .dockbar-item:hover {
