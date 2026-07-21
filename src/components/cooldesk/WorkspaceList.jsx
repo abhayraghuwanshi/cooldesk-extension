@@ -125,11 +125,15 @@ export function WorkspaceList({
         return () => document.removeEventListener('mousedown', onDocClick);
     }, [isModeMenuOpen]);
 
-    // Narrow mode: the expanded workspace takes over the list as a full detail view
+    // Expanding a workspace takes over the list as a full detail view (status /
+    // tasks / notes as their own full-width section below the items) at every
+    // width — the same presentation the narrow sidebar always used. This
+    // replaces the in-card drag-to-resize scroll panel, which crammed the same
+    // content into a fixed-height card and overlapped the links.
     const expandedDetailWorkspace = useMemo(() => {
-        if (!isNarrow || !expandedWorkspaceId) return null;
+        if (!expandedWorkspaceId) return null;
         return savedWorkspaces.find(w => w.id === expandedWorkspaceId) || null;
-    }, [isNarrow, expandedWorkspaceId, savedWorkspaces]);
+    }, [expandedWorkspaceId, savedWorkspaces]);
     // Track which workspace app banners have been dismissed in this session
     const [dismissedBanners, setDismissedBanners] = useState(new Set());
 

@@ -1,80 +1,132 @@
-/* Taskbar-style workspace dock (top/bottom edges). The main window IS the bar
-   in this mode, so the root fills the viewport and everything fits one row. */
+/* Floating macOS-style dock (top/bottom edges). The main window IS the bar in
+   this mode (transparent, edge-to-edge), so the real desktop shows through
+   around it — the dock is a single content-hugging glass pill, centered and
+   floating a few pixels off the screen edge, not a slab that fills the window. */
 
 .dockbar {
-  /* The bar mounts inside App's .popup-wrap with siblings (UpdateBanner etc.),
-     so it must pin itself over the whole window rather than rely on flow.
-     Visual grammar matches the edge handle (handle.html): translucent dark
-     glass, hairline border, rounded corners on the inner edge. */
   position: fixed;
   inset: 0;
   z-index: 9999;
   display: flex;
+  /* Center the pill in the (short) window band so the space above and below it
+     is equal — with flex-end + zero top padding all the slack pooled at the
+     bottom and the pill crowded the top edge. */
   align-items: center;
-  gap: 8px;
+  justify-content: center;
   box-sizing: border-box;
-  padding: 5px 10px;
-  background: rgba(22, 18, 30, 0.88);
-  backdrop-filter: blur(18px);
+  padding: 4px 18px;
+  background: transparent;
   font-family: var(--font-family-base, -apple-system, 'Segoe UI', sans-serif);
-  overflow: hidden;
+  overflow: visible;
   user-select: none;
 }
 
-.dockbar--bottom {
-  border-top: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 10px 10px 0 0;
+/* ---- The pill: workspace chip · launchers · controls, all in one shelf ---- */
+.dockbar-shelf {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 2px 9px;
+  border-radius: 21px;
+  /* Near-neutral dark glass — barely-there warmth, not a purple wash. The
+     accent color lives only on the chip and active states. */
+  background: linear-gradient(180deg, rgba(38, 36, 44, 0.72), rgba(20, 19, 24, 0.82));
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.13) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.2) inset,
+    0 20px 44px -16px rgba(0, 0, 0, 0.62),
+    0 5px 14px rgba(0, 0, 0, 0.3);
+  animation: dockShelfIn 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.dockbar--top {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 0 0 10px 10px;
+@keyframes dockShelfIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* Workspace chip — compact pill, click cycles workspaces. */
+.dockbar--top .dockbar-shelf {
+  animation-name: dockShelfInTop;
+}
+
+@keyframes dockShelfInTop {
+  from { opacity: 0; transform: translateY(-16px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Workspace chip — the dock's "Finder icon": distinct pill, always-visible
+   name, the one place the accent color leads. Click cycles workspaces. */
 .dockbar-ws-chip {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   flex: 0 0 auto;
-  max-width: 170px;
-  padding: 4px 10px 4px 6px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  max-width: 168px;
+  height: 44px;
+  padding: 0 13px 0 7px;
+  border: 1px solid rgba(167, 139, 250, 0.28);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.92);
+  background: linear-gradient(150deg, rgba(139, 92, 246, 0.28), rgba(139, 92, 246, 0.08));
+  color: #fff;
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition: filter 0.15s ease, border-color 0.15s ease, transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .dockbar-ws-chip:hover {
-  background: rgba(42, 34, 56, 0.92);
-  border-color: rgba(167, 139, 250, 0.45);
+  filter: brightness(1.15);
+  border-color: rgba(167, 139, 250, 0.55);
+  transform: translateY(-2px);
+}
+
+.dockbar--top .dockbar-ws-chip:hover {
+  transform: translateY(2px);
 }
 
 .dockbar-ws-logo {
-  width: 18px;
-  height: 18px;
+  width: 30px;
+  height: 30px;
   object-fit: contain;
   flex: 0 0 auto;
+  border-radius: 8px;
 }
 
 .dockbar-ws-name {
   font-size: var(--font-size-xs, 12px);
   font-weight: 600;
+  letter-spacing: 0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Launcher row — scrolls horizontally when a workspace has many items. */
+/* Hairline dividers between the pill's three zones. */
+.dockbar-sep {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 1px;
+  height: 26px;
+  margin: 0 1px;
+  background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.16), transparent);
+}
+
+/* Launcher row — scrolls horizontally so a workspace with many launchers stays
+   INSIDE the centered pill instead of overflowing past its right edge. The two
+   axes are set explicitly (x:auto, y:hidden) so neither forces the other to
+   `auto`; y:hidden clips at the padding edge, and the vertical padding then
+   doubles as the headroom a magnified icon grows into — it stays within the
+   pill rather than being clipped or spilling out. */
 .dockbar-items {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex: 1;
+  gap: 5px;
+  flex: 0 1 auto;
   min-width: 0;
   height: 100%;
+  padding: 7px 2px;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -90,83 +142,118 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border: none;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.07);
+  border-radius: 13px;
+  /* Almost no plate at rest — the icon reads as artwork, the way a real dock
+     icon does; the faint plate only grounds tiny favicons. Brightens on hover. */
+  background: rgba(255, 255, 255, 0.045);
   cursor: pointer;
-  transition: transform 0.12s ease, background 0.12s ease;
+  /* Grows from its own center so the magnification splits above and below,
+     fitting inside the row's vertical padding without clipping — the short
+     window band has no room for edge-anchored growth to rise out of the pill. */
+  transform-origin: center;
+  transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), background 0.15s ease;
 }
 
-/* Active = the app is running / the url is open in a tab. Purple ring +
-   taskbar-style dot, matching the app's purple-selection color grammar. */
-.dockbar-item.is-active {
-  background: rgba(139, 92, 246, 0.16);
-  box-shadow: 0 0 0 1.5px rgba(167, 139, 250, 0.55);
+/* Entrance is a transient class, toggled by React state on a timer (see
+   JSX) rather than a permanent rule — it shares the `animation` property
+   with .is-bouncing below, so only one of the two is ever applied at once. */
+.dockbar-item.is-entering {
+  animation: dockItemIn 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+@keyframes dockItemIn {
+  from { opacity: 0; transform: translateY(18px) scale(0.7); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Active = the app is running / the url is open in a tab. Glowing dot riding
+   just off the icon, matching the app's purple selection grammar. */
 .dockbar-item.is-active::after {
   content: '';
   position: absolute;
-  bottom: 0;
+  bottom: -4px;
   left: 50%;
   transform: translateX(-50%);
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
-  background: #a78bfa;
+  background: #c4b5fd;
+  box-shadow: 0 0 7px 1.5px rgba(196, 181, 253, 0.9);
+}
+
+.dockbar--top .dockbar-item.is-active::after {
+  bottom: auto;
+  top: -4px;
 }
 
 .dockbar-item:hover {
-  transform: translateY(-3px) scale(1.05);
-  background: rgba(42, 34, 56, 0.95);
-  box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.35);
-}
-
-.dockbar--top .dockbar-item:hover {
-  transform: translateY(3px) scale(1.05);
+  background: rgba(255, 255, 255, 0.1);
+  z-index: 5;
 }
 
 .dockbar-item:active {
-  transform: scale(0.95);
+  filter: brightness(0.85);
+}
+
+/* Launch bounce — plays on click, on top of whatever the magnify transform
+   currently is (animation wins over inline style for the duration). */
+.dockbar-item.is-bouncing {
+  animation: dockBounce 0.52s cubic-bezier(0.28, 0.84, 0.42, 1);
+}
+
+@keyframes dockBounce {
+  0% { transform: translateY(0) scale(1, 1); }
+  30% { transform: translateY(-6px) scale(1.1, 0.9); }
+  52% { transform: translateY(2px) scale(0.95, 1.05); }
+  72% { transform: translateY(-2px) scale(1.02, 0.98); }
+  100% { transform: translateY(0) scale(1, 1); }
 }
 
 .dockbar-item img {
-  width: 20px;
-  height: 20px;
+  width: 30px;
+  height: 30px;
   object-fit: contain;
-  border-radius: 4px;
+  border-radius: 7px;
   pointer-events: none;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
 }
 
 .dockbar-letter {
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
   color: #fff;
-  font-size: var(--font-size-xs, 11px);
+  font-size: var(--font-size-sm, 13px);
   font-weight: 700;
+  pointer-events: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .dockbar-app-glyph {
-  color: rgba(255, 255, 255, 0.75);
-  font-size: 15px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 18px;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
 }
 
 .dockbar-empty {
-  color: rgba(255, 255, 255, 0.4);
+  padding: 0 10px;
+  color: rgba(255, 255, 255, 0.42);
   font-size: var(--font-size-sm, 13px);
+  font-style: italic;
   white-space: nowrap;
 }
 
-/* Right-side window controls (collapse to handle / back to full app). */
+/* ---- Controls: collapse to handle / back to full app ---- */
 .dockbar-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   flex: 0 0 auto;
 }
 
@@ -174,18 +261,39 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 34px;
+  height: 34px;
   border: none;
-  border-radius: 7px;
+  border-radius: 10px;
   background: transparent;
   color: rgba(255, 255, 255, 0.55);
   cursor: pointer;
-  font-size: 12px;
-  transition: background 0.12s ease, color 0.12s ease;
+  font-size: 13px;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .dockbar-ctrl:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
+  transform: translateY(-2px);
+}
+
+.dockbar--top .dockbar-ctrl:hover {
+  transform: translateY(2px);
+}
+
+.dockbar-ctrl:active {
+  transform: scale(0.92);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dockbar-shelf,
+  .dockbar-item {
+    animation: none;
+  }
+  .dockbar-item,
+  .dockbar-ws-chip,
+  .dockbar-ctrl {
+    transition: none;
+  }
 }

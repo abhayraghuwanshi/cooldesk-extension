@@ -2631,6 +2631,41 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   }
 }
 
+/* Expanded compact card — stack in block flow and scroll, at ALL widths.
+   The card is a flex column with a FIXED height once expanded (cardHeight set on
+   expand/drag). In flex-column the icon rows and the context panel flex-crush
+   into each other, and with the card's overflow the rows spill over the panel —
+   the overlap the user sees. Block flow + own scroll makes them stack and the
+   card scroll through them instead. This was previously gated behind
+   @media (max-width:500px) (viewport), so the overlap returned whenever the
+   window was wider than the drawer. !important beats the inline overflow:hidden
+   the resize handle sets on the card. */
+.cooldesk-workspace-card.compact.panel-open {
+  display: block;
+  overflow-y: auto !important;
+}
+.cooldesk-workspace-card.compact.panel-open .compact-card-inner {
+  flex: none; /* natural height in block flow — don't crush to fit card height */
+}
+.cooldesk-workspace-card.compact.panel-open .compact-icons-scroll {
+  overflow: visible;
+  max-height: none;
+}
+/* THE overlap fix. The base .workspace-context-panel is flex: 1 1 0 — a
+   flex-basis of 0 that collapses the panel's box to ~zero height inside the
+   card's flex column, so its content (status / todos / notes) overflows the
+   empty box and paints straight over the link rows above it. flex: none +
+   height: auto gives the panel its real height so it sits below the links
+   instead of on top of them. This is the same guard the detail view already
+   uses (.workspace-detail-view .workspace-context-panel); the in-card panel
+   was missing it. Applies whether the card ends up flex (list-view forces
+   flex-direction: column) or block. */
+.cooldesk-workspace-card.compact.panel-open .workspace-context-panel {
+  flex: none;
+  height: auto;
+  overflow: visible;
+}
+
 /* Expanded compact card at drawer width: the default horizontal row layout and
    the two-column context grid crush the links/todos/notes. Re-lay the inner as
    a grid so the title + collapse button share the top row (button inline in the
@@ -5584,12 +5619,25 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   min-height: 0;
   overflow: hidden;
   padding: 16px 18px 18px;
-  border-top: 1px solid rgba(148, 163, 184, 0.08);
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  /* Opaque surface: the base layer must fully hide whatever is behind/beside the
+     panel (spilled icon rows, the card below in the list, an open link popover),
+     which the previous near-transparent gradient (alpha 0 → 0.2) let bleed
+     straight through. Accent glows ride on top of a solid dark base. */
   background:
-    radial-gradient(120% 80% at 0% 0%, rgba(96, 165, 250, 0.05), transparent 55%),
-    radial-gradient(80% 60% at 100% 100%, rgba(167, 139, 250, 0.045), transparent 60%),
-    linear-gradient(180deg, rgba(8, 11, 22, 0) 0%, rgba(8, 11, 22, 0.2) 100%);
+    radial-gradient(120% 80% at 0% 0%, rgba(96, 165, 250, 0.07), transparent 55%),
+    radial-gradient(80% 60% at 100% 100%, rgba(167, 139, 250, 0.06), transparent 60%),
+    linear-gradient(180deg, #161c2b 0%, #10141f 100%);
   animation: wcp-in 260ms cubic-bezier(.2,.8,.2,1);
+}
+
+/* Light theme keeps the panel opaque with a light surface. */
+body.bg-white-cred .workspace-context-panel {
+  border-top-color: rgba(15, 23, 42, 0.1);
+  background:
+    radial-gradient(120% 80% at 0% 0%, rgba(96, 165, 250, 0.06), transparent 55%),
+    radial-gradient(80% 60% at 100% 100%, rgba(167, 139, 250, 0.05), transparent 60%),
+    linear-gradient(180deg, #f4f5f8 0%, #eceef3 100%);
 }
 
 /* Two-column working grid */
@@ -6235,19 +6283,25 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 }
 .wcp-note-title:focus { border-bottom-color: rgba(167, 139, 250, 0.55); }
 
+/* Flat, full-width document (readme-style) rather than a boxed field: no border,
+   no background card, and NO horizontal padding — the note body then aligns with
+   the note title (which sits at x=0) and uses the panel's own gutter as the only
+   margin, instead of stacking editor-box + content + ProseMirror paddings and
+   shoving the text ~50px in. */
 .wcp-note-tiptap {
   flex: 1;
   min-height: 140px;
   overflow-y: auto;
-  background: rgba(8, 11, 22, 0.35);
-  border: 1px solid rgba(148, 163, 184, 0.08);
-  border-radius: 10px;
-  padding: 14px 16px;
-  transition: border-color 200ms ease;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 6px 0 0;
 }
-.wcp-note-tiptap:focus-within {
-  border-color: rgba(167, 139, 250, 0.35);
-  box-shadow: 0 0 0 4px rgba(167, 139, 250, 0.06);
+/* Kill the inner paddings the shared TiptapEditor adds (tiptap-content 0 4px,
+   ProseMirror 1rem 2rem) so the text runs edge-to-edge within the panel. Scoped
+   to the workspace note so NotesCanvas keeps its own roomy padding. */
+.wcp-note-tiptap .tiptap-content {
+  padding: 0 0 32px;
 }
 .wcp-note-tiptap::-webkit-scrollbar { width: 6px; }
 .wcp-note-tiptap::-webkit-scrollbar-thumb {
@@ -6261,6 +6315,9 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 .wcp-note-tiptap .ProseMirror {
   outline: none;
   min-height: 100%;
+  /* Override the shared editor's 1rem 2rem — no horizontal padding so the body
+     aligns with the note title and fills the panel width. */
+  padding: 0;
   color: #e2e8f0;
   font-family: var(--font-family-base);
   font-size: var(--font-md, 13px);

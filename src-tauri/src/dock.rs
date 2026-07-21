@@ -31,6 +31,24 @@ pub fn work_area(raw_hwnd: isize) -> Option<(i32, i32, i32, i32)> {
     imp::work_area(raw_hwnd)
 }
 
+/// Full monitor rectangle (ignoring taskbar/appbar insets) of the monitor
+/// hosting the given window, as (x, y, width, height) in physical pixels. Used
+/// so a horizontal dock can span the whole screen width even when a side
+/// taskbar insets the work area.
+#[cfg(windows)]
+pub fn monitor_rect(raw_hwnd: isize) -> Option<(i32, i32, i32, i32)> {
+    imp::monitor_rect(raw_hwnd)
+}
+
+/// True when the foreground window covers its entire monitor — a fullscreen app,
+/// game, or video. The drawer handle is a plain topmost window (not an AppBar),
+/// so nothing tells it to step aside for fullscreen content the way the shell
+/// does for the taskbar; we poll this instead and hide the handle while it holds.
+#[cfg(windows)]
+pub fn foreground_is_fullscreen() -> bool {
+    imp::foreground_is_fullscreen()
+}
+
 // Non-Windows stubs. The callers in lib.rs are all `#[cfg(windows)]`-gated, so
 // these are never invoked off Windows — they exist only so the module compiles.
 #[cfg(not(windows))]
@@ -46,6 +64,16 @@ pub fn work_area(_raw_hwnd: isize) -> Option<(i32, i32, i32, i32)> {
     None
 }
 
+#[cfg(not(windows))]
+pub fn monitor_rect(_raw_hwnd: isize) -> Option<(i32, i32, i32, i32)> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn foreground_is_fullscreen() -> bool {
+    false
+}
+
 #[cfg(windows)]
 mod imp {
     use std::ffi::c_void;
@@ -54,14 +82,16 @@ mod imp {
     use windows::core::w;
     use windows::Win32::Foundation::{HWND, LPARAM, RECT};
     use windows::Win32::Graphics::Gdi::{
-        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTOPRIMARY,
+        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+        MONITOR_DEFAULTTOPRIMARY,
     };
     use windows::Win32::UI::Shell::{
         SHAppBarMessage, ABE_BOTTOM, ABE_LEFT, ABE_RIGHT, ABE_TOP, ABM_NEW, ABM_QUERYPOS,
         ABM_REMOVE, ABM_SETPOS, APPBARDATA,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        RegisterWindowMessageW, SetWindowPos, HWND_TOPMOST, SWP_NOACTIVATE, SWP_SHOWWINDOW,
+        GetClassNameW, GetForegroundWindow, GetWindowRect, RegisterWindowMessageW, SetWindowPos,
+        HWND_TOPMOST, SWP_NOACTIVATE, SWP_SHOWWINDOW,
     };
 
     // Holds the window handle (as isize) while an AppBar registration is live, so
@@ -106,6 +136,56 @@ mod imp {
         let mi = monitor_info(hwnd_from_isize(raw_hwnd))?;
         let rc = mi.rcWork;
         Some((rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top))
+    }
+
+    pub fn monitor_rect(raw_hwnd: isize) -> Option<(i32, i32, i32, i32)> {
+        let mi = monitor_info(hwnd_from_isize(raw_hwnd))?;
+        let rc = mi.rcMonitor;
+        Some((rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top))
+    }
+
+    pub fn foreground_is_fullscreen() -> bool {
+        unsafe {
+            let hwnd = GetForegroundWindow();
+            if hwnd.0.is_null() {
+                return false;
+            }
+
+            // The shell surfaces owning the foreground is the *normal* desktop
+            // state, not a fullscreen app — the taskbar/start/desktop each cover
+            // (or nearly cover) the screen and would otherwise be misread as one.
+            let mut class_buf = [0u16; 64];
+            let len = GetClassNameW(hwnd, &mut class_buf);
+            if len > 0 {
+                let class = String::from_utf16_lossy(&class_buf[..len as usize]);
+                if matches!(
+                    class.as_str(),
+                    "Progman"
+                        | "WorkerW"
+                        | "Shell_TrayWnd"
+                        | "Shell_SecondaryTrayWnd"
+                        | "Windows.UI.Core.CoreWindow"
+                ) {
+                    return false;
+                }
+            }
+
+            let mut rc = RECT::default();
+            if GetWindowRect(hwnd, &mut rc).is_err() {
+                return false;
+            }
+            let hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            let mut mi = MONITORINFO {
+                cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+                ..Default::default()
+            };
+            if !GetMonitorInfoW(hmon, &mut mi).as_bool() {
+                return false;
+            }
+            let mon = mi.rcMonitor;
+            // Window rect covers (or exceeds) the whole monitor → fullscreen.
+            rc.left <= mon.left && rc.top <= mon.top && rc.right >= mon.right && rc.bottom >= mon.bottom
+        }
     }
 
     // Unregisters the current AppBar (if any) and releases its reserved work

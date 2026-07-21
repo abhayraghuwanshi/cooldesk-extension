@@ -1,6 +1,7 @@
 use tauri::{Manager, Emitter};
 use tauri_plugin_autostart::ManagerExt;
 use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::tray::TrayIconBuilder;
 use tauri::menu::{Menu, MenuItem};
 
@@ -139,6 +140,13 @@ impl Default for DockState {
     }
 }
 
+// True while the drawer is collapsed to its edge handle (the handle window is
+// the visible dock surface). The fullscreen watcher thread only acts on the
+// handle in this state; when it's false the dock is off, in reserve mode, or the
+// panel is open, and there's nothing for the watcher to manage. Set here (not
+// read from disk) so the watcher's hot loop needs no file I/O.
+static DRAWER_COLLAPSED: AtomicBool = AtomicBool::new(false);
+
 const DOCK_MIN_WIDTH: u32 = 220;
 const DOCK_MAX_WIDTH: u32 = 900;
 const BAR_MIN_HEIGHT: u32 = 40;
@@ -224,7 +232,21 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
             let (x, y, w, h) = if horizontal {
                 let h = st.bar_height.clamp(BAR_MIN_HEIGHT, BAR_MAX_HEIGHT) as i32;
                 let y = if st.side == "top" { my } else { my + mh - h };
-                (mx, y, mw, h)
+                // Span the full monitor width (not the work-area width) so the bar
+                // reaches both screen edges even when a side taskbar/appbar insets
+                // the work area — that inset was leaving a gap + rounded corner on
+                // one side. Vertical placement still uses the work area (above), so
+                // a bottom taskbar is not covered.
+                #[cfg(windows)]
+                let (bx, bw) = main
+                    .hwnd()
+                    .ok()
+                    .and_then(|hwnd| dock::monitor_rect(hwnd.0 as isize))
+                    .map(|(rx, _, rw, _)| (rx, rw))
+                    .unwrap_or((mx, mw));
+                #[cfg(not(windows))]
+                let (bx, bw) = (mx, mw);
+                (bx, y, bw, h)
             } else {
                 let w = st.width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH) as i32;
                 let x = if st.side == "left" { mx } else { mx + mw - w };
@@ -242,6 +264,9 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
     if let Some(handle) = app.get_webview_window("handle") {
         let _ = handle.hide();
     }
+    // Panel is now the visible surface — the handle isn't, so the fullscreen
+    // watcher should stand down.
+    DRAWER_COLLAPSED.store(false, Ordering::Relaxed);
 }
 
 /// Collapse to the handle: hide the panel, show the slim edge tab (vertical tab
@@ -270,6 +295,9 @@ fn collapse_drawer(app: &tauri::AppHandle, st: &DockState) {
             let _ = handle.show();
         }
     }
+    // Handle is now the visible dock surface — let the watcher hide/show it as
+    // fullscreen apps come and go.
+    DRAWER_COLLAPSED.store(true, Ordering::Relaxed);
 }
 
 /// Turn on drawer mode: persist state and show the handle (collapsed).
@@ -314,6 +342,7 @@ fn apply_dock(app: &tauri::AppHandle, side: String, thickness: u32) -> Result<Do
     #[cfg(windows)]
     {
         // The handle is a drawer concept — make sure it's hidden in reserve mode.
+        DRAWER_COLLAPSED.store(false, Ordering::Relaxed);
         if let Some(handle) = app.get_webview_window("handle") {
             let _ = handle.hide();
         }
@@ -345,6 +374,7 @@ fn disable_dock(app: &tauri::AppHandle) -> DockState {
     #[cfg(windows)]
     dock::remove_dock();
 
+    DRAWER_COLLAPSED.store(false, Ordering::Relaxed);
     if let Some(handle) = app.get_webview_window("handle") {
         let _ = handle.hide();
     }
@@ -1942,6 +1972,36 @@ pub fn run() {
                   log::info!("[Dock] Restored drawer handle on startup ({})", dock_state.side);
               }
           }
+      }
+
+      // Fullscreen watcher: the drawer handle is a plain topmost window, so —
+      // unlike an AppBar — the shell never tells it to hide for a fullscreen app,
+      // leaving it floating over games/videos at the (now auto-hidden) taskbar
+      // row. Poll the foreground window and hide the handle while a fullscreen app
+      // holds it, restoring it afterwards. Gated on DRAWER_COLLAPSED so the loop
+      // does nothing (and touches no disk) unless the handle is actually showing.
+      #[cfg(windows)]
+      {
+          let app_handle = app.handle().clone();
+          std::thread::spawn(move || {
+              let mut hidden_for_fullscreen = false;
+              loop {
+                  std::thread::sleep(std::time::Duration::from_millis(600));
+                  if !DRAWER_COLLAPSED.load(Ordering::Relaxed) {
+                      hidden_for_fullscreen = false;
+                      continue;
+                  }
+                  let Some(handle) = app_handle.get_webview_window("handle") else { continue };
+                  let fullscreen = dock::foreground_is_fullscreen();
+                  if fullscreen && !hidden_for_fullscreen {
+                      let _ = handle.hide();
+                      hidden_for_fullscreen = true;
+                  } else if !fullscreen && hidden_for_fullscreen {
+                      let _ = handle.show();
+                      hidden_for_fullscreen = false;
+                  }
+              }
+          });
       }
 
       // Main window events: hide-on-close, and (in drawer mode) collapse to the

@@ -190,6 +190,10 @@
     gap: 10px;
 }
 
+/* The tile is just a faint backing plate; each widget iframe paints its own
+   surface (the website's --surface frosted panel), so the tile stays nearly
+   transparent — imposing a background here would double up with the widget's
+   own and could mismatch its theme. */
 .wgb-tile {
     position: relative;
     background: rgba(255, 255, 255, 0.026);

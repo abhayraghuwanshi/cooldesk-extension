@@ -64,6 +64,12 @@ export function getWidget(id) {
 }
 
 export function widgetEmbedUrl(id, theme) {
+    // Widgets paint their own surface (the website's --surface token — a uniform
+    // frosted panel that matches the ?theme). We deliberately do NOT use the
+    // host-owned `embed=host` transparency: it made the widget body transparent
+    // and depended on the board's tile + the ?theme in this URL (memoized once)
+    // staying in sync, which desynced on a theme switch and rendered widgets
+    // white-on-white. Self-contained = text and background always agree.
     return `${WIDGET_STORE_ORIGIN}/widgets/${id}.html?theme=${theme === 'light' ? 'light' : 'dark'}&v=${WIDGET_VERSION}`;
 }
 

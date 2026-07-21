@@ -51,7 +51,6 @@ import { recordFeedbackEvent, recordUrlWorkspace } from '../../services/feedback
 import { getBaseDomainFromUrl, getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
 import { GroupedLinksPopover } from './GroupedLinksPopover.jsx';
 import { UrlAnalyticsPopover } from './UrlAnalyticsPopover.jsx';
-import { WorkspaceContextPanel } from './WorkspaceContextPanel.jsx';
 
 const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
 
@@ -164,7 +163,6 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   // null = use CSS-controlled height (compact auto); number = inline-style controlled
   const [cardHeight, setCardHeight] = useState(compact ? null : 280);
   const [hasUserResized, setHasUserResized] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
   const cardRef = useRef(null);
 
   // Reset height when view mode switches between compact and non-compact
@@ -615,32 +613,6 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     };
   }, [contextMenu]);
 
-  // ── Resize drag handle ───────────────────────────────────────────────────
-  const handleResizeMouseDown = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const startY = e.clientY;
-    // Use actual rendered height when card is in CSS-auto mode (compact view)
-    const startHeight = cardHeight !== null
-      ? cardHeight
-      : (cardRef.current?.getBoundingClientRect().height ?? 80);
-    setIsDragging(true);
-
-    const onMove = (e) => {
-      const delta = e.clientY - startY;
-      if (Math.abs(delta) > 4) setHasUserResized(true);
-      const next = Math.max(80, startHeight + delta);
-      setCardHeight(next);
-    };
-    const onUp = () => {
-      setIsDragging(false);
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }, [cardHeight]);
-
   // ── Show fewer links in compact mode, unless expanded ────────────────────
   const activeUrls = sortedUrls.filter(u => u.status !== 'draft');
   const draftUrls = sortedUrls.filter(u => u.status === 'draft');
@@ -661,7 +633,6 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
         height: cardHeight,
         maxHeight: 'none',
         overflow: 'hidden',
-        transition: isDragging ? 'none' : undefined,
       }
       : { position: 'relative' }; // CSS class controls height (compact auto)
 
@@ -1209,21 +1180,12 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
         </>
       )}
 
-      {/* ── Context panel + resize handle — App only, not in extension ───
-           In fullView the detail view renders the panel as a sibling section
-           below the card, so it must not also render inside it. */}
-      {isDesktopApp && contextPanelVisible && !fullView && (
-        <WorkspaceContextPanel workspace={workspace} />
-      )}
-
-      {isDesktopApp && !fullView && (
-        <div
-          className="workspace-resize-handle"
-          onMouseDown={handleResizeMouseDown}
-          onClick={e => e.stopPropagation()}
-          title="Drag to expand — reveals status, tasks & notes"
-        />
-      )}
+      {/* Status / tasks / notes are no longer shown inside the card. Expanding a
+          workspace (click, or the expand chevron) opens the full-width detail
+          view (WorkspaceList → .workspace-detail-view), which renders that
+          content as its own section below the items — no fixed-height card, no
+          internal scroll, no drag-resize. Only the detail-view instance
+          (fullView) still hosts the panel, as a sibling in WorkspaceList. */}
 
       {/* Right-click context menu — rendered via portal to escape backdrop-filter stacking context */}
       {contextMenu && createPortal(

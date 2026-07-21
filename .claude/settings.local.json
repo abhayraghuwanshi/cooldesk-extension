@@ -53,7 +53,9 @@
       "Bash(git checkout *)",
       "Bash(git stash *)",
       "PowerShell(npx esbuild src/components/cooldesk/WorkspaceCard.jsx --loader:.jsx=jsx --outfile=NUL)",
-      "PowerShell(npx vite build 2>&1 | Select-Object -Last 8)"
+      "PowerShell(npx vite build 2>&1 | Select-Object -Last 8)",
+      "Read(//c/Users/raghu/projects/cooldesk-onboard-smoothly/src/**)",
+      "Read(//c/Users/raghu/projects/cooldesk-onboard-smoothly/**)"
     ],
     "deny": [],
     "ask": [],
