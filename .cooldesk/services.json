@@ -1,0 +1,5 @@
+{
+  "services": [
+    { "id": "sidecar", "label": "Sidecar API (axum)", "url": "http://localhost:4545", "port": 4545 }
+  ]
+}

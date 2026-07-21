@@ -5699,6 +5699,109 @@ body.bg-white-cred .workspace-context-panel {
 .wcp-section-head[data-accent="status"] { color: #60a5fa; }
 .wcp-section-head[data-accent="todos"]  { color: #f59e0b; }
 .wcp-section-head[data-accent="notes"]  { color: #a78bfa; }
+.wcp-section-head[data-accent="cooldesk"] { color: #2dd4bf; }
+
+/* ── CoolDesk project section (.cooldesk reader) ─────────────────────── */
+.cdk-section {
+  padding: 10px 12px 12px;
+  border: 1px solid color-mix(in srgb, #2dd4bf 22%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, #2dd4bf 6%, transparent);
+}
+.cdk-badge {
+  font-size: var(--font-xs, 9px);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #2dd4bf;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #2dd4bf 14%, transparent);
+  border: 1px solid color-mix(in srgb, #2dd4bf 30%, transparent);
+}
+.cdk-ident { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cdk-name { font-size: var(--font-md, 14px); font-weight: 700; color: #e2e8f0; }
+.cdk-status {
+  font-size: var(--font-xs, 10px);
+  font-weight: 600;
+  text-transform: capitalize;
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+.cdk-status-active   { color: #22c55e; background: rgba(34, 197, 94, 0.14); }
+.cdk-status-planning { color: #60a5fa; background: rgba(96, 165, 250, 0.14); }
+.cdk-status-on-hold  { color: #f59e0b; background: rgba(245, 158, 11, 0.14); }
+.cdk-git {
+  font-size: var(--font-xs, 10px);
+  font-family: var(--font-family-mono, ui-monospace, monospace);
+  color: rgba(148, 163, 184, 0.85);
+  margin-left: auto;
+}
+.cdk-desc {
+  font-size: var(--font-sm, 12px);
+  color: rgba(203, 213, 225, 0.85);
+  margin: 6px 0 0;
+  line-height: 1.4;
+}
+.cdk-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+.cdk-chip {
+  font-size: var(--font-xs, 10.5px);
+  color: #cbd5e1;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+.cdk-chip-type { color: #2dd4bf; font-weight: 600; }
+/* Shared todos (from .cooldesk) merged into the Next Up list — read-only, teal-tinted */
+.wcp-todo-row.is-shared {
+  cursor: default;
+  padding-left: 2px;
+}
+.wcp-todo-shared-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: rgba(45, 212, 191, 0.55);
+  border: 1px solid #2dd4bf;
+  flex-shrink: 0;
+  margin: 0 3px;
+}
+.wcp-todo-row.is-shared.is-active .wcp-todo-shared-dot {
+  background: #2dd4bf;
+  box-shadow: 0 0 6px #2dd4bf;
+}
+.wcp-todo-shared-tag {
+  font-size: var(--font-xs, 9px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #2dd4bf;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #2dd4bf 13%, transparent);
+  border: 1px solid color-mix(in srgb, #2dd4bf 28%, transparent);
+  flex-shrink: 0;
+}
+
+/* README card in the notes list + read-only editor view */
+.wcp-note-card.is-readme {
+  border-color: color-mix(in srgb, #2dd4bf 28%, transparent);
+  background: color-mix(in srgb, #2dd4bf 6%, transparent);
+}
+.wcp-note-readme-tag,
+.wcp-notes-readonly-tag {
+  font-size: var(--font-xs, 9px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #2dd4bf;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #2dd4bf 13%, transparent);
+  border: 1px solid color-mix(in srgb, #2dd4bf 28%, transparent);
+}
+.wcp-readme-view .wcp-note-tiptap {
+  cursor: default;
+}
 .wcp-section-title {
   font-size: var(--font-xs, 10px);
   font-weight: 700;

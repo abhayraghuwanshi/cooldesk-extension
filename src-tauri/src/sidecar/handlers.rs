@@ -609,6 +609,18 @@ pub async fn get_site_usage(
     Json(crate::sidecar::sites::site_usage(&rows, query.days.unwrap_or(7)))
 }
 
+#[derive(Debug, serde::Deserialize)]
+pub struct CooldeskQuery {
+    path: String,
+}
+
+/// Read a project's committed `.cooldesk/` workspace folder (manifest, todos, commands,
+/// services, decisions, README) for the desktop app to render. Read-only.
+/// GET /cooldesk?path=C:\Users\me\projects\acme
+pub async fn get_cooldesk(Query(query): Query<CooldeskQuery>) -> Json<serde_json::Value> {
+    Json(crate::sidecar::cooldesk::read_cooldesk(&query.path))
+}
+
 /// Search apps by query — fuzzy match against installed+running list
 /// GET /search?q=chrome&limit=10
 #[derive(Debug, serde::Deserialize)]

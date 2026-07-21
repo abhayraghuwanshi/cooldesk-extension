@@ -227,6 +227,8 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/activity/all-desktops", get(get_all_desktop_apps))
         .route("/activity/app-usage", get(get_app_usage))
         .route("/activity/site-usage", get(get_site_usage))
+        // CoolDesk project workspace folder (.cooldesk/) reader
+        .route("/cooldesk", get(get_cooldesk))
         .route("/notes", get(get_notes).post(post_notes))
         .route("/url-notes", get(get_url_notes).post(post_url_notes))
         .route("/pins", get(get_pins).post(post_pins))

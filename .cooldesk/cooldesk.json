@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "id": "cooldesk",
+    "name": "CoolDesk",
+    "description": "Desktop app (Tauri/Rust + React) + Chrome extension. A launcher that organizes your work by project.",
+    "status": "active"
+  },
+  "resources": [
+    {
+      "type": "github",
+      "name": "cooldesk-extension",
+      "url": "https://github.com/abhayraghuwanshi/cooldesk-extension"
+    },
+    {
+      "type": "folder",
+      "name": "frontend",
+      "path": "src"
+    },
+    {
+      "type": "folder",
+      "name": "backend",
+      "path": "src-tauri"
+    },
+    {
+      "type": "folder",
+      "name": "plugin",
+      "path": "cooldesk-plugin"
+    }
+  ],
+  "dock": {
+    "pinned": [
+      {
+        "type": "command",
+        "ref": "dev:tauri"
+      },
+      {
+        "type": "command",
+        "ref": "dev"
+      },
+      {
+        "type": "resource",
+        "ref": "cooldesk-extension"
+      }
+    ]
+  },
+  "sidebar": {
+    "sections": [
+      "todos",
+      "decisions",
+      "notes"
+    ]
+  },
+  "auto": {
+    "lastSyncedAt": "2026-07-21T19:17:41Z",
+    "git": {
+      "branch": "master",
+      "head": "633282e"
+    },
+    "files": {
+      "README.md": true,
+      "architecture.md": false,
+      "decisions.md": false,
+      "commands.json": true,
+      "services.json": true,
+      "knowledge": false,
+      "prompts": false,
+      "workflows": false,
+      "notes": false
+    },
+    "todoCounts": {
+      "open": 3,
+      "done": 0,
+      "total": 3
+    }
+  }
+}

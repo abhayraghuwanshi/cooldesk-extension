@@ -1,0 +1,7 @@
+{
+  "todos": [
+    { "id": "t1", "title": "Wire .cooldesk/ reader into the UI (WorkspaceContextPanel todos/README + WorkspaceDockBar from dock.pinned)", "status": "todo", "shared": true },
+    { "id": "t2", "title": "Commit the Rust /cooldesk endpoint (cooldesk.rs + handler + route) — currently uncommitted", "status": "todo", "shared": true },
+    { "id": "t3", "title": "Investigate the 2 plugin load errors reported by /reload-plugins", "status": "todo", "shared": true }
+  ]
+}

@@ -1,6 +1,9 @@
 import { faArrowLeft, faBolt, faCompass, faPause, faPlus, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { marked } from 'marked';
+import { CooldeskSection } from './CooldeskSection.jsx';
+import { fetchCooldesk } from '../../services/cooldeskService.js';
 import {
   deleteNote,
   deleteWorkspaceTodo,
@@ -50,6 +53,32 @@ const toEditorContent = (text) => {
 
 export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ workspace }) {
   const { id: workspaceId, name } = workspace;
+
+  // ── CoolDesk (.cooldesk) — committed project knowledge from the workspace folder ──
+  const folderPath = useMemo(() => {
+    const folder = (workspace?.apps || []).find(a => a.appType === 'folder' && a.path);
+    return folder?.path || null;
+  }, [workspace]);
+  const [cooldesk, setCooldesk] = useState(null);
+  const [readmeView, setReadmeView] = useState(false);
+
+  useEffect(() => {
+    if (!folderPath) { setCooldesk(null); return; }
+    let cancelled = false;
+    fetchCooldesk(folderPath)
+      .then(d => { if (!cancelled) setCooldesk(d?.exists ? d : null); })
+      .catch(() => { if (!cancelled) setCooldesk(null); });
+    return () => { cancelled = true; };
+  }, [folderPath]);
+
+  const sharedTodos = useMemo(
+    () => (cooldesk?.todos || []).filter(t => t.status !== 'done'),
+    [cooldesk],
+  );
+  const readmeHtml = useMemo(
+    () => (cooldesk?.readme ? marked.parse(cooldesk.readme, { breaks: true }) : ''),
+    [cooldesk],
+  );
 
   // Status
   const [status, setStatus] = useState(workspace.status || null);
@@ -117,12 +146,14 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
 
   // ── Notes ───────────────────────────────────────────────────────────────
   const openNote = useCallback((note) => {
+    setReadmeView(false);
     setActiveNote(note);
     setNoteTitle(note.title || '');
     setNoteContent(note.text || '');
   }, []);
 
   const newNote = useCallback(() => {
+    setReadmeView(false);
     const blank = {
       id: `wsnote_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       workspaceId,
@@ -206,14 +237,16 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
     deleteNote(noteId).catch(() => {});
   }, [activeNote]);
 
-  const openCount = todos.filter(t => !t.done).length;
+  const openCount = todos.filter(t => !t.done).length + sharedTodos.length;
 
   return (
     <div className="workspace-context-panel" onClick={e => e.stopPropagation()}>
       <div className="wcp-grid">
 
-        {/* ── LEFT RAIL: status + todos ─────────────────────────────────── */}
+        {/* ── LEFT RAIL: project (.cooldesk) + status + todos ───────────── */}
         <aside className="wcp-rail">
+
+          <CooldeskSection cooldesk={cooldesk} />
 
           <section className="wcp-section">
             <header className="wcp-section-head" data-accent="status">
@@ -245,6 +278,13 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
               {openCount > 0 && <span className="wcp-section-count">{openCount}</span>}
             </header>
             <div className="wcp-todos">
+              {sharedTodos.map(todo => (
+                <div key={todo.id} className={`wcp-todo-row is-shared ${todo.status === 'in_progress' ? 'is-active' : ''}`}>
+                  <span className="wcp-todo-shared-dot" aria-hidden="true" />
+                  <span className="wcp-todo-text">{todo.title}</span>
+                  <span className="wcp-todo-shared-tag" title="From .cooldesk — committed, team-shared">shared</span>
+                </div>
+              ))}
               {todos.map(todo => (
                 <div key={todo.id} className={`wcp-todo-row ${todo.done ? 'is-done' : ''}`}>
                   <button
@@ -274,7 +314,7 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
                   >×</button>
                 </div>
               ))}
-              {todos.length === 0 && (
+              {todos.length === 0 && sharedTodos.length === 0 && (
                 <div className="wcp-todos-empty">Nothing queued. Capture one below.</div>
               )}
               <div className="wcp-todo-add">
@@ -305,12 +345,15 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
           <header className="wcp-section-head" data-accent="notes">
             <span className="wcp-section-bar" aria-hidden="true" />
             <h4 className="wcp-section-title">
-              {activeNote ? 'Drafting' : 'Notes'}
+              {readmeView ? 'README' : activeNote ? 'Drafting' : 'Notes'}
             </h4>
-            {!activeNote && notes.length > 0 && (
+            {readmeView && (
+              <span className="wcp-notes-readonly-tag" title="Read-only — from .cooldesk">shared</span>
+            )}
+            {!activeNote && !readmeView && notes.length > 0 && (
               <span className="wcp-section-count">{notes.length}</span>
             )}
-            {!activeNote && (
+            {!activeNote && !readmeView && (
               <button
                 type="button"
                 className="wcp-notes-new-btn"
@@ -321,6 +364,14 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
                 <FontAwesomeIcon icon={faPlus} />
                 <span>New</span>
               </button>
+            )}
+            {readmeView && (
+              <div className="wcp-notes-actions">
+                <button type="button" className="wcp-notes-back" onClick={() => setReadmeView(false)}>
+                  <FontAwesomeIcon icon={faArrowLeft} />
+                  <span>Back</span>
+                </button>
+              </div>
             )}
             {activeNote && (
               <div className="wcp-notes-actions">
@@ -343,7 +394,15 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
             )}
           </header>
 
-          {activeNote ? (
+          {readmeView ? (
+            <div className="wcp-note-editor wcp-readme-view">
+              <div className="wcp-note-tiptap">
+                <Suspense fallback={<div className="wcp-note-loading">Loading…</div>}>
+                  <TiptapEditor content={readmeHtml} isEditable={false} onChange={() => {}} />
+                </Suspense>
+              </div>
+            </div>
+          ) : activeNote ? (
             <div className="wcp-note-editor">
               <input
                 className="wcp-note-title"
@@ -363,6 +422,21 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
             </div>
           ) : (
             <div className="wcp-notes-list">
+              {cooldesk?.readme && (
+                <div
+                  className="wcp-note-card is-readme"
+                  onClick={() => setReadmeView(true)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setReadmeView(true); } }}
+                >
+                  <div className="wcp-note-card-row">
+                    <span className="wcp-note-card-title">README</span>
+                    <span className="wcp-note-readme-tag">.cooldesk</span>
+                  </div>
+                  <span className="wcp-note-card-preview">Committed project readme — read-only</span>
+                </div>
+              )}
               {notes.length === 0 ? (
                 <button type="button" className="wcp-notes-empty" onClick={newNote}>
                   <span className="wcp-notes-empty-glyph">✎</span>

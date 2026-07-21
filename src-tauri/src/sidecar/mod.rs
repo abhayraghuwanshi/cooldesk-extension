@@ -13,5 +13,6 @@ pub mod feedback;
 pub mod llm_v3;
 pub mod sampler;
 pub mod sites;
+pub mod cooldesk;
 
 pub use server::start_server;

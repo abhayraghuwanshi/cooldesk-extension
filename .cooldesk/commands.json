@@ -1,0 +1,9 @@
+{
+  "commands": [
+    { "id": "dev", "label": "Vite dev (frontend only)", "run": "npm run dev" },
+    { "id": "dev:tauri", "label": "Tauri dev (full app)", "run": "npm run dev:tauri" },
+    { "id": "build", "label": "Build frontend", "run": "npm run build" },
+    { "id": "build:tauri", "label": "Build desktop app", "run": "npm run build:tauri" },
+    { "id": "lint", "label": "Lint", "run": "npm run lint" }
+  ]
+}
