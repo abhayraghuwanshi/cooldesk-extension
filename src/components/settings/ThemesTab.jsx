@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react';
 import { fontFamilies } from '../../utils/fontUtils';
+import FontFamilyDropdown from './FontFamilyDropdown';
+import FontSizeDropdown from './FontSizeDropdown';
 const ThemesTab = ({
   selectedTheme,
   fontSize,
@@ -19,6 +21,11 @@ const ThemesTab = ({
   onUnsplashApiKeyChange = () => { }
 }) => {
   const [showAllThemes, setShowAllThemes] = useState(false);
+  const [showUnsplash, setShowUnsplash] = useState(false);
+  // Remember the last gradient theme so switching back from Wallpaper restores it
+  const [lastGradient, setLastGradient] = useState(
+    wallpaperEnabled ? 'crimson-fire' : (selectedTheme || 'crimson-fire')
+  );
   const [unsplashSearchQuery, setUnsplashSearchQuery] = useState('');
   const [unsplashResults, setUnsplashResults] = useState([]);
   const [unsplashLoading, setUnsplashLoading] = useState(false);
@@ -211,14 +218,6 @@ const ThemesTab = ({
     }
   ];
 
-  // Font size options
-  const fontSizes = [
-    { id: 'small', name: 'Small', size: '13px', description: 'Compact text for more content' },
-    { id: 'medium', name: 'Medium', size: '14px', description: 'Default comfortable reading' },
-    { id: 'large', name: 'Large', size: '16px', description: 'Easier reading, larger text' },
-    { id: 'extra-large', name: 'Extra Large', size: '18px', description: 'Maximum readability' }
-  ];
-
 
 
   // Curated 4K high-quality wallpapers for the application
@@ -297,6 +296,20 @@ const ThemesTab = ({
 
 
 
+  // Themes and wallpaper are two modes of the same "background" choice
+  const bgMode = wallpaperEnabled ? 'wallpaper' : 'theme';
+  const gradientThemes = themes.filter(t => t.type !== 'wallpaper');
+
+  const selectBackgroundMode = (mode) => {
+    if (mode === 'wallpaper') {
+      onWallpaperEnabledChange(true);
+      onThemeChange('wallpaper-custom');
+    } else {
+      onWallpaperEnabledChange(false);
+      onThemeChange(lastGradient || gradientThemes[0].id);
+    }
+  };
+
   return (
     <div style={{ padding: '16px 0' }}>
       <h4 style={{
@@ -305,23 +318,64 @@ const ThemesTab = ({
         fontSize: 'var(--font-2xl)',
         fontWeight: '600'
       }}>
-        Choose Your Theme
+        Appearance
       </h4>
       <p style={{
-        margin: '0 0 24px 0',
+        margin: '0 0 16px 0',
         color: '#9ca3af',
         fontSize: 'var(--font-base)',
         lineHeight: '1.5'
       }}>
-        Select a theme that matches your style. Each theme includes a carefully chosen font family. Changes apply instantly.
+        Pick a gradient theme or set your own wallpaper as the background. Changes apply instantly.
       </p>
 
+      {/* Background mode toggle — themes vs. wallpaper */}
+      <div style={{
+        display: 'inline-flex',
+        gap: '4px',
+        padding: '4px',
+        background: 'rgba(255, 255, 255, 0.04)',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        borderRadius: '12px',
+        marginBottom: '20px'
+      }}>
+        {[
+          { id: 'theme', label: '🎨 Gradient Themes' },
+          { id: 'wallpaper', label: '🖼️ Wallpaper' }
+        ].map(({ id, label }) => {
+          const active = bgMode === id;
+          return (
+            <button
+              key={id}
+              onClick={() => selectBackgroundMode(id)}
+              style={{
+                padding: '7px 16px',
+                borderRadius: '9px',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 'var(--font-sm)',
+                fontWeight: '600',
+                background: active ? 'rgba(52, 199, 89, 0.18)' : 'transparent',
+                color: active ? '#34C759' : 'rgba(255,255,255,0.55)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = '#e5e7eb'; }}
+              onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = 'rgba(255,255,255,0.55)'; }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {bgMode === 'theme' && (
+      <>
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(4, 1fr)',
         gap: '8px'
       }}>
-        {themes.slice(0, showAllThemes ? themes.length : 3).map((theme) => {
+        {gradientThemes.slice(0, showAllThemes ? gradientThemes.length : 8).map((theme) => {
           const themeFontFamily = fontFamilies.find(f => f.id === theme.fontFamily);
           const isWallpaperTheme = theme.type === 'wallpaper';
           const isSelected = selectedTheme === theme.id;
@@ -330,13 +384,9 @@ const ThemesTab = ({
             <div
               key={theme.id}
               onClick={() => {
-                if (isWallpaperTheme) {
-                  onWallpaperEnabledChange(true);
-                  onThemeChange(theme.id);
-                } else {
-                  onWallpaperEnabledChange(false);
-                  onThemeChange(theme.id);
-                }
+                setLastGradient(theme.id);
+                onWallpaperEnabledChange(false);
+                onThemeChange(theme.id);
               }}
               style={{
                 background: 'rgba(255, 255, 255, 0.05)',
@@ -463,6 +513,7 @@ const ThemesTab = ({
         })}
       </div>
 
+      {gradientThemes.length > 8 && (
       <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
         <button
           onClick={() => setShowAllThemes(!showAllThemes)}
@@ -486,260 +537,15 @@ const ThemesTab = ({
             e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
           }}
         >
-          {showAllThemes ? 'Show Less Themes' : `Show All Themes (${themes.length})`}
+          {showAllThemes ? 'Show Less Themes' : `Show All Themes (${gradientThemes.length})`}
         </button>
       </div>
+      )}
+      </>
+      )}
 
-      <div style={{ marginTop: '32px' }}>
-        <h5 style={{
-          margin: '0 0 16px 0',
-          color: '#e5e7eb',
-          fontSize: 'var(--font-lg)',
-          fontWeight: '600'
-        }}>
-          Typography Settings
-        </h5>
-
-        <div style={{ marginBottom: '24px' }}>
-          <h4 style={{
-            margin: '0 0 12px 0',
-            fontSize: '16px',
-            fontWeight: '600',
-            color: 'var(--text-primary)'
-          }}>
-            Font Size Settings
-          </h4>
-          <p style={{
-            margin: '0 0 20px 0',
-            fontSize: 'var(--font-base)',
-            color: 'var(--text-secondary)',
-            lineHeight: '1.5'
-          }}>
-            Adjust the text size for better readability across the interface.
-          </p>
-
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: '8px'
-          }}>
-            {fontSizes.map((fontOption) => (
-              <div
-                key={fontOption.id}
-                onClick={() => onFontSizeChange && onFontSizeChange(fontOption.id)}
-                style={{
-                  padding: '12px',
-                  background: fontSize === fontOption.id
-                    ? 'linear-gradient(135deg, rgba(96, 165, 250, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%)'
-                    : 'var(--bg-secondary)',
-                  border: fontSize === fontOption.id
-                    ? '2px solid rgba(96, 165, 250, 0.6)'
-                    : '1px solid var(--border-primary)',
-                  borderRadius: '12px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  position: 'relative'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                  <div style={{
-                    width: '16px',
-                    height: '16px',
-                    borderRadius: '50%',
-                    border: '2px solid',
-                    borderColor: fontSize === fontOption.id ? '#60a5fa' : 'var(--text-secondary)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    {fontSize === fontOption.id && (
-                      <div style={{
-                        width: '6px',
-                        height: '6px',
-                        borderRadius: '50%',
-                        background: '#60a5fa'
-                      }} />
-                    )}
-                  </div>
-                  <div>
-                    <div style={{
-                      fontWeight: '600',
-                      color: 'var(--text-primary)',
-                      fontSize: 'var(--font-sm)',
-                      lineHeight: '1.2'
-                    }}>
-                      {fontOption.name}
-                    </div>
-                    <div style={{
-                      fontSize: 'var(--font-xs)',
-                      color: 'var(--text-secondary)',
-                      marginTop: '1px',
-                      lineHeight: '1.2'
-                    }}>
-                      {fontOption.description}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{
-                  border: '1px solid var(--border-primary)',
-                  borderRadius: '6px',
-                  padding: '8px',
-                  background: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)'
-                }}>
-                  <div style={{
-                    fontSize: fontOption.size,
-                    lineHeight: '1.3',
-                    marginBottom: '2px'
-                  }}>
-                    Sample ({fontOption.size})
-                  </div>
-                  <div style={{
-                    fontSize: `calc(${fontOption.size} * 0.8)`,
-                    color: 'var(--text-secondary)',
-                    lineHeight: '1.3'
-                  }}>
-                    Preview text
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ marginBottom: '24px' }}>
-          <label style={{
-            display: 'block',
-            marginBottom: '8px',
-            color: '#9ca3af',
-            fontSize: 'var(--font-base)',
-            fontWeight: '500'
-          }}>
-            Font Family
-          </label>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: '8px'
-          }}>
-            {fontFamilies.map((font) => (
-              <div
-                key={font.id}
-                onClick={() => {
-                  onFontFamilyChange && onFontFamilyChange(font.id);
-                }}
-                style={{
-                  background: fontFamily === font.id
-                    ? 'rgba(52, 199, 89, 0.2)'
-                    : 'rgba(255, 255, 255, 0.05)',
-                  border: fontFamily === font.id
-                    ? '1px solid #34C759'
-                    : '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '8px',
-                  padding: '12px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  position: 'relative',
-                  pointerEvents: 'auto',
-                  userSelect: 'none',
-                  zIndex: 1
-                }}
-                onMouseEnter={(e) => {
-                  if (fontFamily !== font.id) {
-                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (fontFamily !== font.id) {
-                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                  }
-                }}
-              >
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  marginBottom: '6px',
-                  pointerEvents: 'none'
-                }}>
-                  <div style={{
-                    width: '16px',
-                    height: '16px',
-                    borderRadius: '50%',
-                    border: '2px solid',
-                    borderColor: fontFamily === font.id ? '#34C759' : 'rgba(255, 255, 255, 0.3)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    {fontFamily === font.id && (
-                      <div style={{
-                        width: '6px',
-                        height: '6px',
-                        borderRadius: '50%',
-                        background: '#34C759'
-                      }} />
-                    )}
-                  </div>
-                  <div>
-                    <div style={{
-                      color: fontFamily === font.id ? '#34C759' : '#e5e7eb',
-                      fontSize: 'var(--font-sm)',
-                      fontWeight: '600',
-                      lineHeight: '1.2',
-                      fontFamily: font.family
-                    }}>
-                      {font.name}
-                    </div>
-                    <div style={{
-                      fontSize: 'var(--font-xs)',
-                      color: fontFamily === font.id ? '#34C759' : 'rgba(255, 255, 255, 0.6)',
-                      marginTop: '1px',
-                      lineHeight: '1.2'
-                    }}>
-                      {font.description}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '6px',
-                  padding: '8px',
-                  background: 'rgba(255, 255, 255, 0.02)',
-                  color: '#e5e7eb',
-                  pointerEvents: 'none'
-                }}>
-                  <div style={{
-                    fontSize: 'var(--font-sm)',
-                    lineHeight: '1.3',
-                    fontFamily: font.family
-                  }}>
-                    The quick brown fox
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Wallpaper Customization Section - Only show when wallpaper theme is selected */}
-      {wallpaperEnabled && (
-        <div style={{ marginTop: '32px' }}>
-          <h3 style={{
-            fontSize: '16px',
-            fontWeight: '600',
-            color: '#e5e7eb',
-            marginBottom: '16px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            🖼️ Wallpaper Customization
-          </h3>
-
+      {bgMode === 'wallpaper' && (
+        <div>
           <>
             {/* Curated Wallpaper Gallery */}
             <div style={{ marginBottom: '20px' }}>
@@ -909,53 +715,80 @@ const ThemesTab = ({
               </label>
             </div>
 
-            {/* Unsplash API Key */}
+            {/* Unsplash — collapsible search + API key */}
             <div style={{ marginBottom: '16px' }}>
-              <label style={{
-                display: 'block',
-                color: '#e5e7eb',
-                fontWeight: '500',
-                marginBottom: '8px',
-                fontSize: 'var(--font-base)'
-              }}>
-                Unsplash API Key (Optional)
-              </label>
-              <input
-                type="password"
-                value={unsplashApiKey}
-                onChange={(e) => onUnsplashApiKeyChange(e.target.value)}
-                placeholder="Enter your Unsplash API key"
+              <button
+                onClick={() => setShowUnsplash(s => !s)}
                 style={{
                   width: '100%',
-                  padding: '12px 14px',
-                  background: 'rgba(255, 255, 255, 0.05)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '11px 14px',
+                  background: 'rgba(255, 255, 255, 0.04)',
                   border: '1px solid rgba(255, 255, 255, 0.1)',
                   borderRadius: '10px',
                   color: '#e5e7eb',
                   fontSize: 'var(--font-base)',
-                  outline: 'none',
-                  transition: 'all 0.2s ease'
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'border-color 0.2s ease'
                 }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = 'rgba(52, 199, 89, 0.4)';
-                  e.target.style.background = 'rgba(255, 255, 255, 0.08)';
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                  e.target.style.background = 'rgba(255, 255, 255, 0.05)';
-                }}
-              />
-              <div style={{
-                fontSize: 'var(--font-xs)',
-                color: 'rgba(255, 255, 255, 0.4)',
-                marginTop: '6px'
-              }}>
-                Get your free API key at <a href="https://unsplash.com/developers" target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>unsplash.com/developers</a>. Enables high-quality wallpaper search.
-              </div>
+              >
+                <span>
+                  🔍 Search Unsplash photos
+                  {unsplashApiKey
+                    ? <span style={{ color: '#34C759', fontSize: 'var(--font-xs)', marginLeft: 8 }}>Connected</span>
+                    : <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 'var(--font-xs)', marginLeft: 8 }}>Connect to enable</span>}
+                </span>
+                <span style={{
+                  transform: showUnsplash ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.2s ease',
+                  color: 'rgba(255,255,255,0.5)',
+                  fontSize: 'var(--font-sm)'
+                }}>▾</span>
+              </button>
+
+              {showUnsplash && !unsplashApiKey && (
+                <div style={{ marginTop: '10px' }}>
+                  <input
+                    type="password"
+                    value={unsplashApiKey}
+                    onChange={(e) => onUnsplashApiKeyChange(e.target.value)}
+                    placeholder="Paste your Unsplash API key"
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '10px',
+                      color: '#e5e7eb',
+                      fontSize: 'var(--font-base)',
+                      outline: 'none',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = 'rgba(52, 199, 89, 0.4)';
+                      e.target.style.background = 'rgba(255, 255, 255, 0.08)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                      e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+                    }}
+                  />
+                  <div style={{
+                    fontSize: 'var(--font-xs)',
+                    color: 'rgba(255, 255, 255, 0.4)',
+                    marginTop: '6px'
+                  }}>
+                    Get a free key at <a href="https://unsplash.com/developers" target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>unsplash.com/developers</a> to search millions of photos.
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Unsplash Search - Only show if API key is provided */}
-            {unsplashApiKey && (
+            {/* Unsplash Search results */}
+            {showUnsplash && unsplashApiKey && (
               <div style={{ marginBottom: '20px' }}>
                 <label style={{
                   display: 'block',
@@ -1132,16 +965,66 @@ const ThemesTab = ({
               </div>
             )}
 
-            {/* Opacity Slider */}
-            <div style={{ marginBottom: '16px' }}>
+            {/* Live preview paired with the opacity control */}
+            <div style={{
+              padding: '16px',
+              background: 'rgba(255, 255, 255, 0.03)',
+              borderRadius: '12px',
+              border: '1px solid rgba(255, 255, 255, 0.08)'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '10px'
+              }}>
+                <span style={{ fontSize: 'var(--font-sm)', color: 'rgba(255,255,255,0.6)', fontWeight: '500' }}>
+                  Preview
+                </span>
+                <span style={{ fontSize: 'var(--font-sm)', color: '#34C759', fontWeight: '600' }}>
+                  {Math.round(wallpaperOpacity * 100)}% opacity
+                </span>
+              </div>
+
+              <div style={{
+                position: 'relative',
+                height: '140px',
+                borderRadius: '8px',
+                overflow: 'hidden',
+                background: '#0a0a0f',
+                marginBottom: '14px'
+              }}>
+                <div style={{
+                  position: 'absolute',
+                  inset: 0,
+                  backgroundImage: `url(${wallpaperUrl})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  opacity: wallpaperOpacity
+                }} />
+                <div style={{
+                  position: 'absolute',
+                  inset: 0,
+                  backdropFilter: 'blur(8px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#fff',
+                  fontSize: 'var(--font-base)',
+                  fontWeight: '500'
+                }}>
+                  Your Dashboard Preview
+                </div>
+              </div>
+
               <label style={{
                 display: 'block',
-                color: '#e5e7eb',
+                color: '#9ca3af',
+                fontSize: 'var(--font-sm)',
                 fontWeight: '500',
-                marginBottom: '8px',
-                fontSize: 'var(--font-base)'
+                marginBottom: '8px'
               }}>
-                Background Opacity: {Math.round(wallpaperOpacity * 100)}%
+                Background Opacity
               </label>
               <input
                 type="range"
@@ -1165,69 +1048,75 @@ const ThemesTab = ({
                 color: 'rgba(255, 255, 255, 0.4)',
                 marginTop: '6px'
               }}>
-                0% = fully transparent, 100% = fully visible (clearer image)
-              </div>
-            </div>
-
-
-
-            {/* Preview Box */}
-            <div style={{
-              padding: '16px',
-              background: 'rgba(255, 255, 255, 0.03)',
-              borderRadius: '12px',
-              border: '1px solid rgba(255, 255, 255, 0.08)'
-            }}>
-              <div style={{
-                fontSize: 'var(--font-sm)',
-                color: 'rgba(255, 255, 255, 0.6)',
-                marginBottom: '8px',
-                fontWeight: '500'
-              }}>
-                Preview
-              </div>
-              <div style={{
-                position: 'relative',
-                height: '120px',
-                borderRadius: '8px',
-                overflow: 'hidden',
-                background: '#0a0a0f'
-              }}>
-                <div style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  backgroundImage: `url(${wallpaperUrl})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  opacity: wallpaperOpacity
-                }} />
-                <div style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  backdropFilter: 'blur(8px)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#fff',
-                  fontSize: 'var(--font-base)',
-                  fontWeight: '500'
-                }}>
-                  Your Dashboard Preview
-                </div>
+                Lower opacity fades the image so the interface stays readable.
               </div>
             </div>
           </>
         </div>
       )}
 
+      {/* Typography */}
+      <div style={{ marginTop: '32px' }}>
+        <h5 style={{
+          margin: '0 0 16px 0',
+          color: '#e5e7eb',
+          fontSize: 'var(--font-lg)',
+          fontWeight: '600'
+        }}>
+          Typography
+        </h5>
+
+        <p style={{
+          margin: '0 0 20px 0',
+          fontSize: 'var(--font-base)',
+          color: 'var(--text-secondary)',
+          lineHeight: '1.5'
+        }}>
+          Choose the typeface and text size used across the interface. Changes apply instantly.
+        </p>
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: '20px',
+          alignItems: 'start'
+        }}>
+          <div>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              color: '#9ca3af',
+              fontSize: 'var(--font-base)',
+              fontWeight: '500'
+            }}>
+              Font Family
+            </label>
+            <FontFamilyDropdown
+              fontFamily={fontFamily}
+              onFontFamilyChange={onFontFamilyChange}
+            />
+          </div>
+
+          <div>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              color: '#9ca3af',
+              fontSize: 'var(--font-base)',
+              fontWeight: '500'
+            }}>
+              Font Size
+            </label>
+            <FontSizeDropdown
+              fontSize={fontSize}
+              onFontSizeChange={onFontSizeChange}
+            />
+          </div>
+        </div>
+      </div>
+
       <div style={{
-        marginTop: '20px',
+        marginTop: '32px',
         padding: '12px',
         background: 'var(--bg-tertiary)',
         borderRadius: '8px',

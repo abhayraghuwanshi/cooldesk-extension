@@ -89,14 +89,71 @@ export const setAndSaveFontSize = (fontSizeId) => {
 // Default font family using CSS variable for dynamic updates
 export const defaultFontFamily = 'var(--font-family-base)';
 
-// Font family options
+// Fallback stacks appended after each web font, per category
+const SANS_FALLBACK = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+const SERIF_FALLBACK = 'Georgia, "Times New Roman", serif';
+const MONO_FALLBACK = 'Consolas, Monaco, "Courier New", monospace';
+
+/**
+ * Font family options.
+ * `google` is the Google Fonts family spec (with weights) loaded on demand the
+ * first time the font is applied or previewed — see ensureFontLoaded(). Omit
+ * `google` for fonts that need no network load (e.g. system default).
+ * `category` groups fonts in the picker dropdown.
+ */
 export const fontFamilies = [
-  { id: 'system', name: 'System Default', family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif', description: 'Native system fonts' },
-  { id: 'inter', name: 'Inter', family: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif', description: 'Modern geometric sans-serif' },
-  { id: 'roboto', name: 'Roboto', family: 'Roboto, -apple-system, BlinkMacSystemFont, sans-serif', description: 'Google\'s friendly sans-serif' },
-  { id: 'poppins', name: 'Poppins', family: 'Poppins, -apple-system, BlinkMacSystemFont, sans-serif', description: 'Rounded geometric typeface' },
-  { id: 'jetbrains', name: 'JetBrains Mono', family: 'JetBrains Mono, Consolas, Monaco, monospace', description: 'Developer-focused monospace' }
+  // System
+  { id: 'system', name: 'System Default', category: 'System', family: `-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif`, description: 'Native system fonts' },
+
+  // Sans-serif
+  { id: 'inter', name: 'Inter', category: 'Sans-serif', google: 'Inter:wght@300;400;500;600;700', family: `Inter, ${SANS_FALLBACK}`, description: 'Modern geometric sans-serif' },
+  { id: 'roboto', name: 'Roboto', category: 'Sans-serif', google: 'Roboto:wght@400;500;700', family: `Roboto, ${SANS_FALLBACK}`, description: "Google's friendly sans-serif" },
+  { id: 'poppins', name: 'Poppins', category: 'Sans-serif', google: 'Poppins:wght@400;500;600;700', family: `Poppins, ${SANS_FALLBACK}`, description: 'Rounded geometric typeface' },
+  { id: 'open-sans', name: 'Open Sans', category: 'Sans-serif', google: 'Open+Sans:wght@400;500;600;700', family: `"Open Sans", ${SANS_FALLBACK}`, description: 'Neutral, highly legible' },
+  { id: 'lato', name: 'Lato', category: 'Sans-serif', google: 'Lato:wght@400;700', family: `Lato, ${SANS_FALLBACK}`, description: 'Warm humanist sans' },
+  { id: 'montserrat', name: 'Montserrat', category: 'Sans-serif', google: 'Montserrat:wght@400;500;600;700', family: `Montserrat, ${SANS_FALLBACK}`, description: 'Urban geometric style' },
+  { id: 'nunito', name: 'Nunito', category: 'Sans-serif', google: 'Nunito:wght@400;600;700', family: `Nunito, ${SANS_FALLBACK}`, description: 'Rounded and friendly' },
+  { id: 'work-sans', name: 'Work Sans', category: 'Sans-serif', google: 'Work+Sans:wght@400;500;600', family: `"Work Sans", ${SANS_FALLBACK}`, description: 'Optimised for screens' },
+  { id: 'dm-sans', name: 'DM Sans', category: 'Sans-serif', google: 'DM+Sans:wght@400;500;700', family: `"DM Sans", ${SANS_FALLBACK}`, description: 'Low-contrast geometric' },
+  { id: 'manrope', name: 'Manrope', category: 'Sans-serif', google: 'Manrope:wght@400;500;600;700', family: `Manrope, ${SANS_FALLBACK}`, description: 'Modern, semi-condensed' },
+  { id: 'rubik', name: 'Rubik', category: 'Sans-serif', google: 'Rubik:wght@400;500;600', family: `Rubik, ${SANS_FALLBACK}`, description: 'Slightly rounded corners' },
+
+  // Serif
+  { id: 'merriweather', name: 'Merriweather', category: 'Serif', google: 'Merriweather:wght@400;700', family: `Merriweather, ${SERIF_FALLBACK}`, description: 'Readable classic serif' },
+  { id: 'lora', name: 'Lora', category: 'Serif', google: 'Lora:wght@400;500;600', family: `Lora, ${SERIF_FALLBACK}`, description: 'Contemporary serif' },
+  { id: 'playfair', name: 'Playfair Display', category: 'Serif', google: 'Playfair+Display:wght@400;600;700', family: `"Playfair Display", ${SERIF_FALLBACK}`, description: 'Elegant high-contrast' },
+  { id: 'source-serif', name: 'Source Serif', category: 'Serif', google: 'Source+Serif+4:wght@400;600', family: `"Source Serif 4", ${SERIF_FALLBACK}`, description: 'Balanced editorial serif' },
+
+  // Monospace
+  { id: 'jetbrains', name: 'JetBrains Mono', category: 'Monospace', google: 'JetBrains+Mono:wght@400;600;700', family: `"JetBrains Mono", ${MONO_FALLBACK}`, description: 'Developer-focused monospace' },
+  { id: 'fira-code', name: 'Fira Code', category: 'Monospace', google: 'Fira+Code:wght@400;500;600', family: `"Fira Code", ${MONO_FALLBACK}`, description: 'Monospace with ligatures' },
+  { id: 'source-code', name: 'Source Code Pro', category: 'Monospace', google: 'Source+Code+Pro:wght@400;500;600', family: `"Source Code Pro", ${MONO_FALLBACK}`, description: 'Clean coding monospace' },
 ];
+
+// Track which Google Fonts have already been injected so we never load twice
+const loadedGoogleFonts = new Set();
+
+/**
+ * Inject a Google Fonts stylesheet on demand for the given font object.
+ * No-op for system fonts or fonts already loaded.
+ * @param {object|string} fontOrId - a fontFamilies entry or its id
+ */
+export const ensureFontLoaded = (fontOrId) => {
+  const fontObj = typeof fontOrId === 'string'
+    ? fontFamilies.find(f => f.id === fontOrId)
+    : fontOrId;
+  if (!fontObj || !fontObj.google || loadedGoogleFonts.has(fontObj.id)) return;
+  loadedGoogleFonts.add(fontObj.id);
+  try {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = `https://fonts.googleapis.com/css2?family=${fontObj.google}&display=swap`;
+    link.setAttribute('data-cooldesk-font', fontObj.id);
+    document.head.appendChild(link);
+  } catch (e) {
+    console.warn('Failed to load font:', fontObj.name, e);
+  }
+};
 
 /**
  * Apply font family to the document root
@@ -104,6 +161,9 @@ export const fontFamilies = [
  */
 export const applyFontFamily = (fontFamilyId) => {
   const fontObj = fontFamilies.find(f => f.id === fontFamilyId) || fontFamilies[0];
+
+  // Make sure the web font is loaded before we switch to it
+  ensureFontLoaded(fontObj);
 
   // Set CSS custom property
   document.documentElement.style.setProperty('--font-family-base', fontObj.family);
