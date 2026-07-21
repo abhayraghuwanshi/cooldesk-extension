@@ -86,6 +86,27 @@ put personal ones in `local/`.
 { "todos": [ { "id": "t1", "title": "Wire dock to cooldesk.json", "status": "in_progress", "shared": true } ] }
 ```
 
+`group.json` (optional, hub only) — links many projects into one workspace using a **star
+topology**: the hub lists all members; each member holds a single back-pointer. Scales linearly
+(10 projects = 1 group file + 10 back-pointers), unlike pairwise two-way links (N²). Managed by
+`/cd-link`.
+```json
+{
+  "schemaVersion": 1,
+  "group": { "id": "cooldesk-suite", "name": "CoolDesk Suite" },
+  "members": [
+    { "name": "extension", "path": ".", "repo": "https://github.com/org/cooldesk-extension" },
+    { "name": "website", "path": "../cooldesk-onboard-smoothly", "repo": "https://github.com/org/site" }
+  ]
+}
+```
+A member's own `cooldesk.json` carries only the back-pointer (never sibling links):
+```json
+"group": { "name": "CoolDesk Suite", "hub": "../extension", "hubRepo": "https://github.com/org/cooldesk-extension" }
+```
+Paths are relative to the hub (survive a sibling clone); `repo` is the canonical fallback. The app
+reader follows the hub's `group.json`, resolves each member's `.cooldesk/`, and merges them.
+
 `decisions.md` — append-only, newest first, one block per decision:
 ```
 ## 2026-07-22 — Store project knowledge in .cooldesk/, not the backend

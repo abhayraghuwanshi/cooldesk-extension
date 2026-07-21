@@ -65,6 +65,50 @@ if (cmd === 'update') {
   process.exit(0);
 }
 
+if (cmd === 'discover') {
+  // Find candidate projects to link: sibling folders (and the hub's own children)
+  // that contain their own .cooldesk/cooldesk.json. Flags ones already in the group.
+  const groupDoc = readJSON(path.join(root, 'group.json'));
+  const realpath = (p) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
+
+  const linked = new Set([realpath(cwd)]);
+  if (Array.isArray(groupDoc?.members)) {
+    for (const m of groupDoc.members) linked.add(realpath(path.resolve(cwd, m.path || '.')));
+  }
+
+  const scanDirs = [path.dirname(cwd), cwd]; // siblings of the hub, plus the hub's own subfolders
+  const seen = new Set();
+  const candidates = [];
+  for (const dir of scanDirs) {
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name.startsWith('.') || e.name === 'node_modules') continue;
+      const proj = path.join(dir, e.name);
+      const rp = realpath(proj);
+      if (seen.has(rp)) continue;
+      seen.add(rp);
+      const manifest = readJSON(path.join(proj, '.cooldesk', 'cooldesk.json'));
+      if (!manifest) continue;
+      candidates.push({
+        name: manifest.project?.name || e.name,
+        status: manifest.project?.status || null,
+        description: manifest.project?.description || null,
+        path: path.relative(cwd, proj).split(path.sep).join('/') || '.',
+        linked: linked.has(rp),
+      });
+    }
+  }
+  candidates.sort((a, b) => Number(a.linked) - Number(b.linked) || a.name.localeCompare(b.name));
+  process.stdout.write(JSON.stringify({ hub: manifest0Name(), candidates }, null, 2));
+  process.exit(0);
+}
+
+function manifest0Name() {
+  const m = readJSON(manifestPath);
+  return m?.project?.name || path.basename(cwd);
+}
+
 // summary -> SessionStart additionalContext
 const manifest = readJSON(manifestPath) || {};
 const t = todos();

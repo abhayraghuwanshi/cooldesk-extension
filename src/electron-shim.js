@@ -500,6 +500,16 @@ const electronAPI = {
         }
     },
 
+    runCommand: async (command, cwd) => {
+        console.log('[TauriShim] runCommand:', command, 'cwd:', cwd);
+        try {
+            return await invoke('run_project_command', { command, cwd });
+        } catch (e) {
+            console.error('[TauriShim] Failed to run command:', e);
+            throw e;
+        }
+    },
+
     searchFiles: async (query) => {
         try {
             const result = await invoke('search_files', { query });

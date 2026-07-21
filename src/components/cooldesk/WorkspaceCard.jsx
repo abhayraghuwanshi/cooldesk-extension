@@ -46,9 +46,12 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   getUrlAnalytics,
+  saveWorkspace,
 } from '../../db/index.js';
 import { recordFeedbackEvent, recordUrlWorkspace } from '../../services/feedbackService.js';
+import { fetchCooldesk } from '../../services/cooldeskService.js';
 import { getBaseDomainFromUrl, getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
+import { AccentColorPicker } from './AccentColorPicker.jsx';
 import { GroupedLinksPopover } from './GroupedLinksPopover.jsx';
 import { UrlAnalyticsPopover } from './UrlAnalyticsPopover.jsx';
 
@@ -57,6 +60,14 @@ const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
 // Editor-style apps that launch with a folder/file argument (`code .`, `cursor .`)
 const CUSTOM_EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'rubymine', 'fleet', 'zed'];
 const isEditorApp = (app) => CUSTOM_EDITORS.includes(app?.appType?.toLowerCase());
+
+// Resolve a .cooldesk resource path (relative to the project root) to an absolute path.
+const joinProjectPath = (base, rel) => {
+  if (!base || !rel || rel === '.') return base || rel;
+  const b = base.replace(/[\\/]+$/, '');
+  const r = String(rel).replace(/[/\\]+/g, '\\').replace(/^\\+/, '');
+  return `${b}\\${r}`;
+};
 
 const ICON_MAP = {
   folder: faFolder,
@@ -156,6 +167,9 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   const [hoveredLink, setHoveredLink] = useState(null);
   const [showDrafts, setShowDrafts] = useState(false);
   const [contextMenu, setContextMenu] = useState(null); // { x, y }
+  // User-chosen accent color. Optimistic local state so the tint applies
+  // instantly; persisted to the workspace record (survives reload / sync).
+  const [colorOverride, setColorOverride] = useState(workspace.color || null);
   const activePopover = popoverState.index;
 
   // ── Context panel ────────────────────────────────────────────────────────
@@ -576,6 +590,50 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   const folderApps = useMemo(() => apps.filter(app => app.appType?.toLowerCase() === 'folder'), [apps]);
   const fileApps = useMemo(() => apps.filter(app => app.appType?.toLowerCase() === 'file'), [apps]);
 
+  // ── .cooldesk resources merged into the categorized rows ─────────────────
+  // The workspace's project folder (an app of appType 'folder') may hold a
+  // committed .cooldesk manifest declaring folders / links / linked projects.
+  // Surface those alongside the workspace's own apps/urls instead of duplicating
+  // them in a separate chip list.
+  const projectFolderPath = useMemo(() => {
+    const f = apps.find(a => a.appType?.toLowerCase() === 'folder' && a.path);
+    return f?.path || null;
+  }, [apps]);
+  const [cooldesk, setCooldesk] = useState(null);
+  useEffect(() => {
+    if (!projectFolderPath) { setCooldesk(null); return; }
+    let cancelled = false;
+    fetchCooldesk(projectFolderPath)
+      .then(d => { if (!cancelled) setCooldesk(d?.exists ? d : null); })
+      .catch(() => { if (!cancelled) setCooldesk(null); });
+    return () => { cancelled = true; };
+  }, [projectFolderPath]);
+
+  const cdFolders = useMemo(() => {
+    if (!cooldesk) return [];
+    const existing = new Set(folderApps.map(a => a.path?.toLowerCase()));
+    return cooldesk.resources
+      .filter(r => r.type === 'folder' && r.path)
+      .map(r => ({ name: r.name || r.path, path: joinProjectPath(projectFolderPath, r.path), appType: 'folder', _cd: true }))
+      .filter(r => !existing.has(r.path?.toLowerCase()));
+  }, [cooldesk, folderApps, projectFolderPath]);
+  const cdLinks = useMemo(() => {
+    if (!cooldesk) return [];
+    const norm = (u) => (u || '').replace(/\/+$/, '').toLowerCase();
+    const existing = new Set((urls || []).map(u => norm(u.url)));
+    return cooldesk.resources
+      .filter(r => r.url)
+      .map(r => ({ url: r.url, title: r.name || r.url, type: 'single', _cd: true }))
+      .filter(r => !existing.has(norm(r.url)));
+  }, [cooldesk, urls]);
+  const cdProjects = useMemo(() => {
+    if (!cooldesk) return [];
+    const hubId = cooldesk.project?.id;
+    return (cooldesk.members || [])
+      .filter(m => (m.project?.id || m.name) !== hubId)
+      .map(m => ({ name: m.project?.name || m.name, path: m.path, repo: m.repo, exists: m.exists, _cd: true }));
+  }, [cooldesk]);
+
   const handleCardClick = () => {
     if (fullView) return; // detail view: card body is not a collapse target
     onClick?.(workspace);
@@ -601,10 +659,30 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     setContextMenu({ x: e.clientX, y: e.clientY });
   };
 
-  // Dismiss context menu on outside click
+  // Apply an accent color (or null to reset to the default hue). Optimistic:
+  // update local state immediately, then persist the whole workspace record.
+  // keepOpen=true is used by the live color picker — closing the menu there
+  // unmounts the <input>, aborting the OS picker mid-selection.
+  const applyColor = (color, keepOpen = false) => {
+    setColorOverride(color);
+    if (!keepOpen) setContextMenu(null);
+    const next = { ...workspace, updatedAt: Date.now() };
+    if (color) next.color = color; else delete next.color;
+    Promise.resolve(saveWorkspace(next)).catch((err) =>
+      console.error('[WorkspaceCard] Failed to save card color:', err)
+    );
+  };
+
+  // Dismiss context menu on outside click. The menu is portaled to document.body,
+  // so its React onClick stopPropagation can't stop these native window listeners —
+  // we must skip clicks that land inside the menu ourselves, otherwise interacting
+  // with it (e.g. opening the native color picker) closes it instantly.
   useEffect(() => {
     if (!contextMenu) return;
-    const dismiss = () => setContextMenu(null);
+    const dismiss = (e) => {
+      if (e.target?.closest?.('.workspace-context-menu')) return;
+      setContextMenu(null);
+    };
     window.addEventListener('click', dismiss);
     window.addEventListener('contextmenu', dismiss);
     return () => {
@@ -639,10 +717,10 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   return (
     <div
       ref={cardRef}
-      className={`cooldesk-workspace-card ${isActive ? 'active' : ''} ${compact ? 'compact' : ''} ${contextPanelVisible ? 'panel-open' : ''} ${fullView ? 'full-view' : ''}`}
+      className={`cooldesk-workspace-card ${isActive ? 'active' : ''} ${compact ? 'compact' : ''} ${contextPanelVisible ? 'panel-open' : ''} ${fullView ? 'full-view' : ''} ${colorOverride ? 'has-accent' : ''}`}
       onClick={handleCardClick}
       onContextMenu={handleContextMenu}
-      style={cardStyle}
+      style={colorOverride ? { ...cardStyle, '--card-accent': colorOverride } : cardStyle}
       {...rest}
     >
       {compact ? (
@@ -796,6 +874,24 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                 // the links laid out flat — one click to open, no popover indirection.
                 const linkGroups = groupedItems.filter(item => item.type === 'group');
                 const singleLinks = groupedItems.filter(item => item.type !== 'group');
+                // A linked .cooldesk project — opens its folder; shown in its own row.
+                const renderProjectIcon = (proj, idx, showLabel = false) => (
+                  <div
+                    key={`proj-${idx}`}
+                    className={`compact-url-icon compact-app-icon${showLabel ? ' is-labeled' : ''}${proj.exists ? '' : ' is-missing'}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (proj.exists && proj.path && window.electronAPI?.openFolder) window.electronAPI.openFolder(proj.path);
+                      else if (proj.repo) openUrl(proj.repo, name, proj.name);
+                    }}
+                    title={proj.exists ? (proj.path || proj.name) : `${proj.name} — not found locally${proj.repo ? ` (${proj.repo})` : ''}`}
+                    style={{ border: '1px solid #2dd4bf55', background: '#2dd4bf12' }}
+                  >
+                    <FontAwesomeIcon icon={faBriefcase} style={{ color: '#2dd4bf', fontSize: '18px' }} />
+                    {showLabel && <span className="compact-icon-label" style={{ color: '#2dd4bf' }}>{proj.name}</span>}
+                  </div>
+                );
+
                 const linkRows = [
                   ...linkGroups.map(group => ({
                     key: `group-${group.key}`,
@@ -807,14 +903,15 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                     items: group.urls,
                     render: renderLinkIcon
                   })),
-                  { key: 'links', label: linkGroups.length > 0 ? 'Other Links' : 'Links', icon: faLink, accent: '#60a5fa', items: singleLinks, render: renderLinkIcon },
+                  { key: 'links', label: linkGroups.length > 0 ? 'Other Links' : 'Links', icon: faLink, accent: '#60a5fa', items: [...singleLinks, ...cdLinks], render: renderLinkIcon },
                 ];
 
                 const ROWS = [
                   ...linkRows,
+                  { key: 'projects', label: 'Projects', icon: faBriefcase, accent: '#2dd4bf', items: cdProjects, render: renderProjectIcon },
                   { key: 'editors', label: 'Editors', icon: faCode, accent: '#38bdf8', items: editorApps, render: renderAppIcon },
                   { key: 'apps', label: 'Apps', icon: faDesktop, accent: '#8b5cf6', items: desktopApps, render: renderAppIcon },
-                  { key: 'folders', label: 'Folders', icon: faFolderOpen, accent: '#facc15', items: folderApps, render: renderAppIcon },
+                  { key: 'folders', label: 'Folders', icon: faFolderOpen, accent: '#facc15', items: [...folderApps, ...cdFolders], render: renderAppIcon },
                   { key: 'files', label: 'Files', icon: faFileLines, accent: '#94a3b8', items: fileApps, render: renderAppIcon },
                 ].filter(row => row.items.length > 0);
 
@@ -1195,6 +1292,17 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
           onClick={(e) => e.stopPropagation()}
           onContextMenu={(e) => e.preventDefault()}
         >
+          {/* Customize accent color */}
+          <div className="context-menu-label">
+            <FontAwesomeIcon icon={faPalette} />
+            Customize
+          </div>
+          <AccentColorPicker
+            className="context-menu-swatches"
+            value={colorOverride}
+            onSelect={(color, source) => applyColor(color, source === 'custom')}
+          />
+          <div className="context-menu-divider" />
           {onPin && (
             <button
               className="context-menu-item"

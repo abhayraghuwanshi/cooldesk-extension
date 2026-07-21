@@ -413,8 +413,14 @@ export function CoolDeskContainer({
   // Click outside to close expanded workspace
   useEffect(() => {
     const handleGlobalClick = (e) => {
-      // If clicking inside a workspace card, do nothing (let internal handler work)
-      if (e.target.closest('.cooldesk-workspace-card') || e.target.closest('.workspace-popup-menu')) {
+      // If clicking inside a workspace card, do nothing (let internal handler work).
+      // The right-click context menu renders via a portal to document.body, so it
+      // is OUTSIDE the card subtree — exempt it explicitly, otherwise this mousedown
+      // collapses the workspace and unmounts the menu before its buttons / the
+      // native color picker can fire.
+      if (e.target.closest('.cooldesk-workspace-card') ||
+          e.target.closest('.workspace-popup-menu') ||
+          e.target.closest('.workspace-context-menu')) {
         return;
       }
       // If clicking outside, close

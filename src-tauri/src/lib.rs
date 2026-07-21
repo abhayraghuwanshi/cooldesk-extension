@@ -1083,6 +1083,79 @@ async fn launch_app_with_args(app: String, args: Vec<String>) -> Result<(), Stri
     Ok(())
 }
 
+/// Run a saved project command (from `.cooldesk/commands.json`) in a visible terminal
+/// window, in the given working directory, so the user can watch its output. Used by the
+/// clickable command pills in the CoolDesk workspace panel.
+#[tauri::command]
+async fn run_project_command(command: String, cwd: Option<String>) -> Result<(), String> {
+    if command.trim().is_empty() {
+        return Err("Empty command".into());
+    }
+    // Strip the Windows extended-length prefix (`\\?\`) — CMD rejects it as a working dir.
+    let raw = cwd.unwrap_or_default();
+    let dir = match raw.strip_prefix(r"\\?\") {
+        Some(s) => s.to_string(),
+        None => raw,
+    };
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NEW_CONSOLE: u32 = 0x00000010;
+        // Open a new visible console running the command via `cmd /k` (keeps the window
+        // open so dev-server output stays visible). Set the working directory through the
+        // OS (`current_dir`) rather than a shell `cd /d "<path>"`, so the project path
+        // never passes through cmd's quote parser — which mishandles the `\"`-escaped
+        // quotes Rust emits for an embedded path, producing "syntax is incorrect".
+        let mut c = std::process::Command::new("cmd");
+        c.arg("/k").arg(&command).creation_flags(CREATE_NEW_CONSOLE);
+        if !dir.is_empty() {
+            c.current_dir(&dir);
+        }
+        c.spawn()
+            .map_err(|e| format!("Failed to run command: {}", e))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let script = if dir.is_empty() {
+            command.clone()
+        } else {
+            format!("cd {} && {}", dir, command)
+        };
+        let osa = format!(
+            "tell application \"Terminal\" to do script \"{}\"",
+            script.replace('\\', "\\\\").replace('"', "\\\"")
+        );
+        std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(&osa)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        let full = if dir.is_empty() {
+            command.clone()
+        } else {
+            format!("cd '{}' && {}", dir, command)
+        };
+        let spawned = std::process::Command::new("x-terminal-emulator")
+            .arg("-e")
+            .arg(format!("bash -c \"{}; exec bash\"", full))
+            .spawn()
+            .is_ok();
+        if !spawned {
+            std::process::Command::new("gnome-terminal")
+                .arg("--")
+                .arg("bash")
+                .arg("-c")
+                .arg(format!("{}; exec bash", full))
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
 /// Open a folder in the system file explorer
 #[tauri::command]
 async fn open_folder(path: String) -> Result<(), String> {
@@ -1877,6 +1950,7 @@ pub fn run() {
         webapp_embed::webapp_embed_set_bounds,
         webapp_embed::webapp_embed_close,
         open_folder,
+        run_project_command,
         get_frequent_folders,
         search_files,
         list_dir,

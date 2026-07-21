@@ -95,6 +95,12 @@ export const VALIDATION_SCHEMAS = {
         status: {
             [ValidationRules.TYPE]: 'string',
             [ValidationRules.ENUM]: ['active', 'planning', 'on-hold']
+        },
+        // User-chosen accent color for the card (hex string, e.g. '#3B82F6').
+        // Empty/absent = use the name-derived default hue.
+        color: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 20
         }
     },
 

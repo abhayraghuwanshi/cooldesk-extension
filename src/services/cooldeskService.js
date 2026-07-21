@@ -51,6 +51,22 @@ export async function fetchCooldesk(projectPath) {
             architecture: raw.architecture ?? null,
             decisions: raw.decisions ?? null,
             docs: raw.docs || {},
+            // Linking: a hub project's group + resolved member projects (star model).
+            group: raw.group || null,
+            members: Array.isArray(raw.members)
+                ? raw.members.map(mem => ({
+                    name: mem.name || mem.project?.name || null,
+                    path: mem.path,
+                    repo: mem.repo || null,
+                    exists: !!mem.exists,
+                    project: mem.project || null,
+                    resources: Array.isArray(mem.resources) ? mem.resources : [],
+                    todos: Array.isArray(mem.todos?.todos) ? mem.todos.todos : [],
+                    commands: Array.isArray(mem.commands?.commands) ? mem.commands.commands : [],
+                    services: Array.isArray(mem.services?.services) ? mem.services.services : [],
+                    docs: mem.docs || {},
+                }))
+                : [],
         };
     } catch (err) {
         // Sidecar down or not a cooldesk project — degrade quietly.
@@ -62,7 +78,68 @@ export async function fetchCooldesk(projectPath) {
 /** Convenience: just the open (non-done) shared todos for a project. */
 export async function fetchCooldeskTodos(projectPath) {
     const cd = await fetchCooldesk(projectPath);
-    return cd.todos.filter((t) => t.status !== 'done');
+    return collectSharedTodos(cd);
+}
+
+/**
+ * All open shared todos across the hub project and any linked group members,
+ * each tagged with the originating project name. Falls back to just the hub's
+ * todos when the project isn't part of a group.
+ */
+export function collectSharedTodos(cd) {
+    if (!cd?.exists) return [];
+    const out = [];
+    const hubName = cd.project?.name || 'this project';
+    for (const t of cd.todos) out.push({ ...t, project: hubName });
+    for (const mem of linkedMembers(cd)) {
+        const memName = mem.project?.name || mem.name || 'linked';
+        for (const t of mem.todos) out.push({ ...t, project: memName });
+    }
+    return out.filter((t) => t.status !== 'done');
+}
+
+/** Members excluding the hub itself (the hub is often listed in its own group.json). */
+function linkedMembers(cd) {
+    const hubId = cd.project?.id;
+    return (cd.members || []).filter(m => (m.project?.id || m.name) !== hubId);
+}
+
+/** True when this project links out to other projects as a group hub. */
+export function isGrouped(cd) {
+    return !!(cd?.group && (cd.members?.length || 0) > 1);
+}
+
+/**
+ * All run commands across the hub and any linked members, each tagged with its
+ * project name. Falls back to just the hub's commands for a single project.
+ */
+export function collectCommands(cd) {
+    if (!cd?.exists) return [];
+    const out = [];
+    const hubName = cd.project?.name || 'this project';
+    for (const c of cd.commands) out.push({ ...c, project: hubName, projectPath: cd.path });
+    for (const mem of linkedMembers(cd)) {
+        const memName = mem.project?.name || mem.name || 'linked';
+        for (const c of mem.commands || []) out.push({ ...c, project: memName, projectPath: mem.path });
+    }
+    return out;
+}
+
+/**
+ * Shared docs files (notes/knowledge/prompts/workflows) across the hub and members,
+ * flattened to { kind, file, project }.
+ */
+export function collectDocs(cd) {
+    if (!cd?.exists) return [];
+    const out = [];
+    const push = (docs, project) => {
+        for (const kind of ['notes', 'knowledge', 'prompts', 'workflows']) {
+            for (const file of (docs?.[kind] || [])) out.push({ kind, file, project });
+        }
+    };
+    push(cd.docs, cd.project?.name || 'this project');
+    for (const mem of linkedMembers(cd)) push(mem.docs, mem.project?.name || mem.name || 'linked');
+    return out;
 }
 
 function emptyShape() {
@@ -70,5 +147,6 @@ function emptyShape() {
         project: null, resources: [], dock: null, sidebar: null, auto: null,
         todos: [], commands: [], services: [],
         readme: null, architecture: null, decisions: null, docs: {},
+        group: null, members: [],
     };
 }

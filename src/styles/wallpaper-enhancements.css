@@ -340,6 +340,30 @@
     transform: translateY(-6px) scale(1.02);
 }
 
+/* User-chosen accent color (right-click → Customize). These must beat the
+   forced card backgrounds above, so they carry !important and a heavier
+   selector. The dark glass base is baked in so tint stays readable on any
+   wallpaper. Driven by the inline --card-accent var set in WorkspaceCard. */
+.wallpaper-enabled .cooldesk-workspace-card.has-accent,
+.wallpaper-enabled .cooldesk-workspace-card.compact.has-accent {
+    background:
+        linear-gradient(135deg,
+            color-mix(in srgb, var(--card-accent) 30%, transparent),
+            color-mix(in srgb, var(--card-accent) 10%, transparent)),
+        linear-gradient(135deg, rgba(15, 15, 20, 0.78) 0%, rgba(10, 10, 15, 0.72) 100%) !important;
+    border: 1px solid color-mix(in srgb, var(--card-accent) 45%, transparent) !important;
+}
+
+.wallpaper-enabled .cooldesk-workspace-card.has-accent:hover,
+.wallpaper-enabled .cooldesk-workspace-card.compact.has-accent:hover {
+    background:
+        linear-gradient(135deg,
+            color-mix(in srgb, var(--card-accent) 38%, transparent),
+            color-mix(in srgb, var(--card-accent) 14%, transparent)),
+        linear-gradient(135deg, rgba(25, 25, 30, 0.85) 0%, rgba(15, 15, 20, 0.8) 100%) !important;
+    border-color: color-mix(in srgb, var(--card-accent) 65%, transparent) !important;
+}
+
 /* === PANELS & SECTIONS === */
 .wallpaper-enabled .activity-feed,
 .wallpaper-enabled .cooldesk-panel,
@@ -404,7 +428,7 @@
 .wallpaper-enabled .cooldesk-settings-btn,
 .wallpaper-enabled .cooldesk-voice-btn,
 .wallpaper-enabled .workspace-add-url-btn,
-.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):not([class*="spotlight-"]):not([class*="ws-dropdown"]):not([class*="tree-chevron"]):not([class*="dockbar-"]) {
+.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):not([class*="spotlight-"]):not([class*="ws-dropdown"]):not([class*="tree-chevron"]):not([class*="dockbar-"]):not([class*="card-swatch"]):not([class*="wcp-color-trigger"]) {
     background: linear-gradient(135deg,
             rgba(25, 25, 30, 0.76) 0%,
             rgba(20, 20, 25, 0.7) 100%) !important;
@@ -420,7 +444,7 @@
 .wallpaper-enabled .cooldesk-settings-btn:hover,
 .wallpaper-enabled .cooldesk-voice-btn:hover,
 .wallpaper-enabled .workspace-add-url-btn:hover,
-.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):not([class*="spotlight-"]):not([class*="ws-dropdown"]):not([class*="tree-chevron"]):not([class*="dockbar-"]):hover {
+.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):not([class*="spotlight-"]):not([class*="ws-dropdown"]):not([class*="tree-chevron"]):not([class*="dockbar-"]):not([class*="card-swatch"]):not([class*="wcp-color-trigger"]):hover {
     background: linear-gradient(135deg,
             rgba(40, 40, 45, 0.84) 0%,
             rgba(30, 30, 35, 0.78) 100%) !important;

@@ -1,9 +1,10 @@
-import { faArrowLeft, faBolt, faCompass, faPause, faPlus, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faArrowLeft, faBolt, faChevronDown, faChevronUp, faCompass, faPause, faPlus, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { marked } from 'marked';
+import { AccentColorPicker } from './AccentColorPicker.jsx';
 import { CooldeskSection } from './CooldeskSection.jsx';
-import { fetchCooldesk } from '../../services/cooldeskService.js';
+import { fetchCooldesk, collectSharedTodos } from '../../services/cooldeskService.js';
 import {
   deleteNote,
   deleteWorkspaceTodo,
@@ -71,10 +72,18 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
     return () => { cancelled = true; };
   }, [folderPath]);
 
-  const sharedTodos = useMemo(
-    () => (cooldesk?.todos || []).filter(t => t.status !== 'done'),
-    [cooldesk],
-  );
+  const sharedTodos = useMemo(() => collectSharedTodos(cooldesk), [cooldesk]);
+  // Group shared todos by project ("category-wise"), so the Next Up list reads as
+  // folder-style sections instead of a flat list with a repeated tag on every row.
+  const sharedByProject = useMemo(() => {
+    const map = new Map();
+    for (const t of sharedTodos) {
+      if (!map.has(t.project)) map.set(t.project, []);
+      map.get(t.project).push(t);
+    }
+    return [...map.entries()].map(([project, items]) => ({ project, items }));
+  }, [sharedTodos]);
+  const showCatHeads = sharedTodos.length > 0;
   const readmeHtml = useMemo(
     () => (cooldesk?.readme ? marked.parse(cooldesk.readme, { breaks: true }) : ''),
     [cooldesk],
@@ -82,6 +91,11 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
 
   // Status
   const [status, setStatus] = useState(workspace.status || null);
+
+  // Accent color (optimistic; persisted to the workspace record so the card
+  // and panel stay in sync on reload).
+  const [accent, setAccent] = useState(workspace.color || null);
+  const [colorOpen, setColorOpen] = useState(false);
 
   // Todos
   const [todos, setTodos] = useState([]);
@@ -112,6 +126,15 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
     setStatus(next);
     saveWorkspace({ ...workspace, status: next, updatedAt: Date.now() })
       .catch(err => console.error('[WorkspaceContextPanel] saveWorkspace failed:', err));
+  }, [workspace]);
+
+  // ── Accent color ──────────────────────────────────────────────────────────
+  const applyAccent = useCallback((color) => {
+    setAccent(color);
+    const next = { ...workspace, updatedAt: Date.now() };
+    if (color) next.color = color; else delete next.color;
+    saveWorkspace(next)
+      .catch(err => console.error('[WorkspaceContextPanel] save accent failed:', err));
   }, [workspace]);
 
   // ── Todos ───────────────────────────────────────────────────────────────
@@ -240,7 +263,11 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
   const openCount = todos.filter(t => !t.done).length + sharedTodos.length;
 
   return (
-    <div className="workspace-context-panel" onClick={e => e.stopPropagation()}>
+    <div
+      className={`workspace-context-panel ${accent ? 'has-accent' : ''}`}
+      style={accent ? { '--card-accent': accent } : undefined}
+      onClick={e => e.stopPropagation()}
+    >
       <div className="wcp-grid">
 
         {/* ── LEFT RAIL: project (.cooldesk) + status + todos ───────────── */}
@@ -271,6 +298,38 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
             </div>
           </section>
 
+          <section className="wcp-section">
+            <button
+              type="button"
+              className="wcp-color-trigger"
+              data-accent="color"
+              onClick={() => setColorOpen(v => !v)}
+              aria-expanded={colorOpen}
+            >
+              <span className="wcp-section-bar" aria-hidden="true" />
+              <span className="wcp-section-title">Card Color</span>
+              <span
+                className="wcp-color-current"
+                style={{ background: accent || 'transparent' }}
+                aria-hidden="true"
+              />
+              <FontAwesomeIcon
+                icon={colorOpen ? faChevronUp : faChevronDown}
+                className="wcp-color-chevron"
+              />
+            </button>
+            {colorOpen && (
+              <AccentColorPicker
+                className="wcp-accent-picker"
+                value={accent}
+                onSelect={(color, source) => {
+                  applyAccent(color);
+                  if (source !== 'custom') setColorOpen(false);
+                }}
+              />
+            )}
+          </section>
+
           <section className="wcp-section wcp-todos-section">
             <header className="wcp-section-head" data-accent="todos">
               <span className="wcp-section-bar" aria-hidden="true" />
@@ -278,42 +337,51 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
               {openCount > 0 && <span className="wcp-section-count">{openCount}</span>}
             </header>
             <div className="wcp-todos">
-              {sharedTodos.map(todo => (
-                <div key={todo.id} className={`wcp-todo-row is-shared ${todo.status === 'in_progress' ? 'is-active' : ''}`}>
-                  <span className="wcp-todo-shared-dot" aria-hidden="true" />
-                  <span className="wcp-todo-text">{todo.title}</span>
-                  <span className="wcp-todo-shared-tag" title="From .cooldesk — committed, team-shared">shared</span>
+              {sharedByProject.map(g => (
+                <div key={g.project} className="wcp-todo-cat">
+                  {showCatHeads && <div className="wcp-todo-cat-head">{g.project}</div>}
+                  {g.items.map((todo, i) => (
+                    <div key={`${g.project}:${todo.id}:${i}`} className={`wcp-todo-row is-shared ${todo.status === 'in_progress' ? 'is-active' : ''}`}>
+                      <span className="wcp-todo-shared-dot" aria-hidden="true" />
+                      <span className="wcp-todo-text">{todo.title}</span>
+                    </div>
+                  ))}
                 </div>
               ))}
-              {todos.map(todo => (
-                <div key={todo.id} className={`wcp-todo-row ${todo.done ? 'is-done' : ''}`}>
-                  <button
-                    type="button"
-                    className="wcp-todo-check"
-                    onClick={() => handleToggleTodo(todo.id)}
-                    aria-label={todo.done ? 'Mark undone' : 'Mark done'}
-                    aria-pressed={todo.done}
-                  >
-                    <svg viewBox="0 0 14 14" width="9" height="9" aria-hidden="true">
-                      <path
-                        d="M2 7.5L5.5 11L12 3.5"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </button>
-                  <span className="wcp-todo-text">{todo.text}</span>
-                  <button
-                    type="button"
-                    className="wcp-todo-del"
-                    onClick={() => handleDeleteTodo(todo.id)}
-                    aria-label="Delete task"
-                  >×</button>
+              {todos.length > 0 && (
+                <div className="wcp-todo-cat">
+                  {showCatHeads && <div className="wcp-todo-cat-head">Personal</div>}
+                  {todos.map(todo => (
+                    <div key={todo.id} className={`wcp-todo-row ${todo.done ? 'is-done' : ''}`}>
+                      <button
+                        type="button"
+                        className="wcp-todo-check"
+                        onClick={() => handleToggleTodo(todo.id)}
+                        aria-label={todo.done ? 'Mark undone' : 'Mark done'}
+                        aria-pressed={todo.done}
+                      >
+                        <svg viewBox="0 0 14 14" width="9" height="9" aria-hidden="true">
+                          <path
+                            d="M2 7.5L5.5 11L12 3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                      <span className="wcp-todo-text">{todo.text}</span>
+                      <button
+                        type="button"
+                        className="wcp-todo-del"
+                        onClick={() => handleDeleteTodo(todo.id)}
+                        aria-label="Delete task"
+                      >×</button>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
               {todos.length === 0 && sharedTodos.length === 0 && (
                 <div className="wcp-todos-empty">Nothing queued. Capture one below.</div>
               )}
