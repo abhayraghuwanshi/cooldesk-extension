@@ -3,8 +3,10 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { forceCollide, forceX, forceY } from 'd3-force-3d';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
+import categoryManager from '../../data/categories.js';
 import { fetchGraph, graphChanged } from '../../services/graphService';
 import { getHostUrl } from '../../services/syncConfig';
+import { computeDegrees, sparsifyLinks, STRUCTURAL_EDGE_TYPES } from '../../utils/graphSalience.js';
 import { ActivityOverview } from './ActivityOverview';
 import './KnowledgeGraph.css';
 
@@ -59,9 +61,14 @@ const NODE_COLORS = Object.fromEntries(
 
 const FILTERS = ['all', 'url', 'app', 'folder', 'file', 'media', 'workspace'];
 
+// Size from what is actually on screen. The backend `weight` field cannot be
+// used here: it means "member count" on a workspace, "degree" on an app, and is
+// flat 0 for any node that only ever appeared in a co-occurrence pair — so it
+// is not comparable across node types and understates a fifth of the graph.
 function nodeRadius(node) {
-  if (node.type === 'workspace') return 16 + Math.sqrt(node.weight || 1) * 3;
-  const byLinks = 3.5 + Math.sqrt(node.weight || 1) * 1.4;
+  const links = node.degree || 0;
+  if (node.type === 'workspace') return 14 + Math.sqrt(node.memberCount || 1) * 2.6;
+  const byLinks = 3.5 + Math.sqrt(links) * 1.4;
   // Real usage beats link count: size by active minutes (14d) when the sampler
   // has data for this node.
   if (node.activeS) {
@@ -115,9 +122,6 @@ export function GraphCanvas() {
   const [localMode, setLocalMode]         = useState(false);
   const [hopDepth, setHopDepth]           = useState(1);
 
-  // Fixed weak-edge cutoff (was a user slider; a good default beats a knob)
-  const EDGE_THRESHOLD = 0.05;
-
   const fgRef      = useRef(null);
   const canvasRef  = useRef(null);
   const mousePos   = useRef({ x: 0, y: 0 });
@@ -164,17 +168,43 @@ export function GraphCanvas() {
   }, []);
 
   // ── Cluster model: every node belongs to a workspace or to "Unsorted" ─────
-  const nodeCluster = useMemo(() => {
+  // Membership comes first (the user said so explicitly). Anything left over
+  // falls back to its domain category — the workspaces are named after the same
+  // taxonomy, so a categorised URL lands in a hub that already exists instead of
+  // in an anonymous pile.
+  const { cluster: nodeCluster, inferred } = useMemo(() => {
     const wsIds = new Set(rawData.nodes.filter(n => n.type === 'workspace').map(n => n.id));
     const map = new Map();
+    const inferred = new Set();
     wsIds.forEach(id => map.set(id, id));
+
+    // Pass 1 — explicit workspace membership.
     rawData.links.forEach(l => {
       const src = typeof l.source === 'object' ? l.source.id : l.source;
       const tgt = typeof l.target === 'object' ? l.target.id : l.target;
       if (wsIds.has(src) && !wsIds.has(tgt) && !map.has(tgt)) map.set(tgt, src);
       if (wsIds.has(tgt) && !wsIds.has(src) && !map.has(src)) map.set(src, tgt);
     });
-    return map; // nodes absent from the map are unsorted
+
+    // Pass 2 — category fallback, workspace label matched case-insensitively.
+    const wsByName = new Map(
+      rawData.nodes
+        .filter(n => n.type === 'workspace')
+        .map(n => [n.label.trim().toLowerCase(), n.id])
+    );
+    rawData.nodes.forEach(n => {
+      if (map.has(n.id) || (n.type !== 'url' && n.type !== 'media')) return;
+      const cat = categoryManager.categorizeUrl(n.label);
+      if (cat === 'uncategorized') return;
+      const wsId = wsByName.get(cat.toLowerCase());
+      if (wsId) {
+        map.set(n.id, wsId);
+        inferred.add(n.id);
+      }
+    });
+
+    // nodes absent from `cluster` are genuinely unsorted
+    return { cluster: map, inferred };
   }, [rawData]);
 
   const clusterOf = useCallback(
@@ -185,8 +215,12 @@ export function GraphCanvas() {
   // Fixed anchor per cluster, arranged on a ring — deterministic layout, so the
   // map reads as named regions and never reshuffles between refreshes.
   const clusterAnchors = useMemo(() => {
+    // An empty workspace claims a ring slot and a full-size bubble while saying
+    // nothing, so only hubs that actually hold something get anchored.
+    const populated = new Set();
+    nodeCluster.forEach((wsId, nodeId) => { if (nodeId !== wsId) populated.add(wsId); });
     const wsSorted = rawData.nodes
-      .filter(n => n.type === 'workspace')
+      .filter(n => n.type === 'workspace' && populated.has(n.id))
       .sort((a, b) => a.label.localeCompare(b.label))
       .map(n => n.id);
     const hasUnsorted = rawData.nodes.some(n => n.type !== 'workspace' && !nodeCluster.has(n.id));
@@ -297,12 +331,39 @@ export function GraphCanvas() {
     if (timeCutoffMs) {
       data = { ...data, links: data.links.filter(l => !l.last_seen || l.last_seen >= timeCutoffMs) };
     }
-    {
-      const STATIC = new Set(['url_in_workspace','app_in_workspace','folder_in_workspace','file_in_workspace','shared_resource']);
-      data = { ...data, links: data.links.filter(l => STATIC.has(l.type) || (l.weight || 0) >= EDGE_THRESHOLD) };
-    }
-    return data;
-  }, [rawData, filter, timeCutoffMs]);
+    // Salience pass: normalize co-occurrence by base rate, then keep each
+    // node's strongest links. A flat weight cutoff cannot work here — raw
+    // co-occurrence counts favour whatever is always open, so ~96% of edges
+    // cleared the old threshold and every layout collapsed into one knot.
+    const links = sparsifyLinks(data.links);
+
+    // Size inputs, derived from what survived rather than from the backend's
+    // overloaded `weight`. Mutating the node objects (rather than cloning) is
+    // deliberate — react-force-graph keeps its simulation state on them.
+    const degrees = computeDegrees(links);
+    const memberCounts = new Map();
+    nodeCluster.forEach((wsId, nodeId) => {
+      if (nodeId === wsId) return;
+      memberCounts.set(wsId, (memberCounts.get(wsId) || 0) + 1);
+    });
+    data.nodes.forEach(n => {
+      n.degree = degrees.get(n.id) || 0;
+      if (n.type === 'workspace') n.memberCount = memberCounts.get(n.id) || 0;
+    });
+
+    // Drop hubs that hold nothing — they get no ring anchor, so leaving them in
+    // would strand them at the origin on top of everything else.
+    const nodes = data.nodes.filter(n => n.type !== 'workspace' || n.memberCount > 0);
+    const live = new Set(nodes.map(n => n.id));
+    return {
+      nodes,
+      links: links.filter(l => {
+        const s = typeof l.source === 'object' ? l.source.id : l.source;
+        const t = typeof l.target === 'object' ? l.target.id : l.target;
+        return live.has(s) && live.has(t);
+      }),
+    };
+  }, [rawData, filter, timeCutoffMs, nodeCluster]);
 
   const connectedIds = useMemo(() => {
     if (!selectedId) return null;
@@ -352,16 +413,22 @@ export function GraphCanvas() {
     const node = rawData.nodes.find(n => n.id === selectedId);
     if (!node) return null;
     const getId = x => typeof x === 'object' ? x.id : x;
-    const connections = rawData.links
+    // Ranked over the links actually drawn, by salience — raw `weight` is not
+    // comparable between a membership edge (always 1.0) and a measured one.
+    const connections = filteredData.links
       .filter(l => getId(l.source) === selectedId || getId(l.target) === selectedId)
       .map(l => {
         const otherId = getId(l.source) === selectedId ? getId(l.target) : getId(l.source);
-        return { node: rawData.nodes.find(n => n.id === otherId), edgeType: l.type, weight: l.weight || 0 };
+        return {
+          node: rawData.nodes.find(n => n.id === otherId),
+          edgeType: l.type,
+          weight: l.salience ?? 0,
+        };
       })
       .filter(c => c.node)
       .sort((a, b) => b.weight - a.weight);
     return { node, connections };
-  }, [selectedId, rawData]);
+  }, [selectedId, rawData, filteredData]);
 
   // ── Per-node workspace color map ─────────────────────────────────────────
   // Workspaces get WORKSPACE_PALETTE[i] sorted by label.
@@ -516,9 +583,13 @@ export function GraphCanvas() {
     ctx.fill();
     ctx.shadowBlur = 0;
 
+    // A dashed rim marks a node placed by category rather than by the user, so
+    // an inferred grouping never passes itself off as one you confirmed.
     ctx.strokeStyle = vis.hi + (faded ? '30' : '80');
     ctx.lineWidth   = 1 / globalScale;
+    if (inferred.has(node.id)) ctx.setLineDash([2 / globalScale, 2 / globalScale]);
     ctx.stroke();
+    ctx.setLineDash([]);
 
     // ── Workspace: single clean outer ring ──
     if (isWs && !faded) {
@@ -563,7 +634,7 @@ export function GraphCanvas() {
 
     ctx.restore();
     node.__r = r;
-  }, [connectedIds, selectedId, searchMatches, wsColorMap, wsChildCount]);
+  }, [connectedIds, selectedId, searchMatches, wsColorMap, wsChildCount, inferred]);
 
   const nodePointerAreaPaint = useCallback((node, col, ctx) => {
     ctx.fillStyle = col;
@@ -597,11 +668,18 @@ export function GraphCanvas() {
     return col + alphaHex(alpha);
   }, [connectedIds, wsColorMap, clusterOf]);
 
+  // Width tracks `salience`, not the raw weight — the five edge types are on
+  // five different scales, and membership edges are a flat 1.0, which used to
+  // make the links the user typed in by hand the thickest thing on screen.
+  // Those are context, so they render as hairlines; measured association gets
+  // the ink.
   const handleLinkWidth = useCallback(link => {
     const [srcId, tgtId] = linkEnds(link);
+    if (STRUCTURAL_EDGE_TYPES.has(link.type)) return 0.5;
+    const s = link.salience ?? 0.3;
     return clusterOf(srcId) !== clusterOf(tgtId)
-      ? Math.max(1, (link.weight || 0.3) * 2.2)
-      : Math.max(0.7, (link.weight || 0.3) * 2);
+      ? Math.max(1, s * 4)
+      : Math.max(0.7, s * 3.2);
   }, [clusterOf]);
 
   const isEmpty = rawData.nodes.length === 0 && !loading;
@@ -748,8 +826,8 @@ export function GraphCanvas() {
                 <span className="kg-stat-label">connections</span>
               </div>
               <div className="kg-stat">
-                <span className="kg-stat-val">{selectedDetail.node.weight}</span>
-                <span className="kg-stat-label">weight</span>
+                <span className="kg-stat-val">{selectedDetail.node.degree ?? 0}</span>
+                <span className="kg-stat-label">links shown</span>
               </div>
               {fmtActive(selectedDetail.node.activeS) && (
                 <div className="kg-stat">
@@ -814,7 +892,7 @@ export function GraphCanvas() {
               </span>
               {wsName && <><span>·</span><span style={{ color: tVis.hi + 'cc' }}>{wsName}</span></>}
               <span>·</span>
-              <span>{tooltip.node.weight} links</span>
+              <span>{tooltip.node.degree ?? 0} links</span>
               {fmtActive(tooltip.node.activeS) && (
                 <><span>·</span><span style={{ color: '#4ade80' }}>{fmtActive(tooltip.node.activeS)} active</span></>
               )}

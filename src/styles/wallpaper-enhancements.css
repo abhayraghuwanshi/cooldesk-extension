@@ -351,7 +351,8 @@
             color-mix(in srgb, var(--card-accent) 30%, transparent),
             color-mix(in srgb, var(--card-accent) 10%, transparent)),
         linear-gradient(135deg, rgba(15, 15, 20, 0.78) 0%, rgba(10, 10, 15, 0.72) 100%) !important;
-    border: 1px solid color-mix(in srgb, var(--card-accent) 45%, transparent) !important;
+    /* No accent border and no hover treatment — the tint alone carries the
+       color; the card keeps the neutral hairline from the rules above. */
 }
 
 /* The context panel follows the same accent grammar as the card it belongs to,
@@ -363,17 +364,9 @@
             color-mix(in srgb, var(--card-accent) 10%, transparent)),
         linear-gradient(135deg, rgba(15, 15, 20, 0.78) 0%, rgba(10, 10, 15, 0.72) 100%),
         linear-gradient(180deg, #161c2b 0%, #10141f 100%) !important;
-    border: none !important;
-}
-
-.wallpaper-enabled .cooldesk-workspace-card.has-accent:hover,
-.wallpaper-enabled .cooldesk-workspace-card.compact.has-accent:hover {
-    background:
-        linear-gradient(135deg,
-            color-mix(in srgb, var(--card-accent) 38%, transparent),
-            color-mix(in srgb, var(--card-accent) 14%, transparent)),
-        linear-gradient(135deg, rgba(25, 25, 30, 0.85) 0%, rgba(15, 15, 20, 0.8) 100%) !important;
-    border-color: color-mix(in srgb, var(--card-accent) 65%, transparent) !important;
+    /* Same neutral hairline the compact card gets above — not an accent-colored
+       outline, just enough edge that the panel reads as a box like the card. */
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
 }
 
 /* === PANELS & SECTIONS === */

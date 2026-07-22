@@ -1152,12 +1152,8 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
       color-mix(in srgb, var(--card-accent) 24%, transparent),
       color-mix(in srgb, var(--card-accent) 8%, transparent)),
     var(--glass-bg, rgba(30, 41, 59, 0.7));
-  border: 1px solid color-mix(in srgb, var(--card-accent) 42%, transparent);
-}
-
-.cooldesk-workspace-card.has-accent:hover {
-  border-color: color-mix(in srgb, var(--card-accent) 65%, transparent);
-  box-shadow: 0 8px 32px color-mix(in srgb, var(--card-accent) 22%, rgba(0, 0, 0, 0.3));
+  /* Tint only: no accent border, and no accent hover glow — the card keeps the
+     neutral border/hover from the base rules. */
 }
 
 .workspace-card-header {
@@ -3998,6 +3994,10 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* One horizontal gutter for the whole detail view. The card's item rows and
+     the context panel below are separate boxes with their own padding chains,
+     so without a shared token their left/right insets drift apart. */
+  --detail-gutter: 18px;
 }
 
 .workspace-detail-back {
@@ -4051,11 +4051,46 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   padding: 7px 12px 7px 8px;
 }
 
-/* Symmetric gutters: the base 24px left indents (rows + container) exist to
-   tuck wrapped pills under the section label — with full-width rows they just
-   shift everything right of center. */
+/* Header (icon + name + collapse chevron) on its own row, item rows spanning
+   the full width below it. Side-by-side, the workspace icon tile pushes every
+   link/app row ~76px right of the panel's gutter — the rows and the panel
+   below then read as two differently-indented columns. */
+.cooldesk-workspace-card.compact.full-view .compact-card-inner {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "title btn"
+    "icons icons";
+  gap: 8px 10px;
+  padding: 12px var(--detail-gutter, 18px);
+}
+
+.cooldesk-workspace-card.compact.full-view .compact-workspace-stack {
+  grid-area: title;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  justify-self: start;
+}
+
+.cooldesk-workspace-card.compact.full-view .compact-expand-btn {
+  grid-area: btn;
+  align-self: center;
+  margin-left: 0;
+}
+
+.cooldesk-workspace-card.compact.full-view .compact-icons-scroll {
+  grid-area: icons;
+  width: 100%;
+}
+
+/* Symmetric gutters: the base 24px left indent (and the 8px the drawer-width
+   rule adds) exists to tuck wrapped pills under the section label — with
+   full-width rows it just offsets them from the card's own padding. The
+   inner padding is now 0 so the rows sit exactly on --detail-gutter, the
+   same edge the panel below uses. */
 .cooldesk-workspace-card.compact.full-view .compact-icons-rows {
-  padding: 6px 8px;
+  padding: 6px 0;
 }
 
 .cooldesk-workspace-card.compact.full-view .compact-icons-container {
@@ -4070,6 +4105,7 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   flex: none;
   height: auto;
   overflow: visible;
+  padding: 16px var(--detail-gutter, 18px) 18px;
   border: 1px solid var(--border-primary, rgba(148, 163, 184, 0.15));
   border-radius: 14px;
   background: var(--glass-bg, rgba(30, 41, 59, 0.5));
@@ -4084,6 +4120,9 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 
 .workspace-detail-view .wcp-rail {
   overflow: visible;
+  /* The 6px reserves room for the rail's own scrollbar; with overflow visible
+     here it only inset the rail 6px further than the notes column below it. */
+  padding-right: 0;
 }
 
 /* Nested scrollers are what make the wheel "stick" in the detail view: the

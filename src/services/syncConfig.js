@@ -66,9 +66,11 @@ export function getSyncConfig() {
  * Check if the Electron host server is reachable
  * Caches the result to avoid repeated health checks
  */
-export async function checkHostAvailable() {
-  // Return cached result if we checked recently (within 30 seconds)
-  if (hostAvailable !== null) {
+export async function checkHostAvailable(force = false) {
+  // Return cached result if we checked recently (within 30 seconds).
+  // `force` skips it — a user pressing Retry after starting the app should not
+  // be answered from a cached failure for another 10 seconds.
+  if (!force && hostAvailable !== null) {
     return hostAvailable;
   }
 

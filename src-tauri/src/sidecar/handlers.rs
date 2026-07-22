@@ -372,14 +372,17 @@ pub async fn get_graph(State(state): State<Arc<AppState>>) -> Json<GraphResponse
         let tgt_id = graph_id_for_domain(&co.url2);
         let node_type_of = |id: &str| if id.starts_with("media::") { "media" } else { "url" };
 
-        nodes.entry(src_id.clone()).or_insert_with(|| GraphNode {
-            id: src_id.clone(), node_type: node_type_of(&src_id).to_string(),
-            label: co.url1.clone(), title: None, weight: 0,
-        });
-        nodes.entry(tgt_id.clone()).or_insert_with(|| GraphNode {
-            id: tgt_id.clone(), node_type: node_type_of(&tgt_id).to_string(),
-            label: co.url2.clone(), title: None, weight: 0,
-        });
+        // Count the degree these edges contribute. Without this a URL that only
+        // ever appeared in co-occurrence pairs keeps weight 0 forever — and the
+        // trim below sorts URL nodes by weight, so a whole class of nodes was
+        // being kept or dropped arbitrarily.
+        for (id, label) in [(&src_id, &co.url1), (&tgt_id, &co.url2)] {
+            let entry = nodes.entry(id.clone()).or_insert_with(|| GraphNode {
+                id: id.clone(), node_type: node_type_of(id).to_string(),
+                label: label.clone(), title: None, weight: 0,
+            });
+            entry.weight = entry.weight.saturating_add(1);
+        }
 
         edges.push(GraphEdge {
             source: src_id,

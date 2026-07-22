@@ -13,7 +13,7 @@ import { useSync } from '../../hooks/useSync';
 import { getSyncStatus } from '../../services/conditionalSync';
 import { isElectronApp } from '../../services/environmentDetector';
 import { sendMessage, storageGet, storageSet } from '../../services/extensionApi';
-import { loadSyncConfig, toggleHostSync } from '../../services/syncConfig';
+import { checkHostAvailable, loadSyncConfig, toggleHostSync } from '../../services/syncConfig';
 import { setAndSaveFontFamily, setAndSaveFontSize } from '../../utils/fontUtils';
 import { checkUpdateWithPing, isAnalyticsEnabled, setAnalyticsEnabled } from '../../services/analytics';
 import { TEAM_FEATURE_ENABLED } from '../../config/features';
@@ -259,14 +259,18 @@ export function SettingsModal({
     };
   }, [show]);
 
-  const loadSettingsSync = async () => {
+  const loadSettingsSync = async (forceProbe = false) => {
     try {
       setSyncConfigLoading(true);
       const config = await loadSyncConfig();
       const status = getSyncStatus();
       setSyncConfig(config);
-      setSyncStatus(status);
       setHostSyncEnabled(config.enableHostSync !== false);
+      // getSyncStatus() only reports which features are switched on — it has no
+      // hostAvailable field. The row reads that field, so without this probe it
+      // stays undefined and the status is stuck on "Checking…" forever.
+      const available = config.enableHostSync === false ? false : await checkHostAvailable(forceProbe);
+      setSyncStatus({ ...status, hostAvailable: available });
     } finally {
       setSyncConfigLoading(false);
     }
@@ -276,6 +280,9 @@ export function SettingsModal({
     try {
       await toggleHostSync(enabled);
       setHostSyncEnabled(enabled);
+      // The status row is driven by hostAvailable, so flipping the toggle has
+      // to re-probe or the dot keeps showing the pre-toggle answer.
+      loadSettingsSync(true);
     } catch {
       setError('Failed to toggle host sync');
     }
@@ -782,7 +789,9 @@ export function SettingsModal({
                       right={
                         <div style={{ display: 'flex', gap: 6 }}>
                           {hostSyncEnabled && !syncStatus?.hostAvailable && (
-                            <SmallBtn onClick={loadSettingsSync}>Retry</SmallBtn>
+                            <SmallBtn onClick={() => loadSettingsSync(true)} disabled={syncConfigLoading}>
+                              {syncConfigLoading ? 'Checking…' : 'Retry'}
+                            </SmallBtn>
                           )}
                           <SmallBtn
                             onClick={triggerSync}

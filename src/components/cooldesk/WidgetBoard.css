@@ -200,30 +200,26 @@
     border-radius: 14px;
     overflow: hidden;
     min-height: 0;
+    box-sizing: border-box;
 }
 
-/* Per-widget accent (hover ◍ chip / right-click → Widget color).
-   The widget iframe paints its own opaque frosted surface, so a background on
-   the tile is hidden behind it — a flat `background: <color>` here does
-   nothing visible. The tint therefore rides ON TOP of the frame as an overlay
-   layer, kept translucent so widget text stays readable and
-   pointer-events:none so the widget stays interactive. Driven by the inline
-   --tile-accent var, same grammar as the workspace card's --card-accent. */
+/* Per-widget accent (hover ◍ chip / right-click → Widget color) — ambient
+   light, not paint. Two things were tried and rejected: a translucent film
+   over the frame (::after, inset 0), which only muted the widget's own colors
+   and read as coloured plastic over a grey card; and a solid 3px bezel, which
+   outlined the opaque widget slab like a sticker. The widget surface belongs
+   to the store page and can't be tinted from here, so the accent stays
+   OUTSIDE it: a hairline at the edge plus the glow the tile casts on the
+   wallpaper. Driven by the inline --tile-accent var, same grammar as the
+   workspace card's --card-accent. */
 .wgb-tile.has-accent {
-    background: color-mix(in srgb, var(--tile-accent) 18%, rgba(255, 255, 255, 0.026));
-}
-
-.wgb-tile.has-accent::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    pointer-events: none;
-    border-radius: inherit;
-    background: linear-gradient(160deg,
-            color-mix(in srgb, var(--tile-accent) 30%, transparent),
-            color-mix(in srgb, var(--tile-accent) 12%, transparent));
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tile-accent) 52%, transparent);
+    background: color-mix(in srgb, var(--tile-accent) 20%, rgba(255, 255, 255, 0.026));
+    box-shadow:
+        /* hairline, not a bezel — enough to read the hue at the edge */
+        0 0 0 1px color-mix(in srgb, var(--tile-accent) 28%, transparent),
+        /* the accent lives mostly in the light the tile throws on the wallpaper */
+        0 2px 12px -4px color-mix(in srgb, var(--tile-accent) 40%, transparent),
+        0 12px 36px -14px color-mix(in srgb, var(--tile-accent) 70%, transparent);
 }
 
 .wgb-frame {
@@ -251,7 +247,6 @@
     position: absolute;
     top: 6px;
     right: 6px;
-    /* Above the accent overlay (::after, z-index 1). */
     z-index: 2;
     display: flex;
     gap: 2px;
@@ -745,17 +740,14 @@
     background: rgba(15, 23, 42, 0.04);
 }
 
-/* Light theme: the same hue over a light widget surface needs less alpha or it
-   reads as a wash instead of a tint. */
+/* Light theme: the bezel sits against a light widget surface, so the plate is
+   mixed toward white instead of toward the dark plate. */
 .bg-white-cred .wgb-tile.has-accent {
-    background: color-mix(in srgb, var(--tile-accent) 14%, rgba(15, 23, 42, 0.04));
-}
-
-.bg-white-cred .wgb-tile.has-accent::after {
-    background: linear-gradient(160deg,
-            color-mix(in srgb, var(--tile-accent) 20%, transparent),
-            color-mix(in srgb, var(--tile-accent) 7%, transparent));
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tile-accent) 40%, transparent);
+    background: color-mix(in srgb, var(--tile-accent) 16%, rgba(15, 23, 42, 0.04));
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--tile-accent) 32%, transparent),
+        0 2px 12px -5px color-mix(in srgb, var(--tile-accent) 35%, transparent),
+        0 12px 34px -16px color-mix(in srgb, var(--tile-accent) 55%, transparent);
 }
 
 .bg-white-cred .wgb-head,

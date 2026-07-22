@@ -238,7 +238,14 @@ export function ActivityOverview({ embedded = false, hideWhenEmpty = false }) {
       const d = Math.abs(s.ts - target);
       if (d < bestDist) { bestDist = d; best = s; }
     });
-    return bestDist <= 90 * 60 * 1000 ? best : null; // within ±90 min only
+    if (bestDist > 90 * 60 * 1000) return null; // within ±90 min only
+    // The backend omits empty arrays (skip_serializing_if), so normalize them.
+    return {
+      ...best,
+      apps: best.apps || [],
+      tabDomains: best.tabDomains || [],
+      localhost: best.localhost || [],
+    };
   }, [today, dayOffset]);
 
   // ── Projects (context trends over the selected range) ──────────────────────
@@ -448,7 +455,7 @@ export function ActivityOverview({ embedded = false, hideWhenEmpty = false }) {
                         <span className="ao-tip-secs">{fmtDur(s)}</span>
                       </div>
                     ))}
-                    {snap && (
+                    {snap && (snap.apps.length > 0 || snap.localhost.length > 0) && (
                       <div className="ao-tip-snap">
                         {snap.apps.slice(0, 4).map(prettyApp).join(' · ')}
                         {snap.localhost.length > 0 && ` · ⚡${snap.localhost[0]}`}
