@@ -57,12 +57,26 @@ fn autostart_flag_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
     app.path().app_config_dir().ok().map(|dir| dir.join("launch_at_login"))
 }
 
-fn read_autostart_intent(app: &tauri::AppHandle) -> Option<bool> {
+// File format is "<enabled>:<args_version>", e.g. "1:2". Files written before
+// the version existed hold a bare "1"/"0" and read back as version 1, which is
+// what triggers the one-time Run-entry rewrite.
+fn read_autostart_flag(app: &tauri::AppHandle) -> Option<(bool, u32)> {
     let path = autostart_flag_path(app)?;
-    match std::fs::read_to_string(&path) {
-        Ok(s) => Some(s.trim() == "1"),
-        Err(_) => None,
-    }
+    let raw = std::fs::read_to_string(&path).ok()?;
+    let raw = raw.trim();
+    let (enabled, version) = match raw.split_once(':') {
+        Some((e, v)) => (e.trim() == "1", v.trim().parse().unwrap_or(1)),
+        None => (raw == "1", 1),
+    };
+    Some((enabled, version))
+}
+
+fn read_autostart_intent(app: &tauri::AppHandle) -> Option<bool> {
+    read_autostart_flag(app).map(|(enabled, _)| enabled)
+}
+
+fn read_autostart_args_version(app: &tauri::AppHandle) -> u32 {
+    read_autostart_flag(app).map(|(_, v)| v).unwrap_or(0)
 }
 
 fn write_autostart_intent(app: &tauri::AppHandle, enabled: bool) {
@@ -70,7 +84,8 @@ fn write_autostart_intent(app: &tauri::AppHandle, enabled: bool) {
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        let _ = std::fs::write(&path, if enabled { "1" } else { "0" });
+        let value = format!("{}:{}", if enabled { 1 } else { 0 }, AUTOSTART_ARGS_VERSION);
+        let _ = std::fs::write(&path, value);
     }
 }
 
@@ -96,6 +111,86 @@ fn get_launch_at_login(app: tauri::AppHandle) -> bool {
         return intent;
     }
     app.autolaunch().is_enabled().unwrap_or(false)
+}
+
+// ── Autostart args ───────────────────────────────────────────────────────────
+// At login the Run key launches us with ARG_AUTOSTART. Every well-behaved
+// startup app does this (OneDrive /background, Steam -silent, Chrome
+// --no-startup-window): come up headless, into the tray, and don't compete with
+// the other startup programs for disk. Without it we cold-booted a 1400x900
+// WebView2 dashboard at the worst possible moment.
+const ARG_AUTOSTART: &str = "--autostart";
+
+// Bumped whenever the Run key's *value* needs rewriting (e.g. adding an arg).
+// The flag file stores this; installs written by an older version re-register
+// once on startup. Without this, `is_enabled()` only checks that the key exists,
+// so a stale argless command line would survive forever.
+const AUTOSTART_ARGS_VERSION: u32 = 2;
+
+fn launched_by_autostart() -> bool {
+    std::env::args().any(|a| a == ARG_AUTOSTART)
+}
+
+/// Get the main window, creating it if it doesn't exist yet.
+///
+/// The main window is *not* declared in tauri.conf.json — declaring it there
+/// makes Tauri build the webview and load the whole React dashboard at process
+/// start, which is exactly the login-time cost we're avoiding. It's built here
+/// on first demand instead (tray click, single-instance relaunch, dock expand),
+/// and pre-warmed in the background well after login has settled.
+///
+/// Always returns the window hidden; callers decide when to show it.
+fn ensure_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
+    if let Some(win) = app.get_webview_window("main") {
+        return Some(win);
+    }
+
+    let built = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
+        .title("CoolDesk")
+        .inner_size(1400.0, 900.0)
+        .resizable(true)
+        .fullscreen(false)
+        .visible(false)
+        .build();
+
+    match built {
+        Ok(win) => {
+            attach_main_window_events(&win);
+            Some(win)
+        }
+        Err(e) => {
+            log::error!("[Window] Failed to create main window: {}", e);
+            None
+        }
+    }
+}
+
+/// Hide-on-close, and (in drawer mode) collapse to the handle when the panel
+/// loses focus — the "click away to hide" behavior.
+fn attach_main_window_events(window: &tauri::WebviewWindow) {
+    let win = window.clone();
+    window.on_window_event(move |event| match event {
+        tauri::WindowEvent::CloseRequested { api, .. } => {
+            api.prevent_close();
+            let _ = win.hide();
+        }
+        tauri::WindowEvent::Focused(false) => {
+            let app = win.app_handle();
+            let st = load_dock_state(app);
+            if st.enabled && st.mode == "drawer" && win.is_visible().unwrap_or(false) {
+                collapse_drawer(app, &st);
+            }
+        }
+        _ => {}
+    });
+}
+
+/// Create and show the main window (creating it first if needed).
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(win) = ensure_main_window(app) {
+        let _ = win.show();
+        let _ = win.set_focus();
+    }
 }
 
 // ── Workspace dock ─────────────────────────────────────────────────────────
@@ -227,7 +322,7 @@ fn drawer_geom(app: &tauri::AppHandle, win: &tauri::WebviewWindow, horizontal: b
 /// overlay, and hide the handle.
 fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
     let horizontal = dock_is_horizontal(&st.side);
-    if let Some(main) = app.get_webview_window("main") {
+    if let Some(main) = ensure_main_window(app) {
         if let Some((mx, my, mw, mh)) = drawer_geom(app, &main, horizontal) {
             let (x, y, w, h) = if horizontal {
                 let h = st.bar_height.clamp(BAR_MIN_HEIGHT, BAR_MAX_HEIGHT) as i32;
@@ -346,8 +441,7 @@ fn apply_dock(app: &tauri::AppHandle, side: String, thickness: u32) -> Result<Do
         if let Some(handle) = app.get_webview_window("handle") {
             let _ = handle.hide();
         }
-        let window = app
-            .get_webview_window("main")
+        let window = ensure_main_window(app)
             .ok_or_else(|| "main window not found".to_string())?;
         let _ = window.set_decorations(false);
         let _ = window.set_resizable(false);
@@ -378,7 +472,7 @@ fn disable_dock(app: &tauri::AppHandle) -> DockState {
     if let Some(handle) = app.get_webview_window("handle") {
         let _ = handle.hide();
     }
-    if let Some(window) = app.get_webview_window("main") {
+    if let Some(window) = ensure_main_window(app) {
         let _ = window.set_always_on_top(false);
         let _ = window.set_decorations(true);
         let _ = window.set_resizable(true);
@@ -1922,15 +2016,16 @@ pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
         // When a second instance is launched, show the main window of the first
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.show();
-            let _ = window.set_focus();
-        }
+        // (creating it if the first instance came up headless via autostart).
+        show_main_window(app);
     }))
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_process::init())
-    .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
+    .plugin(tauri_plugin_autostart::init(
+        tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+        Some(vec![ARG_AUTOSTART]),
+    ))
     .invoke_handler(tauri::generate_handler![
         get_running_apps,
         get_installed_apps,
@@ -1971,6 +2066,9 @@ pub fn run() {
         dock_get_state
     ])
     .setup(|app| {
+      let autostarted = launched_by_autostart();
+      log::info!("[Startup] autostart={}", autostarted);
+
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()
@@ -2009,13 +2107,34 @@ pub fn run() {
                       Ok(_) => log::info!("[Autostart] Re-asserted launch-at-login after update"),
                       Err(e) => log::warn!("[Autostart] Failed to re-assert: {}", e),
                   }
+              } else if read_autostart_args_version(app_handle) < AUTOSTART_ARGS_VERSION {
+                  // The key exists but its command line predates ARG_AUTOSTART.
+                  // `is_enabled()` only checks for the key's existence, so the
+                  // stale value would never be rewritten — force it once.
+                  match manager.disable().and_then(|_| manager.enable()) {
+                      Ok(_) => log::info!(
+                          "[Autostart] Rewrote Run entry with args (v{})",
+                          AUTOSTART_ARGS_VERSION
+                      ),
+                      Err(e) => log::warn!("[Autostart] Failed to rewrite Run entry: {}", e),
+                  }
               }
+              write_autostart_intent(app_handle, true);
           }
       }
 
-      // Check for updates in the background on startup
+      // Check for updates in the background on startup. When we were launched at
+      // login, hold off until the login storm has passed — a network call plus a
+      // possible download is the last thing that should run while every other
+      // startup program is hammering the disk. Kept longer than the 60s window
+      // pre-warm below on purpose: `update-available` is emitted to windows, and
+      // UpdateBanner lives in the main window, so main must exist by then.
       let update_handle = app.handle().clone();
+      let update_delay = if autostarted { 90 } else { 0 };
       tauri::async_runtime::spawn(async move {
+          if update_delay > 0 {
+              tokio::time::sleep(std::time::Duration::from_secs(update_delay)).await;
+          }
           use tauri_plugin_updater::UpdaterExt;
           match update_handle.updater() {
               Ok(updater) => match updater.check().await {
@@ -2078,26 +2197,26 @@ pub fn run() {
           });
       }
 
-      // Main window events: hide-on-close, and (in drawer mode) collapse to the
-      // handle when the panel loses focus — the "click away to hide" behavior.
-      if let Some(main_window) = app.get_webview_window("main") {
-          let win = main_window.clone();
-          main_window.on_window_event(move |event| {
-              match event {
-                  tauri::WindowEvent::CloseRequested { api, .. } => {
-                      api.prevent_close();
-                      let _ = win.hide();
+      // Main window. Launched by hand (or by the installer's "run now"), the user
+      // asked to see it — build and show it straight away. Launched at login, stay
+      // headless in the tray and pre-warm the webview once the login storm has
+      // settled, so the first tray click is still instant.
+      //
+      // The dock restore above may already have created it (reserve mode docks the
+      // main window); ensure_main_window is idempotent, so this is safe either way.
+      if autostarted {
+          let prewarm_handle = app.handle().clone();
+          tauri::async_runtime::spawn(async move {
+              tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+              let inner = prewarm_handle.clone();
+              let _ = prewarm_handle.run_on_main_thread(move || {
+                  if ensure_main_window(&inner).is_some() {
+                      log::info!("[Startup] Pre-warmed main window");
                   }
-                  tauri::WindowEvent::Focused(false) => {
-                      let app = win.app_handle();
-                      let st = load_dock_state(app);
-                      if st.enabled && st.mode == "drawer" && win.is_visible().unwrap_or(false) {
-                          collapse_drawer(app, &st);
-                      }
-                  }
-                  _ => {}
-              }
+              });
           });
+      } else {
+          show_main_window(app.handle());
       }
 
       // System tray icon — lets users show/hide the window and quit cleanly
@@ -2116,9 +2235,8 @@ pub fn run() {
                   let st = load_dock_state(app);
                   if st.enabled && st.mode == "drawer" {
                       expand_drawer(app, &st);
-                  } else if let Some(window) = app.get_webview_window("main") {
-                      let _ = window.show();
-                      let _ = window.set_focus();
+                  } else {
+                      show_main_window(app);
                   }
               }
               "toggle_dock" => {
@@ -2140,22 +2258,25 @@ pub fn run() {
               if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, button_state: tauri::tray::MouseButtonState::Up, .. } = event {
                   let app = tray.app_handle();
                   let st = load_dock_state(app);
+                  // `is_visible` on a not-yet-created window is treated as
+                  // hidden, so a headless autostart falls through to "open it".
+                  let visible = app
+                      .get_webview_window("main")
+                      .and_then(|w| w.is_visible().ok())
+                      .unwrap_or(false);
                   if st.enabled && st.mode == "drawer" {
                       // Drawer: toggle the panel open/closed.
-                      if let Some(window) = app.get_webview_window("main") {
-                          if window.is_visible().unwrap_or(false) {
-                              collapse_drawer(app, &st);
-                          } else {
-                              expand_drawer(app, &st);
-                          }
-                      }
-                  } else if let Some(window) = app.get_webview_window("main") {
-                      if window.is_visible().unwrap_or(false) {
-                          let _ = window.hide();
+                      if visible {
+                          collapse_drawer(app, &st);
                       } else {
-                          let _ = window.show();
-                          let _ = window.set_focus();
+                          expand_drawer(app, &st);
                       }
+                  } else if visible {
+                      if let Some(window) = app.get_webview_window("main") {
+                          let _ = window.hide();
+                      }
+                  } else {
+                      show_main_window(app);
                   }
               }
           })

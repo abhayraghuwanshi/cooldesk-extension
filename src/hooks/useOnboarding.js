@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 
 const ONBOARDING_KEY = 'cooldesk_onboarding_completed';
-const ONBOARDING_VERSION = '1.0';
+// Bumped for the 3-step getting-started flow — existing users see it once more.
+const ONBOARDING_VERSION = '2.0';
 
 /**
  * Hook to manage onboarding state

@@ -23,6 +23,7 @@ import { enrichRunningAppsWithIcons, getBaseDomainFromUrl, getFaviconUrl } from 
 import { useIsSidebarWidth } from '../hooks/useIsSidebarWidth';
 import { useSlashCommands } from '../hooks/useSlashCommands';
 import { useVoiceCommands } from '../hooks/useVoiceCommands';
+import { VOICE_SEARCH_ENABLED } from '../config/features';
 import './GlobalSpotlight.css';
 
 
@@ -319,7 +320,9 @@ export function GlobalSpotlight({
     // Opt-in capabilities (activated per surface via props)
     const slash = useSlashCommands({ enabled: enableSlashCommands, isDesktopApp, onNavigate, showFeedback });
     const voice = useVoiceCommands({
-        enabled: enableVoice,
+        // Feature-flagged off globally — the `enableVoice` prop only matters
+        // once voice search is switched back on.
+        enabled: VOICE_SEARCH_ENABLED && enableVoice,
         onNavigate,
         onSearch: (term) => { setQuery(term); setPanelOpen(true); },
         showFeedback,
@@ -2003,7 +2006,7 @@ export function GlobalSpotlight({
                     >
                         ✨ Deep
                     </button> */}
-                    {enableVoice && voice.voiceSupported && (
+                    {VOICE_SEARCH_ENABLED && enableVoice && voice.voiceSupported && (
                         <button
                             className={`spotlight-voice-btn${voice.isListening ? ' listening' : ''}`}
                             onClick={() => voice.toggleVoice()}

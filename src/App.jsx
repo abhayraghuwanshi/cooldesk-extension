@@ -104,7 +104,7 @@ export default function App() {
 
 
   // Use Onboarding Hook
-  const { shouldShowOnboarding, isManualStart, completeOnboarding, skipOnboarding, startOnboarding } = useOnboarding();
+  const { shouldShowOnboarding, completeOnboarding, skipOnboarding, startOnboarding } = useOnboarding();
 
   // Sync hook for Electron ↔ Extension synchronization
   const { syncStatus, syncWorkspaces, isElectron, environment } = useSync();
@@ -1519,7 +1519,10 @@ export default function App() {
           <OnboardingTour
             onComplete={completeOnboarding}
             onSkip={skipOnboarding}
-            autoPlay={!isManualStart}
+            wallpaperEnabled={wallpaperEnabled}
+            wallpaperUrl={wallpaperUrl}
+            onWallpaperEnabledChange={setWallpaperEnabled}
+            onWallpaperUrlChange={setWallpaperUrl}
           />
         </React.Suspense>
       )}

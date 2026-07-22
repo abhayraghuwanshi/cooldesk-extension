@@ -13,14 +13,6 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "label": "main",
-        "title": "CoolDesk",
-        "width": 1400,
-        "height": 900,
-        "resizable": true,
-        "fullscreen": false
-      },
-      {
         "label": "spotlight",
         "title": "CoolDesk Spotlight",
         "decorations": false,

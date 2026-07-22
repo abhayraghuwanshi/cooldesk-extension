@@ -1,6 +1,6 @@
-import { faDiagramProject, faDownLeftAndUpRightToCenter, faEllipsisVertical, faGear, faGripLines, faUpRightAndDownLeftFromCenter, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faDiagramProject, faEllipsisVertical, faGear, faGripLines, faTableColumns, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import logo from '../../../logo-2.png';
 import { addUrlToWorkspace, deleteWorkspace, saveWorkspace } from '../../db/unified-api';
 import { TEAM_FEATURE_ENABLED } from '../../config/features';
@@ -149,15 +149,6 @@ export function CoolDeskContainer({
   // Backend dock state — drives the horizontal-bar render mode below.
   const dockState = useDockState();
 
-  const handleExitDock = useCallback(async () => {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('dock_disable');
-    } catch (e) {
-      console.error('[CoolDesk] Failed to exit dock mode:', e);
-    }
-  }, []);
-
   // Activate a workspace as a taskbar-style bottom bar: make it current, then
   // dock the main window to the bottom edge and slide it in.
   const handleDockWorkspace = useCallback(async (workspace) => {
@@ -171,21 +162,46 @@ export function CoolDeskContainer({
     }
   }, []);
 
-  // Re-enter sidebar mode from the full app and slide it in right away instead
-  // of leaving just the collapsed edge handle. Side must be explicit: the saved
-  // side may be "bottom" from the bar mode, and falling back to it would turn
-  // this button into a second bottom-bar button. Keep the user's last vertical
-  // side, defaulting to right.
-  const handleEnterDock = useCallback(async () => {
-    const side = dockState?.side === 'left' ? 'left' : 'right';
+  /* ── Layout cycle ────────────────────────────────────────────────────────
+     One button walks the window through three layouts:
+       full → side (drawer on the saved vertical edge) → bar (bottom strip) → full
+     The button renders the *next* layout's icon, so it always reads as an
+     action rather than a status light. */
+
+  const LAYOUTS = useMemo(() => ({
+    full: { key: 'full', label: 'Full window', icon: faWindowMaximize, next: 'side' },
+    side: { key: 'side', label: 'Side dock', icon: faTableColumns, next: 'bar' },
+    bar: { key: 'bar', label: 'Bottom bar', icon: faGripLines, next: 'full' },
+  }), []);
+
+  const currentLayout = !dockState?.enabled
+    ? 'full'
+    : (dockState.side === 'bottom' || dockState.side === 'top') ? 'bar' : 'side';
+
+  const nextLayout = LAYOUTS[LAYOUTS[currentLayout].next];
+
+  const applyLayout = useCallback(async (layout) => {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
+      if (layout === 'full') {
+        await invoke('dock_disable');
+        return;
+      }
+      // Keep the user's chosen vertical edge; the stored side may be "bottom"
+      // from bar mode, in which case fall back to right.
+      const side = layout === 'bar'
+        ? 'bottom'
+        : (dockState?.side === 'left' ? 'left' : 'right');
       await invoke('dock_enable', { mode: 'drawer', side });
       await invoke('dock_expand');
     } catch (e) {
-      console.error('[CoolDesk] Failed to enter dock mode:', e);
+      console.error(`[CoolDesk] Failed to switch layout to "${layout}":`, e);
     }
   }, [dockState]);
+
+  const cycleLayout = useCallback(() => {
+    applyLayout(LAYOUTS[currentLayout].next);
+  }, [applyLayout, LAYOUTS, currentLayout]);
 
   const handleOpenAIManager = useCallback((workspace = null) => {
     setAiManagerState({
@@ -231,21 +247,27 @@ export function CoolDeskContainer({
     }
   }, []);
 
-  // Keyboard shortcuts for AI Workspace Manager (Ctrl+Shift+K) and Graph (Ctrl+Shift+G)
+  // Keyboard shortcuts: AI Workspace Manager (Ctrl+Shift+K), Graph (Ctrl+Shift+G),
+  // sidebar dock toggle (Ctrl+Shift+D).
+  // `e.key` is the *shifted* character, so compare case-insensitively.
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'k') {
+      if (!((e.metaKey || e.ctrlKey) && e.shiftKey)) return;
+      const key = e.key.toLowerCase();
+      if (key === 'k') {
         e.preventDefault();
         if (!aiManagerState.isOpen) handleOpenAIManager(null);
-      }
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'g') {
+      } else if (key === 'g') {
         e.preventDefault();
         setGraphOpen(prev => !prev);
+      } else if (key === 'd' && isDesktopApp) {
+        e.preventDefault();
+        cycleLayout();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [aiManagerState.isOpen, handleOpenAIManager]);
+  }, [aiManagerState.isOpen, handleOpenAIManager, isDesktopApp, cycleLayout]);
 
   // Onboarding navigation via custom event (face names: workspace, tabs, team, overview)
   useEffect(() => {
@@ -642,13 +664,13 @@ export function CoolDeskContainer({
 
         <div className="header-right">
           {isDesktopApp && (
-            <button className="cooldesk-settings-btn" onClick={handleEnterDock} title="Dock as sidebar">
-              <FontAwesomeIcon icon={faDownLeftAndUpRightToCenter} />
-            </button>
-          )}
-          {isDesktopApp && (
-            <button className="cooldesk-settings-btn" onClick={() => handleDockWorkspace(currentWorkspace)} title="Dock as bottom bar">
-              <FontAwesomeIcon icon={faGripLines} />
+            <button
+              className="cooldesk-settings-btn"
+              data-onboarding="dock-btn"
+              onClick={cycleLayout}
+              title={`${LAYOUTS[currentLayout].label} → ${nextLayout.label} (Ctrl+Shift+D)`}
+            >
+              <FontAwesomeIcon icon={nextLayout.icon} />
             </button>
           )}
           <button className="cooldesk-settings-btn" onClick={() => setGraphOpen(true)} title="Cool Activity (Ctrl+Shift+G)">
@@ -673,8 +695,12 @@ export function CoolDeskContainer({
               <FontAwesomeIcon icon={faGear} />
             </button>
             {isDesktopApp && (
-              <button className="sidebar-control-btn" onClick={handleExitDock} title="Back to full app">
-                <FontAwesomeIcon icon={faUpRightAndDownLeftFromCenter} />
+              <button
+                className="sidebar-control-btn"
+                onClick={cycleLayout}
+                title={`${LAYOUTS[currentLayout].label} → ${nextLayout.label}`}
+              >
+                <FontAwesomeIcon icon={nextLayout.icon} />
               </button>
             )}
           </>
