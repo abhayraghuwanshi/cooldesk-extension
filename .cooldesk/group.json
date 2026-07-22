@@ -1,8 +1,24 @@
 {
-  "schemaVersion": 1,
-  "group": { "id": "cooldesk-suite", "name": "CoolDesk Suite" },
+  "group": {
+    "id": "cooldesk-suite",
+    "name": "CoolDesk Suite"
+  },
   "members": [
-    { "name": "extension", "path": ".", "repo": "https://github.com/abhayraghuwanshi/cooldesk-extension" },
-    { "name": "website", "path": "../cooldesk-onboard-smoothly", "repo": "https://github.com/abhayraghuwanshi/cooldesk-onboard-smoothly" }
-  ]
+    {
+      "name": "extension",
+      "path": ".",
+      "repo": "https://github.com/abhayraghuwanshi/cooldesk-extension"
+    },
+    {
+      "name": "website",
+      "path": "../cooldesk-onboard-smoothly",
+      "repo": "https://github.com/abhayraghuwanshi/cooldesk-onboard-smoothly"
+    },
+    {
+      "name": "cooldesk-video",
+      "path": "../remotions/cooldesk-video",
+      "repo": null
+    }
+  ],
+  "schemaVersion": 1
 }

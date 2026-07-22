@@ -5185,37 +5185,90 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   flex: 1;
 }
 
-/* Folder tree rows (FolderCard) — editor-style hierarchy with indent guides.
-   Indentation must stay rock-solid: no hover padding shift, and every row
-   reserves a fixed caret column so file/folder icons align per level. */
-.folder-tree-row {
-  gap: 6px;
-  padding: 5px 8px;
+/* Folder chips (FolderCard) — compact pills that open the in-app FileManager.
+   Replaced the old inline folder tree; a drill-down inside a grid card was too
+   cramped to browse with. */
+.folders-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
 }
 
-.folder-tree-row:hover {
-  padding-left: 8px;
-  /* keep tree alignment stable on hover */
+.cooldesk-folder-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--glass-bg, rgba(30, 41, 59, 0.7));
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+  min-width: 0;
 }
 
-.folder-tree-guide {
-  align-self: stretch;
-  width: 16px;
+.cooldesk-folder-chip:hover {
+  background: rgba(30, 41, 59, 0.85);
+  border-color: rgba(139, 92, 246, 0.35);
+  transform: translateY(-1px);
+}
+
+.folder-chip-icon {
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
-  /* stretch through row padding + list gap so lines read as continuous */
-  margin: -7px 0;
-  border-left: 1px solid rgba(148, 163, 184, 0.22);
-  margin-left: 7px;
-}
-
-.folder-tree-caret {
-  width: 14px;
-  height: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 8px;
+  font-size: var(--font-sm, 12px);
+  background: rgba(250, 204, 21, 0.12);
+  color: #FACC15;
+}
+
+.folder-chip-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.folder-chip-name {
+  font-size: var(--font-sm, 12px);
+  font-weight: 600;
+  color: var(--text, #E5E7EB);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folder-chip-path {
+  font-size: var(--font-xs, 10px);
+  color: var(--text-muted, #6B7280);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folder-chip-action {
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
-  color: #94A3B8;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--text-muted, #6B7280);
+  font-size: var(--font-xs, 10px);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.cooldesk-folder-chip:hover .folder-chip-action {
+  opacity: 1;
+}
+
+.folder-chip-action:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text, #E5E7EB);
 }
 
 .tab-group-item.is-top .tab-group-item-text {

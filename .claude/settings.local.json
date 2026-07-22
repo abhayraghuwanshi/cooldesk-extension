@@ -56,7 +56,14 @@
       "PowerShell(npx vite build 2>&1 | Select-Object -Last 8)",
       "Read(//c/Users/raghu/projects/cooldesk-onboard-smoothly/src/**)",
       "Read(//c/Users/raghu/projects/cooldesk-onboard-smoothly/**)",
-      "PowerShell(Get-NetTCPConnection *)"
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell($p=\"C:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\src-tauri\\\\target\\\\debug\\\\cooldesk.exe\"; $bytes=[System.IO.File]::ReadAllBytes\\($p\\); $text=[System.Text.Encoding]::ASCII.GetString\\($bytes\\); foreach\\($s in @\\(\"get_backups_dir\",\"save_backup\",\"list_backups\",\"read_backup\",\"dock_get_state\"\\)\\){ \"{0,-18} present: {1}\" -f $s,$text.Contains\\($s\\) })",
+      "Bash(python -c ' *)",
+      "Bash(rm -rf linktest)",
+      "Bash(mkdir -p linktest/alpha/.cooldesk linktest/beta/.cooldesk)",
+      "Bash(echo '{\"schemaVersion\":1,\"project\":{\"id\":\"alpha\",\"name\":\"Alpha App\",\"status\":\"active\"}}')",
+      "Bash(echo '{\"schemaVersion\":1,\"project\":{\"id\":\"beta\",\"name\":\"Beta Service\",\"status\":\"active\"}}')",
+      "Bash(python -)"
     ],
     "deny": [],
     "ask": [],

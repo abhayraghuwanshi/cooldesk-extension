@@ -113,6 +113,161 @@ fn get_launch_at_login(app: tauri::AppHandle) -> bool {
     app.autolaunch().is_enabled().unwrap_or(false)
 }
 
+// ── Backups ──────────────────────────────────────────────────────────────────
+// The snapshot itself is assembled in the frontend (the data lives in IndexedDB
+// and extension storage, which Rust can't reach), but writing it goes through
+// here so a scheduled backup doesn't depend on a browser download — no Settings
+// modal open, no Downloads folder, no unbounded pile of files.
+
+// How many backup files to keep. Older ones are pruned after each write.
+const BACKUP_KEEP: usize = 10;
+
+fn backups_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("backups");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+#[tauri::command]
+fn get_backups_dir(app: tauri::AppHandle) -> Result<String, String> {
+    Ok(backups_dir(&app)?.to_string_lossy().to_string())
+}
+
+/// Write a backup snapshot and prune old ones. Returns the file path written.
+#[tauri::command]
+fn save_backup(app: tauri::AppHandle, contents: String) -> Result<String, String> {
+    let dir = backups_dir(&app)?;
+    let stamp = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S");
+    let path = dir.join(format!("cooldesk-backup-{}.json", stamp));
+
+    // Write to a temp file first, then rename — a crash mid-write leaves the
+    // previous backup intact rather than a truncated one.
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, contents.as_bytes()).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &path).map_err(|e| e.to_string())?;
+
+    prune_backups(&dir);
+    log::info!("[Backup] Wrote {}", path.display());
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[derive(serde::Serialize)]
+struct BackupEntry {
+    name: String,
+    path: String,
+    size: u64,
+    /// Unix millis, from the file's mtime.
+    modified: i64,
+}
+
+/// List saved backups, newest first.
+#[tauri::command]
+fn list_backups(app: tauri::AppHandle) -> Result<Vec<BackupEntry>, String> {
+    let dir = backups_dir(&app)?;
+    let entries = std::fs::read_dir(&dir).map_err(|e| e.to_string())?;
+
+    let mut out: Vec<BackupEntry> = entries
+        .filter_map(|e| e.ok())
+        .filter_map(|e| {
+            let path = e.path();
+            let name = path.file_name()?.to_str()?.to_string();
+            if !path.is_file() || !name.starts_with("cooldesk-backup-") || !name.ends_with(".json") {
+                return None;
+            }
+            let meta = e.metadata().ok()?;
+            let modified = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(0);
+            Some(BackupEntry {
+                name,
+                path: path.to_string_lossy().to_string(),
+                size: meta.len(),
+                modified,
+            })
+        })
+        .collect();
+
+    out.sort_by(|a, b| b.modified.cmp(&a.modified));
+    Ok(out)
+}
+
+/// Read a backup file's contents.
+///
+/// Restricted to files inside the backups directory: the path comes from the
+/// frontend, and without this check the command would be an arbitrary-file-read
+/// primitive for anything running in the webview. Both sides are canonicalized
+/// so `..` segments and symlinks can't escape.
+#[tauri::command]
+fn read_backup(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    let dir = backups_dir(&app)?
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
+    let target = std::path::PathBuf::from(&path)
+        .canonicalize()
+        .map_err(|e| format!("Backup not found: {}", e))?;
+
+    if !target.starts_with(&dir) {
+        return Err("Refusing to read a file outside the backups folder".into());
+    }
+
+    std::fs::read_to_string(&target).map_err(|e| e.to_string())
+}
+
+/// Delete a backup file. Same containment check as read_backup.
+#[tauri::command]
+fn delete_backup(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let dir = backups_dir(&app)?
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
+    let target = std::path::PathBuf::from(&path)
+        .canonicalize()
+        .map_err(|e| format!("Backup not found: {}", e))?;
+
+    if !target.starts_with(&dir) {
+        return Err("Refusing to delete a file outside the backups folder".into());
+    }
+
+    std::fs::remove_file(&target).map_err(|e| e.to_string())?;
+    log::info!("[Backup] Deleted {}", target.display());
+    Ok(())
+}
+
+/// Keep the newest BACKUP_KEEP files, delete the rest. Sorted by filename, which
+/// sorts chronologically given the timestamp format above.
+fn prune_backups(dir: &std::path::Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let mut files: Vec<std::path::PathBuf> = entries
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            p.is_file()
+                && p.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| n.starts_with("cooldesk-backup-") && n.ends_with(".json"))
+                    .unwrap_or(false)
+        })
+        .collect();
+
+    if files.len() <= BACKUP_KEEP {
+        return;
+    }
+    files.sort();
+    let cutoff = files.len() - BACKUP_KEEP;
+    for stale in &files[..cutoff] {
+        match std::fs::remove_file(stale) {
+            Ok(_) => log::info!("[Backup] Pruned {}", stale.display()),
+            Err(e) => log::warn!("[Backup] Failed to prune {}: {}", stale.display(), e),
+        }
+    }
+}
+
 // ── Autostart args ───────────────────────────────────────────────────────────
 // At login the Run key launches us with ARG_AUTOSTART. Every well-behaved
 // startup app does this (OneDrive /background, Steam -silent, Chrome
@@ -1506,11 +1661,18 @@ unsafe fn list_quick_access_folders() -> Vec<FrequentFolder> {
     out
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Default)]
 pub struct SearchFileResult {
     pub path: String,
     pub date: String,
     pub is_dir: bool,
+    /// File size in bytes (0 for directories, and for search hits where we
+    /// skip the extra stat call). Used by the in-app file manager.
+    pub size: u64,
+    /// Dot-prefixed, or carrying the Windows hidden/system attribute. These are
+    /// still returned — callers decide whether to show them — because project
+    /// folders like `.cooldesk`, `.git` and `.claude` matter to the user.
+    pub hidden: bool,
 }
 
 /// Heavy/noise directories we never recurse INTO (they still match by name).
@@ -1556,7 +1718,7 @@ fn search_dir_recursive(
                     dt.format("%Y-%m-%d %H:%M").to_string()
                 })
                 .unwrap_or_default();
-            results.push(SearchFileResult { path: path.to_string_lossy().into_owned(), date: date_str, is_dir });
+            results.push(SearchFileResult { path: path.to_string_lossy().into_owned(), date: date_str, is_dir, size: 0, hidden: false });
         }
         // Descend into folders, but skip heavy/noise ones to stay fast.
         if is_dir && !is_pruned_dir(&name) {
@@ -1607,7 +1769,7 @@ async fn search_files(query: String) -> Result<Vec<SearchFileResult>, String> {
                 .unwrap_or_default();
             let path = root.to_string_lossy().into_owned();
             if !final_results.iter().any(|r| r.path == path) {
-                final_results.push(SearchFileResult { path, date: date_str, is_dir: true });
+                final_results.push(SearchFileResult { path, date: date_str, is_dir: true, size: 0, hidden: false });
             }
         }
     }
@@ -1633,7 +1795,7 @@ async fn search_files(query: String) -> Result<Vec<SearchFileResult>, String> {
                 }
             }
             if !final_results.iter().any(|r| r.path == path) {
-                final_results.push(SearchFileResult { path: path.to_string(), date: date_str, is_dir });
+                final_results.push(SearchFileResult { path: path.to_string(), date: date_str, is_dir, size: 0, hidden: false });
             }
         }
         final_results.truncate(15);
@@ -1673,27 +1835,74 @@ async fn list_dir(path: String) -> Result<Vec<SearchFileResult>, String> {
     let mut files_out: Vec<SearchFileResult> = Vec::new();
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
-        if name.starts_with('.') { continue; } // skip hidden/system dotfiles
         let p = entry.path();
+        let meta = entry.metadata().ok();
+        // Hidden entries are flagged, not dropped: `.cooldesk`, `.git`, `.env`
+        // and friends are exactly what a developer opens a folder to find.
+        let mut hidden = name.starts_with('.');
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::fs::MetadataExt;
+            const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
+            const FILE_ATTRIBUTE_SYSTEM: u32 = 0x4;
+            if let Some(m) = meta.as_ref() {
+                if m.file_attributes() & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM) != 0 {
+                    hidden = true;
+                }
+            }
+        }
         let is_dir = p.is_dir();
-        let date_str = entry.metadata().ok()
+        let date_str = meta.as_ref()
             .and_then(|m| m.modified().ok())
             .map(|t| {
                 let dt: chrono::DateTime<chrono::Local> = t.into();
                 dt.format("%Y-%m-%d %H:%M").to_string()
             })
             .unwrap_or_default();
-        let r = SearchFileResult { path: p.to_string_lossy().into_owned(), date: date_str, is_dir };
+        let size = if is_dir { 0 } else { meta.as_ref().map(|m| m.len()).unwrap_or(0) };
+        let r = SearchFileResult { path: p.to_string_lossy().into_owned(), date: date_str, is_dir, size, hidden };
         if is_dir { dirs_out.push(r) } else { files_out.push(r) }
     }
     // Folders first, each group sorted case-insensitively by name.
     dirs_out.sort_by(|a, b| a.path.to_lowercase().cmp(&b.path.to_lowercase()));
     files_out.sort_by(|a, b| a.path.to_lowercase().cmp(&b.path.to_lowercase()));
     dirs_out.extend(files_out);
-    dirs_out.truncate(300);
+    dirs_out.truncate(2000);
     Ok(dirs_out)
 }
 
+
+/// The standard user places the in-app file manager shows in its sidebar
+/// (Home, Desktop, Downloads, …) plus, on Windows, the available drive roots.
+/// Only paths that actually exist are returned, so the sidebar never dead-ends.
+#[tauri::command]
+async fn get_user_places() -> Vec<FrequentFolder> {
+    let mut out: Vec<FrequentFolder> = Vec::new();
+    let mut push = |name: &str, p: Option<std::path::PathBuf>| {
+        if let Some(p) = p {
+            if p.is_dir() {
+                out.push(FrequentFolder { name: name.to_string(), path: p.to_string_lossy().into_owned() });
+            }
+        }
+    };
+    push("Home", dirs::home_dir());
+    push("Desktop", dirs::desktop_dir());
+    push("Downloads", dirs::download_dir());
+    push("Documents", dirs::document_dir());
+    push("Pictures", dirs::picture_dir());
+
+    #[cfg(target_os = "windows")]
+    {
+        // Drive roots: probe C:\ … Z:\ and keep the ones that mount.
+        for letter in b'C'..=b'Z' {
+            let root = format!("{}:\\", letter as char);
+            if std::path::Path::new(&root).is_dir() {
+                out.push(FrequentFolder { name: root.clone(), path: root });
+            }
+        }
+    }
+    out
+}
 
 /// Find the process(es) listening on a TCP port and force-kill them.
 /// Windows: `netstat -ano` → parse LISTENING rows → `taskkill /F /PID`.
@@ -2049,6 +2258,7 @@ pub fn run() {
         get_frequent_folders,
         search_files,
         list_dir,
+        get_user_places,
         get_focused_app,
         get_app_version,
         set_launch_at_login,
@@ -2063,7 +2273,12 @@ pub fn run() {
         dock_expand,
         dock_collapse,
         dock_set_width,
-        dock_get_state
+        dock_get_state,
+        save_backup,
+        get_backups_dir,
+        list_backups,
+        read_backup,
+        delete_backup
     ])
     .setup(|app| {
       let autostarted = launched_by_autostart();

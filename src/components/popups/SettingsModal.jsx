@@ -1,6 +1,7 @@
 import { faCog, faDatabase, faPalette, faRocket, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
+import logo from '../../../logo-2.png';
 
 const isTauri = typeof window !== 'undefined' && !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
 async function tauriInvoke(cmd, args) {
@@ -8,11 +9,13 @@ async function tauriInvoke(cmd, args) {
   const { invoke } = await import('@tauri-apps/api/core');
   return invoke(cmd, args);
 }
-import { DB_CONFIG, getUnifiedDB, listWorkspaces, saveSettings, saveWorkspace } from '../../db';
+import { listWorkspaces, saveSettings, saveWorkspace } from '../../db';
 import { useSync } from '../../hooks/useSync';
 import { getSyncStatus } from '../../services/conditionalSync';
 import { isElectronApp } from '../../services/environmentDetector';
 import { sendMessage, storageGet, storageSet } from '../../services/extensionApi';
+import { calculateNextBackupTime, deleteBackup, getBackupsDir, listBackups, readBackup, runBackup } from '../../services/backupService';
+import { parseBackup, restoreBackup } from '../../services/backupRestore';
 import { checkHostAvailable, loadSyncConfig, toggleHostSync } from '../../services/syncConfig';
 import { setAndSaveFontFamily, setAndSaveFontSize } from '../../utils/fontUtils';
 import { checkUpdateWithPing, isAnalyticsEnabled, setAnalyticsEnabled } from '../../services/analytics';
@@ -67,6 +70,13 @@ export function SettingsModal({
   const [backupFrequency, setBackupFrequency] = useState('weekly');
   const [lastBackupTime, setLastBackupTime] = useState(null);
   const [backupInProgress, setBackupInProgress] = useState(false);
+  const [savedBackups, setSavedBackups] = useState([]);
+  const [showBackupList, setShowBackupList] = useState(false);
+  // Path of the backup awaiting confirmation — restore overwrites live data, so
+  // it's a deliberate two-step rather than a single click.
+  const [confirmRestorePath, setConfirmRestorePath] = useState(null);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const [restoreResult, setRestoreResult] = useState(null);
 
   const [spotlightShortcut, setSpotlightShortcut] = useState('Alt+K');
   const [isRecordingShortcut, setIsRecordingShortcut] = useState(false);
@@ -389,7 +399,9 @@ export function SettingsModal({
     try {
       await storageSet({ backupFrequency: frequency });
       setBackupFrequency(frequency);
-      if (autoBackupEnabled) scheduleNextBackup();
+      // Pass it explicitly — `backupFrequency` state hasn't updated yet here, so
+      // the old value would be used to compute the next run.
+      if (autoBackupEnabled) scheduleNextBackup(frequency);
     } catch { setError('Failed to update backup frequency'); }
   };
 
@@ -417,60 +429,88 @@ export function SettingsModal({
     } catch { setError('Failed to save Unsplash API key'); }
   };
 
-  const calculateNextBackupTime = (frequency) => {
-    const day = 24 * 60 * 60 * 1000;
-    return Date.now() + ({ daily: day, weekly: 7 * day, monthly: 30 * day }[frequency] ?? 7 * day);
-  };
-
-  const scheduleNextBackup = async () => {
-    await storageSet({ nextBackupTime: calculateNextBackupTime(backupFrequency) });
+  const scheduleNextBackup = async (frequency = backupFrequency) => {
+    await storageSet({ nextBackupTime: calculateNextBackupTime(frequency) });
   };
 
   const performManualBackup = async () => {
     setBackupInProgress(true);
     setError('');
     try {
-      const db = await getUnifiedDB();
-      const data = { meta: { exportedAt: Date.now(), version: db.version }, stores: {}, storageLocal: {} };
-      const storeNames = Object.values(DB_CONFIG.STORES);
-      for (const storeName of storeNames) {
-        const tx = db.transaction(storeName, 'readonly');
-        const store = tx.objectStore(storeName);
-        const request = store.getAll();
-        data.stores[storeName] = await new Promise((resolve, reject) => {
-          request.onsuccess = () => resolve(request.result || []);
-          request.onerror = () => reject(request.error);
-        });
-      }
-      try {
-        const { pinnedWorkspaces } = await storageGet(['pinnedWorkspaces']);
-        data.storageLocal.pinnedWorkspaces = Array.isArray(pinnedWorkspaces) ? pinnedWorkspaces : [];
-        const all = await storageGet(null);
-        let notesByDate = {};
-        for (const [k, v] of Object.entries(all)) {
-          if (k.startsWith('dailyNotes_') && k !== 'dailyNotesSummary' && k !== 'dailyNotesLastUpdate') notesByDate[k] = v;
-        }
-        data.storageLocal.dailyNotes = { notesByDate, summary: all.dailyNotesSummary || {}, lastUpdate: all.dailyNotesLastUpdate || 0 };
-        if (all.domainSelectors) data.storageLocal.domainSelectors = all.domainSelectors;
-        if (all.platformSettings) data.storageLocal.platformSettings = all.platformSettings;
-      } catch { }
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `cooldesk-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      const now = Date.now();
-      setLastBackupTime(now);
-      await storageSet({ lastBackupTime: now });
+      const { at } = await runBackup();
+      setLastBackupTime(at);
       setError('Backup completed successfully');
+      if (showBackupList) await refreshBackupList();
     } catch (err) {
       setError(`Backup failed: ${err.message || err}`);
     } finally {
       setBackupInProgress(false);
+    }
+  };
+
+  const refreshBackupList = async () => {
+    setSavedBackups(await listBackups());
+  };
+
+  const toggleBackupList = async () => {
+    const next = !showBackupList;
+    setShowBackupList(next);
+    setConfirmRestorePath(null);
+    setRestoreResult(null);
+    if (next) await refreshBackupList();
+  };
+
+  const handleRestore = async (path) => {
+    setRestoreBusy(true);
+    setError('');
+    setRestoreResult(null);
+    try {
+      // Parse before touching anything — a corrupt file should fail here, not
+      // after the live stores have been cleared.
+      const parsed = parseBackup(await readBackup(path));
+
+      // Snapshot the current state first. Restore clears the stores, so without
+      // this an interrupted restore is unrecoverable data loss.
+      try {
+        await runBackup();
+      } catch (e) {
+        throw new Error(`Could not take a safety backup first, aborting: ${e.message || e}`);
+      }
+
+      // Replace rather than merge: restoring a snapshot should land you on that
+      // snapshot, not on it union'd with whatever is there now.
+      const report = await restoreBackup(parsed, { replace: true });
+      setRestoreResult(report);
+      setConfirmRestorePath(null);
+      await refreshBackupList(); // the safety backup is now in the list
+      setError(report.written
+        ? `Restored ${report.written} rows — reload to see the changes`
+        : 'Restore finished, but nothing was written');
+    } catch (e) {
+      setError(`Restore failed: ${e.message || e}`);
+    } finally {
+      setRestoreBusy(false);
+    }
+  };
+
+  const handleDeleteBackup = async (path) => {
+    try {
+      await deleteBackup(path);
+      await refreshBackupList();
+    } catch (e) { setError(`Could not delete backup: ${e.message || e}`); }
+  };
+
+  const openBackupsFolder = async () => {
+    try {
+      const dir = await getBackupsDir();
+      if (!dir) {
+        setError('Backups folder is only available in the desktop app');
+        return;
+      }
+      await tauriInvoke('open_folder', { path: dir });
+    } catch (e) {
+      console.error('[Settings] Open backups folder failed:', e);
+      setError(`Could not open the backups folder: ${e.message || e}`);
     }
   };
 
@@ -586,14 +626,11 @@ export function SettingsModal({
         }}>
           {/* Logo */}
           <div style={{ padding: '0 8px 20px 8px', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              width: 30, height: 30, borderRadius: 8,
-              background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 14, color: 'white', flexShrink: 0
-            }}>
-              <FontAwesomeIcon icon={faRocket} />
-            </div>
+            <img
+              src={logo}
+              alt=""
+              style={{ width: 30, height: 30, borderRadius: 8, objectFit: 'contain', flexShrink: 0 }}
+            />
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1.2 }}>CoolDesk</div>
               <div style={{ fontSize: 10, opacity: 0.4, color: '#fff' }}>Settings</div>
@@ -808,13 +845,18 @@ export function SettingsModal({
                   </Card>
                 </section>
 
-                {/* Data */}
+                {/* Data — Backup is a desktop-app feature. The extension's service
+                    worker can't hold a reliable schedule, so auto-backup only
+                    runs in the app; ExportData stays available in both. */}
                 <section>
                   <SectionHeader title="Data" />
+                  {isTauri && (
                   <Card>
                     <SettingRow
                       label="Backup"
-                      hint={lastBackupTime ? `Last backup ${new Date(lastBackupTime).toLocaleDateString()}` : 'Download a snapshot of all your data'}
+                      hint={lastBackupTime
+                        ? `Last backup ${new Date(lastBackupTime).toLocaleDateString()} · keeps the 10 most recent`
+                        : 'Saves a snapshot of all your data to this device'}
                       last
                       right={
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -832,6 +874,10 @@ export function SettingsModal({
                               ))}
                             </div>
                           )}
+                          <SmallBtn onClick={toggleBackupList}>
+                            {showBackupList ? 'Hide' : 'Restore…'}
+                          </SmallBtn>
+                          <SmallBtn onClick={openBackupsFolder}>Folder</SmallBtn>
                           <SmallBtn onClick={performManualBackup} disabled={backupInProgress}>
                             {backupInProgress ? '…' : 'Backup Now'}
                           </SmallBtn>
@@ -839,7 +885,91 @@ export function SettingsModal({
                       }
                     />
                   </Card>
-                  <div style={{ marginTop: 8 }}>
+                  )}
+
+                  {isTauri && showBackupList && (
+                    <div style={{
+                      marginTop: 8, padding: '10px 12px', borderRadius: 12,
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid rgba(255,255,255,0.06)',
+                    }}>
+                      {savedBackups.length === 0 ? (
+                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+                          No saved backups yet — use Backup Now to create one.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          {savedBackups.map(b => {
+                            const confirming = confirmRestorePath === b.path;
+                            return (
+                              <div key={b.path} style={{
+                                display: 'flex', alignItems: 'center', gap: 8,
+                                padding: '6px 4px', fontSize: 11,
+                                borderBottom: '1px solid rgba(255,255,255,0.04)',
+                              }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ color: '#cbd5e1' }}>
+                                    {new Date(b.modified).toLocaleString([], {
+                                      year: 'numeric', month: 'short', day: 'numeric',
+                                      hour: '2-digit', minute: '2-digit',
+                                    })}
+                                  </div>
+                                  <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10 }}>
+                                    {(b.size / 1024).toFixed(0)} KB
+                                  </div>
+                                </div>
+
+                                {confirming ? (
+                                  <>
+                                    <span style={{ color: '#fbbf24', fontSize: 10 }}>
+                                      Replaces current data (saved first)
+                                    </span>
+                                    <SmallBtn onClick={() => handleRestore(b.path)} disabled={restoreBusy} accent>
+                                      {restoreBusy ? '…' : 'Confirm'}
+                                    </SmallBtn>
+                                    <SmallBtn onClick={() => setConfirmRestorePath(null)} disabled={restoreBusy}>
+                                      Cancel
+                                    </SmallBtn>
+                                  </>
+                                ) : (
+                                  <>
+                                    <SmallBtn onClick={() => setConfirmRestorePath(b.path)} disabled={restoreBusy}>
+                                      Restore
+                                    </SmallBtn>
+                                    <SmallBtn onClick={() => handleDeleteBackup(b.path)} disabled={restoreBusy}>
+                                      Delete
+                                    </SmallBtn>
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {restoreResult && (
+                        <div style={{ marginTop: 8, fontSize: 11, lineHeight: 1.6, color: 'rgba(255,255,255,0.5)' }}>
+                          <div>{restoreResult.written} rows restored{restoreResult.skipped ? `, ${restoreResult.skipped} skipped` : ''}</div>
+                          {restoreResult.compatibility === 'upgrade' && (
+                            <div>Migrated from schema v{restoreResult.dbVersion} to v{restoreResult.currentVersion}</div>
+                          )}
+                          {restoreResult.compatibility === 'newer' && (
+                            <div style={{ color: '#fbbf24' }}>
+                              Backup is newer (v{restoreResult.dbVersion}) than this build (v{restoreResult.currentVersion}) — unsupported data skipped
+                            </div>
+                          )}
+                          {restoreResult.unknownStores?.length > 0 && (
+                            <div style={{ color: '#fbbf24' }}>Skipped: {restoreResult.unknownStores.join(', ')}</div>
+                          )}
+                          {restoreResult.errors?.map((e, i) => (
+                            <div key={i} style={{ color: '#f87171' }}>{e}</div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: isTauri ? 8 : 0 }}>
                     <ExportData />
                   </div>
                 </section>

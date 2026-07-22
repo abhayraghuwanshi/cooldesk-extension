@@ -24,6 +24,7 @@ import categoryManager from './data/categories';
 import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, getWorkspace, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges } from './db/index.js';
 import { useDashboardData } from './hooks/useDashboardData';
 import { useOnboarding } from './hooks/useOnboarding';
+import { startBackupScheduler } from './services/backupService';
 import { useSync } from './hooks/useSync';
 import { hasRuntime, onMessage, sendMessage, storageGet, storageRemove, storageSet } from './services/extensionApi';
 import { createSharedWorkspaceClient } from './services/sharedWorkspaceService.js';
@@ -303,6 +304,10 @@ export default function App() {
       console.warn('Failed to handle share workspace URL action:', e);
     }
   };
+
+  // Auto-backup scheduler. Lives here rather than in SettingsModal so it runs
+  // whether or not Settings is open; no-ops outside the desktop app.
+  useEffect(() => startBackupScheduler(), []);
 
   // Window resize handler for responsive behavior
   useEffect(() => {

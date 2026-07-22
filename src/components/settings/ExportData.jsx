@@ -2,7 +2,8 @@ import { faCheckCircle, faFileExport, faFileImport, faTimesCircle } from '@forta
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useRef, useState } from 'react'
 import { DB_CONFIG, getUnifiedDB } from '../../db/index.js'
-import { storageGet, storageRemove, storageSet } from '../../services/extensionApi'
+import { storageGet } from '../../services/extensionApi'
+import { parseBackup, restoreBackup } from '../../services/backupRestore'
 
 
 export default function ExportData() {
@@ -116,124 +117,47 @@ export default function ExportData() {
         setMessage('Reading import file...')
         setDetails(null)
         try {
-            const text = await file.text()
-            const parsed = JSON.parse(text)
-            if (!parsed || typeof parsed !== 'object' || !parsed.stores) {
-                throw new Error('Invalid backup format: missing stores')
-            }
+            const parsed = parseBackup(await file.text())
 
-            const db = await getUnifiedDB()
+            // Restore is version-aware: it applies forward row migrations for a
+            // backup older than this schema, and skips (rather than fails on)
+            // stores a newer backup carries that this build doesn't know.
+            setMessage('Restoring...')
+            const report = await restoreBackup(parsed, { replace: replaceMode })
 
-            // Replace mode: clear all known stores first
-            if (replaceMode) {
-                setMessage('Clearing existing data...')
-                for (const storeName of storeNames) {
-                    const tx = db.transaction(storeName, 'readwrite')
-                    const store = tx.objectStore(storeName)
-                    // eslint-disable-next-line no-await-in-loop
-                    await new Promise((resolve, reject) => {
-                        try {
-                            const req = store.clear()
-                            req.onsuccess = () => resolve()
-                            req.onerror = () => reject(req.error)
-                        } catch (err) {
-                            // Some stores may not exist in older versions; ignore
-                            resolve()
-                        }
-                    })
-                }
-                // Also clear existing daily notes keys in storage.local
-                try {
-                    const all = await chrome.storage.local.get(null)
-                    const toRemove = Object.keys(all).filter(k => k.startsWith('dailyNotes_'))
-                    if (toRemove.length) {
-                        await storageRemove(toRemove)
-                    }
-                } catch { /* ignore */ }
-            }
-
-            // Import data per store (merge/replace handled above)
-            const importCounts = {}
-            for (const [storeName, rows] of Object.entries(parsed.stores)) {
-                if (!Array.isArray(rows)) continue
-                importCounts[storeName] = 0
-                const tx = db.transaction(storeName, 'readwrite')
-                const store = tx.objectStore(storeName)
-                for (const row of rows) {
-                    // eslint-disable-next-line no-await-in-loop
-                    await new Promise((resolve, reject) => {
-                        try {
-                            const req = store.put(row)
-                            req.onsuccess = () => resolve()
-                            req.onerror = () => reject(req.error)
-                        } catch (err) {
-                            // If store not found in current schema, skip gracefully
-                            resolve()
-                        }
-                    })
-                    importCounts[storeName] += 1
+            const counts = {}
+            for (const [store, r] of Object.entries(report.stores)) {
+                if (r.written || r.skipped) {
+                    counts[store] = r.skipped ? `${r.written} (${r.skipped} skipped)` : r.written
                 }
             }
 
-            // Restore chrome.storage.local pins, daily notes, view settings, and scraping configs
-            try {
-                const updates = {}
+            const versionNote = {
+                upgrade: `Backup from schema v${report.dbVersion}, migrated to v${report.currentVersion}`,
+                newer: `Backup is from a newer version (v${report.dbVersion} > v${report.currentVersion}) — unsupported data was skipped`,
+                unknown: 'Backup has no version stamp — applied all migrations',
+                ok: `Schema v${report.currentVersion}`,
+            }[report.compatibility]
 
-                if (parsed.storageLocal && Array.isArray(parsed.storageLocal.pinnedWorkspaces)) {
-                    updates.pinnedWorkspaces = parsed.storageLocal.pinnedWorkspaces
-                }
-
-                // Restore scraping configurations
-                if (parsed.storageLocal?.domainSelectors) {
-                    updates.domainSelectors = parsed.storageLocal.domainSelectors
-                }
-                if (parsed.storageLocal?.platformSettings) {
-                    updates.platformSettings = parsed.storageLocal.platformSettings
-                }
-                if (parsed.storageLocal?.genericScraperAllowlist) {
-                    updates.genericScraperAllowlist = parsed.storageLocal.genericScraperAllowlist
-                }
-
-                if (Object.keys(updates).length > 0) {
-                    await storageSet(updates)
-                }
-
-                // Restore view mode and display settings
-                if (parsed.storageLocal) {
-                    if (parsed.storageLocal.viewMode) {
-                        localStorage.setItem('cooldesk_view_mode', parsed.storageLocal.viewMode)
-                    }
-                    if (parsed.storageLocal.displaySettings) {
-                        localStorage.setItem('cooldesk_display_settings', JSON.stringify(parsed.storageLocal.displaySettings))
-                        // Dispatch event to update UI
-                        window.dispatchEvent(new CustomEvent('displaySettingsChanged', {
-                            detail: parsed.storageLocal.displaySettings
-                        }))
-                        window.dispatchEvent(new CustomEvent('viewModeChanged', {
-                            detail: { modeId: parsed.storageLocal.viewMode || 'default' }
-                        }))
-                    }
-                }
-                if (parsed.storageLocal && parsed.storageLocal.dailyNotes && typeof parsed.storageLocal.dailyNotes === 'object') {
-                    const dn = parsed.storageLocal.dailyNotes
-                    const obj = {}
-                    if (dn.notesByDate && typeof dn.notesByDate === 'object') {
-                        for (const [k, v] of Object.entries(dn.notesByDate)) {
-                            if (k.startsWith('dailyNotes_')) obj[k] = v
-                        }
-                    }
-                    if (dn.summary && typeof dn.summary === 'object') obj['dailyNotesSummary'] = dn.summary
-                    if (Number.isFinite(Number(dn.lastUpdate))) obj['dailyNotesLastUpdate'] = Number(dn.lastUpdate)
-                    if (Object.keys(obj).length) await storageSet(obj)
-                }
-            } catch { /* ignore storage errors */ }
-
-            setMessage('Import complete')
+            setMessage(report.written ? 'Import complete' : 'Import finished, but nothing was written')
             setDetails({
-                counts: importCounts,
+                rowsWritten: report.written,
+                rowsSkipped: report.skipped,
+                version: versionNote,
+                ...(report.appVersion ? { fromAppVersion: report.appVersion } : {}),
+                ...(report.pendingMigrations.length
+                    ? { migrationsApplied: report.pendingMigrations.join(', ') }
+                    : {}),
+                ...(report.unknownStores.length
+                    ? { unknownStores: report.unknownStores.join(', ') }
+                    : {}),
+                counts,
+                ...(report.errors.length ? { errors: report.errors } : {}),
                 viewMode: parsed.storageLocal?.viewMode || 'not included',
                 displaySettings: parsed.storageLocal?.displaySettings ? 'restored' : 'not included',
-                scrapingRules: parsed.storageLocal?.domainSelectors ? Object.keys(parsed.storageLocal.domainSelectors).length : 0
+                scrapingRules: parsed.storageLocal?.domainSelectors
+                    ? Object.keys(parsed.storageLocal.domainSelectors).length
+                    : 0,
             })
         } catch (err) {
             console.error('[ExportData] Import failed', err)
@@ -244,6 +168,7 @@ export default function ExportData() {
             if (fileInputRef.current) fileInputRef.current.value = ''
         }
     }
+
 
     const isError = message.includes('failed') || message.includes('Failed')
 
@@ -314,6 +239,40 @@ export default function ExportData() {
                 }}>
                     <FontAwesomeIcon icon={isError ? faTimesCircle : faCheckCircle} />
                     {message}
+                </div>
+            )}
+
+            {details && (
+                <div style={{
+                    padding: '9px 12px', borderRadius: 8, fontSize: 11, lineHeight: 1.6,
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    color: 'rgba(255,255,255,0.55)',
+                }}>
+                    {details.version && (
+                        <div style={{ color: 'rgba(255,255,255,0.75)', marginBottom: 4 }}>{details.version}</div>
+                    )}
+                    {Number.isFinite(details.rowsWritten) && (
+                        <div>
+                            {details.rowsWritten} rows restored
+                            {details.rowsSkipped ? `, ${details.rowsSkipped} skipped` : ''}
+                        </div>
+                    )}
+                    {details.fromAppVersion && <div>From app v{details.fromAppVersion}</div>}
+                    {details.migrationsApplied && <div>Migrations applied: v{details.migrationsApplied}</div>}
+                    {details.unknownStores && (
+                        <div style={{ color: '#fbbf24' }}>Unrecognised stores skipped: {details.unknownStores}</div>
+                    )}
+                    {details.counts && Object.keys(details.counts).length > 0 && (
+                        <div style={{ marginTop: 4, opacity: 0.8 }}>
+                            {Object.entries(details.counts).map(([store, n]) => (
+                                <div key={store}>{store}: {n}</div>
+                            ))}
+                        </div>
+                    )}
+                    {Array.isArray(details.errors) && details.errors.map((e, i) => (
+                        <div key={i} style={{ color: '#f87171' }}>{e}</div>
+                    ))}
                 </div>
             )}
         </div>

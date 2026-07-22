@@ -624,6 +624,38 @@ pub async fn get_cooldesk(Query(query): Query<CooldeskQuery>) -> Json<serde_json
     Json(crate::sidecar::cooldesk::read_cooldesk(&query.path))
 }
 
+#[derive(Debug, serde::Deserialize)]
+pub struct CooldeskLinkBody {
+    /// The project that owns the group (star model) — the one you're viewing.
+    pub hub: String,
+    /// The project being linked into (or removed from) that group.
+    pub member: String,
+    /// When true, remove the link instead of creating it.
+    #[serde(default)]
+    pub unlink: bool,
+}
+
+/// Link (or unlink) two `.cooldesk` projects as one group, writing the same
+/// `group.json` + back-pointer shape the `/cd-link` plugin command produces.
+/// The only write path into `.cooldesk/` — everything else here is read-only.
+/// POST /cooldesk/link  { "hub": "...", "member": "...", "unlink": false }
+pub async fn post_cooldesk_link(
+    Json(body): Json<CooldeskLinkBody>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let result = if body.unlink {
+        crate::sidecar::cooldesk::unlink_project(&body.hub, &body.member)
+    } else {
+        crate::sidecar::cooldesk::link_project(&body.hub, &body.member)
+    };
+    match result {
+        Ok(v) => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "cooldesk": v }))),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "ok": false, "error": e })),
+        ),
+    }
+}
+
 /// Search apps by query — fuzzy match against installed+running list
 /// GET /search?q=chrome&limit=10
 #[derive(Debug, serde::Deserialize)]

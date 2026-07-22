@@ -11,6 +11,7 @@ import { enrichRunningAppsWithIcons, getBaseDomainFromUrl } from '../../utils/he
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
 import { AppCard, FolderCard, TabCard, TabGroupCard, TaskGroupCard } from './TabCard';
 import { DevServersPanel } from './DevServersPanel';
+import { FileManager } from './FileManager';
 import { WidgetBoard } from './WidgetBoard';
 
 // The Tabs page gets its own widget strip (independent of the overview board).
@@ -97,6 +98,8 @@ export function TabManagement() {
   const [runningApps, setRunningApps] = useState([]);
   const [chromeTabGroups, setChromeTabGroups] = useState({});
   const [frequentFolders, setFrequentFolders] = useState([]);
+  // Folder currently open in the in-app file manager (null = manager closed)
+  const [browsingFolder, setBrowsingFolder] = useState(null);
 
   // Task-First Tab Modeling state
   const [taskViewEnabled, setTaskViewEnabled] = useState(false);
@@ -612,7 +615,13 @@ export function TabManagement() {
     }
   }, []);
 
-  const handleFolderClick = useCallback(async (folder) => {
+  // Folders open in the in-app file manager; the OS explorer stays available
+  // as an explicit secondary action on the chip and inside the manager.
+  const handleFolderClick = useCallback((folder) => {
+    if (folder?.path) setBrowsingFolder(folder.path);
+  }, []);
+
+  const handleFolderOpenExternal = useCallback(async (folder) => {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       await invoke('open_folder', { path: folder.path });
@@ -1412,14 +1421,15 @@ export function TabManagement() {
                   gap: '6px'
                 }}>
                   <FontAwesomeIcon icon={faFolderOpen} style={{ opacity: 0.6 }} />
-                  Popular Folders ({Math.min(frequentFolders.length, 6)})
+                  Popular Folders ({Math.min(frequentFolders.length, 8)})
                 </h3>
-                <div className="tabs-grid">
-                  {frequentFolders.slice(0, 6).map(folder => (
+                <div className="folders-chip-grid">
+                  {frequentFolders.slice(0, 8).map(folder => (
                     <FolderCard
                       key={folder.path}
                       folder={folder}
                       onClick={handleFolderClick}
+                      onOpenExternal={handleFolderOpenExternal}
                     />
                   ))}
                 </div>
@@ -1553,6 +1563,14 @@ export function TabManagement() {
           </>
         )}
       </div>
+
+      {/* In-app folder browser — opened from any folder chip */}
+      <FileManager
+        isOpen={!!browsingFolder}
+        initialPath={browsingFolder}
+        places={frequentFolders}
+        onClose={() => setBrowsingFolder(null)}
+      />
     </div >
   );
 }

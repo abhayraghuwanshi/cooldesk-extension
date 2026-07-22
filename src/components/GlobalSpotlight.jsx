@@ -1198,7 +1198,12 @@ export function GlobalSpotlight({
         if (!treeChildren[path] && window.electronAPI?.listDir) {
             try {
                 const children = await window.electronAPI.listDir(path);
-                const items = (children || []).map(fileToResultItem).filter(Boolean);
+                // list_dir now returns hidden entries (flagged) for the file
+                // manager; the spotlight tree stays noise-free without them.
+                const items = (children || [])
+                    .filter(c => !c.hidden)
+                    .map(fileToResultItem)
+                    .filter(Boolean);
                 setTreeChildren(prev => ({ ...prev, [path]: items }));
             } catch (err) {
                 console.error('[Spotlight] listDir failed:', err);
