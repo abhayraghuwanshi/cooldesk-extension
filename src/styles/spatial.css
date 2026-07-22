@@ -1824,11 +1824,16 @@
   color: #fca5a5;
 }
 
-/* Optimization: Skip rendering work for off-screen faces */
-.workspace-face {
+/* Optimization: skip rendering work for off-screen faces.
+   Scoped to :not(.active) deliberately. On the *active* face this breaks
+   scrolling: content-visibility:auto makes the browser size subtrees from
+   contain-intrinsic-size until they're on screen, so the scroll container's
+   scrollHeight changes as you scroll through it — the position jumps, the
+   scrollbar thumb resizes mid-drag, and scrolling back up fights the
+   re-estimation. The face you're looking at must render normally. */
+.workspace-face:not(.active) {
   content-visibility: auto;
   contain-intrinsic-size: 100vh;
-  /* Estimate height to prevent scrollbar jumping */
 }
 
 /* Smooth focus transition for faces */

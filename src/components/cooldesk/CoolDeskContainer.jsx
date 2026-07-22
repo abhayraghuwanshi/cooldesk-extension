@@ -412,13 +412,33 @@ export function CoolDeskContainer({
 
   // Click outside to close expanded workspace
   useEffect(() => {
+    // A mousedown on a scrollbar reports the scrolling element as its target,
+    // with coordinates in the scrollbar gutter — i.e. outside that element's
+    // client (padding) box. Without this, grabbing the scrollbar of any
+    // container *around* the detail view counted as an outside click and
+    // collapsed the workspace mid-drag.
+    const isScrollbarClick = (e) => {
+      const el = e.target;
+      if (!(el instanceof Element)) return false;
+      const rect = el.getBoundingClientRect();
+      const inVerticalGutter = el.scrollHeight > el.clientHeight &&
+        e.clientX > rect.left + el.clientLeft + el.clientWidth;
+      const inHorizontalGutter = el.scrollWidth > el.clientWidth &&
+        e.clientY > rect.top + el.clientTop + el.clientHeight;
+      return inVerticalGutter || inHorizontalGutter;
+    };
+
     const handleGlobalClick = (e) => {
+      if (isScrollbarClick(e)) return;
       // If clicking inside a workspace card, do nothing (let internal handler work).
       // The right-click context menu renders via a portal to document.body, so it
       // is OUTSIDE the card subtree — exempt it explicitly, otherwise this mousedown
       // collapses the workspace and unmounts the menu before its buttons / the
       // native color picker can fire.
+      // .workspace-detail-view covers the context panel, which is a sibling of the
+      // card rather than a child of it.
       if (e.target.closest('.cooldesk-workspace-card') ||
+          e.target.closest('.workspace-detail-view') ||
           e.target.closest('.workspace-popup-menu') ||
           e.target.closest('.workspace-context-menu')) {
         return;

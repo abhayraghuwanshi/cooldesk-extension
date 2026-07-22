@@ -354,6 +354,18 @@
     border: 1px solid color-mix(in srgb, var(--card-accent) 45%, transparent) !important;
 }
 
+/* The context panel follows the same accent grammar as the card it belongs to,
+   but with an opaque bottom layer — it overlaps content and must not bleed. */
+.wallpaper-enabled .workspace-context-panel.has-accent {
+    background:
+        linear-gradient(135deg,
+            color-mix(in srgb, var(--card-accent) 30%, transparent),
+            color-mix(in srgb, var(--card-accent) 10%, transparent)),
+        linear-gradient(135deg, rgba(15, 15, 20, 0.78) 0%, rgba(10, 10, 15, 0.72) 100%),
+        linear-gradient(180deg, #161c2b 0%, #10141f 100%) !important;
+    border: none !important;
+}
+
 .wallpaper-enabled .cooldesk-workspace-card.has-accent:hover,
 .wallpaper-enabled .cooldesk-workspace-card.compact.has-accent:hover {
     background:

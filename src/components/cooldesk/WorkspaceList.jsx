@@ -423,23 +423,26 @@ export function WorkspaceList({
         }
     };
 
+    // min-height (not height) + no overflow of our own: the mount site in
+    // CoolDeskContainer already wraps this in an overflow:auto box, so owning a
+    // second scroller here stacked two scrollbars at the same right edge — the
+    // wheel and the scrollbar thumb each grabbed a different one. One scroll
+    // surface only: the parent's.
     return (
         <div style={{
             display: 'flex',
             flexDirection: 'column',
-            height: '100%',
-            gap: '16px',
-            overflow: 'hidden' // Parent manages layout, child scrolls
+            minHeight: '100%',
+            gap: '16px'
         }}>
-            {/* Scrollable Content Area */}
+            {/* Content area — grows, parent scrolls it */}
             <div style={{
                 flex: 1,
-                overflowY: 'auto',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '24px',
                 paddingRight: '4px',
-                minHeight: 0 // Crucial for nested flex scrolling
+                minHeight: 0
             }}>
                 {expandedDetailWorkspace ? (
                     /* Sidebar width: single workspace opened in full, in-depth view.

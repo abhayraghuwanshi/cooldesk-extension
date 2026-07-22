@@ -4086,6 +4086,36 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   overflow: visible;
 }
 
+/* Nested scrollers are what make the wheel "stick" in the detail view: the
+   notes grid and the note editor are each their own overflow-y:auto box, so a
+   wheel over them scrolls that box to its end and never chains back out to the
+   page — and their scrollbars sit on top of the outer one. Here the detail
+   view's outer container is the only scroll surface (same rule as the full-view
+   card above), so these grow with their content instead. */
+.workspace-detail-view .wcp-notes-list,
+.workspace-detail-view .wcp-note-tiptap {
+  overflow: visible;
+  flex: none;
+  max-height: none;
+}
+.workspace-detail-view .wcp-notes-list {
+  min-height: 0;
+}
+
+/* TiptapEditor owns a scroller of its own (.tiptap-content: overflow-y:auto +
+   overscroll-behavior:contain). `contain` blocks scroll chaining even when the
+   box has nothing to scroll, so with an open note the editor swallowed every
+   wheel / two-finger gesture over it and the page underneath never moved.
+   In the detail view the editor grows and the page scrolls. */
+.workspace-detail-view .wcp-note-tiptap .tiptap-editor-container {
+  height: auto;
+}
+.workspace-detail-view .wcp-note-tiptap .tiptap-content {
+  flex: none;
+  overflow: visible;
+  overscroll-behavior: auto;
+}
+
 /* The ≤720px rule stacks the status pills for the cramped in-card rail; the
    detail-view panel is full width, so keep them as one compact segmented row. */
 .workspace-detail-view .wcp-status-seg {
@@ -5782,9 +5812,16 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
    chosen card color, so the detail view reads as the same "desk". */
 .workspace-context-panel.has-accent {
   position: relative;
+  /* Same grammar as .cooldesk-workspace-card.has-accent above: a 135° accent
+     tint (24% → 8%) over the theme glass, plus a 42% accent border. The one
+     differences: an opaque base as the bottom layer (the card floats over the
+     page, but this panel must fully hide the content it overlaps), and no
+     accent border — the panel is borderless. */
   background:
-    radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--card-accent) 16%, transparent), transparent 55%),
-    radial-gradient(80% 60% at 100% 100%, rgba(167, 139, 250, 0.06), transparent 60%),
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--card-accent) 24%, transparent),
+      color-mix(in srgb, var(--card-accent) 8%, transparent)),
+    var(--glass-bg, rgba(30, 41, 59, 0.7)),
     linear-gradient(180deg, #161c2b 0%, #10141f 100%);
 }
 
@@ -5793,6 +5830,18 @@ body.bg-white-cred .workspace-context-panel {
   background:
     radial-gradient(120% 80% at 0% 0%, rgba(96, 165, 250, 0.06), transparent 55%),
     radial-gradient(80% 60% at 100% 100%, rgba(167, 139, 250, 0.05), transparent 60%),
+    linear-gradient(180deg, #f4f5f8 0%, #eceef3 100%);
+}
+
+/* …and the accented variant has to be re-stated for light theme: the plain
+   light rule above outranks .workspace-context-panel.has-accent, which was
+   silently dropping the accent entirely whenever bg-white-cred was on. */
+body.bg-white-cred .workspace-context-panel.has-accent {
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--card-accent) 18%, transparent),
+      color-mix(in srgb, var(--card-accent) 6%, transparent)),
+    var(--glass-bg, rgba(15, 23, 42, 0.03)),
     linear-gradient(180deg, #f4f5f8 0%, #eceef3 100%);
 }
 

@@ -1,4 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { AccentColorPicker } from './AccentColorPicker.jsx';
 import {
     WIDGET_CATALOG,
     WIDGET_CATEGORIES,
@@ -76,12 +78,17 @@ const DEFAULT_BOARD = [
     { id: 'quotes', size: 'm' },
 ];
 
+const isHex6 = (c) => /^#[0-9a-fA-F]{6}$/.test(c || '');
+
 function sanitizeTiles(arr) {
     // Custom ids pass through here; whether they still exist is checked at
     // render time against the custom-widget store.
     return arr.filter(t => t && (getWidget(t.id) || isCustomWidgetId(t.id))).map(t => ({
         id: t.id,
         size: SIZES.includes(t.size) ? t.size : 's',
+        // Accent is optional; drop anything that isn't a plain hex so a bad
+        // value can never end up inside a color-mix().
+        ...(isHex6(t.color) ? { color: t.color } : {}),
     }));
 }
 
@@ -131,16 +138,56 @@ function currentTheme() {
     }
 }
 
-const WidgetTile = memo(function WidgetTile({ tile, widget, theme, dragging, onResize, onRemove, onDragStart, onDragEnter, onDragEnd }) {
+const WidgetTile = memo(function WidgetTile({ tile, widget, theme, dragging, onResize, onRemove, onRecolor, onDragStart, onDragEnter, onDragEnd }) {
+    const [menu, setMenu] = useState(null);
+
+    // Dismiss on outside click. The menu is portaled out of the tile, so its
+    // own React handlers can't stop these native listeners — skip clicks that
+    // land inside it, or opening the native color picker closes it instantly.
+    useEffect(() => {
+        if (!menu) return;
+        const dismiss = (e) => {
+            if (e.target?.closest?.('.workspace-context-menu')) return;
+            setMenu(null);
+        };
+        // Attached on the next frame, never in this one: React 18 flushes this
+        // effect while the opening click is still in flight, so attaching now
+        // would let that event dismiss the menu it just opened.
+        const raf = requestAnimationFrame(() => {
+            window.addEventListener('click', dismiss);
+            window.addEventListener('contextmenu', dismiss);
+        });
+        return () => {
+            cancelAnimationFrame(raf);
+            window.removeEventListener('click', dismiss);
+            window.removeEventListener('contextmenu', dismiss);
+        };
+    }, [menu]);
+
     if (!widget) return null;
     const { cols, rows } = tileSpans(widget, tile.size);
 
+    // keepOpen for the live picker: closing unmounts the <input> mid-selection.
+    const applyColor = (color, keepOpen) => {
+        onRecolor(tile.id, color);
+        if (!keepOpen) setMenu(null);
+    };
+
     return (
         <div
-            className={`wgb-tile ${dragging ? 'wgb-tile-dragging' : ''}`}
-            style={{ gridColumn: `span ${cols}`, gridRow: `span ${rows}` }}
+            className={`wgb-tile ${dragging ? 'wgb-tile-dragging' : ''} ${tile.color ? 'has-accent' : ''}`}
+            style={{
+                gridColumn: `span ${cols}`,
+                gridRow: `span ${rows}`,
+                ...(tile.color ? { '--tile-accent': tile.color } : {}),
+            }}
             onDragOver={e => e.preventDefault()}
             onDragEnter={() => onDragEnter(tile.id)}
+            onContextMenu={e => {
+                e.preventDefault();
+                e.stopPropagation();
+                setMenu({ x: e.clientX, y: e.clientY });
+            }}
         >
             {widget.custom ? (
                 <CustomWidgetFrame widget={widget} theme={theme} className="wgb-frame" />
@@ -167,6 +214,24 @@ const WidgetTile = memo(function WidgetTile({ tile, widget, theme, dragging, onR
                 >
                     ⠿
                 </span>
+                {/* The iframe swallows contextmenu, so the tile's own right-click
+                    only fires on its edges — this chip is the dependable way in. */}
+                <button
+                    className={`wgb-chip wgb-chip-color ${tile.color ? 'active' : ''}`}
+                    title="Widget color"
+                    style={tile.color ? { color: tile.color } : undefined}
+                    onClick={e => {
+                        // Must stop here: React's listener sits on the root
+                        // container, so without this the very same native click
+                        // carries on up to the window dismiss listener the menu
+                        // just installed and closes it in the same tick.
+                        e.stopPropagation();
+                        const r = e.currentTarget.getBoundingClientRect();
+                        setMenu({ x: r.left, y: r.bottom + 4 });
+                    }}
+                >
+                    ◍
+                </button>
                 {SIZES.map(s => (
                     <button
                         key={s}
@@ -181,6 +246,32 @@ const WidgetTile = memo(function WidgetTile({ tile, widget, theme, dragging, onR
                     ✕
                 </button>
             </div>
+
+            {/* Portaled so the tile's overflow:hidden and the board's stacking
+                context can't clip it — same pattern as the workspace card. */}
+            {menu && createPortal(
+                <div
+                    className="workspace-context-menu"
+                    style={{ top: menu.y, left: menu.x }}
+                    onClick={e => e.stopPropagation()}
+                    onContextMenu={e => e.preventDefault()}
+                >
+                    <div className="context-menu-label">Widget color</div>
+                    <AccentColorPicker
+                        className="context-menu-swatches"
+                        value={tile.color || null}
+                        onSelect={(color, source) => applyColor(color, source === 'custom')}
+                    />
+                    <div className="context-menu-divider" />
+                    <button
+                        className="context-menu-item"
+                        onClick={() => { onRemove(tile.id); setMenu(null); }}
+                    >
+                        Remove widget
+                    </button>
+                </div>,
+                document.body
+            )}
         </div>
     );
 });
@@ -477,6 +568,16 @@ const WidgetBoard = memo(function WidgetBoard({ storageArea, compact = false, de
         setBoard(prev => prev.map(t => (t.id === id ? { ...t, size } : t)));
     }, [setBoard]);
 
+    // null clears the accent back to the default plate.
+    const recolorWidget = useCallback((id, color) => {
+        setBoard(prev => prev.map(t => {
+            if (t.id !== id) return t;
+            const next = { ...t };
+            if (color) next.color = color; else delete next.color;
+            return next;
+        }));
+    }, [setBoard]);
+
     const switchLayout = useCallback((name) => {
         setState(prev => (prev.layouts[name] ? { ...prev, active: name } : prev));
     }, []);
@@ -634,6 +735,7 @@ const WidgetBoard = memo(function WidgetBoard({ storageArea, compact = false, de
                             dragging={tile.id === draggingId}
                             onResize={resizeWidget}
                             onRemove={removeWidget}
+                            onRecolor={recolorWidget}
                             onDragStart={handleDragStart}
                             onDragEnter={handleDragEnter}
                             onDragEnd={handleDragEnd}

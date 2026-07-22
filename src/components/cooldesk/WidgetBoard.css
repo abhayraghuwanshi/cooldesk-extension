@@ -202,6 +202,30 @@
     min-height: 0;
 }
 
+/* Per-widget accent (hover ◍ chip / right-click → Widget color).
+   The widget iframe paints its own opaque frosted surface, so a background on
+   the tile is hidden behind it — a flat `background: <color>` here does
+   nothing visible. The tint therefore rides ON TOP of the frame as an overlay
+   layer, kept translucent so widget text stays readable and
+   pointer-events:none so the widget stays interactive. Driven by the inline
+   --tile-accent var, same grammar as the workspace card's --card-accent. */
+.wgb-tile.has-accent {
+    background: color-mix(in srgb, var(--tile-accent) 18%, rgba(255, 255, 255, 0.026));
+}
+
+.wgb-tile.has-accent::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    border-radius: inherit;
+    background: linear-gradient(160deg,
+            color-mix(in srgb, var(--tile-accent) 30%, transparent),
+            color-mix(in srgb, var(--tile-accent) 12%, transparent));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tile-accent) 52%, transparent);
+}
+
 .wgb-frame {
     display: block;
     width: 100%;
@@ -227,6 +251,8 @@
     position: absolute;
     top: 6px;
     right: 6px;
+    /* Above the accent overlay (::after, z-index 1). */
+    z-index: 2;
     display: flex;
     gap: 2px;
     padding: 2px;
@@ -268,6 +294,13 @@
 .wgb-chip.active {
     background: rgba(255, 255, 255, 0.18);
     color: #fff;
+}
+
+/* Accent trigger — when a color is set the glyph wears it (inline style). */
+.wgb-chip-color {
+    font-size: var(--font-sm, 12px);
+    line-height: 1.2;
+    padding: 1px 6px;
 }
 
 .wgb-chip-remove:hover {
@@ -710,6 +743,19 @@
 /* Light theme (white-cred) — flip the luminance steps */
 .bg-white-cred .wgb-tile {
     background: rgba(15, 23, 42, 0.04);
+}
+
+/* Light theme: the same hue over a light widget surface needs less alpha or it
+   reads as a wash instead of a tint. */
+.bg-white-cred .wgb-tile.has-accent {
+    background: color-mix(in srgb, var(--tile-accent) 14%, rgba(15, 23, 42, 0.04));
+}
+
+.bg-white-cred .wgb-tile.has-accent::after {
+    background: linear-gradient(160deg,
+            color-mix(in srgb, var(--tile-accent) 20%, transparent),
+            color-mix(in srgb, var(--tile-accent) 7%, transparent));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tile-accent) 40%, transparent);
 }
 
 .bg-white-cred .wgb-head,
