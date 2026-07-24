@@ -448,6 +448,10 @@ export const VALIDATION_SCHEMAS = {
             [ValidationRules.TYPE]: ['number', 'string'], // Allow both - empty string or number
             [ValidationRules.MAX_VALUE]: 365
         },
+        spotlightShortcut: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 100
+        },
         updatedAt: {
             [ValidationRules.TYPE]: 'number',
             [ValidationRules.MIN_VALUE]: 0

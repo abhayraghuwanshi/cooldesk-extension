@@ -100,7 +100,3 @@ export function widgetEmbedOrigin() {
         return o && o !== 'null' ? o : '*';
     } catch { return '*'; }
 }
-
-export function widgetSandbox(widget) {
-    return `allow-scripts allow-same-origin${widget.sandbox ? ` ${widget.sandbox}` : ''}`;
-}

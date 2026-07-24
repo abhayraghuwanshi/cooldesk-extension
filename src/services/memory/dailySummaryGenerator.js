@@ -47,25 +47,21 @@ export async function generateDailySummary(date, userId = 'default') {
             updatedAt: Date.now()
         };
 
-        // Validate
-        const validation = validateAndSanitize(dailySummary, 'dailyMemory');
-        if (!validation.valid) {
-            console.error('[DailySummary] Validation failed:', validation.errors);
-            throw new Error('Invalid daily summary data');
-        }
+        // Validate & sanitize (throws ValidationError on failure, returns the sanitized object)
+        const sanitized = validateAndSanitize(dailySummary, 'dailyMemory');
 
         // Store in database
         const transaction = db.transaction([DB_CONFIG.STORES.DAILY_MEMORY], 'readwrite');
         const store = transaction.objectStore(DB_CONFIG.STORES.DAILY_MEMORY);
 
         await new Promise((resolve, reject) => {
-            const request = store.put(validation.sanitized);
-            request.onsuccess = () => resolve(validation.sanitized);
+            const request = store.put(sanitized);
+            request.onsuccess = () => resolve(sanitized);
             request.onerror = () => reject(request.error);
         });
 
         console.log(`[DailySummary] Generated summary for ${date}`);
-        return validation.sanitized;
+        return sanitized;
     } catch (error) {
         console.error('[DailySummary] Failed to generate summary:', error);
         throw error;

@@ -8,7 +8,6 @@ import {
     getWidget,
     widgetEmbedUrl,
     widgetEmbedOrigin,
-    widgetSandbox,
 } from '../../data/widgetCatalog';
 import {
     CUSTOM_WIDGET_PROMPT,
@@ -217,7 +216,6 @@ const WidgetTile = memo(function WidgetTile({ tile, widget, theme, dragging, onR
                     className="wgb-frame"
                     src={widgetEmbedUrl(widget.id, theme, tile.color)}
                     title={widget.name}
-                    sandbox={widgetSandbox(widget)}
                     onLoad={bridgeOnLoad}
                 />
             )}
@@ -384,9 +382,12 @@ function WidgetPicker({ board, theme, customs, onAdd, onRemove, onClose, onCreat
     }, [onClose]);
 
     const selectedAdded = selected ? onBoard.has(selected.id) : false;
-    const showCreateRow = category === 'Custom' || category === 'All';
 
-    return (
+    // Portal to <body>: the overlay is position:fixed, but an ancestor
+    // (.overview-left-column) uses backdrop-filter, which makes it the
+    // containing block for fixed descendants — without the portal the modal is
+    // clipped to that column instead of covering the viewport.
+    return createPortal(
         <div className="wgb-overlay" onMouseDown={onClose}>
             <div className="wgb-picker" onMouseDown={e => e.stopPropagation()}>
                 <div className="wgb-picker-head">
@@ -405,7 +406,7 @@ function WidgetPicker({ board, theme, customs, onAdd, onRemove, onClose, onCreat
                     <button className="wgb-chip wgb-picker-close" title="Close" onClick={onClose}>✕</button>
                 </div>
                 <div className="wgb-picker-cats">
-                    {['All', ...WIDGET_CATEGORIES, 'Custom'].map(c => (
+                    {['All', ...WIDGET_CATEGORIES].map(c => (
                         <button
                             key={c}
                             className={`wgb-pill ${category === c ? 'active' : ''}`}
@@ -417,14 +418,6 @@ function WidgetPicker({ board, theme, customs, onAdd, onRemove, onClose, onCreat
                 </div>
                 <div className="wgb-picker-body">
                     <div className="wgb-picker-list">
-                        {showCreateRow && (
-                            <div
-                                className={`wgb-picker-row wgb-picker-create ${creating ? 'active' : ''}`}
-                                onClick={() => setSelectedId(NEW_CUSTOM)}
-                            >
-                                <span className="wgb-picker-name">＋ Create your own…</span>
-                            </div>
-                        )}
                         {list.map(w => {
                             const added = onBoard.has(w.id);
                             const active = selected && selected.id === w.id;
@@ -456,9 +449,7 @@ function WidgetPicker({ board, theme, customs, onAdd, onRemove, onClose, onCreat
                             <div className="wgb-picker-none">
                                 {query.trim()
                                     ? `No widgets match “${query.trim()}”`
-                                    : category === 'Custom'
-                                        ? 'No custom widgets yet — create one above.'
-                                        : 'Nothing here yet.'}
+                                    : 'Nothing here yet.'}
                             </div>
                         )}
                     </div>
@@ -492,7 +483,6 @@ function WidgetPicker({ board, theme, customs, onAdd, onRemove, onClose, onCreat
                                         className="wgb-preview-frame"
                                         src={widgetEmbedUrl(selected.id, theme)}
                                         title={`${selected.name} preview`}
-                                        sandbox={widgetSandbox(selected)}
                                         style={{ height: selected.h }}
                                         onLoad={bridgeOnLoad}
                                     />
@@ -526,7 +516,8 @@ function WidgetPicker({ board, theme, customs, onAdd, onRemove, onClose, onCreat
                     )}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
 

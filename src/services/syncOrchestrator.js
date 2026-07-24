@@ -60,6 +60,16 @@ import {
 import { getDeviceId, isHostSyncEnabled, loadSyncConfig } from './syncConfig';
 import { syncWebSocket } from './syncWebSocket';
 
+// True only for browser web activity (http/https url). Desktop-app focus events
+// synced from the app carry a file-path/.exe url and an `appName`; those belong
+// to the app's /activity/app-usage surface, not the extension's web-activity DB.
+function isWebActivity(activity) {
+    if (!activity || typeof activity !== 'object') return false;
+    if (activity.appName) return false;
+    const url = activity.url;
+    return typeof url === 'string' && /^https?:\/\//i.test(url);
+}
+
 // Simple hash function for change detection
 function simpleHash(data) {
     const str = JSON.stringify(data);
@@ -883,6 +893,14 @@ class SyncOrchestrator {
 
         try {
             for (const activity of activities) {
+                // The extension's activity store is for *web* browsing only. The
+                // desktop app also pushes its native app-focus events (appName +
+                // a file-path/.exe "url", e.g. WindowsTerminal.exe) over the same
+                // sync channel; those belong to the app's /activity/app-usage
+                // surface, not this IndexedDB store. Drop them at the boundary so
+                // desktop apps don't leak into the extension's activity feed.
+                if (!isWebActivity(activity)) continue;
+
                 // Ensure unique ID if missing
                 if (!activity.id) activity.id = `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 

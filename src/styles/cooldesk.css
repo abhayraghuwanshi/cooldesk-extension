@@ -3580,12 +3580,15 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 
 /* Responsive for medium screens (1200px and below) */
 @media (max-width: 1200px) {
+  /* Single column: stop trapping both sections inside one viewport-height
+     scroll box (that squashed the widget rail to "a few height" and left the
+     activity feed half-shown). Flow naturally and let the page scroll instead —
+     widgets render at full height, the activity feed sits properly below. */
   .overview-dashboard-grid {
     grid-template-columns: 1fr;
     gap: 16px;
-    height: calc(100vh - 96px);
-    overflow-y: auto;
-    overflow-x: hidden;
+    height: auto;
+    overflow: visible;
   }
 
   .overview-left-column {
@@ -3596,7 +3599,7 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   }
 
   .overview-activity-column {
-    height: 500px;
+    height: 560px;
     min-height: 300px;
     max-height: none;
     flex: 1;
@@ -3617,9 +3620,8 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
     grid-template-columns: 1fr;
     gap: 12px;
     padding-right: 0;
-    height: calc(100vh - 96px);
-    overflow-y: auto;
-    overflow-x: hidden;
+    height: auto;
+    overflow: visible;
   }
 
   .overview-left-column {
