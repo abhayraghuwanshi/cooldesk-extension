@@ -46,7 +46,7 @@
     "http://*/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://api.unsplash.com http://127.0.0.1:4545 ws://127.0.0.1:4545 http://localhost:4545 ws://localhost:4545; frame-src 'self' https://www.google.com https://cool-desk.com",
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://api.unsplash.com http://127.0.0.1:4545 ws://127.0.0.1:4545 http://localhost:4545 ws://localhost:4545 https://api.open-meteo.com https://api.coingecko.com https://api.frankfurter.app https://en.wikipedia.org; frame-src 'self' https://www.google.com https://cool-desk.com",
     "sandbox": "sandbox allow-scripts allow-forms allow-popups allow-modals; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; font-src * data:; connect-src *"
   },
   "sandbox": {
@@ -60,7 +60,8 @@
         "assets/*",
         "dist/*",
         "logo-2.png",
-        "extension.html"
+        "extension.html",
+        "widgets/*"
       ],
       "matches": [
         "<all_urls>"

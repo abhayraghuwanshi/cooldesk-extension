@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Decision Maker — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget" style="justify-content:center;gap:10px">
+  <span class="label">Can't decide?</span>
+  <form class="row" id="form">
+    <input class="grow" id="options" placeholder="pizza, sushi, tacos" autocomplete="off">
+    <button class="primary">Pick</button>
+  </form>
+  <div class="grow center">
+    <span class="big" id="result" style="font-size:26px;text-align:center">—</span>
+  </div>
+  <div class="row">
+    <button class="grow" id="coin">🪙 Coin flip</button>
+    <button class="grow" id="dice">🎲 Roll d6</button>
+  </div>
+</main>
+<script src="picker.js?v=5"></script>
+</body>
+</html>

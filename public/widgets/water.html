@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Water Tracker — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<style>
+  .glasses { display: flex; gap: 6px; flex-wrap: wrap; }
+  .glass { width: 20px; height: 26px; border: 1.5px solid var(--faint); border-radius: 3px 3px 6px 6px; position: relative; overflow: hidden; }
+  .glass.full { border-color: var(--accent); }
+  .glass.full::after { content: ""; position: absolute; inset: 25% 0 0 0; background: color-mix(in srgb, var(--accent) 55%, transparent); }
+</style>
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget" style="justify-content:center;gap:12px">
+  <div class="row spread">
+    <span class="label">Water</span>
+    <span class="label" id="count"></span>
+  </div>
+  <div class="glasses" id="glasses"></div>
+  <div class="row">
+    <button class="primary grow" id="add">+ Glass</button>
+    <button class="ghost" id="minus">−</button>
+  </div>
+</main>
+<script src="water.js?v=5"></script>
+</body>
+</html>

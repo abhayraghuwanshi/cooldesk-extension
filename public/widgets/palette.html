@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Color Palette — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<style>
+  .swatches { display: flex; flex: 1; gap: 6px; min-height: 0; }
+  .swatch { flex: 1; border-radius: 9px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 7px; cursor: pointer; border: 1px solid var(--faint); }
+  .swatch span { font-family: ui-monospace, monospace; font-size: 9px; letter-spacing: .04em; background: rgba(0,0,0,.45); color: #fff; padding: 2px 5px; border-radius: 4px; }
+</style>
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget">
+  <div class="row spread">
+    <span class="label" id="status">Palette — click a color to copy</span>
+    <button id="gen">Shuffle</button>
+  </div>
+  <div class="swatches" id="swatches"></div>
+</main>
+<script src="palette.js?v=5"></script>
+</body>
+</html>

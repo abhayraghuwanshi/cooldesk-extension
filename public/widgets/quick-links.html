@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quick Links — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<style>
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px 8px; border: 1px solid var(--faint); border-radius: 9px; transition: border-color .15s; }
+  .tile:hover { border-color: var(--accent); }
+  .glyph { width: 30px; height: 30px; border-radius: 8px; background: var(--card); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; color: var(--accent); }
+  .tile span { font-size: 10px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tile button { position: absolute; top: 2px; right: 2px; padding: 0 5px; border: none; opacity: 0; }
+  .tile:hover button { opacity: 1; }
+</style>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget">
+  <div class="row spread">
+    <span class="label">Quick links</span>
+    <button class="ghost" id="add">+ Add</button>
+  </div>
+  <form class="row" id="form" style="display:none">
+    <input id="name" placeholder="Name" style="width:80px" maxlength="20">
+    <input class="grow" id="url" placeholder="https://…" type="url" required>
+    <button class="primary">Save</button>
+  </form>
+  <div class="grid" id="grid"></div>
+</main>
+<script src="quick-links.js?v=5"></script>
+</body>
+</html>

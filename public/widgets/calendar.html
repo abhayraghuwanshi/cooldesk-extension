@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Calendar — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<style>
+  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; flex: 1; }
+  .cal .h { font-family: ui-monospace, monospace; font-size: 9px; letter-spacing: .1em; color: var(--muted); text-align: center; text-transform: uppercase; align-self: center; }
+  .cal .d { display: flex; align-items: center; justify-content: center; font-size: 12px; font-variant-numeric: tabular-nums; border-radius: 7px; min-height: 24px; }
+  .cal .d.dim { color: var(--muted); opacity: .4; }
+  .cal .d.today { background: var(--accent); color: var(--bg); font-weight: 700; }
+</style>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget">
+  <div class="row spread">
+    <button class="ghost" id="prev">‹</button>
+    <span class="label" id="title"></span>
+    <button class="ghost" id="next">›</button>
+  </div>
+  <div class="cal" id="cal"></div>
+</main>
+<script src="calendar.js?v=5"></script>
+</body>
+</html>

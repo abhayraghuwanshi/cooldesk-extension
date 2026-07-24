@@ -140,6 +140,11 @@ pub fn read_cooldesk(project_path: &str) -> Value {
                         "commands": one.get("commands").cloned().unwrap_or(Value::Null),
                         "services": one.get("services").cloned().unwrap_or(Value::Null),
                         "docs": one.get("docs").cloned().unwrap_or(Value::Null),
+                        // README (and other long-form docs) so the app can show each
+                        // linked project's committed knowledge, not just the hub's.
+                        "readme": one.get("readme").cloned().unwrap_or(Value::Null),
+                        "architecture": one.get("architecture").cloned().unwrap_or(Value::Null),
+                        "decisions": one.get("decisions").cloned().unwrap_or(Value::Null),
                     }));
                 }
             }

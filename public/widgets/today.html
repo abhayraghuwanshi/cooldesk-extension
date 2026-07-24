@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Today — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget" style="justify-content:center;gap:12px">
+  <div class="row spread" style="align-items:baseline">
+    <span class="big" id="day" style="font-size:30px"></span>
+    <span class="label" id="week"></span>
+  </div>
+  <span class="muted" id="date" style="font-size:13px"></span>
+  <div class="stack" style="gap:5px">
+    <div class="row spread">
+      <span class="label">Day progress</span>
+      <span class="mono muted" id="pct" style="font-size:11px"></span>
+    </div>
+    <div class="bar"><i id="fill"></i></div>
+  </div>
+</main>
+<script src="today.js?v=5"></script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Daily Focus — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget" style="justify-content:center;gap:12px">
+  <span class="label">Main focus today</span>
+  <form id="ask" class="row">
+    <input class="grow" id="input" placeholder="What's your main thing today?" maxlength="90" autocomplete="off">
+  </form>
+  <div id="show" class="row" style="display:none;gap:10px">
+    <input type="checkbox" id="done" style="width:18px;height:18px;accent-color:var(--accent);flex-shrink:0">
+    <span class="grow" id="text" style="font-size:19px;font-weight:700;line-height:1.35;cursor:pointer" title="Click to edit"></span>
+  </div>
+</main>
+<script src="focus.js?v=5"></script>
+</body>
+</html>

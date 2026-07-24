@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pomodoro — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget">
+  <div class="row spread">
+    <span class="label" id="phase">Focus</span>
+    <span class="label" id="count">Session 1</span>
+  </div>
+  <div class="grow center">
+    <span class="big mono" id="time" style="font-size:56px">25:00</span>
+  </div>
+  <div class="bar"><i id="fill" style="width:100%"></i></div>
+  <div class="row">
+    <button class="primary grow" id="toggle">Start</button>
+    <button id="skip">Skip</button>
+    <button class="ghost" id="reset">Reset</button>
+  </div>
+</main>
+<script src="pomodoro.js?v=5"></script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Typing Sprint — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget">
+  <div class="row spread">
+    <span class="label">Typing sprint · 15s</span>
+    <span class="label mono" id="clock">15.0</span>
+  </div>
+  <p id="target" class="muted" style="font-size:13px;line-height:1.6"></p>
+  <input id="input" class="mono" placeholder="Start typing to begin…" autocomplete="off" spellcheck="false">
+  <div class="row spread">
+    <span class="mono" id="result" style="font-size:13px"></span>
+    <button class="ghost" id="retry">Retry</button>
+  </div>
+</main>
+<script src="wpm.js?v=5"></script>
+</body>
+</html>

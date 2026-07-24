@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Weather — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget" style="justify-content:center;gap:8px">
+  <span class="label" id="city"></span>
+  <div class="row" style="gap:12px">
+    <span id="icon" style="font-size:38px">·</span>
+    <span class="big mono" id="temp" style="font-size:44px">--°</span>
+    <div class="stack grow" style="gap:3px;align-items:flex-end">
+      <span class="muted" id="desc" style="font-size:12px">Loading…</span>
+      <span class="muted mono" id="wind" style="font-size:11px"></span>
+    </div>
+  </div>
+</main>
+<script src="weather.js?v=5"></script>
+</body>
+</html>

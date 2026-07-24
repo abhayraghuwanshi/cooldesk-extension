@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Project Workspaces — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<style>
+  .ws { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--faint); border-radius: 9px; cursor: pointer; transition: border-color .15s; }
+  .ws:hover { border-color: var(--accent); }
+  .ws.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+</style>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget">
+  <div class="row spread">
+    <span class="label">Workspaces</span>
+    <span class="label" id="mode">Demo</span>
+  </div>
+  <div class="list stack" id="rows" style="gap:6px"></div>
+</main>
+<script src="workspaces.js?v=5"></script>
+</body>
+</html>

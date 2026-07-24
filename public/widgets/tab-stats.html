@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tab Pulse — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget">
+  <div class="row spread">
+    <span class="label">Tab pulse</span>
+    <span class="label" id="mode">Demo</span>
+  </div>
+  <div class="row" style="gap:18px">
+    <div class="stack" style="gap:2px">
+      <span class="big mono" id="open" style="font-size:30px">—</span>
+      <span class="label">Open tabs</span>
+    </div>
+    <div class="stack" style="gap:2px">
+      <span class="big mono" id="dupes" style="font-size:30px">—</span>
+      <span class="label">Duplicates</span>
+    </div>
+    <div class="stack" style="gap:2px">
+      <span class="big mono" id="oldest" style="font-size:30px">—</span>
+      <span class="label">Oldest tab</span>
+    </div>
+  </div>
+  <div class="stack grow" id="domains" style="gap:6px;justify-content:flex-end"></div>
+</main>
+<script src="tab-stats.js?v=5"></script>
+</body>
+</html>

@@ -595,9 +595,14 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   // committed .cooldesk manifest declaring folders / links / linked projects.
   // Surface those alongside the workspace's own apps/urls instead of duplicating
   // them in a separate chip list.
+  // A project folder may be a plain 'folder' app or an editor app (the folder
+  // added as "open in <editor>"); both name a root that can hold .cooldesk/.
+  // Prefer a plain folder, then fall back to an editor-associated folder.
   const projectFolderPath = useMemo(() => {
-    const f = apps.find(a => a.appType?.toLowerCase() === 'folder' && a.path);
-    return f?.path || null;
+    const plain = apps.find(a => a.appType?.toLowerCase() === 'folder' && a.path);
+    if (plain) return plain.path;
+    const editorFolder = apps.find(a => isEditorApp(a) && a.path);
+    return editorFolder?.path || null;
   }, [apps]);
   const [cooldesk, setCooldesk] = useState(null);
   useEffect(() => {
@@ -611,11 +616,30 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
 
   const cdFolders = useMemo(() => {
     if (!cooldesk) return [];
-    const existing = new Set(folderApps.map(a => a.path?.toLowerCase()));
-    return cooldesk.resources
-      .filter(r => r.type === 'folder' && r.path)
-      .map(r => ({ name: r.name || r.path, path: joinProjectPath(projectFolderPath, r.path), appType: 'folder', _cd: true }))
-      .filter(r => !existing.has(r.path?.toLowerCase()));
+    // Dedupe against the workspace's own folder apps and across projects.
+    const seen = new Set(folderApps.map(a => a.path?.toLowerCase()).filter(Boolean));
+    const out = [];
+    // Folder resources are relative to their own project's root, so each source
+    // (the hub and every linked member) is joined against its own base path.
+    const addFolders = (resources, base, projectName) => {
+      for (const r of (resources || [])) {
+        if (r.type !== 'folder' || !r.path) continue;
+        const path = joinProjectPath(base, r.path);
+        const key = path?.toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push({ name: r.name || r.path, path, appType: 'folder', _cd: true, project: projectName });
+      }
+    };
+    // Hub's own folders.
+    addFolders(cooldesk.resources, projectFolderPath, cooldesk.project?.name);
+    // Each linked group member's folders (skip the hub's own member entry).
+    const hubId = cooldesk.project?.id;
+    for (const m of (cooldesk.members || [])) {
+      if ((m.project?.id || m.name) === hubId) continue;
+      addFolders(m.resources, m.path, m.project?.name || m.name);
+    }
+    return out;
   }, [cooldesk, folderApps, projectFolderPath]);
   const cdLinks = useMemo(() => {
     if (!cooldesk) return [];

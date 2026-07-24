@@ -69,6 +69,9 @@ export async function fetchCooldesk(projectPath) {
                     commands: Array.isArray(mem.commands?.commands) ? mem.commands.commands : [],
                     services: Array.isArray(mem.services?.services) ? mem.services.services : [],
                     docs: mem.docs || {},
+                    readme: mem.readme ?? null,
+                    architecture: mem.architecture ?? null,
+                    decisions: mem.decisions ?? null,
                 }))
                 : [],
         };

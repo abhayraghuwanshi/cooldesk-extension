@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Resume Session — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget" style="justify-content:center;gap:10px">
+  <div class="row spread">
+    <span class="label">Pick up where you left off</span>
+    <span class="label" id="mode">Demo</span>
+  </div>
+  <div class="card stack" style="gap:4px">
+    <span style="font-size:14px;font-weight:700" id="name">—</span>
+    <span class="muted" style="font-size:11px" id="detail">—</span>
+    <span class="muted mono" id="apps" style="font-size:11px"></span>
+  </div>
+  <button class="primary" id="restore">Restore session</button>
+</main>
+<script src="session.js?v=5"></script>
+</body>
+</html>

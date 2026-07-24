@@ -639,6 +639,16 @@ export function TabManagement() {
         suggestionContent: app.name || app.title
       }).catch(() => { });
 
+      // Tab entry (Windows Terminal / File Explorer): these share one HWND with
+      // their siblings, so focusing by pid/hwnd alone lands on whichever tab was
+      // last active. Route through UIA to select the specific tab, same as
+      // GlobalSpotlight does.
+      if (app.tabIndex != null && app.hwnd && window.electronAPI?.focusAppTab) {
+        console.log('[TabManagement] Focusing tab:', app.title, 'HWND:', app.hwnd, 'index:', app.tabIndex);
+        await window.electronAPI.focusAppTab(app.hwnd, app.tabIndex, app.title);
+        return;
+      }
+
       if (window.electronAPI?.focusApp && app.pid) {
         console.log('[TabManagement] Focusing app:', app.name, app.pid, 'HWND:', app.hwnd);
         await window.electronAPI.focusApp(app.pid, app.name, app.hwnd);

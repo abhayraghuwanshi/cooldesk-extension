@@ -190,10 +190,11 @@
     gap: 10px;
 }
 
-/* The tile is just a faint backing plate; each widget iframe paints its own
-   surface (the website's --surface frosted panel), so the tile stays nearly
-   transparent — imposing a background here would double up with the widget's
-   own and could mismatch its theme. */
+/* The tile is a backing plate, not the widget's surface. The iframe canvas is
+   opaque in this app, so it covers whatever the tile paints — a background here
+   is only visible in the sliver around the frame and while the widget loads.
+   Anything meant to be seen *through* the widget has to be sent into it
+   (?tint=), not drawn behind it. */
 .wgb-tile {
     position: relative;
     background: rgba(255, 255, 255, 0.026);
@@ -203,15 +204,13 @@
     box-sizing: border-box;
 }
 
-/* Per-widget accent (hover ◍ chip / right-click → Widget color) — ambient
-   light, not paint. Two things were tried and rejected: a translucent film
-   over the frame (::after, inset 0), which only muted the widget's own colors
-   and read as coloured plastic over a grey card; and a solid 3px bezel, which
-   outlined the opaque widget slab like a sticker. The widget surface belongs
-   to the store page and can't be tinted from here, so the accent stays
-   OUTSIDE it: a hairline at the edge plus the glow the tile casts on the
-   wallpaper. Driven by the inline --tile-accent var, same grammar as the
-   workspace card's --card-accent. */
+/* Per-widget accent (hover ◍ chip / right-click → Widget color). The colour is
+   applied in two halves that have to agree: the widget mixes --tile-accent into
+   its own card via ?tint= (see widgetEmbedUrl), and these shadows carry it
+   outward into the light the tile throws on the wallpaper. Only the outside
+   half lives here — box-shadow paints beyond the frame, backgrounds don't.
+   Driven by the inline --tile-accent var, same grammar as the workspace card's
+   --card-accent. */
 .wgb-tile.has-accent {
     background: color-mix(in srgb, var(--tile-accent) 20%, rgba(255, 255, 255, 0.026));
     box-shadow:
@@ -740,8 +739,8 @@
     background: rgba(15, 23, 42, 0.04);
 }
 
-/* Light theme: the bezel sits against a light widget surface, so the plate is
-   mixed toward white instead of toward the dark plate. */
+/* Light theme: the glow sits against a light widget card, so the plate is mixed
+   toward white instead of toward the dark plate. */
 .bg-white-cred .wgb-tile.has-accent {
     background: color-mix(in srgb, var(--tile-accent) 16%, rgba(15, 23, 42, 0.04));
     box-shadow:

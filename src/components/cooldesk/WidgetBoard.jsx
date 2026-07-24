@@ -4,10 +4,10 @@ import { AccentColorPicker } from './AccentColorPicker.jsx';
 import {
     WIDGET_CATALOG,
     WIDGET_CATEGORIES,
-    WIDGET_STORE_ORIGIN,
     WIDGET_STORE_URL,
     getWidget,
     widgetEmbedUrl,
+    widgetEmbedOrigin,
     widgetSandbox,
 } from '../../data/widgetCatalog';
 import {
@@ -21,12 +21,13 @@ import { attachWidgetHostBridge } from '../../services/widgetHostBridge';
 import './WidgetBoard.css';
 
 // Every widget iframe gets the host bridge on load: widget data mirrors into
-// the extension's own IndexedDB and survives cool-desk.com site-data wipes.
+// the extension's own IndexedDB. Widgets are now served same-origin (bundled in
+// public/widgets/), so the bridge targets the app's own origin.
 // The 'loaded' class fades the frame in — boxes are pre-sized, so late paint
 // is an opacity change, never a layout shift.
 const bridgeOnLoad = (e) => {
     e.currentTarget.classList.add('loaded');
-    attachWidgetHostBridge(e.currentTarget, WIDGET_STORE_ORIGIN);
+    attachWidgetHostBridge(e.currentTarget, widgetEmbedOrigin());
 };
 
 // User-authored widgets render in the extension's sandboxed page: opaque
@@ -138,6 +139,26 @@ function currentTheme() {
     }
 }
 
+// Must be reactive, not read once. Widgets are embedded with ?embed=host, so
+// the tile paints the surface and the iframe paints only the text — a stale
+// theme here means the tile flips (its .bg-white-cred ancestor class is live)
+// while the iframe doesn't, which is exactly the white-on-white that got the
+// host-owned surface reverted last time.
+function useWidgetTheme() {
+    const [theme, setTheme] = useState(currentTheme);
+    useEffect(() => {
+        const sync = () => setTheme(currentTheme());
+        // In-page switch (Settings / onboarding) and other-window switch.
+        window.addEventListener('cooldesk-theme-changed', sync);
+        window.addEventListener('storage', sync);
+        return () => {
+            window.removeEventListener('cooldesk-theme-changed', sync);
+            window.removeEventListener('storage', sync);
+        };
+    }, []);
+    return theme;
+}
+
 const WidgetTile = memo(function WidgetTile({ tile, widget, theme, dragging, onResize, onRemove, onRecolor, onDragStart, onDragEnter, onDragEnd }) {
     const [menu, setMenu] = useState(null);
 
@@ -194,7 +215,7 @@ const WidgetTile = memo(function WidgetTile({ tile, widget, theme, dragging, onR
             ) : (
                 <iframe
                     className="wgb-frame"
-                    src={widgetEmbedUrl(widget.id, theme)}
+                    src={widgetEmbedUrl(widget.id, theme, tile.color)}
                     title={widget.name}
                     sandbox={widgetSandbox(widget)}
                     onLoad={bridgeOnLoad}
@@ -525,7 +546,7 @@ const WidgetBoard = memo(function WidgetBoard({ storageArea, compact = false, de
     const [collapsed, setCollapsed] = useState(() => {
         try { return compact && localStorage.getItem(collapseKey) === '1'; } catch { return false; }
     });
-    const theme = useMemo(currentTheme, []);
+    const theme = useWidgetTheme();
 
     const toggleCollapsed = useCallback(() => {
         setCollapsed(prev => {

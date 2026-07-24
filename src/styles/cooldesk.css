@@ -2889,6 +2889,10 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 
   .cooldesk-workspace-card.compact.panel-open .wcp-notes-col {
     padding-left: 0;
+    margin-top: 6px;
+    padding-top: 18px;
+    border-left: none;
+    border-top: 1px solid rgba(148, 163, 184, 0.14);
   }
 }
 
@@ -4161,8 +4165,16 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   flex-direction: row;
 }
 
+/* Stacked single-column: the notes column follows the whole rail top-to-bottom,
+   so the Next Up "What's next…" add-todo input ends up butting against the NOTES
+   header and reads as floating between the two lists. A divider marks NOTES as
+   its own section and pins the add-input to the todos above it. */
 .workspace-detail-view .wcp-notes-col {
   padding-left: 0;
+  margin-top: 6px;
+  padding-top: 18px;
+  border-left: none;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
 }
 
 /* The narrow-mode strip hides the big workspace icon tile to save width;
@@ -6370,7 +6382,7 @@ body.bg-white-cred .workspace-context-panel.has-accent {
 .wcp-todo-input {
   flex: 1;
   background: rgba(8, 11, 22, 0.5);
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 7px;
   padding: 7px 10px;
   color: #e2e8f0;

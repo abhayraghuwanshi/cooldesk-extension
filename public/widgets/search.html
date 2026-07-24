@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Search — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget" style="justify-content:center">
+  <form class="row" id="form">
+    <select id="engine" style="width:96px">
+      <option value="https://www.google.com/search?q=">Google</option>
+      <option value="https://duckduckgo.com/?q=">DuckDuckGo</option>
+      <option value="https://www.bing.com/search?q=">Bing</option>
+      <option value="https://www.youtube.com/results?search_query=">YouTube</option>
+      <option value="https://github.com/search?q=">GitHub</option>
+    </select>
+    <input class="grow" id="q" placeholder="Search the web…" autocomplete="off" autofocus>
+    <button class="primary">Go</button>
+  </form>
+</main>
+<script src="search.js?v=5"></script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shortcut of the Day — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<style>
+  kbd {
+    font-family: ui-monospace, monospace; font-size: 13px; font-weight: 700;
+    border: 1px solid var(--faint); border-bottom-width: 2.5px; border-radius: 6px;
+    padding: 4px 9px; background: var(--card);
+  }
+</style>
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget" style="justify-content:center;gap:12px">
+  <div class="row spread">
+    <span class="label">Shortcut of the day</span>
+    <span class="label" id="app"></span>
+  </div>
+  <div class="row" id="keys" style="gap:5px;flex-wrap:wrap"></div>
+  <span id="what" style="font-size:13px;line-height:1.5"></span>
+  <button class="ghost" id="next" style="align-self:flex-start">Next →</button>
+</main>
+<script src="shortcuts.js?v=5"></script>
+</body>
+</html>

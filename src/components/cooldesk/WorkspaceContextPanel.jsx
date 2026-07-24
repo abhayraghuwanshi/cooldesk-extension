@@ -17,6 +17,10 @@ import {
 // Heavy: @tiptap/* (a dozen extensions). Only load when a note is actually opened.
 const TiptapEditor = lazy(() => import('../spatial/editor/TiptapEditor'));
 
+// Editor appTypes: a project folder added as "open in <editor>" is stored with the
+// editor's key rather than 'folder', but its path is still the project root.
+const CUSTOM_EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'rubymine', 'fleet', 'zed'];
+
 const STATUS_OPTIONS = [
   { key: 'active',   label: 'Active',   color: '#22c55e', icon: faBolt },
   { key: 'planning', label: 'Planning', color: '#60a5fa', icon: faCompass },
@@ -56,12 +60,22 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
   const { id: workspaceId, name } = workspace;
 
   // ── CoolDesk (.cooldesk) — committed project knowledge from the workspace folder ──
+  // A project folder may be stored as a plain 'folder' app OR as an editor app
+  // (appType 'vscode' / 'cursor' / … when added as "open the folder in <editor>").
+  // Both name a directory root that can hold a committed .cooldesk/, so both are
+  // valid candidates — prefer a plain folder, then fall back to an editor folder.
   const folderPath = useMemo(() => {
-    const folder = (workspace?.apps || []).find(a => a.appType === 'folder' && a.path);
-    return folder?.path || null;
+    const apps = workspace?.apps || [];
+    const plain = apps.find(a => a.appType?.toLowerCase() === 'folder' && a.path);
+    if (plain) return plain.path;
+    const editorFolder = apps.find(a => CUSTOM_EDITORS.includes(a.appType?.toLowerCase()) && a.path);
+    return editorFolder?.path || null;
   }, [workspace]);
   const [cooldesk, setCooldesk] = useState(null);
-  const [readmeView, setReadmeView] = useState(false);
+  // Which committed README is open in the reader, or null for the notes list.
+  // Holds the selected doc ({ name, readme }) so grouped workspaces can surface
+  // each linked project's README, not only the hub's.
+  const [readmeDoc, setReadmeDoc] = useState(null);
 
   useEffect(() => {
     if (!folderPath) { setCooldesk(null); return; }
@@ -84,9 +98,29 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
     return [...map.entries()].map(([project, items]) => ({ project, items }));
   }, [sharedTodos]);
   const showCatHeads = sharedTodos.length > 0;
+
+  // Every committed README available for this workspace: the hub's own, plus each
+  // linked group member that ships one. Members often include the hub itself
+  // (path "."), so dedupe it out by project id / name.
+  const readmeDocs = useMemo(() => {
+    if (!cooldesk) return [];
+    const out = [];
+    const hubId = cooldesk.project?.id;
+    if (cooldesk.readme) {
+      out.push({ id: hubId || 'hub', name: cooldesk.project?.name || 'This project', readme: cooldesk.readme });
+    }
+    for (const m of (cooldesk.members || [])) {
+      if ((m.project?.id || m.name) === hubId) continue; // skip the hub's own member entry
+      if (m.readme) {
+        out.push({ id: m.project?.id || m.path || m.name, name: m.project?.name || m.name || 'Linked project', readme: m.readme });
+      }
+    }
+    return out;
+  }, [cooldesk]);
+
   const readmeHtml = useMemo(
-    () => (cooldesk?.readme ? marked.parse(cooldesk.readme, { breaks: true }) : ''),
-    [cooldesk],
+    () => (readmeDoc?.readme ? marked.parse(readmeDoc.readme, { breaks: true }) : ''),
+    [readmeDoc],
   );
 
   // Status
@@ -169,14 +203,14 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
 
   // ── Notes ───────────────────────────────────────────────────────────────
   const openNote = useCallback((note) => {
-    setReadmeView(false);
+    setReadmeDoc(null);
     setActiveNote(note);
     setNoteTitle(note.title || '');
     setNoteContent(note.text || '');
   }, []);
 
   const newNote = useCallback(() => {
-    setReadmeView(false);
+    setReadmeDoc(null);
     const blank = {
       id: `wsnote_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       workspaceId,
@@ -413,15 +447,15 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
           <header className="wcp-section-head" data-accent="notes">
             <span className="wcp-section-bar" aria-hidden="true" />
             <h4 className="wcp-section-title">
-              {readmeView ? 'README' : activeNote ? 'Drafting' : 'Notes'}
+              {readmeDoc ? `README · ${readmeDoc.name}` : activeNote ? 'Drafting' : 'Notes'}
             </h4>
-            {readmeView && (
+            {readmeDoc && (
               <span className="wcp-notes-readonly-tag" title="Read-only — from .cooldesk">shared</span>
             )}
-            {!activeNote && !readmeView && notes.length > 0 && (
+            {!activeNote && !readmeDoc && notes.length > 0 && (
               <span className="wcp-section-count">{notes.length}</span>
             )}
-            {!activeNote && !readmeView && (
+            {!activeNote && !readmeDoc && (
               <button
                 type="button"
                 className="wcp-notes-new-btn"
@@ -433,9 +467,9 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
                 <span>New</span>
               </button>
             )}
-            {readmeView && (
+            {readmeDoc && (
               <div className="wcp-notes-actions">
-                <button type="button" className="wcp-notes-back" onClick={() => setReadmeView(false)}>
+                <button type="button" className="wcp-notes-back" onClick={() => setReadmeDoc(null)}>
                   <FontAwesomeIcon icon={faArrowLeft} />
                   <span>Back</span>
                 </button>
@@ -462,7 +496,7 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
             )}
           </header>
 
-          {readmeView ? (
+          {readmeDoc ? (
             <div className="wcp-note-editor wcp-readme-view">
               <div className="wcp-note-tiptap">
                 <Suspense fallback={<div className="wcp-note-loading">Loading…</div>}>
@@ -490,21 +524,22 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
             </div>
           ) : (
             <div className="wcp-notes-list">
-              {cooldesk?.readme && (
+              {readmeDocs.map(doc => (
                 <div
+                  key={doc.id}
                   className="wcp-note-card is-readme"
-                  onClick={() => setReadmeView(true)}
+                  onClick={() => setReadmeDoc(doc)}
                   role="button"
                   tabIndex={0}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setReadmeView(true); } }}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setReadmeDoc(doc); } }}
                 >
                   <div className="wcp-note-card-row">
-                    <span className="wcp-note-card-title">README</span>
+                    <span className="wcp-note-card-title">README · {doc.name}</span>
                     <span className="wcp-note-readme-tag">.cooldesk</span>
                   </div>
                   <span className="wcp-note-card-preview">Committed project readme — read-only</span>
                 </div>
-              )}
+              ))}
               {notes.length === 0 ? (
                 <button type="button" className="wcp-notes-empty" onClick={newNote}>
                   <span className="wcp-notes-empty-glyph">✎</span>

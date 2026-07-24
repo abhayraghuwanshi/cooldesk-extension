@@ -104,7 +104,11 @@ export default defineConfig(({ mode }) => {
       crx({
         manifest,
         contentSecurityPolicy: {
-          'extension_pages': "script-src 'self' 'wasm-unsafe-eval' http://localhost:5173; object-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com https://*.firebaseio.com https://accounts.google.com https://*.google.com https://identitytoolkit.googleapis.com http://localhost:* http://127.0.0.1:* wss://localhost:* ws://localhost:* ws://127.0.0.1:*"
+          // Widgets are bundled (public/widgets/) and framed same-origin, so the
+          // extension's own CSP now governs them: frame-src 'self' to embed them,
+          // and their data-API hosts in connect-src (weather/crypto/currency/etc.),
+          // which previously ran under cool-desk.com when framed cross-origin.
+          'extension_pages': "script-src 'self' 'wasm-unsafe-eval' http://localhost:5173; object-src 'self'; frame-src 'self' https://www.google.com https://cool-desk.com; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com https://*.firebaseio.com https://accounts.google.com https://*.google.com https://identitytoolkit.googleapis.com https://api.open-meteo.com https://api.coingecko.com https://api.frankfurter.app https://en.wikipedia.org http://localhost:* http://127.0.0.1:* wss://localhost:* ws://localhost:* ws://127.0.0.1:*"
         }
       }),
       react(),

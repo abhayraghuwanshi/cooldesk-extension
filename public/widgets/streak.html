@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Streak — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget" style="justify-content:center;gap:10px">
+  <span class="label" id="title"></span>
+  <div class="row" style="align-items:baseline;gap:10px">
+    <span class="big mono" id="days" style="font-size:52px">0</span>
+    <span class="muted" style="font-size:14px">days</span>
+  </div>
+  <form class="row" id="form" style="gap:6px">
+    <input id="label" placeholder="Label" style="width:110px;font-size:11px;padding:4px 8px" maxlength="30">
+    <input id="date" type="date" style="font-size:11px;padding:4px 8px">
+    <button class="ghost">Set</button>
+  </form>
+</main>
+<script src="streak.js?v=5"></script>
+</body>
+</html>

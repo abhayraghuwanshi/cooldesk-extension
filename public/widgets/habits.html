@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Habit Tracker — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<style>
+  .hrow { display: flex; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--faint); }
+  .hrow:last-child { border-bottom: none; }
+  .hname { flex: 1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dot { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--faint); cursor: pointer; padding: 0; }
+  .dot.on { background: var(--accent); border-color: var(--accent); }
+  .dot.today { border-color: var(--fg); }
+  .hrow .del { padding: 0 5px; border: none; opacity: 0; }
+  .hrow:hover .del { opacity: 1; }
+</style>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget">
+  <div class="row spread">
+    <span class="label">Habits — this week</span>
+    <span class="label" id="days"></span>
+  </div>
+  <div class="list" id="rows"></div>
+  <form class="row" id="form">
+    <input class="grow" id="input" placeholder="New habit…" maxlength="40">
+  </form>
+</main>
+<script src="habits.js?v=5"></script>
+</body>
+</html>

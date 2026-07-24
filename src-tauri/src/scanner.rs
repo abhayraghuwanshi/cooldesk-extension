@@ -916,14 +916,20 @@ mod windows_impl {
         // windows (e.g. Windows Terminal's monarch window) aren't valid focus
         // targets; surfacing them produced phantom entries that focused nothing.
         // (Minimized windows report visible=true, so they're still included;
-        // other-desktop windows are cloaked and already filtered out above.)
+        // app-cloaked windows were dropped above — note shell-cloaked ones,
+        // including other-desktop windows, still reach here and are tagged via
+        // `is_on_current_desktop` rather than filtered.)
+        //
+        // Tabbed apps get no help from this loop: WT and Explorer keep every
+        // tab inside ONE hwnd whose title reflects only the active tab, so the
+        // inactive ones are invisible to EnumWindows by construction. They are
+        // recovered later via UIA — see `tab_uia::supports_tabs`.
         if is_visible {
             let titles = state.pid_to_titles.entry(pid).or_default();
             let hwnd_val = hwnd.0 as i64;
             // Dedup by hwnd (always unique from EnumWindows), NOT by title:
-            // Windows Terminal exposes each tab as a separate, same-titled
-            // top-level window (e.g. three "Command Prompt" tabs, each its own
-            // cloaked hwnd). Collapsing by title would hide all but one session.
+            // an app can legitimately own several same-titled windows, and
+            // collapsing by title would hide all but one of them.
             if !titles.iter().any(|(h, _)| *h == hwnd_val) {
                 titles.push((hwnd_val, title));
             }

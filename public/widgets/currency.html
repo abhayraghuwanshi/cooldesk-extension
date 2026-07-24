@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Currency — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget" style="justify-content:center">
+  <span class="label">Currency converter</span>
+  <div class="row">
+    <input class="grow mono" id="amount" type="number" value="100" min="0" step="any">
+    <select id="from"></select>
+  </div>
+  <div class="row">
+    <span class="big mono grow" id="result" style="font-size:26px">—</span>
+    <select id="to"></select>
+  </div>
+  <span class="label" id="status"></span>
+</main>
+<script src="currency.js?v=5"></script>
+</body>
+</html>

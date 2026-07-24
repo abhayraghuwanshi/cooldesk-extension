@@ -63,7 +63,8 @@
       "Bash(mkdir -p linktest/alpha/.cooldesk linktest/beta/.cooldesk)",
       "Bash(echo '{\"schemaVersion\":1,\"project\":{\"id\":\"alpha\",\"name\":\"Alpha App\",\"status\":\"active\"}}')",
       "Bash(echo '{\"schemaVersion\":1,\"project\":{\"id\":\"beta\",\"name\":\"Beta Service\",\"status\":\"active\"}}')",
-      "Bash(python -)"
+      "Bash(python -)",
+      "Bash(powershell -NoProfile -Command \"Get-Process node -EA SilentlyContinue | Select-Object Id, StartTime | Sort-Object StartTime | Format-Table -AutoSize\")"
     ],
     "deny": [],
     "ask": [],

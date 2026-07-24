@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Snippets — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<style>
+  .snip { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--faint); border-radius: 8px; cursor: pointer; transition: border-color .15s; }
+  .snip:hover { border-color: var(--accent); }
+  .snip .del { padding: 0 5px; border: none; opacity: 0; }
+  .snip:hover .del { opacity: 1; }
+</style>
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget">
+  <div class="row spread">
+    <span class="label" id="status">Snippets — click to copy</span>
+    <button class="ghost" id="add">+ Add</button>
+  </div>
+  <form class="stack" id="form" style="display:none;gap:6px">
+    <input id="name" placeholder="Name" maxlength="30" required>
+    <div class="row">
+      <input class="grow" id="text" placeholder="Text to copy" required>
+      <button class="primary">Save</button>
+    </div>
+  </form>
+  <div class="list stack" id="rows" style="gap:6px"></div>
+</main>
+<script src="snippets.js?v=5"></script>
+</body>
+</html>

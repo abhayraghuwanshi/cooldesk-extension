@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GitHub Contributions — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<style>
+  img { width: 100%; height: auto; border-radius: 6px; }
+  [data-theme="dark"] img { filter: invert(0.92) hue-rotate(180deg); }
+</style>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget">
+  <div class="row spread">
+    <span class="label" id="title">GitHub contributions</span>
+    <form class="row" id="form" style="gap:4px">
+      <input id="user" placeholder="username" style="width:110px;font-size:11px;padding:4px 8px">
+    </form>
+  </div>
+  <div class="grow center" id="chartBox">
+    <img id="chart" alt="GitHub contribution graph" loading="lazy">
+  </div>
+</main>
+<script src="github.js?v=5"></script>
+</body>
+</html>

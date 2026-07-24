@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Regex Tester — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<style>
+  #out { flex: 1; overflow: auto; font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; padding: 9px 11px; }
+  mark { background: color-mix(in srgb, var(--accent) 35%, transparent); color: var(--fg); border-radius: 3px; padding: 0 1px; }
+</style>
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget">
+  <div class="row spread">
+    <span class="label">Regex tester</span>
+    <span class="label mono" id="count"></span>
+  </div>
+  <div class="row">
+    <span class="mono muted">/</span>
+    <input class="grow mono" id="pattern" placeholder="\b\w+@\w+\.\w+\b" autocomplete="off" spellcheck="false">
+    <span class="mono muted">/</span>
+    <input class="mono" id="flags" value="g" style="width:44px" maxlength="5">
+  </div>
+  <textarea id="text" class="mono" style="resize:none;height:64px;font-size:12px" spellcheck="false">Reach me at hello@cool-desk.com or support@example.org — not at "not-an-email".</textarea>
+  <div class="card mono" id="out"></div>
+</main>
+<script src="regex.js?v=5"></script>
+</body>
+</html>

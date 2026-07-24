@@ -11,7 +11,7 @@
 
 export const WIDGET_STORE_ORIGIN = 'https://cool-desk.com';
 export const WIDGET_STORE_URL = `${WIDGET_STORE_ORIGIN}/widgets`;
-const WIDGET_VERSION = '3';
+const WIDGET_VERSION = '5';
 
 export const WIDGET_CATEGORIES = ['CoolDesk', 'Time & Focus', 'Productivity', 'Data & Life', 'Dev Tools'];
 
@@ -63,14 +63,42 @@ export function getWidget(id) {
     return byId.get(id) || null;
 }
 
-export function widgetEmbedUrl(id, theme) {
-    // Widgets paint their own surface (the website's --surface token — a uniform
-    // frosted panel that matches the ?theme). We deliberately do NOT use the
-    // host-owned `embed=host` transparency: it made the widget body transparent
-    // and depended on the board's tile + the ?theme in this URL (memoized once)
-    // staying in sync, which desynced on a theme switch and rendered widgets
-    // white-on-white. Self-contained = text and background always agree.
-    return `${WIDGET_STORE_ORIGIN}/widgets/${id}.html?theme=${theme === 'light' ? 'light' : 'dark'}&v=${WIDGET_VERSION}`;
+// Widgets are bundled WITH the app (public/widgets/) and served from the app's
+// OWN origin, not from cool-desk.com. Same-origin means the host talks to them
+// directly, they update with the app (no deploy-to-cool-desk.com loop), and — if
+// ever needed — the host can style them without the cross-origin wall. The public
+// store page (WIDGET_STORE_URL, above) still lives on cool-desk.com for browsing.
+//
+// Widgets paint their own OPAQUE surface. Do not send `embed=host` (transparent
+// widget, host tile paints the card): the iframe canvas renders opaque white in
+// this app — verified twice — so a transparent widget is white-on-white, and a
+// translucent one is the grey slab that white shows through. Nothing the host
+// draws behind the frame is ever visible.
+//
+// `tint` is how the per-tile accent reaches the widget: the page mixes it into
+// its own surface and --accent (see public/widgets/cooldesk.js + base.css).
+function widgetBase() {
+    // Resolve against the running document so it's correct in dev (the Vite
+    // server origin), the Tauri build (the app origin), and Electron (file://).
+    try { return new URL('widgets/', document.baseURI); }
+    catch { return new URL('widgets/', location.href); }
+}
+
+export function widgetEmbedUrl(id, theme, tint) {
+    const t = typeof tint === 'string' ? tint.replace(/^#/, '') : '';
+    const tintParam = /^(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(t) ? `&tint=${t}` : '';
+    const query = `?theme=${theme === 'light' ? 'light' : 'dark'}${tintParam}&v=${WIDGET_VERSION}`;
+    return new URL(`${id}.html${query}`, widgetBase()).href;
+}
+
+// Origin to target when postMessage-ing the host bridge into a widget iframe.
+// Widgets are same-origin now, so it's the app's own origin; fall back to '*'
+// for opaque origins (file://) where a concrete origin string isn't usable.
+export function widgetEmbedOrigin() {
+    try {
+        const o = new URL(widgetBase()).origin;
+        return o && o !== 'null' ? o : '*';
+    } catch { return '*'; }
 }
 
 export function widgetSandbox(widget) {

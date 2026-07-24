@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tasks — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<style>
+  .task { display: flex; align-items: center; gap: 9px; padding: 7px 2px; border-bottom: 1px solid var(--faint); font-size: 13px; }
+  .task:last-child { border-bottom: none; }
+  .task input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; flex-shrink: 0; }
+  .task.done span { text-decoration: line-through; color: var(--muted); }
+  .task button { padding: 2px 7px; opacity: 0; }
+  .task:hover button { opacity: 1; }
+</style>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget">
+  <div class="row spread">
+    <span class="label">Tasks</span>
+    <button class="ghost" id="clear">Clear done</button>
+  </div>
+  <form class="row" id="form">
+    <input class="grow" id="input" placeholder="Add a task…" maxlength="120" autocomplete="off">
+  </form>
+  <div class="list" id="items"></div>
+</main>
+<script src="todo.js?v=5"></script>
+</body>
+</html>

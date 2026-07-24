@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sunrise & Sunset — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget" style="justify-content:center;gap:12px">
+  <span class="label" id="city">Sun</span>
+  <div class="row spread">
+    <div class="stack" style="gap:3px">
+      <span class="label">🌅 Sunrise</span>
+      <span class="big mono" id="rise" style="font-size:24px">--:--</span>
+    </div>
+    <div class="stack" style="gap:3px;align-items:flex-end">
+      <span class="label">Sunset 🌇</span>
+      <span class="big mono" id="set" style="font-size:24px">--:--</span>
+    </div>
+  </div>
+  <div class="bar"><i id="fill" style="width:0%"></i></div>
+  <span class="label" id="len"></span>
+</main>
+<script src="sun.js?v=5"></script>
+</body>
+</html>

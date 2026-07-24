@@ -224,11 +224,12 @@ pub fn match_apps(scanner_data: ScannerOutput) -> Vec<AppEntry> {
                 // falsely match an unrelated app named after the folder and drag in
                 // all of explorer.exe's windows.
                 let win_exe = w.exe_name.trim_end_matches(".exe").to_lowercase();
-                // Windows Terminal packs each tab into a separate same-PID
-                // window titled by the running shell ("Command Prompt", "Windows
-                // PowerShell", ...). Letting those apps claim a tab by title
-                // would fragment the window — one app grabs it, the rest of the
-                // tabs vanish. Skip it so every tab surfaces as its own entry.
+                // Windows Terminal titles itself after the active tab's shell
+                // ("Command Prompt", "Windows PowerShell", ...). Letting the
+                // installed app of that name claim the WT window fragments it:
+                // one app grabs the window and `meaningful_titles` then filters
+                // down to that single title. Skipping keeps the window whole so
+                // the UIA tab expansion below can split it per tab.
                 if win_exe == "explorer"
                     || win_exe == "applicationframehost"
                     || win_exe == "windowsterminal"

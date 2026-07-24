@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JSON Formatter — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget">
+  <div class="row spread">
+    <span class="label">JSON formatter</span>
+    <span class="label" id="status"></span>
+  </div>
+  <textarea id="input" class="mono" placeholder='{"paste":"json here"}' style="resize:none;height:74px;font-size:12px"></textarea>
+  <div class="row">
+    <button class="primary" id="format">Format</button>
+    <button id="minify">Minify</button>
+    <span class="grow"></span>
+    <button class="ghost" id="copy">Copy result</button>
+  </div>
+  <textarea id="output" class="mono grow" readonly placeholder="→ result" style="resize:none;font-size:12px;line-height:1.5"></textarea>
+</main>
+<script src="json.js?v=5"></script>
+</body>
+</html>

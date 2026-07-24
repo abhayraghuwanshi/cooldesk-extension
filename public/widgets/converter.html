@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unit Converter — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget" style="justify-content:center">
+  <div class="row spread">
+    <span class="label">Unit converter</span>
+    <select id="cat" style="font-size:11px;padding:4px 8px"></select>
+  </div>
+  <div class="row">
+    <input class="grow mono" id="input" type="number" value="1" step="any">
+    <select id="from"></select>
+  </div>
+  <div class="row">
+    <span class="big mono grow" id="output" style="font-size:24px">—</span>
+    <select id="to"></select>
+  </div>
+</main>
+<script src="converter.js?v=5"></script>
+</body>
+</html>

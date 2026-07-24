@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Timer & Stopwatch — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget">
+  <div class="row">
+    <button class="ghost" id="tabTimer">Timer</button>
+    <button class="ghost" id="tabWatch">Stopwatch</button>
+  </div>
+  <div class="grow center">
+    <span class="big mono" id="display" style="font-size:46px">05:00</span>
+  </div>
+  <div class="row" id="presets">
+    <button data-min="5">5m</button>
+    <button data-min="10">10m</button>
+    <button data-min="25">25m</button>
+    <input id="custom" type="number" min="1" max="720" placeholder="min" style="width:64px">
+  </div>
+  <div class="row">
+    <button class="primary grow" id="toggle">Start</button>
+    <button class="ghost" id="reset">Reset</button>
+  </div>
+</main>
+<script src="timer.js?v=5"></script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spotlight — CoolDesk Widget</title>
+<link rel="stylesheet" href="base.css?v=4">
+<script src="cooldesk.js?v=4"></script>
+<style>
+  .hit { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 8px; font-size: 13px; }
+  .hit.sel { background: var(--card); }
+  .hit .kind { font-family: ui-monospace, monospace; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-left: auto; }
+</style>
+<link rel="icon" href="/favicon.ico"></head>
+<body>
+<main class="widget">
+  <input id="q" placeholder="Search tabs, apps, notes, workspaces…" autocomplete="off" style="font-size:14px;padding:10px 12px">
+  <div class="list" id="hits"></div>
+  <span class="label" id="hint">In CoolDesk this is Alt+K — across your whole machine</span>
+</main>
+<script src="spotlight.js?v=5"></script>
+</body>
+</html>

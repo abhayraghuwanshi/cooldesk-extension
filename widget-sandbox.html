@@ -54,6 +54,16 @@
           document.write(spec.html);
           document.close();
           document.documentElement.dataset.theme = spec.theme === 'light' ? 'light' : 'dark';
+          // Give the canvas an opaque default, matching the store widgets'
+          // --surface. The frame canvas is opaque white in this app, so a widget
+          // that paints nothing would otherwise be a white slab on the board.
+          // Inserted first in <head> so a widget's own background still wins.
+          try {
+            var base = document.createElement('style');
+            base.textContent = 'html,body{background:' +
+              (spec.theme === 'light' ? '#f7f7f4' : '#17171c') + '}';
+            if (document.head) document.head.insertBefore(base, document.head.firstChild);
+          } catch (e) { /* malformed widget HTML: leave the default canvas */ }
         });
       }
 

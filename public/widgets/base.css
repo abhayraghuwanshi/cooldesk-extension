@@ -1,0 +1,146 @@
+/* CoolDesk widget base — shared tokens & primitives for all /widgets/*.html pages.
+   Theme is set by cooldesk.js from the ?theme= query param (dark is default). */
+
+:root {
+  --bg: #0b0b0e;
+  /* Page surface every widget paints on. Kept separate from --bg (which is also
+     used as a foreground/inverted-text color, e.g. button.primary) so the card
+     tone is uniform regardless of how much the widget draws — a sparse widget
+     (year-progress) no longer reads as flat black next to a content-dense one
+     (tasks/clock).
+
+     OPAQUE, deliberately. This surface was translucent once, which looks right
+     on the store page but is wrong in an iframe: an embedded page composites
+     over the frame's own canvas, which the CoolDesk app renders opaque WHITE.
+     A translucent dark panel over white is the grey-white slab that made every
+     board widget look broken. Anything translucent here must be assumed to sit
+     on white, so: don't. See --tint below for how the host colours the card. */
+  --surface-base: #17171c;
+  /* Host tint (?tint=RRGGBB): the embedding board sends the tile's accent so the
+     card itself takes the colour. Without it the mix is a no-op. */
+  --tint: transparent;
+  --tint-strength: 0%;
+  --surface: color-mix(in srgb, var(--tint) var(--tint-strength), var(--surface-base));
+  --fg: #fafafa;
+  --muted: rgba(255, 255, 255, 0.45);
+  --faint: rgba(255, 255, 255, 0.14);
+  --card: rgba(255, 255, 255, 0.05);
+  --accent: #7cb3ff;
+  --good: #4ade80;
+  --bad: #f87171;
+}
+
+[data-theme="light"] {
+  --bg: #f6f6f3;
+  --surface-base: #f7f7f4;
+  --fg: #141414;
+  --muted: rgba(0, 0, 0, 0.5);
+  --faint: rgba(0, 0, 0, 0.12);
+  --card: rgba(0, 0, 0, 0.045);
+  --accent: #2563eb;
+  --good: #16a34a;
+  --bad: #dc2626;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+
+body {
+  background: var(--surface);
+  /* No backdrop-filter: inside an iframe it can only sample the frame's own
+     canvas, never the host's wallpaper, so it costs a compositing layer and
+     buys nothing. The frosted look belongs to the host's tile, not here. */
+  color: var(--fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* Host-owned surface (?embed=host). RETAINED ONLY FOR OLD CLIENTS — do not send
+   this from anything new. It relies on the iframe canvas being transparent so a
+   host tile can show through; that holds in plain Chrome (verified, same- and
+   cross-origin) but NOT in the CoolDesk app, where the canvas renders opaque
+   white and the widget becomes white-on-white. Colour the card with ?tint=
+   instead, which works no matter what the canvas does. */
+html[data-embed="host"] body {
+  background: transparent;
+}
+
+.widget {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+  gap: 10px;
+}
+
+.label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.big {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.accent { color: var(--accent); }
+.good { color: var(--good); }
+.bad { color: var(--bad); }
+
+.row { display: flex; align-items: center; gap: 8px; }
+.spread { justify-content: space-between; }
+.grow { flex: 1; min-width: 0; }
+.center { display: flex; align-items: center; justify-content: center; }
+.stack { display: flex; flex-direction: column; gap: 8px; }
+.hair { border-top: 1px solid var(--faint); }
+
+button, .btn {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid var(--faint);
+  border-radius: 7px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+button:hover, .btn:hover { border-color: var(--accent); }
+button.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+button.ghost { border-color: transparent; color: var(--muted); }
+button.ghost:hover { color: var(--fg); }
+
+input, select, textarea {
+  font: inherit;
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--card);
+  border: 1px solid var(--faint);
+  border-radius: 7px;
+  padding: 7px 9px;
+  outline: none;
+  min-width: 0;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+input::placeholder, textarea::placeholder { color: var(--muted); }
+select { appearance: none; }
+
+.bar { height: 6px; background: var(--faint); border-radius: 99px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width 0.4s ease; }
+
+.list { flex: 1; overflow-y: auto; min-height: 0; }
+.card { background: var(--card); border: 1px solid var(--faint); border-radius: 9px; padding: 9px 11px; }
+
+a { color: inherit; text-decoration: none; }
+::-webkit-scrollbar { width: 0; height: 0; }
