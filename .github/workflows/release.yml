@@ -261,37 +261,59 @@ jobs:
           TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: |
+          set -euo pipefail
+
           # Always regenerate — tauri-action may have produced a partial file
-          # (only one platform) due to parallel job race condition
-          ASSETS=$(gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets')
+          # (only one platform) due to parallel job race condition.
           VERSION="${TAG#v}"
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-          NSIS_URL=$(echo "$ASSETS" | jq -r '.[] | select(.name | endswith("-setup.exe")) | .browserDownloadUrl' | head -1)
-          NSIS_SIG_URL=$(echo "$ASSETS" | jq -r '.[] | select(.name | endswith("-setup.exe.sig")) | .browserDownloadUrl' | head -1)
-          DMG_URL=$(echo "$ASSETS" | jq -r '.[] | select(.name | endswith(".dmg")) | .browserDownloadUrl' | head -1)
-          DMG_SIG_URL=$(echo "$ASSETS" | jq -r '.[] | select(.name | endswith(".dmg.sig")) | .browserDownloadUrl' | head -1)
+          # Build download URLs from the tag rather than reading them back from
+          # the API. The release is still a DRAFT at this point, and a draft's
+          # asset URLs contain a temporary `untagged-<hash>` segment that changes
+          # the moment the release is published — baking those in produces a
+          # latest.json full of 404s.
+          DL="https://github.com/$REPO/releases/download/$TAG"
 
-          NSIS_SIG=""
-          DMG_SIG=""
-          [ -n "$NSIS_SIG_URL" ] && NSIS_SIG=$(curl -sL "$NSIS_SIG_URL")
-          [ -n "$DMG_SIG_URL"  ] && DMG_SIG=$(curl -sL "$DMG_SIG_URL")
+          NAMES=$(gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name')
+          echo "==> Assets on $TAG:"; echo "$NAMES" | sed 's/^/    /'
 
-          if [ -z "$NSIS_SIG" ] && [ -z "$DMG_SIG" ]; then
-            echo "WARNING: No .sig files found — TAURI_SIGNING_PRIVATE_KEY may not be set. Skipping latest.json."
-            exit 0
-          fi
+          # Signatures must come over an authenticated download; a plain curl to
+          # the public URL cannot see a draft release's assets.
+          mkdir -p sigs
+          gh release download "$TAG" --repo "$REPO" --pattern '*.sig' --dir sigs || true
 
-          PLATFORMS="{}"
-          if [ -n "$NSIS_SIG" ] && [ -n "$NSIS_URL" ]; then
+          pick() { echo "$NAMES" | grep -E "$1" | head -1 || true; }
+          NSIS=$(pick '\-setup\.exe$')
+          MSI=$(pick '\.msi$')
+          APP_TGZ=$(pick '\.app\.tar\.gz$')
+
+          PLATFORMS='{}'
+          add_platform() {
+            local key="$1" file="$2"
+            [ -n "$file" ] || { echo "    skip $key — no matching asset"; return; }
+            [ -f "sigs/$file.sig" ] || { echo "    skip $key — $file.sig missing"; return; }
             PLATFORMS=$(echo "$PLATFORMS" | jq \
-              --arg sig "$NSIS_SIG" --arg url "$NSIS_URL" \
-              '."windows-x86_64" = {signature: $sig, url: $url}')
-          fi
-          if [ -n "$DMG_SIG" ] && [ -n "$DMG_URL" ]; then
-            PLATFORMS=$(echo "$PLATFORMS" | jq \
-              --arg sig "$DMG_SIG" --arg url "$DMG_URL" \
-              '."darwin-aarch64" = {signature: $sig, url: $url}')
+              --arg k "$key" \
+              --arg s "$(cat "sigs/$file.sig")" \
+              --arg u "$DL/$file" \
+              '.[$k] = {signature: $s, url: $u}')
+            echo "    + $key -> $file"
+          }
+
+          echo "==> Platforms:"
+          # windows-x86_64 is the key the updater actually looks up; the -nsis
+          # and -msi variants let an MSI-installed client update in place.
+          add_platform "windows-x86_64"      "$NSIS"
+          add_platform "windows-x86_64-nsis" "$NSIS"
+          add_platform "windows-x86_64-msi"  "$MSI"
+          # macOS updates ship as .app.tar.gz — the updater cannot consume a .dmg.
+          add_platform "darwin-aarch64"      "$APP_TGZ"
+
+          if [ "$(echo "$PLATFORMS" | jq 'length')" -eq 0 ]; then
+            echo "ERROR: no signed artifacts found — TAURI_SIGNING_PRIVATE_KEY is probably unset."
+            echo "Failing rather than publishing a release with a dead updater."
+            exit 1
           fi
 
           jq -n \

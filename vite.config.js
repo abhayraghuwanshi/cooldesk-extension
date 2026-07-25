@@ -8,8 +8,9 @@ import manifest from './manifest.json';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Switch between Chrome Extension (default) and Electron/Tauri builds using env
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const isElectron = mode === 'electron'
+  const isBuild = command === 'build'
 
   if (isElectron) {
     // Electron build: no crx(), relative paths for file:// protocol
@@ -161,7 +162,14 @@ export default defineConfig(({ mode }) => {
       }
     },
     esbuild: {
-      legalComments: 'none'
+      legalComments: 'none',
+      // Drop dev logging from the shipped extension. Marked `pure` rather than
+      // `drop: ['console']` so console.error/console.warn survive — a store
+      // reviewer or a user filing a bug still gets real failures in the console.
+      // Build-only: `npm run dev` keeps every log.
+      pure: isBuild
+        ? ['console.log', 'console.debug', 'console.info', 'console.trace']
+        : [],
     },
     define: {
       'global': 'window',
