@@ -14,16 +14,20 @@ import { WidgetBoard } from './WidgetBoard';
 // disk, so splitting it saved no network.
 const OverviewDashboard = memo(function OverviewDashboard() {
     return (
-        <div className="overview-dashboard-grid">
-            {/* Left: widget board + shared activity overview */}
-            <div className="overview-left-column">
-                <WidgetBoard />
-                <ActivityOverview embedded hideWhenEmpty />
-            </div>
+        // .overview-scope establishes the container-query context; the grid
+        // inside responds to this width, not the viewport.
+        <div className="overview-scope">
+            <div className="overview-dashboard-grid">
+                {/* Left: widget board + shared activity overview */}
+                <div className="overview-left-column">
+                    <WidgetBoard />
+                    <ActivityOverview embedded hideWhenEmpty />
+                </div>
 
-            {/* Right: Activity Feed — unchanged */}
-            <div className="overview-activity-column">
-                <ActivityFeed />
+                {/* Right: Activity Feed */}
+                <div className="overview-activity-column">
+                    <ActivityFeed />
+                </div>
             </div>
         </div>
     );

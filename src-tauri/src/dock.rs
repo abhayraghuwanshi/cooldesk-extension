@@ -90,8 +90,9 @@ mod imp {
         ABM_REMOVE, ABM_SETPOS, APPBARDATA,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetClassNameW, GetForegroundWindow, GetWindowRect, RegisterWindowMessageW, SetWindowPos,
-        HWND_TOPMOST, SWP_NOACTIVATE, SWP_SHOWWINDOW,
+        GetClassNameW, GetForegroundWindow, GetWindowLongPtrW, GetWindowRect,
+        RegisterWindowMessageW, IsIconic, SetWindowPos, GWL_STYLE, HWND_TOPMOST, SWP_NOACTIVATE,
+        SWP_SHOWWINDOW, WS_CAPTION,
     };
 
     // Holds the window handle (as isize) while an AppBar registration is live, so
@@ -168,6 +169,26 @@ mod imp {
                 ) {
                     return false;
                 }
+            }
+
+            if IsIconic(hwnd).as_bool() {
+                return false;
+            }
+
+            // A *maximized* window covers the monitor too, and Windows sizes it
+            // to overhang by the resize border on every edge — so the rect test
+            // below calls it fullscreen whenever the work area is close to the
+            // monitor (an auto-hidden taskbar is enough). That misread hid the
+            // drawer handle for as long as any maximized app held the
+            // foreground, which is most of the time.
+            //
+            // Genuine fullscreen surfaces — games, F11 browsers, video players —
+            // drop their caption to take the whole screen; maximized windows
+            // keep theirs. WS_CAPTION is two bits (WS_BORDER | WS_DLGFRAME), so
+            // test for both being set, not for a non-zero mask.
+            let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
+            if style & WS_CAPTION.0 == WS_CAPTION.0 {
+                return false;
             }
 
             let mut rc = RECT::default();

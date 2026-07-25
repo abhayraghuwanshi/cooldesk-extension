@@ -626,6 +626,18 @@ async function main() {
     });
   } catch { }
 
+  // Opened when the user removes the extension. This is the *only* uninstall
+  // hook extensions get — no code runs at removal time, so anything we want to
+  // know or say has to live on that page. Set outside onInstalled so it is
+  // re-applied whenever the service worker respawns.
+  try {
+    chrome.runtime.setUninstallURL?.(
+      `https://cool-desk.com/uninstall?v=${chrome.runtime.getManifest().version}`
+    );
+  } catch (e) {
+    console.debug('[Background] setUninstallURL unavailable', e);
+  }
+
   chrome.runtime.onInstalled.addListener(async () => {
     // Log pinning events to debut auto-pinning issue
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {

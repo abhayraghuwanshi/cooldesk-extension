@@ -90,6 +90,24 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
 
   const openLink = useCallback((item) => {
     if (!item?.url) return;
+
+    // Taskbar behavior, same as openApp below: if the page is already open in a
+    // synced browser tab, focus that tab instead of opening a duplicate. This is
+    // the same lookup that paints the item active, so the dot and the click
+    // agree on what "open" means.
+    const openTab = workspaceActivityService.findOpenTab(item.url);
+    if (openTab && window.electronAPI?.sendMessage) {
+      window.electronAPI.sendMessage({
+        type: 'JUMP_TO_TAB',
+        tabId: openTab.id,
+        windowId: openTab.windowId,
+        url: openTab.url,
+        _deviceId: openTab._deviceId,
+        browser: openTab.browser,
+      });
+      return;
+    }
+
     if (window.electronAPI?.openExternal) {
       window.electronAPI.openExternal(item.url);
     } else {
@@ -99,6 +117,27 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
 
   const openApp = useCallback((app) => {
     if (!app.path || !window.electronAPI) return;
+
+    // Folders resolve against Explorer window titles, not process paths, so they
+    // must be handled before findRunningApp — which would both miss the open
+    // window and risk matching an unrelated app that happens to share the
+    // folder's name (its name test is substring-based in either direction).
+    if (app.appType === 'folder') {
+      const open = workspaceActivityService.findOpenFolder(app.path);
+      if (open?.hwnd) {
+        if (open.tabIndex != null && window.electronAPI.focusAppTab) {
+          window.electronAPI.focusAppTab(open.hwnd, open.tabIndex, open.title);
+        } else if (window.electronAPI.focusApp) {
+          window.electronAPI.focusApp(open.pid, open.name, open.hwnd);
+        }
+        return;
+      }
+      if (window.electronAPI.openFolder) {
+        window.electronAPI.openFolder(app.path);
+        return;
+      }
+    }
+
     // Taskbar behavior: if it's already running, bring it forward.
     const running = workspaceActivityService.findRunningApp(app);
     if (running && !isEditorApp(app) && window.electronAPI.focusApp) {
@@ -239,7 +278,11 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
             );
           })}
           {apps.map((app, idx) => {
-            const isRunning = !!workspaceActivityService.findRunningApp(app);
+            // Match openApp's resolution order so the active dot and the click
+            // never disagree about whether this item is already open.
+            const isRunning = app.appType === 'folder'
+              ? !!workspaceActivityService.findOpenFolder(app.path)
+              : !!workspaceActivityService.findRunningApp(app);
             return (
             <button
               key={`app-${idx}`}

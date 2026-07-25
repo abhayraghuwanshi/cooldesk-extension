@@ -15,6 +15,7 @@ import scrapperConfig from '../../data/scrapper.json';
 import { getTimeSeriesDataRange, listPins, listScrapedChats } from '../../db/index.js';
 import { isElectronApp } from '../../services/environmentDetector';
 import { runningAppsService } from '../../services/runningAppsService.js';
+import { getDeviceId, getHostUrl, isSyncFeatureEnabled, loadSyncConfig } from '../../services/syncConfig.js';
 import '../../styles/cooldesk.css';
 import { enrichRunningAppsWithIcons, getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
 
@@ -38,6 +39,76 @@ const SEARCH_APPS = [
     { name: 'Bing', url: 'https://www.bing.com', domains: ['bing.com'] },
     { name: 'DuckDuckGo', url: 'https://duckduckgo.com', domains: ['duckduckgo.com'] },
 ];
+
+// Tabs living in *other* browsers (Edge/Brave/a second Chrome profile) are
+// invisible to chrome.tabs.* — each extension instance only sees its own
+// profile. The CoolDesk sidecar aggregates every connected browser's tabs into
+// GET /tabs, keyed by device, so we pull that and merge in the foreign ones.
+// Returns [] whenever the desktop app isn't running — this is purely additive.
+let syncConfigReady = null;
+async function fetchRemoteBrowserTabs(myDeviceId) {
+    // The extension page never boots the sync config on its own, so the
+    // in-memory copy would otherwise be defaults and ignore a user's opt-out.
+    syncConfigReady ||= loadSyncConfig().catch(() => null);
+    await syncConfigReady;
+    if (!isSyncFeatureEnabled('syncTabs')) return [];
+    try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 1500);
+        const res = await fetch(`${getHostUrl()}/tabs`, { signal: ctrl.signal });
+        clearTimeout(timer);
+        if (!res.ok) return [];
+        const all = await res.json();
+        if (!Array.isArray(all)) return [];
+        // Drop anything this browser already reported — we render those from the
+        // live chrome.tabs query, which is fresher than the 30s sidecar poll.
+        return all.filter(t => t?.url && t._deviceId && t._deviceId !== myDeviceId);
+    } catch {
+        return []; // app closed / sidecar down — stay silent
+    }
+}
+
+// Tint per browser so a row's owner is readable at a glance. Falls back to a
+// neutral slate for anything the sidecar reports that we don't have a colour for.
+const BROWSER_TINTS = {
+    chrome: '#4285F4',
+    edge: '#39B4EC',
+    brave: '#FB542B',
+    firefox: '#FF7139',
+    safari: '#22A6F2',
+};
+
+/**
+ * Compact pill marking a tab that lives in a *different* browser. Renders
+ * nothing for local tabs — the common case stays visually quiet, and the badge
+ * also explains why identical URLs collapse to one row (local always wins).
+ */
+const RemoteBrowserBadge = ({ item }) => {
+    if (!item?.remote) return null;
+    const key = (item.browser || '').toLowerCase();
+    const tint = BROWSER_TINTS[key] || '#94A3B8';
+    const label = key ? key.charAt(0).toUpperCase() + key.slice(1) : 'Other browser';
+    return (
+        <span
+            title={`Open in ${label} — clicking focuses it there`}
+            style={{
+                flexShrink: 0,
+                padding: '1px 6px',
+                borderRadius: '999px',
+                border: `1px solid ${tint}59`,
+                background: `${tint}1F`,
+                color: tint,
+                fontSize: 'var(--font-xs)',
+                fontWeight: 600,
+                lineHeight: 1.6,
+                letterSpacing: '0.02em',
+                whiteSpace: 'nowrap',
+            }}
+        >
+            {label}
+        </span>
+    );
+};
 
 // Platform config derived from scrapper.json
 const PLATFORM_CONFIG = scrapperConfig.platforms.reduce((acc, platform) => {
@@ -309,9 +380,12 @@ export function ActivityFeed() {
         const openTabUrls = new Set();
         try {
             if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) {
-                const tabs = await chrome.tabs.query({ currentWindow: true });
+                // Query ALL windows, not just the focused one — browser windows are
+                // often spread across virtual desktops, and { currentWindow: true }
+                // silently hid every tab that wasn't in the window holding this page.
+                const tabs = await chrome.tabs.query({});
                 const tabItems = tabs
-                    .filter(t => !t.url.startsWith('chrome://'))
+                    .filter(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('edge://'))
                     .map(tab => {
                         let hostname = 'Browser Tab';
                         try {
@@ -332,6 +406,36 @@ export function ActivityFeed() {
             }
         } catch (e) {
             console.error('Failed to load tabs', e);
+        }
+
+        // 2b. Fetch tabs open in OTHER browsers via the sidecar (Edge, Brave, a
+        // second Chrome profile...). chrome.tabs.* can't see them.
+        try {
+            const myDeviceId = await getDeviceId();
+            const remoteTabs = await fetchRemoteBrowserTabs(myDeviceId);
+            for (const tab of remoteTabs) {
+                if (openTabUrls.has(tab.url)) continue;
+                if (tab.url.startsWith('chrome://') || tab.url.startsWith('edge://')) continue;
+                if (tab.url.startsWith('chrome-extension://')) continue;
+                openTabUrls.add(tab.url);
+                items.push({
+                    id: `rtab_${tab._deviceId}_${tab.id}`,
+                    title: tab.title || 'Untitled Tab',
+                    url: tab.url,
+                    timestamp: Date.now(),
+                    type: 'tab',
+                    subtitle: safeGetHostname(tab.url) || 'Browser Tab',
+                    favIconUrl: tab.favIconUrl,
+                    // Remote-tab routing info — clicking these jumps in the owning browser
+                    remote: true,
+                    remoteTabId: tab.id,
+                    remoteWindowId: tab.windowId,
+                    deviceId: tab._deviceId,
+                    browser: tab.browser || null,
+                });
+            }
+        } catch (e) {
+            console.debug('[ActivityFeed] remote tabs unavailable', e);
         }
 
         // 3. Fetch Recent Browsing History (last 4 hours, skip already-open tabs)
@@ -575,8 +679,29 @@ export function ActivityFeed() {
         return () => resizeObserver.disconnect();
     }, [calculateVisibleFavorites, quickLinks]);
 
-    const handleItemClick = async (url) => {
+    const handleItemClick = async (url, item = null) => {
         if (!url) return;
+
+        // Tab lives in another browser — ask the sidecar to focus it there
+        // instead of opening a duplicate in this one.
+        if (item?.remote) {
+            try {
+                await fetch(`${getHostUrl()}/cmd/jump-to-tab`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tabId: item.remoteTabId,
+                        windowId: item.remoteWindowId,
+                        url,
+                        deviceId: item.deviceId,
+                        browser: item.browser,
+                    }),
+                });
+                return;
+            } catch (e) {
+                console.warn('[ActivityFeed] remote jump failed, opening locally', e);
+            }
+        }
 
         try {
             if (chrome?.tabs?.query) {
@@ -615,8 +740,10 @@ export function ActivityFeed() {
         }
     };
 
-    // Small × button shown on open-tab rows
-    const renderTabCloseBtn = (tabItem) => (
+    // Small × button shown on open-tab rows.
+    // Tabs owned by another browser can't be closed via chrome.tabs.remove, so
+    // they get no button rather than a dead one.
+    const renderTabCloseBtn = (tabItem) => tabItem?.remote ? null : (
         <button
             className="feed-tab-close"
             type="button"
@@ -1206,7 +1333,7 @@ export function ActivityFeed() {
     }, []);
 
     return (
-        <div className="cooldesk-panel" style={{ padding: 0, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="cooldesk-panel activity-feed-panel" style={{ padding: 0, display: 'flex', flexDirection: 'column' }}>
             {/* Header: Favorites */}
             <div>
                 <div style={{
@@ -1228,14 +1355,13 @@ export function ActivityFeed() {
                     className="favorites-scroll-container activity-feed-scroll"
                     style={{
                         display: 'flex',
+                        flexWrap: 'wrap',
                         gap: '8px',
-                        overflowX: 'auto',
-                        overflowY: 'hidden',
                         padding: '0 16px 12px 16px',
                         alignItems: 'center'
                     }}
                 >
-                    {quickLinks.length > 0 ? quickLinks.slice(0, visibleFavCount).map(link => (
+                    {quickLinks.length > 0 ? quickLinks.map(link => (
                         <div key={link.id}
                             onClick={() => handleItemClick(link.url)}
                             title={link.title}
@@ -1292,45 +1418,13 @@ export function ActivityFeed() {
                     )) : (
                         <div style={{ color: '#64748B', fontSize: '12px' }}>No favorites yet</div>
                     )}
-
-                    {/* +N More Indicator */}
-                    {quickLinks.length > visibleFavCount && (
-                        <div
-                            style={{
-                                width: '44px',
-                                height: '44px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                background: 'rgba(148, 163, 184, 0.15)',
-                                border: '1.5px solid rgba(148, 163, 184, 0.25)',
-                                borderRadius: '12px',
-                                cursor: 'pointer',
-                                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                                flexShrink: 0,
-                                fontSize: 'var(--font-sm)',
-                                fontWeight: 600,
-                                color: '#94A3B8'
-                            }}
-                            title={`${quickLinks.length - visibleFavCount} more favorites`}
-                            onClick={() => setVisibleFavCount(quickLinks.length)}
-                            onMouseEnter={e => {
-                                e.currentTarget.style.background = 'rgba(148, 163, 184, 0.25)';
-                                e.currentTarget.style.color = '#E5E7EB';
-                            }}
-                            onMouseLeave={e => {
-                                e.currentTarget.style.background = 'rgba(148, 163, 184, 0.15)';
-                                e.currentTarget.style.color = '#94A3B8';
-                            }}
-                        >
-                            +{quickLinks.length - visibleFavCount}
-                        </div>
-                    )}
                 </div>
             </div>
 
-            {/* Feed Tabs & List */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '0', display: 'flex', flexDirection: 'column' }}>
+            {/* Feed Tabs & List. Behavior is class-driven (.activity-feed-list):
+                wide two-pane = scrolls inside the fixed-height card; stacked
+                (≤600px) = grows and flows into the single page scroll. */}
+            <div className="activity-feed-list" style={{ padding: '0', display: 'flex', flexDirection: 'column' }}>
                 <div style={{
                     padding: '4px 16px 12px',
                     position: 'sticky',
@@ -1818,7 +1912,7 @@ export function ActivityFeed() {
                                             >
                                                 {/* Icon */}
                                                 <div
-                                                    onClick={() => handleItemClick(topTab.url)}
+                                                    onClick={() => handleItemClick(topTab.url, topTab)}
                                                     style={{
                                                         borderRadius: '8px',
                                                         display: 'flex',
@@ -1846,7 +1940,7 @@ export function ActivityFeed() {
 
                                                 {/* Info */}
                                                 <div
-                                                    onClick={() => handleItemClick(topTab.url)}
+                                                    onClick={() => handleItemClick(topTab.url, topTab)}
                                                     style={{ flex: 1, minWidth: 0 }}
                                                 >
                                                     <div style={{
@@ -1870,6 +1964,7 @@ export function ActivityFeed() {
                                                         <span>{item.domain}</span>
                                                         <span style={{ width: '2px', height: '2px', background: 'currentColor', borderRadius: '50%', opacity: 0.5 }}></span>
                                                         <span>{formatTime(topTab.timestamp)}</span>
+                                                        <RemoteBrowserBadge item={topTab} />
                                                     </div>
                                                 </div>
 
@@ -1919,7 +2014,7 @@ export function ActivityFeed() {
                                                         <div
                                                             key={tab.id}
                                                             className="feed-row"
-                                                            onClick={() => handleItemClick(tab.url)}
+                                                            onClick={() => handleItemClick(tab.url, tab)}
                                                             style={{
                                                                 display: 'flex',
                                                                 alignItems: 'center',
@@ -1949,6 +2044,7 @@ export function ActivityFeed() {
                                                                     {tab.title}
                                                                 </div>
                                                             </div>
+                                                            <RemoteBrowserBadge item={tab} />
                                                             <span style={{ fontSize: 'var(--font-xs)', color: '#64748B' }}>
                                                                 {formatTime(tab.timestamp)}
                                                             </span>
@@ -2324,7 +2420,7 @@ export function ActivityFeed() {
                                 return (
                                     <div key={item.id}
                                         className="feed-row"
-                                        onClick={() => handleItemClick(item.url)}
+                                        onClick={() => handleItemClick(item.url, item)}
                                         style={{
                                             display: 'flex',
                                             alignItems: 'center',
@@ -2391,6 +2487,7 @@ export function ActivityFeed() {
                                                 <span>{item.subtitle}</span>
                                                 <span style={{ width: '2px', height: '2px', background: 'currentColor', borderRadius: '50%', opacity: 0.5 }}></span>
                                                 <span>{formatTime(item.timestamp)}</span>
+                                                <RemoteBrowserBadge item={item} />
                                             </div>
                                         </div>
 

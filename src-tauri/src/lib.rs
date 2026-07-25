@@ -286,6 +286,18 @@ fn launched_by_autostart() -> bool {
     std::env::args().any(|a| a == ARG_AUTOSTART)
 }
 
+// The uninstaller runs `cooldesk.exe --quit` before removing files. The
+// single-instance plugin forwards it to the running process, which then exits
+// through `RunEvent::Exit` — the only path that releases the AppBar work-area
+// reservation (`dock::remove_dock`) and closes glued browser windows. Tauri's
+// own uninstall step force-kills the process, which skips all of that and can
+// leave a permanently shrunk desktop behind.
+const ARG_QUIT: &str = "--quit";
+
+fn quit_requested(args: &[String]) -> bool {
+    args.iter().any(|a| a == ARG_QUIT)
+}
+
 /// Get the main window, creating it if it doesn't exist yet.
 ///
 /// The main window is *not* declared in tauri.conf.json — declaring it there
@@ -333,6 +345,7 @@ fn attach_main_window_events(window: &tauri::WebviewWindow) {
             let app = win.app_handle();
             let st = load_dock_state(app);
             if st.enabled && st.mode == "drawer" && win.is_visible().unwrap_or(false) {
+                log::info!("[Dock] Panel blurred → collapsing to handle");
                 collapse_drawer(app, &st);
             }
         }
@@ -342,6 +355,19 @@ fn attach_main_window_events(window: &tauri::WebviewWindow) {
 
 /// Create and show the main window (creating it first if needed).
 fn show_main_window(app: &tauri::AppHandle) {
+    // In drawer mode the panel is not an ordinary window: it's a topmost strip
+    // pinned to a screen edge, and the handle must go away while it's up. Going
+    // through expand_drawer keeps every entry point (tray, relaunch, startup)
+    // consistent with the handle click. A plain show() here restored the panel
+    // without its topmost flag or dock geometry, so it came back underneath the
+    // other windows — and left the handle visible alongside it.
+    {
+        let st = load_dock_state(app);
+        if st.enabled && st.mode == "drawer" {
+            expand_drawer(app, &st);
+            return;
+        }
+    }
     if let Some(win) = ensure_main_window(app) {
         let _ = win.show();
         let _ = win.set_focus();
@@ -477,8 +503,13 @@ fn drawer_geom(app: &tauri::AppHandle, win: &tauri::WebviewWindow, horizontal: b
 /// overlay, and hide the handle.
 fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
     let horizontal = dock_is_horizontal(&st.side);
-    if let Some(main) = ensure_main_window(app) {
-        if let Some((mx, my, mw, mh)) = drawer_geom(app, &main, horizontal) {
+    let Some(main) = ensure_main_window(app) else {
+        log::error!("[Dock] expand_drawer: no main window");
+        return;
+    };
+    match drawer_geom(app, &main, horizontal) {
+        None => log::error!("[Dock] expand_drawer: no monitor geometry"),
+        Some((mx, my, mw, mh)) => {
             let (x, y, w, h) = if horizontal {
                 let h = st.bar_height.clamp(BAR_MIN_HEIGHT, BAR_MAX_HEIGHT) as i32;
                 let y = if st.side == "top" { my } else { my + mh - h };
@@ -509,6 +540,7 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
             let _ = main.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
             let _ = main.show();
             let _ = main.set_focus();
+            log::info!("[Dock] Panel expanded on {}: x={x} y={y} w={w} h={h}", st.side);
         }
     }
     if let Some(handle) = app.get_webview_window("handle") {
@@ -540,7 +572,17 @@ fn collapse_drawer(app: &tauri::AppHandle, st: &DockState) {
                 (x, y, HANDLE_W, HANDLE_H)
             };
             let _ = handle.set_always_on_top(true);
-            let _ = handle.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w as u32, height: h as u32 }));
+            // Windows clamps every top-level window to a minimum tracking size
+            // (SM_CXMINTRACK ≈ 136px wide, SM_CYMINTRACK ≈ 39px tall, DPI-scaled)
+            // via WM_GETMINMAXINFO. A vertical handle asks for 22px wide, which
+            // gets silently forced up to ~136px — turning the slim tab into a fat
+            // near-square (and flipping the grip horizontal via handle.html's
+            // aspect-ratio safety net). Horizontal docks escape it because their
+            // 132px width already clears the floor. Pin the min size to our exact
+            // target first so the clamp can't override set_size below.
+            let target = tauri::Size::Physical(tauri::PhysicalSize { width: w as u32, height: h as u32 });
+            let _ = handle.set_min_size(Some(target.clone()));
+            let _ = handle.set_size(target);
             let _ = handle.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
             let _ = handle.show();
         }
@@ -650,8 +692,10 @@ fn dock_get_state(app: tauri::AppHandle) -> DockState {
     load_dock_state(&app)
 }
 
+// Async for the same reason as `dock_expand`: reserve mode docks the main
+// window, which may still need building.
 #[tauri::command(rename_all = "snake_case")]
-fn dock_enable(
+async fn dock_enable(
     app: tauri::AppHandle,
     side: Option<String>,
     width: Option<u32>,
@@ -687,8 +731,14 @@ fn dock_disable(app: tauri::AppHandle) -> DockState {
 
 /// Slide the drawer panel in (called by the handle window's click, the tray, or
 /// the frontend). No-op if the dock isn't in drawer mode.
+///
+/// `async` on purpose: a sync command runs on the main thread *inside* the event
+/// loop, and if the panel still has to be built (headless autostart, before the
+/// pre-warm lands) `WebviewWindowBuilder::build` blocks that loop waiting for
+/// WebView2 — a deadlock. Off the main thread the build is proxied instead, so
+/// the loop stays free to service it.
 #[tauri::command]
-fn dock_expand(app: tauri::AppHandle) -> DockState {
+async fn dock_expand(app: tauri::AppHandle) -> DockState {
     let st = load_dock_state(&app);
     if st.enabled && st.mode == "drawer" {
         expand_drawer(&app, &st);
@@ -1014,6 +1064,51 @@ async fn focus_window_tab(
     } else {
         Err("tab not found".into())
     }
+}
+
+/// The name the shell shows for a folder, which is what Explorer puts in its
+/// window and tab titles: "Documents", "Local Disk (C:)", and the localized
+/// names of every special folder. Matching those titles by path basename only
+/// works for ordinary folders — `C:\Users\me\Documents` is titled "Documents",
+/// and on a non-English Windows it isn't even that.
+///
+/// Falls back to the basename when the shell has nothing better (or off-Windows).
+#[tauri::command]
+fn folder_display_name(path: String) -> String {
+    #[cfg(target_os = "windows")]
+    {
+        use windows::core::PCWSTR;
+        use windows::Win32::UI::Shell::{SHGetFileInfoW, SHFILEINFOW, SHGFI_DISPLAYNAME};
+
+        let wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+        let mut info = SHFILEINFOW::default();
+        let ok = unsafe {
+            SHGetFileInfoW(
+                PCWSTR(wide.as_ptr()),
+                Default::default(),
+                Some(&mut info),
+                std::mem::size_of::<SHFILEINFOW>() as u32,
+                SHGFI_DISPLAYNAME,
+            )
+        };
+        if ok != 0 {
+            let end = info
+                .szDisplayName
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(info.szDisplayName.len());
+            let name = String::from_utf16_lossy(&info.szDisplayName[..end]);
+            if !name.trim().is_empty() {
+                return name;
+            }
+        }
+    }
+
+    path.trim_end_matches(['\\', '/'])
+        .rsplit(['\\', '/'])
+        .next()
+        .unwrap_or("")
+        .to_string()
 }
 
 #[tauri::command]
@@ -2223,7 +2318,13 @@ async fn list_listening_ports() -> Result<Vec<ListeningPort>, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
-    .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+    .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+        // `--quit` from the uninstaller: shut this instance down cleanly rather
+        // than surfacing a window that's about to be deleted.
+        if quit_requested(&args) {
+            app.exit(0);
+            return;
+        }
         // When a second instance is launched, show the main window of the first
         // (creating it if the first instance came up headless via autostart).
         show_main_window(app);
@@ -2243,6 +2344,7 @@ pub fn run() {
         close_app,
         list_window_tabs,
         focus_window_tab,
+        folder_display_name,
         toggle_spotlight,
         hide_spotlight,
         set_spotlight_shortcut,
@@ -2281,6 +2383,15 @@ pub fn run() {
         delete_backup
     ])
     .setup(|app| {
+      // No instance was running, so `--quit` reached us as the primary. Exit
+      // before spawning the sidecar or a window — otherwise the uninstaller's
+      // shutdown request would leave a brand-new process running.
+      if quit_requested(&std::env::args().collect::<Vec<_>>()) {
+        log::info!("[Startup] --quit with no running instance; exiting");
+        app.handle().exit(0);
+        return Ok(());
+      }
+
       let autostarted = launched_by_autostart();
       log::info!("[Startup] autostart={}", autostarted);
 
@@ -2366,7 +2477,10 @@ pub fn run() {
 
       // Re-apply the workspace dock if the user left it enabled. Windows are
       // already created by the time setup runs.
-      {
+      //
+      // When it takes over, the dock owns the main window's visibility for the
+      // rest of startup — the plain show below must not fight it.
+      let dock_owns_window = {
           let app_handle = app.handle();
           let dock_state = load_dock_state(app_handle);
           if dock_state.enabled {
@@ -2379,8 +2493,11 @@ pub fn run() {
                   collapse_drawer(app_handle, &dock_state);
                   log::info!("[Dock] Restored drawer handle on startup ({})", dock_state.side);
               }
+              true
+          } else {
+              false
           }
-      }
+      };
 
       // Fullscreen watcher: the drawer handle is a plain topmost window, so —
       // unlike an AppBar — the shell never tells it to hide for a fullscreen app,
@@ -2401,13 +2518,27 @@ pub fn run() {
                   }
                   let Some(handle) = app_handle.get_webview_window("handle") else { continue };
                   let fullscreen = dock::foreground_is_fullscreen();
-                  if fullscreen && !hidden_for_fullscreen {
-                      let _ = handle.hide();
-                      hidden_for_fullscreen = true;
-                  } else if !fullscreen && hidden_for_fullscreen {
-                      let _ = handle.show();
-                      hidden_for_fullscreen = false;
+                  if fullscreen {
+                      if !hidden_for_fullscreen {
+                          let _ = handle.hide();
+                          hidden_for_fullscreen = true;
+                      }
+                      continue;
                   }
+
+                  // Not fullscreen, and the drawer is collapsed — so the handle
+                  // is the dock's only surface and it must be on screen. Assert
+                  // that every tick rather than only undoing our own hide: an
+                  // app that goes topmost buries the tab in the topmost band,
+                  // and whatever hid it (a stale hide, a display change) would
+                  // otherwise leave the dock simply gone until the next tray
+                  // click. SetWindowPos here is SWP_NOACTIVATE, so re-asserting
+                  // steals no focus and doesn't flicker.
+                  let _ = handle.set_always_on_top(true);
+                  if !handle.is_visible().unwrap_or(true) {
+                      let _ = handle.show();
+                  }
+                  hidden_for_fullscreen = false;
               }
           });
       }
@@ -2430,6 +2561,14 @@ pub fn run() {
                   }
               });
           });
+      } else if dock_owns_window {
+          // The dock decides when the panel is *shown*, but it must still exist
+          // by the time the handle is clicked. Building it lazily from inside
+          // `dock_expand` deadlocks: sync commands run on the main thread, and
+          // `WebviewWindowBuilder::build` needs that event loop free to pump
+          // WebView2 creation messages. Create it hidden here, during setup,
+          // where the loop isn't blocked; expand_drawer then only shows it.
+          let _ = ensure_main_window(app.handle());
       } else {
           show_main_window(app.handle());
       }

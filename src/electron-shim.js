@@ -464,6 +464,18 @@ const electronAPI = {
         }
     },
 
+    // Shell display name for a folder ("Documents", "Local Disk (C:)"), which is
+    // what Explorer titles its window/tab with. Used to match an open folder
+    // against a workspace entry.
+    folderDisplayName: async (path) => {
+        try {
+            return await invoke('folder_display_name', { path });
+        } catch (e) {
+            console.debug('[TauriShim] folderDisplayName failed:', e);
+            return null;
+        }
+    },
+
     closeApp: async (pid, hwnd) => {
         console.log('[TauriShim] closeApp called - pid:', pid, 'hwnd:', hwnd);
         try {
