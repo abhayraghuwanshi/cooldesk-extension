@@ -54,12 +54,9 @@ import { getBaseDomainFromUrl, getFaviconUrl, safeGetHostname } from '../../util
 import { AccentColorPicker } from './AccentColorPicker.jsx';
 import { GroupedLinksPopover } from './GroupedLinksPopover.jsx';
 import { UrlAnalyticsPopover } from './UrlAnalyticsPopover.jsx';
+import { isEditorApp, workspaceActivityService } from '../../services/workspaceActivityService.js';
 
 const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
-
-// Editor-style apps that launch with a folder/file argument (`code .`, `cursor .`)
-const CUSTOM_EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'rubymine', 'fleet', 'zed'];
-const isEditorApp = (app) => CUSTOM_EDITORS.includes(app?.appType?.toLowerCase());
 
 // Resolve a .cooldesk resource path (relative to the project root) to an absolute path.
 const joinProjectPath = (base, rel) => {
@@ -123,8 +120,12 @@ const CATEGORY_ICONS = {
   cooldesk: faVrCardboard
 };
 
-// Helper to open URLs - works in both extension and Electron modes
-const openUrl = (url, workspaceName, title) => {
+// Helper to open URLs - works in both extension and Electron modes.
+// Navigation itself is the shared find-or-create in workspaceActivityService:
+// a link already open in a synced tab is focused rather than duplicated, which
+// is what the dock has always done and the card used to not. Only the learning
+// signals below are card-specific, so they stay here.
+const openUrl = (url, workspaceName, title, target) => {
   if (!url) return;
 
   // Record feedback for RAG learning (fire-and-forget)
@@ -140,16 +141,7 @@ const openUrl = (url, workspaceName, title) => {
     recordUrlWorkspace(url, title || url, workspaceName).catch(() => { });
   }
 
-  // Prefer chrome.tabs.create for extensions (more reliable, no popup blocker)
-  if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
-    chrome.tabs.create({ url });
-  } else if (window.electronAPI?.openExternal) {
-    // Use electronAPI for Tauri/Electron apps (works on Mac)
-    window.electronAPI.openExternal(url);
-  } else {
-    // Fallback for browser environments
-    window.open(url, '_blank');
-  }
+  workspaceActivityService.activate({ url }, target !== undefined ? { target } : undefined);
 };
 
 // Detect the desktop (Tauri) app via a positive signal. We can't rely on
@@ -205,6 +197,16 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   const urlCount = urls.length;
   const appCount = apps.length;
   const totalCount = urlCount + appCount;
+
+  // ── Live state ───────────────────────────────────────────────────────────
+  // Which of this card's links and apps are already open. Desktop app only —
+  // there are no running apps or synced tabs to match against in the extension,
+  // so the subscription (and its poll) never starts there.
+  const [activity, setActivity] = useState(null);
+  useEffect(() => {
+    if (!isDesktopApp) return;
+    return workspaceActivityService.subscribe(setActivity);
+  }, []);
 
   const colorClass = ICON_COLORS[Math.abs(name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % ICON_COLORS.length];
   const normalizedName = name.toLowerCase().trim();
@@ -716,10 +718,30 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   }, [contextMenu]);
 
   // ── Show fewer links in compact mode, unless expanded ────────────────────
-  const activeUrls = sortedUrls.filter(u => u.status !== 'draft');
+  // Memoized so `resolved` below keys off a stable array identity — recomputing
+  // this list every render would defeat that memo entirely.
+  const activeUrls = useMemo(() => sortedUrls.filter(u => u.status !== 'draft'), [sortedUrls]);
   const draftUrls = sortedUrls.filter(u => u.status === 'draft');
 
   const displayLinks = activeUrls;
+
+  // One resolution pass for the whole card: no two items claim the same tab or
+  // window, and every render site below reads the same answer the click acts on.
+  // Keyed on the objects actually rendered — `sortedUrls` is rebuilt state (it
+  // comes back through the analytics cache as fresh objects), so resolving
+  // `workspace.urls` would produce a map none of these lookups could hit.
+  // `activity` is unread but load-bearing: resolveAll reads the service's
+  // mutable snapshot, so a poll landing is the only cue to recompute.
+  const resolved = useMemo(
+    () => (isDesktopApp ? workspaceActivityService.resolveAll([...activeUrls, ...apps]) : new Map()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeUrls, apps, activity]
+  );
+
+  const activate = useCallback(
+    (item) => workspaceActivityService.activate(item, { target: resolved.get(item) ?? null }),
+    [resolved]
+  );
 
   const cardStyle = fullView
     ? {
@@ -805,20 +827,23 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                 const faviconUrl = getFaviconUrl(url, 20);
                 const avatar = getLetterAvatar(url);
                 const displayName = isGroup ? null : (item.title || formatDomainName(item.url));
+                const isOpen = !isGroup && !!resolved.get(item);
                 return (
                   <div
                     key={`link-${idx}`}
-                    className={`${isGroup ? 'compact-url-group' : 'compact-url-icon'}${showLabel && !isGroup ? ' is-labeled' : ''}`}
+                    className={`${isGroup ? 'compact-url-group' : 'compact-url-icon'}${showLabel && !isGroup ? ' is-labeled' : ''}${isOpen ? ' is-open' : ''}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       if (isGroup) {
                         const rect = e.currentTarget.getBoundingClientRect();
                         setGroupPopoverState({ group: item, rect });
                       } else {
-                        openUrl(item.url, name, item.title);
+                        openUrl(item.url, name, item.title, resolved.get(item));
                       }
                     }}
-                    title={isGroup ? `${item.label} (${item.urls.length}) - ${item.subLabel || item.domain}` : displayName}
+                    title={isGroup
+                      ? `${item.label} (${item.urls.length}) - ${item.subLabel || item.domain}`
+                      : `${displayName}${isOpen ? ' — open in browser' : ''}`}
                   >
                     {faviconUrl ? (
                       <img
@@ -859,25 +884,16 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                   : app.appType === 'folder' ? faFolderOpen
                     : app.appType === 'file' ? faFileLines
                       : faDesktop;
+                const isRunning = !!resolved.get(app);
                 return (
                   <div
                     key={`app-${idx}`}
-                    className={`compact-url-icon compact-app-icon${showLabel ? ' is-labeled' : ''}`}
+                    className={`compact-url-icon compact-app-icon${showLabel ? ' is-labeled' : ''}${isRunning ? ' is-open' : ''}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (!app.path || !window.electronAPI) return;
-                      if (isEditor && window.electronAPI.launchAppWithArgs) {
-                        const cmd = app.appType.toLowerCase() === 'vscode' ? 'code' : app.appType.toLowerCase();
-                        window.electronAPI.launchAppWithArgs(cmd, [app.path]);
-                      } else if (app.appType === 'folder' && window.electronAPI.openFolder) {
-                        window.electronAPI.openFolder(app.path);
-                      } else if (app.appType === 'file' && window.electronAPI.launchApp) {
-                        window.electronAPI.launchApp(app.path);
-                      } else if (window.electronAPI.launchApp) {
-                        window.electronAPI.launchApp(app.path);
-                      }
+                      activate(app);
                     }}
-                    title={app.path || app.name}
+                    title={`${app.path || app.name}${isRunning ? ' — running (click to focus)' : ''}`}
                     style={{ border: `1px solid ${appColor}55`, background: `${appColor}12` }}
                   >
                     {app.icon ? (
@@ -1021,15 +1037,16 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                   const isHovered = hoveredLink === idx;
                   const isPopoverOpen = activePopover === idx;
                   const avatar = getLetterAvatar(urlObj.url);
+                  const isOpen = !!resolved.get(urlObj);
                   return (
                     <div
                       key={idx}
-                      className={`workspace-url-chip${isPopoverOpen ? ' analytics-open' : ''}`}
+                      className={`workspace-url-chip${isPopoverOpen ? ' analytics-open' : ''}${isOpen ? ' is-open' : ''}`}
                       onMouseEnter={() => setHoveredLink(idx)}
                       onMouseLeave={() => { setHoveredLink(null); setPopoverState({ index: null, rect: null }); }}
-                      onClick={(e) => { e.stopPropagation(); openUrl(urlObj.url, name, urlObj.title); }}
+                      onClick={(e) => { e.stopPropagation(); openUrl(urlObj.url, name, urlObj.title, resolved.get(urlObj)); }}
                       style={{ position: 'relative' }}
-                      title={urlObj.title || urlObj.url}
+                      title={`${urlObj.title || urlObj.url}${isOpen ? ' — open in browser' : ''}`}
                     >
                       <span className="workspace-link-icon">
                         {faviconUrl ? (
@@ -1098,24 +1115,19 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                   const isEditor = isEditorApp(app);
                   const appColor = isEditor ? '#38bdf8' : '#8b5cf6';
                   const appIcon = isEditor ? faCode : faDesktop;
+                  const isRunning = !!resolved.get(app);
                   return (
                     <div
                       key={idx}
-                      className="workspace-app-chip"
+                      className={`workspace-app-chip${isRunning ? ' is-open' : ''}`}
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (!app.path || !window.electronAPI) return;
-                        if (isEditor && window.electronAPI.launchAppWithArgs) {
-                          const cmd = app.appType.toLowerCase() === 'vscode' ? 'code' : app.appType.toLowerCase();
-                          window.electronAPI.launchAppWithArgs(cmd, [app.path]);
-                        } else if (window.electronAPI.launchApp) {
-                          window.electronAPI.launchApp(app.path);
-                        }
+                        activate(app);
                       }}
                       style={{ background: `${appColor}1a`, border: `1px solid ${appColor}4d` }}
                       onMouseEnter={(e) => { e.currentTarget.style.background = `${appColor}33`; e.currentTarget.style.borderColor = `${appColor}80`; }}
                       onMouseLeave={(e) => { e.currentTarget.style.background = `${appColor}1a`; e.currentTarget.style.borderColor = `${appColor}4d`; }}
-                      title={`Launch ${app.name}`}
+                      title={isRunning ? `Focus ${app.name}` : `Launch ${app.name}`}
                     >
                       {app.icon ? (
                         <img src={app.icon} alt="" style={{ width: '16px', height: '16px', objectFit: 'contain' }} />
@@ -1141,18 +1153,14 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                 {folderFileApps.map((app, idx) => {
                   const appColor = app.appType === 'folder' ? '#facc15' : '#94a3b8';
                   const appIcon = app.appType === 'folder' ? faFolderOpen : faFileLines;
+                  const isOpen = !!resolved.get(app);
                   return (
                     <div
                       key={idx}
-                      className="workspace-app-chip"
+                      className={`workspace-app-chip${isOpen ? ' is-open' : ''}`}
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (!app.path || !window.electronAPI) return;
-                        if (app.appType === 'folder' && window.electronAPI.openFolder) {
-                          window.electronAPI.openFolder(app.path);
-                        } else if (window.electronAPI.launchApp) {
-                          window.electronAPI.launchApp(app.path);
-                        }
+                        activate(app);
                       }}
                       style={{ background: `${appColor}1a`, border: `1px solid ${appColor}4d` }}
                       onMouseEnter={(e) => { e.currentTarget.style.background = `${appColor}33`; e.currentTarget.style.borderColor = `${appColor}80`; }}

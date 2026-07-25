@@ -2,7 +2,7 @@ import { faChevronDown, faChevronUp, faCode, faDesktop, faFileLines, faFolderOpe
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import logo from '../../../logo-2.png';
-import { workspaceActivityService } from '../../services/workspaceActivityService';
+import { isEditorApp, workspaceActivityService } from '../../services/workspaceActivityService';
 import '../../styles/dockbar.css';
 
 // Favicon resolution as an ordered fallback chain rather than a single source:
@@ -38,11 +38,6 @@ const handleFaviconError = (e) => {
   }
 };
 
-// Editor-style apps launch with their folder/file argument (`code .`) — same
-// list as WorkspaceCard so the two surfaces behave identically.
-const CUSTOM_EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'rubymine', 'fleet', 'zed'];
-const isEditorApp = (app) => CUSTOM_EDITORS.includes(app?.appType?.toLowerCase());
-
 const AVATAR_COLORS = ['#3b82f6', '#f97316', '#a16207', '#22c55e', '#8b5cf6'];
 const letterAvatar = (url) => {
   let host = '';
@@ -75,10 +70,21 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
   );
   const apps = workspace?.apps || [];
 
-  // Live running-apps + open-tabs state; `activity` only drives re-renders,
+  // Live running-apps + open-tabs state. `activity` is only a re-render tick;
   // the matching itself goes through the shared service.
-  const [, setActivity] = useState(null);
+  const [activity, setActivity] = useState(null);
   useEffect(() => workspaceActivityService.subscribe(setActivity), []);
+
+  // One resolution pass for the whole row, so no two items claim the same tab
+  // or window — and so each item's dot and its click read the same answer.
+  // `activity` is not read here but must stay in the deps: resolveAll reads the
+  // service's mutable snapshot, so a poll landing is the only signal that this
+  // needs recomputing. eslint can't see that and calls it unnecessary.
+  const resolved = useMemo(
+    () => workspaceActivityService.resolveAll([...urls, ...apps]),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [urls, apps, activity]
+  );
 
   // The bar is one row tall, so workspace switching is a cycle button rather
   // than a dropdown (a popover would clip against the window edge).
@@ -88,71 +94,14 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
     onSelectWorkspace?.(workspaces[(idx + 1) % workspaces.length]);
   }, [workspaces, workspace, onSelectWorkspace]);
 
-  const openLink = useCallback((item) => {
-    if (!item?.url) return;
-
-    // Taskbar behavior, same as openApp below: if the page is already open in a
-    // synced browser tab, focus that tab instead of opening a duplicate. This is
-    // the same lookup that paints the item active, so the dot and the click
-    // agree on what "open" means.
-    const openTab = workspaceActivityService.findOpenTab(item.url);
-    if (openTab && window.electronAPI?.sendMessage) {
-      window.electronAPI.sendMessage({
-        type: 'JUMP_TO_TAB',
-        tabId: openTab.id,
-        windowId: openTab.windowId,
-        url: openTab.url,
-        _deviceId: openTab._deviceId,
-        browser: openTab.browser,
-      });
-      return;
-    }
-
-    if (window.electronAPI?.openExternal) {
-      window.electronAPI.openExternal(item.url);
-    } else {
-      window.open(item.url, '_blank');
-    }
-  }, []);
-
-  const openApp = useCallback((app) => {
-    if (!app.path || !window.electronAPI) return;
-
-    // Folders resolve against Explorer window titles, not process paths, so they
-    // must be handled before findRunningApp — which would both miss the open
-    // window and risk matching an unrelated app that happens to share the
-    // folder's name (its name test is substring-based in either direction).
-    if (app.appType === 'folder') {
-      const open = workspaceActivityService.findOpenFolder(app.path);
-      if (open?.hwnd) {
-        if (open.tabIndex != null && window.electronAPI.focusAppTab) {
-          window.electronAPI.focusAppTab(open.hwnd, open.tabIndex, open.title);
-        } else if (window.electronAPI.focusApp) {
-          window.electronAPI.focusApp(open.pid, open.name, open.hwnd);
-        }
-        return;
-      }
-      if (window.electronAPI.openFolder) {
-        window.electronAPI.openFolder(app.path);
-        return;
-      }
-    }
-
-    // Taskbar behavior: if it's already running, bring it forward.
-    const running = workspaceActivityService.findRunningApp(app);
-    if (running && !isEditorApp(app) && window.electronAPI.focusApp) {
-      window.electronAPI.focusApp(running.pid, running.name, running.hwnd);
-      return;
-    }
-    if (isEditorApp(app) && window.electronAPI.launchAppWithArgs) {
-      const cmd = app.appType.toLowerCase() === 'vscode' ? 'code' : app.appType.toLowerCase();
-      window.electronAPI.launchAppWithArgs(cmd, [app.path]);
-    } else if (app.appType === 'folder' && window.electronAPI.openFolder) {
-      window.electronAPI.openFolder(app.path);
-    } else if (window.electronAPI.launchApp) {
-      window.electronAPI.launchApp(app.path);
-    }
-  }, []);
+  // Taskbar behavior — focus what's open, launch what isn't — lives in the
+  // service so the dock, the workspace cards and the panels can't drift apart.
+  // The target from `resolved` is handed over rather than looked up again, so
+  // the click acts on exactly what the dot was painted from.
+  const open = useCallback(
+    (item) => workspaceActivityService.activate(item, { target: resolved.get(item) ?? null }),
+    [resolved]
+  );
 
   const appFallbackIcon = (app) =>
     isEditorApp(app) ? faCode
@@ -254,13 +203,13 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
           {urls.map((item, idx) => {
             const sources = faviconSources(item.url);
             const avatar = letterAvatar(item.url);
-            const isOpen = !!workspaceActivityService.findOpenTab(item.url);
+            const isOpen = !!resolved.get(item);
             return (
               <button
                 key={`url-${idx}`}
                 className={`dockbar-item${entering ? ' is-entering' : ''}${bouncingKey === `url-${idx}` ? ' is-bouncing' : ''}${isOpen ? ' is-active' : ''}`}
                 style={{ animationDelay: `${idx * 16}ms` }}
-                onClick={() => { bounce(`url-${idx}`); openLink(item); }}
+                onClick={() => { bounce(`url-${idx}`); open(item); }}
                 title={`${item.title || item.url}${isOpen ? ' — open in browser' : ''}`}
               >
                 {sources.length > 0 ? (
@@ -278,17 +227,13 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
             );
           })}
           {apps.map((app, idx) => {
-            // Match openApp's resolution order so the active dot and the click
-            // never disagree about whether this item is already open.
-            const isRunning = app.appType === 'folder'
-              ? !!workspaceActivityService.findOpenFolder(app.path)
-              : !!workspaceActivityService.findRunningApp(app);
+            const isRunning = !!resolved.get(app);
             return (
             <button
               key={`app-${idx}`}
               className={`dockbar-item dockbar-item--app${entering ? ' is-entering' : ''}${bouncingKey === `app-${idx}` ? ' is-bouncing' : ''}${isRunning ? ' is-active' : ''}`}
               style={{ animationDelay: `${(urls.length + idx) * 16}ms` }}
-              onClick={() => { bounce(`app-${idx}`); openApp(app); }}
+              onClick={() => { bounce(`app-${idx}`); open(app); }}
               title={`${app.name || app.path}${isRunning ? ' — running (click to focus)' : ''}`}
             >
               {app.icon ? (

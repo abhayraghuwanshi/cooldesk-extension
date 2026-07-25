@@ -1471,6 +1471,31 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   border-color: rgba(59, 130, 246, 0.4);
 }
 
+/* Open / running — see .compact-url-icon.is-open. Every pill and row shape
+   shares this one marker: a short bar riding the leading edge. A dot can't work
+   here — under a wide row it reads as detached, and inside one it collides with
+   the label's ellipsis — whereas the edge bar scales from a 140px pill to a
+   full-width row without moving relative to anything. */
+.workspace-url-chip.is-open::before,
+.workspace-app-chip.is-open::before,
+.compact-url-icon.is-labeled.is-open::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  border-radius: 0 2px 2px 0;
+  background: #c4b5fd;
+  box-shadow: 0 0 6px rgba(196, 181, 253, 0.8);
+}
+
+.workspace-app-chip.is-open,
+.compact-url-icon.is-labeled.is-open {
+  position: relative;
+}
+
 .workspace-url-chip .workspace-link-icon {
   flex-shrink: 0;
   width: 16px;
@@ -3017,6 +3042,32 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   border-color: rgba(59, 130, 246, 0.4);
   transform: translateY(-2px) scale(1.1);
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+}
+
+/* Already open in a synced browser tab / already running — clicking focuses it
+   instead of opening a duplicate.
+
+   The indicator follows the element's *shape*, not its context: a round icon
+   tile gets the dot underneath (the dock bar's idiom, .dockbar-item.is-active),
+   while every pill and row shape gets the leading edge marker further down.
+   `.is-labeled` is the pill variant of this same class — and full-view stretches
+   it to a full-width row — so a bottom-centre dot landed on the middle of its
+   border rather than under anything. */
+.compact-url-icon.is-open:not(.is-labeled) {
+  position: relative;
+}
+
+.compact-url-icon.is-open:not(.is-labeled)::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #c4b5fd;
+  box-shadow: 0 0 7px 1.5px rgba(196, 181, 253, 0.9);
 }
 
 .compact-url-icon img {
