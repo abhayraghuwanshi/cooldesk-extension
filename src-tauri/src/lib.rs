@@ -332,6 +332,29 @@ fn ensure_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
     }
 }
 
+/// True when the foreground window belongs to some *other* app. A blur that
+/// hands the foreground to one of our own windows (or to nothing at all, which
+/// is what a hide/show cycle looks like mid-transition) is not the user leaving.
+fn focus_left_the_app(app: &tauri::AppHandle) -> bool {
+    #[cfg(windows)]
+    {
+        let fg = dock::foreground_hwnd();
+        if fg == 0 {
+            return false;
+        }
+        let ours = app
+            .webview_windows()
+            .values()
+            .any(|w| w.hwnd().ok().map(|h| h.0 as isize) == Some(fg));
+        !ours
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        true
+    }
+}
+
 /// Hide-on-close, and (in drawer mode) collapse to the handle when the panel
 /// loses focus — the "click away to hide" behavior.
 fn attach_main_window_events(window: &tauri::WebviewWindow) {
@@ -345,8 +368,17 @@ fn attach_main_window_events(window: &tauri::WebviewWindow) {
             let app = win.app_handle();
             let st = load_dock_state(app);
             if st.enabled && st.mode == "drawer" && win.is_visible().unwrap_or(false) {
-                log::info!("[Dock] Panel blurred → collapsing to handle");
-                collapse_drawer(app, &st);
+                // "Click away to hide" must only fire for a click *away*. During a
+                // layout switch focus bounces between our own windows (the panel is
+                // hidden, the handle is shown, the panel comes back), and the blur
+                // that produces is delivered asynchronously — often after the panel
+                // has already been re-shown, which then collapsed it right back out
+                // of view. Only collapse when something that isn't ours holds the
+                // foreground.
+                if focus_left_the_app(app) {
+                    log::info!("[Dock] Panel blurred → collapsing to handle");
+                    collapse_drawer(app, &st);
+                }
             }
         }
         _ => {}
@@ -606,7 +638,20 @@ fn enable_drawer(app: &tauri::AppHandle, side: String, thickness: u32) -> DockSt
         side,
     };
     save_dock_state(app, &state);
-    collapse_drawer(app, &state);
+    // Turning the drawer *on* from a window the user is currently looking at is a
+    // layout switch, not a dismissal: slide straight into the new edge instead of
+    // hiding the panel down to the handle. Hiding it here also raced the blur
+    // handler, which is how "release to full window, then go back to the side
+    // dock" used to end up with no panel at all — just the edge tab.
+    let visible = app
+        .get_webview_window("main")
+        .and_then(|w| w.is_visible().ok())
+        .unwrap_or(false);
+    if visible {
+        expand_drawer(app, &state);
+    } else {
+        collapse_drawer(app, &state);
+    }
     state
 }
 

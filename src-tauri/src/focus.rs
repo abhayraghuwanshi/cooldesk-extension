@@ -38,6 +38,41 @@
 //! focus_window_by_pid(1234, Some("firefox"))?;
 //! ```
 
+/// Executable stems that identify a browser, keyed by the id the extension sends.
+///
+/// The id arrives as a deviceId prefix ("brave"), an exe name ("msedge.exe"), or
+/// an older build's coarse label, so it is normalised before lookup. Returning
+/// exact stems matters: the previous substring match meant "edge" also matched
+/// `msedgewebview2.exe`, so a browser focus that missed would foreground whatever
+/// WebView2-hosted app enumerated first — an unrelated window stealing focus.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn browser_exe_stems(id: &str) -> Vec<String> {
+    let clean = id.trim().to_lowercase();
+    let clean = clean.trim_end_matches(".exe");
+    let stems: &[&str] = match clean {
+        "edge" | "msedge" | "microsoft edge" => &["msedge"],
+        "chrome" | "chromium" | "google chrome" => &["chrome", "chromium"],
+        "brave" | "brave-browser" => &["brave"],
+        "vivaldi" => &["vivaldi"],
+        "opera" | "opr" => &["opera"],
+        "firefox" => &["firefox"],
+        "arc" => &["arc"],
+        "safari" => &["safari"],
+        // Not a browser we know — focus by the name we were given
+        other => return vec![other.to_string()],
+    };
+    stems.iter().map(|s| s.to_string()).collect()
+}
+
+/// Exact (stem) match of a process name against the candidates. Case-insensitive
+/// and `.exe`-insensitive, but never a substring match — see `browser_exe_stems`.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn process_name_matches(process_name: &str, stems: &[String]) -> bool {
+    let n = process_name.to_lowercase();
+    let n = n.trim_end_matches(".exe");
+    stems.iter().any(|s| s == n)
+}
+
 #[derive(Debug)]
 #[allow(dead_code)]
 pub enum FocusError {
@@ -75,6 +110,46 @@ mod platform {
         GetForegroundWindow, GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
         SetForegroundWindow, ShowWindow, SwitchToThisWindow, GA_ROOT, SW_RESTORE, SW_SHOW,
     };
+    use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+
+    /// Run a foreground-changing sequence with this thread temporarily attached to
+    /// the input queue of whichever thread currently owns the foreground.
+    ///
+    /// Windows honours `SetForegroundWindow` only from the process that already
+    /// owns the foreground, or one pre-authorised via `AllowSetForegroundWindow`.
+    /// We call that exactly once, in `hide_spotlight` — so the spotlight works and
+    /// every *other* caller does not. A focus pushed by the browser extension, by
+    /// the sidecar, or by any click made while a different app owns the foreground
+    /// gets silently downgraded: the window activates and its taskbar button
+    /// flashes, but it never rises in z-order. That is the "switch works but it
+    /// doesn't come to the top" symptom.
+    ///
+    /// Attaching to the foreground thread's input queue makes Windows treat this
+    /// thread as sharing that foreground state, so the call is honoured no matter
+    /// who invoked it. The attachment is always undone.
+    unsafe fn with_foreground_rights<T>(f: impl FnOnce() -> T) -> T {
+        let fg = GetForegroundWindow();
+        let fg_thread = if fg.is_invalid() {
+            0
+        } else {
+            GetWindowThreadProcessId(fg, None)
+        };
+        let this_thread = GetCurrentThreadId();
+
+        // Attaching a thread to itself is invalid, and when we already own the
+        // foreground (the spotlight path, post-AllowSetForegroundWindow) the
+        // rights are present anyway — so this is a no-op there, not a regression.
+        let attached = fg_thread != 0
+            && fg_thread != this_thread
+            && AttachThreadInput(fg_thread, this_thread, true).as_bool();
+
+        let out = f();
+
+        if attached {
+            let _ = AttachThreadInput(fg_thread, this_thread, false);
+        }
+        out
+    }
 
     /// Focus a window by its handle (HWND)
     pub fn focus_window_by_hwnd(hwnd: isize) -> FocusResult<()> {
@@ -107,15 +182,34 @@ mod platform {
 
         // Fallback: try by process name if provided
         if let Some(name) = process_name {
-            let name_clean = name.trim_end_matches(".exe");
+            let name_clean = name.trim_end_matches(".exe").to_lowercase();
+            let stems = super::browser_exe_stems(name);
 
             // Use sysinfo to find processes by name
             use sysinfo::{System, ProcessRefreshKind};
             let mut sys = System::new();
             sys.refresh_processes_specifics(ProcessRefreshKind::new());
 
+            // Pass 1: exact executable match. A substring match would let a
+            // request for "edge" land on msedgewebview2.exe and foreground some
+            // unrelated WebView2 app, so the precise name always wins.
             for (proc_pid, process) in sys.processes() {
-                if process.name().to_lowercase().contains(&name_clean.to_lowercase()) {
+                if super::process_name_matches(process.name(), &stems) {
+                    if try_focus_pid(proc_pid.as_u32()) {
+                        return Ok(());
+                    }
+                }
+            }
+
+            // Pass 2: substring match for callers that pass a partial name.
+            // WebView2 hosts stay excluded unless they were what was asked for.
+            let wants_webview = name_clean.contains("webview");
+            for (proc_pid, process) in sys.processes() {
+                let pname = process.name().to_lowercase();
+                if !wants_webview && pname.contains("webview") {
+                    continue;
+                }
+                if pname.contains(&name_clean) {
                     if try_focus_pid(proc_pid.as_u32()) {
                         return Ok(());
                     }
@@ -351,27 +445,43 @@ mod platform {
             let on_current_desktop = is_window_on_current_desktop(hwnd);
             log::info!("[Focus] hwnd={:?} on_current_desktop={}", hwnd.0, on_current_desktop);
 
-            // AllowSetForegroundWindow(ASFW_ANY) was pre-called from hide_spotlight,
-            // so the subsequent SetForegroundWindow will succeed without the old
-            // SendInput(VK_MENU) workaround (which was unreliable from a bg thread).
+            // The whole activation sequence runs with borrowed foreground rights,
+            // so it behaves identically no matter which entry point asked for it:
+            // spotlight (which also pre-calls AllowSetForegroundWindow via
+            // hide_spotlight), a dock click, or a jump pushed from the extension.
             // fAltTab=FALSE = direct launcher-style activation (not Alt+Tab switcher).
-            SwitchToThisWindow(hwnd, false);
+            let mut focused = with_foreground_rights(|| {
+                SwitchToThisWindow(hwnd, false);
 
-            // Longer sleep for cross-desktop to allow the desktop animation to finish.
-            let switch_sleep_ms = if on_current_desktop { 50 } else { 150 };
-            std::thread::sleep(std::time::Duration::from_millis(switch_sleep_ms));
+                // Longer sleep for cross-desktop to allow the desktop animation to finish.
+                let switch_sleep_ms = if on_current_desktop { 50 } else { 150 };
+                std::thread::sleep(std::time::Duration::from_millis(switch_sleep_ms));
 
-            let _ = BringWindowToTop(hwnd);
-            let _ = SetForegroundWindow(hwnd);
-            let _ = ShowWindow(hwnd, SW_SHOW);
-
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            let mut focused = foreground_matches_target(hwnd, target_pid);
-
-            if !focused {
+                let _ = BringWindowToTop(hwnd);
                 let _ = SetForegroundWindow(hwnd);
-                std::thread::sleep(std::time::Duration::from_millis(80));
-                focused = foreground_matches_target(hwnd, target_pid);
+                let _ = ShowWindow(hwnd, SW_SHOW);
+
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                let mut ok = foreground_matches_target(hwnd, target_pid);
+
+                if !ok {
+                    let _ = SetForegroundWindow(hwnd);
+                    std::thread::sleep(std::time::Duration::from_millis(80));
+                    ok = foreground_matches_target(hwnd, target_pid);
+                }
+                ok
+            });
+
+            // Last resort, outside the attachment: a fresh foreground owner may
+            // have appeared while we slept, in which case the borrowed rights were
+            // taken from the wrong thread. Re-borrow from whoever owns it now.
+            if !focused {
+                focused = with_foreground_rights(|| {
+                    let _ = BringWindowToTop(hwnd);
+                    let _ = SetForegroundWindow(hwnd);
+                    std::thread::sleep(std::time::Duration::from_millis(60));
+                    foreground_matches_target(hwnd, target_pid)
+                });
             }
 
             let after_foreground = normalize_focus_hwnd(GetForegroundWindow());
@@ -653,15 +763,19 @@ pub fn find_hwnd_by_bounds(process_name: &str, x: i32, y: i32, width: i32, heigh
 
     let mut sys = System::new();
     sys.refresh_processes_specifics(ProcessRefreshKind::new());
-    let name_clean = process_name.trim_end_matches(".exe").to_lowercase();
+    // Only windows belonging to *this* browser are candidates. Bounds alone can't
+    // tell two browsers apart — maximised windows on the same monitor have
+    // identical bounds, so a wrong process name here focuses the wrong browser.
+    let stems = browser_exe_stems(process_name);
     let pids: Vec<u32> = sys
         .processes()
         .iter()
-        .filter(|(_, p)| p.name().to_lowercase().contains(&name_clean))
+        .filter(|(_, p)| process_name_matches(p.name(), &stems))
         .map(|(pid, _)| pid.as_u32())
         .collect();
 
     if pids.is_empty() {
+        log::warn!("[Focus] find_hwnd_by_bounds: no running process for '{}' (stems {:?})", process_name, stems);
         return None;
     }
 

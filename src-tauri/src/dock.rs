@@ -49,6 +49,14 @@ pub fn foreground_is_fullscreen() -> bool {
     imp::foreground_is_fullscreen()
 }
 
+/// Raw HWND of the current foreground window, or 0 when there isn't one.
+/// Used to tell "the user clicked away" apart from focus bouncing between our
+/// own windows during a layout switch.
+#[cfg(windows)]
+pub fn foreground_hwnd() -> isize {
+    imp::foreground_hwnd()
+}
+
 // Non-Windows stubs. The callers in lib.rs are all `#[cfg(windows)]`-gated, so
 // these are never invoked off Windows — they exist only so the module compiles.
 #[cfg(not(windows))]
@@ -72,6 +80,11 @@ pub fn monitor_rect(_raw_hwnd: isize) -> Option<(i32, i32, i32, i32)> {
 #[cfg(not(windows))]
 pub fn foreground_is_fullscreen() -> bool {
     false
+}
+
+#[cfg(not(windows))]
+pub fn foreground_hwnd() -> isize {
+    0
 }
 
 #[cfg(windows)]
@@ -143,6 +156,10 @@ mod imp {
         let mi = monitor_info(hwnd_from_isize(raw_hwnd))?;
         let rc = mi.rcMonitor;
         Some((rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top))
+    }
+
+    pub fn foreground_hwnd() -> isize {
+        unsafe { GetForegroundWindow().0 as isize }
     }
 
     pub fn foreground_is_fullscreen() -> bool {

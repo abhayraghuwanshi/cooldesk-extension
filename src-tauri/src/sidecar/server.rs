@@ -231,6 +231,8 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/cooldesk", get(get_cooldesk))
         // Project linking (star/hub group.json) — the one .cooldesk/ write path
         .route("/cooldesk/link", post(post_cooldesk_link))
+        // Plugin -> app push: a .cooldesk/ folder was created or changed
+        .route("/cooldesk/announce", post(post_cooldesk_announce))
         .route("/notes", get(get_notes).post(post_notes))
         .route("/url-notes", get(get_url_notes).post(post_url_notes))
         .route("/pins", get(get_pins).post(post_pins))

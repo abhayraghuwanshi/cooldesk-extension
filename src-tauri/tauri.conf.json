@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "CoolDesk",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "identifier": "com.cooldesk.desktop",
   "build": {
     "frontendDist": "../dist-tauri",
@@ -49,6 +49,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM0OEUzMkNGOUY5M0Q5REYKUldUZjJaT2Z6ektPTk9hUVhxdU43N1QvTlJHYVdLMUJhdGRMalBzUldXdVUwRGlROXdpOVB6d3IK",
       "endpoints": [
+        "https://cool-desk.com/api/update",
         "https://github.com/abhayraghuwanshi/cooldesk-extension/releases/latest/download/latest.json"
       ]
     }

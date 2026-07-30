@@ -656,6 +656,54 @@ pub async fn post_cooldesk_link(
     }
 }
 
+#[derive(Debug, serde::Deserialize)]
+pub struct CooldeskAnnounceBody {
+    /// Absolute path to the project root that owns the `.cooldesk/` folder.
+    pub path: String,
+}
+
+/// Announce that a project's `.cooldesk/` folder was created or changed, so a
+/// running app picks it up instead of waiting for a component to remount.
+///
+/// The plugin's hooks POST here after every write, and the app is usually *not*
+/// running — so the caller treats any failure as success and this stays cheap.
+/// Nothing is written here: the broadcast just invalidates the frontend's read.
+/// POST /cooldesk/announce  { "path": "C:\\code\\myrepo" }
+pub async fn post_cooldesk_announce(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<CooldeskAnnounceBody>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let cd = crate::sidecar::cooldesk::read_cooldesk(&body.path);
+    if cd.get("exists").and_then(|v| v.as_bool()) != Some(true) {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "ok": false, "error": "no .cooldesk/ at that path" })),
+        );
+    }
+
+    // Broadcast the reader's canonical path, never the caller's. The frontend
+    // matches this against workspace folder apps, and a relative segment or a
+    // drive-letter case difference would silently miss.
+    let path = cd
+        .get("path")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&body.path)
+        .to_string();
+    let project = cd
+        .get("manifest")
+        .and_then(|m| m.get("project"))
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+
+    log::info!("[CoolDesk] announce: {}", path);
+    state.broadcast(
+        "cooldesk-updated",
+        serde_json::json!({ "path": path, "project": project }),
+    );
+
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true, "path": path })))
+}
+
 /// Search apps by query — fuzzy match against installed+running list
 /// GET /search?q=chrome&limit=10
 #[derive(Debug, serde::Deserialize)]
