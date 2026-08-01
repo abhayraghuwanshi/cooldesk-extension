@@ -7,41 +7,9 @@ import manifest from './manifest.json';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Switch between Chrome Extension (default) and Electron/Tauri builds using env
-export default defineConfig(({ command, mode }) => {
-  const isElectron = mode === 'electron'
+// Switch between the Chrome extension (default) and the Tauri desktop app.
+export default defineConfig(({ command }) => {
   const isBuild = command === 'build'
-
-  if (isElectron) {
-    // Electron build: no crx(), relative paths for file:// protocol
-    // Uses full App with all features (notes, tabs, team, etc.)
-    return {
-      base: './',
-      plugins: [react()],
-      server: {
-        port: 5173,
-        strictPort: true,
-        hmr: {
-          port: 5173,
-          clientPort: 5173,
-        },
-        watch: {
-          usePolling: true,
-        },
-      },
-      build: {
-        outDir: 'dist-electron',
-        emptyOutDir: true,
-        rollupOptions: {
-          input: {
-            main: resolve(__dirname, 'index.html'),
-            spotlight: resolve(__dirname, 'spotlight.html'),
-            handle: resolve(__dirname, 'handle.html'),
-          }
-        }
-      },
-    }
-  }
 
   // Tauri build
   const isTauri = process.env.TAURI_ENV_PLATFORM !== undefined;

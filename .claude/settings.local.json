@@ -76,7 +76,8 @@
       "Bash(sed -i \"s|from '\\\\.\\\\./\\\\.\\\\./\\\\.\\\\./data/|from '../../data/|; s|from '\\\\.\\\\./\\\\.\\\\./\\\\.\\\\./db/|from '../../db/|; s|from '\\\\.\\\\./\\\\.\\\\./\\\\.\\\\./services/|from '../../services/|; s|from '\\\\.\\\\./\\\\.\\\\./\\\\.\\\\./utils/|from '../../utils/|; s|from '\\\\./SmartWorkspace'|from './parts/SmartWorkspace'|\" src/faces/workspace/ChatContext.jsx)",
       "Bash(sed -i \"s|'\\\\.\\\\./workspace/parts/ChatContext'|'../workspace/ChatContext'|\" src/faces/shell/CoolDeskContainer.jsx)",
       "Bash(sort -u -t'\"' -k2)",
-      "Bash(TAURI_ENV_PLATFORM=windows npx vite build)"
+      "Bash(TAURI_ENV_PLATFORM=windows npx vite build)",
+      "Bash(git rm *)"
     ],
     "deny": [],
     "ask": [],

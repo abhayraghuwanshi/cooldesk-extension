@@ -9,7 +9,6 @@ export default defineConfig([
   // errors from bundled/minified and Tauri-codegen'd JS.
   globalIgnores([
     'dist',
-    'dist-electron',
     'dist-tauri',
     'release',
     'src-tauri/target',
