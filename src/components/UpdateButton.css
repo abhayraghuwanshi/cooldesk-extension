@@ -1,0 +1,88 @@
+/* Update-available pill. Sits beside the neutral header icon buttons, so it
+   is the one accent-coloured control up there — that's the whole point.
+   The `upd-` prefix is excluded from the global `.wallpaper-enabled button`
+   override in wallpaper-enhancements.css; keep it if you rename these. */
+
+.upd-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: var(--header-item, 44px);
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  background: rgba(16, 185, 129, 0.14);
+  color: #6EE7B7;
+  font-family: var(--font-family-base, inherit);
+  font-size: var(--font-md, 13px);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.upd-pill:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.24);
+  border-color: rgba(52, 211, 153, 0.55);
+  color: #A7F3D0;
+}
+
+.upd-pill:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.upd-pill__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.3);
+  font-size: 10px;
+  animation: upd-nudge 2.4s ease-in-out infinite;
+}
+
+.upd-pill__icon svg {
+  width: 10px;
+  height: 10px;
+}
+
+@keyframes upd-nudge {
+
+  0%,
+  70%,
+  100% {
+    transform: translateY(0);
+  }
+
+  80% {
+    transform: translateY(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .upd-pill__icon {
+    animation: none;
+  }
+}
+
+/* Icon-only form for the narrow sidebar control bar. */
+.upd-pill--compact {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 9px;
+}
+
+.upd-pill--compact .upd-pill__icon {
+  background: transparent;
+}
+
+.upd-pill--compact .upd-pill__icon svg {
+  width: 13px;
+  height: 13px;
+}

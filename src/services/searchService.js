@@ -427,6 +427,12 @@ function searchElectronCache(query) {
         type: 'tab',
         favicon: tab.favIconUrl || tab.favicon,
         tabId: tab.id || tab.tabId,
+        // Carry the owning browser through to the jump. Without _deviceId the
+        // jump has no precise routing key and has to guess from the browser
+        // label, which every Chromium browser used to report as "chrome".
+        _deviceId: tab._deviceId,
+        browser: tab.browser,
+        windowId: tab.windowId,
         score: titleMatch ? 80 : 60
       });
     }
@@ -900,6 +906,11 @@ async function searchTabsFallback(query) {
         type: 'tab',
         icon: t.favIconUrl || '🔵',
         favicon: t.favIconUrl,
+        // See the note in the cache-backed tab search above — the jump needs the
+        // owning browser, not just the tab id.
+        _deviceId: t._deviceId,
+        browser: t.browser,
+        windowId: t.windowId,
         score: Math.max(fuzzyScore(t.title, query), fuzzyScore(t.url, query))
       }));
     } catch (e) {

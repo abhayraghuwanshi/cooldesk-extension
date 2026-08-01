@@ -1,54 +1,21 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import './UpdateBanner.css';
-import { checkUpdateWithPing } from '../services/analytics';
-
-const isTauri = () =>
-  typeof window !== 'undefined' && !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+import { useUpdateAvailable } from '../hooks/useUpdateAvailable';
+import { installUpdate, openReleaseNotes } from '../services/updateService';
 
 /**
- * Detection-only update notice for the winget channel.
- * Asks the Rust backend to compare the running version against the latest
- * GitHub release; if newer, shows a banner whose action runs `winget upgrade`.
- * No-op outside the Tauri desktop app (e.g. Chrome extension build).
+ * Detection-only update notice, shown once at the top of the app.
+ * State comes from the shared update service (see services/updateService.js),
+ * which is also what feeds the header's UpdateButton — dismissing this banner
+ * only hides the banner, the header pill stays until the update is installed.
+ * No-op when there's nothing to install (including the non-Tauri, non-extension
+ * dev build, where the check never finds anything).
  */
 export function UpdateBanner() {
-  const [info, setInfo] = useState(null);
-  const [busy, setBusy] = useState(false);
+  const { info, installing } = useUpdateAvailable();
+  const [dismissed, setDismissed] = useState(false);
 
-  useEffect(() => {
-    if (!isTauri()) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        // On-launch update check; also carries the anonymous usage heartbeat.
-        const result = await checkUpdateWithPing();
-        if (!cancelled && result?.has_update) setInfo(result);
-      } catch {
-        // Offline / rate-limited / no release yet — stay silent.
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  if (!info) return null;
-
-  const onUpdate = async () => {
-    setBusy(true);
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('run_winget_upgrade');
-    } catch {
-      // winget missing / not on PATH — fall back to the release page.
-      try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        await invoke('open_url', { url: info.notes_url });
-      } catch {
-        window.open(info.notes_url, '_blank');
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
+  if (!info || dismissed) return null;
 
   return (
     <div className="update-banner" role="status">
@@ -56,13 +23,25 @@ export function UpdateBanner() {
         CoolDesk <strong>{info.latest}</strong> is available — you have {info.current}.
       </span>
       <div className="update-banner__actions">
-        <button className="update-banner__btn update-banner__btn--primary" onClick={onUpdate} disabled={busy}>
-          {busy ? 'Updating…' : 'Update'}
+        <button
+          className="update-banner__btn update-banner__btn--primary"
+          onClick={installUpdate}
+          disabled={installing}
+        >
+          {installing ? 'Updating…' : 'Update'}
         </button>
-        <a className="update-banner__link" href={info.notes_url} target="_blank" rel="noreferrer">
+        {/* Kept as an anchor: in Tauri the shell handles it (openReleaseNotes),
+            in the extension the plain href still works. */}
+        <a
+          className="update-banner__link"
+          href={info.notesUrl}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => { e.preventDefault(); openReleaseNotes(); }}
+        >
           What's new
         </a>
-        <button className="update-banner__btn" onClick={() => setInfo(null)} aria-label="Dismiss">
+        <button className="update-banner__btn" onClick={() => setDismissed(true)} aria-label="Dismiss">
           Dismiss
         </button>
       </div>

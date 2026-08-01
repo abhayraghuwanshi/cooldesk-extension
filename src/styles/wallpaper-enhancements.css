@@ -429,11 +429,18 @@
 
 /* === BUTTONS === */
 /* Excludes awm-* (AI Workspace Manager) buttons — its dropdown/menu buttons
-   style themselves and this glass override made them look like chunky pills. */
+   style themselves and this glass override made them look like chunky pills.
+   upd-* (the update-available pill) is excluded for the same reason: the glass
+   grey would hide the one control that's meant to stand out.
+   fm-* (the in-app file manager) is excluded too: it is a self-contained
+   Explorer window with its own toolbar, sidebar and row controls, and turning
+   every one of them into a glass pill destroys its layout — the icon buttons
+   grow, the rows stop lining up with their column headers, and its own theme
+   vars get overridden by !important. */
 .wallpaper-enabled .cooldesk-settings-btn,
 .wallpaper-enabled .cooldesk-voice-btn,
 .wallpaper-enabled .workspace-add-url-btn,
-.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):not([class*="spotlight-"]):not([class*="ws-dropdown"]):not([class*="tree-chevron"]):not([class*="dockbar-"]):not([class*="card-swatch"]):not([class*="wcp-color-trigger"]):not([class*="ob-"]) {
+.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):not([class*="spotlight-"]):not([class*="ws-dropdown"]):not([class*="tree-chevron"]):not([class*="dockbar-"]):not([class*="card-swatch"]):not([class*="wcp-color-trigger"]):not([class*="ob-"]):not([class*="upd-"]):not([class*="fm-"]) {
     background: linear-gradient(135deg,
             rgba(25, 25, 30, 0.76) 0%,
             rgba(20, 20, 25, 0.7) 100%) !important;
@@ -449,7 +456,7 @@
 .wallpaper-enabled .cooldesk-settings-btn:hover,
 .wallpaper-enabled .cooldesk-voice-btn:hover,
 .wallpaper-enabled .workspace-add-url-btn:hover,
-.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):not([class*="spotlight-"]):not([class*="ws-dropdown"]):not([class*="tree-chevron"]):not([class*="dockbar-"]):not([class*="card-swatch"]):not([class*="wcp-color-trigger"]):not([class*="ob-"]):hover {
+.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):not([class*="spotlight-"]):not([class*="ws-dropdown"]):not([class*="tree-chevron"]):not([class*="dockbar-"]):not([class*="card-swatch"]):not([class*="wcp-color-trigger"]):not([class*="ob-"]):not([class*="upd-"]):hover {
     background: linear-gradient(135deg,
             rgba(40, 40, 45, 0.84) 0%,
             rgba(30, 30, 35, 0.78) 100%) !important;

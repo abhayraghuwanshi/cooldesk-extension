@@ -12,6 +12,9 @@ Manage shared project todos in `.cooldesk/todos.json` (format defined in the `co
   - "list" → just show the current todos, no edit.
 - Match existing todos fuzzily by title when an id isn't given; if ambiguous, ask which one.
 - Keep it valid JSON. Personal-only tasks belong in `.cooldesk/local/`, not here.
+- After editing, push the change to a running CoolDesk app so the todo list updates without a
+  refresh: `node "${CLAUDE_PLUGIN_ROOT}/scripts/cooldesk-sync.mjs" announce`
+  (silent no-op when the app isn't running — not a failure worth reporting).
 - After editing, show the updated open todos.
 
 Arguments: $ARGUMENTS

@@ -19,7 +19,7 @@ import { runningAppsService } from '../services/runningAppsService';
 import { isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../services/searchService';
 import { searchWindowsSettings } from '../data/windowsSettings';
 import { searchWindowsTools } from '../data/windowsTools';
-import { enrichRunningAppsWithIcons, getBaseDomainFromUrl, getFaviconUrl } from '../utils/helpers';
+import { enrichRunningAppsWithIcons, getFaviconUrl, getGroupDomainFromUrl } from '../utils/helpers';
 import { useIsSidebarWidth } from '../hooks/useIsSidebarWidth';
 import { useSlashCommands } from '../hooks/useSlashCommands';
 import { useVoiceCommands } from '../hooks/useVoiceCommands';
@@ -703,16 +703,21 @@ export function GlobalSpotlight({
                 .filter(t => !pendingClosed.has(tabKey(t)));
             console.log('[Spotlight] After URL filter:', afterUrlFilter.length);
 
+            // One row per domain, labelled with how many tabs it stands for.
+            // Keyed on the group domain, not eTLD+1: analytics.google.com and
+            // chromewebstore.google.com are both google.com to PSL, so every
+            // Google product used to collapse into a single row and the tab
+            // count silently dropped.
             const relevantTabs = afterUrlFilter
                 .filter((t, index, self) =>
-                    index === self.findIndex(s => getBaseDomainFromUrl(s.url) === getBaseDomainFromUrl(t.url))
+                    index === self.findIndex(s => getGroupDomainFromUrl(s.url) === getGroupDomainFromUrl(t.url))
                 )
                 .map(t => ({
                     ...t,
                     type: 'tab',
                     description: (() => {
-                        const domain = getBaseDomainFromUrl(t.url);
-                        const count = afterUrlFilter.filter(tab => getBaseDomainFromUrl(tab.url) === domain).length;
+                        const domain = getGroupDomainFromUrl(t.url);
+                        const count = afterUrlFilter.filter(tab => getGroupDomainFromUrl(tab.url) === domain).length;
                         return count > 1 ? `${count} tabs from ${domain}` : `Tab from ${domain}`;
                     })(),
                     favicon: t.favIconUrl || t.favicon  // Map favIconUrl to favicon
@@ -1582,18 +1587,27 @@ export function GlobalSpotlight({
             try {
                 const tabId = item.tabId || item.id;
                 if (tabId) {
+                    // One payload for both transports. In the desktop window
+                    // `chrome` is the polyfill (chromePolyfill.js) that forwards to
+                    // the Tauri shim, so the chrome branch — not the electronAPI one
+                    // — is what runs there. Building the message twice meant the
+                    // desktop path silently dropped _deviceId, and a jump with no
+                    // deviceId stops being routed to one browser instance: the tab id
+                    // is no longer authoritative, so every Chromium browser has to
+                    // re-prove it by exact url and the jump lands nowhere.
+                    const jumpMsg = {
+                        type: 'JUMP_TO_TAB',
+                        tabId,
+                        windowId: item.windowId || item.window_id,
+                        url: item.url,
+                        _deviceId: item._deviceId,
+                        browser: item.browser,
+                    };
                     // Fire-and-forget — spotlight is already closing
                     if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-                        chrome.runtime.sendMessage({ type: 'JUMP_TO_TAB', tabId, url: item.url, browser: item.browser });
+                        chrome.runtime.sendMessage(jumpMsg);
                     } else if (window.electronAPI?.sendMessage) {
-                        window.electronAPI.sendMessage({
-                            type: 'JUMP_TO_TAB',
-                            tabId,
-                            windowId: item.windowId || item.window_id,
-                            url: item.url,
-                            _deviceId: item._deviceId,
-                            browser: item.browser,
-                        });
+                        window.electronAPI.sendMessage(jumpMsg);
                     }
                     return;
                 }

@@ -1,4 +1,4 @@
-import { faDiagramProject, faEllipsisVertical, faGear, faGripLines, faTableColumns, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faDiagramProject, faGear, faGripLines, faTableColumns, faWindowMaximize } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import logo from '../../../logo-2.png';
@@ -14,10 +14,12 @@ import '../../styles/tabCard.css';
 import { Face, WorkspaceShell } from '../spatial/WorkspaceShell';
 import AIWorkspaceManager from './AIWorkspaceManager';
 import { GlobalSpotlight } from '../GlobalSpotlight';
+import { UpdateButton } from '../UpdateButton';
 import { GlobalAddButton } from './GlobalAddButton';
 import { OverviewDashboard } from './OverviewDashboard';
 import { WorkspaceDockBar } from './WorkspaceDockBar';
 import { useDockState } from '../../hooks/useDockState';
+import { useCooldeskAutoWorkspace } from '../../hooks/useCooldeskProjects.js';
 // Lazy load WorkspaceList (Face 2)
 const WorkspaceList = lazy(() => import('./WorkspaceList').then(m => ({ default: m.WorkspaceList })));
 
@@ -60,6 +62,10 @@ export function CoolDeskContainer({
     });
     return unsubscribe;
   }, []);
+
+  // A `/cd-init` in a repo CoolDesk has never seen becomes a workspace here,
+  // instead of staying invisible until someone creates one by hand.
+  useCooldeskAutoWorkspace(savedWorkspaces);
 
   // Run AI app categorization on first launch (or when apps/workspaces change)
   useEffect(() => {
@@ -143,8 +149,6 @@ export function CoolDeskContainer({
   });
 
   const [graphOpen, setGraphOpen] = useState(false);
-  // Sidebar-width corner control bar (replaces the hidden top header)
-  const [sidebarControlsOpen, setSidebarControlsOpen] = useState(false);
 
   // Backend dock state — drives the horizontal-bar render mode below.
   const dockState = useDockState();
@@ -663,6 +667,9 @@ export function CoolDeskContainer({
         </div>
 
         <div className="header-right">
+          {/* Renders only when an update is actually pending — the update must
+              be reachable without opening Settings. */}
+          <UpdateButton />
           {isDesktopApp && (
             <button
               className="cooldesk-settings-btn"
@@ -686,32 +693,26 @@ export function CoolDeskContainer({
           top header above is hidden. Collapsed it's a single dots button;
           expanded it offers the header's actions plus "back to full app". */}
       <div className="sidebar-control-bar">
-        {sidebarControlsOpen && (
-          <>
-            <button className="sidebar-control-btn" onClick={() => setGraphOpen(true)} title="Cool Activity">
-              <FontAwesomeIcon icon={faDiagramProject} />
-            </button>
-            <button className="sidebar-control-btn" onClick={onOpenSettings} title="Settings">
-              <FontAwesomeIcon icon={faGear} />
-            </button>
-            {isDesktopApp && (
-              <button
-                className="sidebar-control-btn"
-                onClick={cycleLayout}
-                title={`${LAYOUTS[currentLayout].label} → ${nextLayout.label}`}
-              >
-                <FontAwesomeIcon icon={nextLayout.icon} />
-              </button>
-            )}
-          </>
+        {/* Outside the collapse: a pending update shouldn't hide behind the
+            dots button, and it disappears again once installed. */}
+        <UpdateButton compact />
+        {/* No Settings or Cool Activity here. Both are full desktop surfaces —
+            SettingsModal is a fixed two-column dialog and the activity graph
+            wants real canvas area — and neither adapts to sidebar widths, so
+            offering them from the drawer only led somewhere broken. Both stay
+            reachable from the full-width header, which is where the layout
+            button returns you. With them gone the dots disclosure that used to
+            wrap them is gone too: a collapse guarding a single button is just
+            an extra tap, and in extension mode it expanded to nothing at all. */}
+        {isDesktopApp && (
+          <button
+            className="sidebar-control-btn"
+            onClick={cycleLayout}
+            title={`${LAYOUTS[currentLayout].label} → ${nextLayout.label}`}
+          >
+            <FontAwesomeIcon icon={nextLayout.icon} />
+          </button>
         )}
-        <button
-          className="sidebar-control-btn sidebar-control-toggle"
-          onClick={() => setSidebarControlsOpen(open => !open)}
-          title={sidebarControlsOpen ? 'Hide controls' : 'Show controls'}
-        >
-          <FontAwesomeIcon icon={sidebarControlsOpen ? faXmark : faEllipsisVertical} />
-        </button>
       </div>
 
       {/* Spatial Workspace Shell - Takes remaining height */}

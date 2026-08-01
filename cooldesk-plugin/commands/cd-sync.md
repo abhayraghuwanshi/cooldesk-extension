@@ -13,6 +13,9 @@ Bring `.cooldesk/` up to date. Follow the `cooldesk-workspace` skill for formats
 3. Keep everything team-shareable — never write secrets, personal layout, or session history into
    the shared files (personal scratch goes in `.cooldesk/local/`).
 4. Do not touch the `auto` block in `cooldesk.json` — the plugin's hook owns it.
-5. Summarize what changed.
+5. Push the changes to a running CoolDesk app so it re-reads without a refresh:
+   `node "${CLAUDE_PLUGIN_ROOT}/scripts/cooldesk-sync.mjs" announce`
+   Silent success when the app isn't running — don't report that as a failure.
+6. Summarize what changed.
 
 $ARGUMENTS, if present, is a focus hint (e.g. "just todos", "update architecture").

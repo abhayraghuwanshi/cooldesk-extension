@@ -1050,3 +1050,33 @@
   .fm-status-hint { display: none; }
   .fm-list.fm-grid { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* Docked sidebar width. The 720px rules above still assume a window — at 500px
+   and below there is no room for a floating dialog at all, so the manager goes
+   full-bleed and drops to a single name column. Without this the fixed 78px
+   size column plus gaps leaves the name column too narrow to read, the toolbar
+   runs past the right edge (it is a nowrap flex row), and the 3-up grid gives
+   ~90px tiles. Matches the app-shell sidebar breakpoint in cooldesk.css. */
+@media (max-width: 500px) {
+  /* Full-bleed: a centred dialog with padding wastes width we do not have. */
+  .fm-backdrop { padding: 0; }
+  .fm-window {
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  /* The toolbar is a nowrap flex row; let it wrap rather than overflow, and let
+     search take the width left over instead of a fixed 120px. */
+  .fm-toolbar { flex-wrap: wrap; }
+  .fm-search { width: auto; flex: 1 1 100%; min-width: 0; }
+
+  /* Name + the row action only. Size joins date in being dropped. */
+  .fm-col-heads,
+  .fm-row { grid-template-columns: 1fr 26px; }
+  .fm-col-size { display: none; }
+
+  .fm-list.fm-grid { grid-template-columns: repeat(2, 1fr); }
+}

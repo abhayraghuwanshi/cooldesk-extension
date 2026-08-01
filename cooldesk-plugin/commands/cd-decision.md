@@ -17,6 +17,9 @@ Append a decision to `.cooldesk/decisions.md` (create the file if missing).
 ```
 
 - Decisions are shared team knowledge — no secrets, no personal preferences.
+- After writing, push the change to a running CoolDesk app so it re-reads without a refresh:
+  `node "${CLAUDE_PLUGIN_ROOT}/scripts/cooldesk-sync.mjs" announce`
+  (silent no-op when the app isn't running — not a failure worth reporting).
 - Show the block you added.
 
 Arguments: $ARGUMENTS

@@ -28,6 +28,25 @@ const git = (args) => {
 // Not a CoolDesk project -> stay completely silent.
 if (!exists(manifestPath)) process.exit(0);
 
+/**
+ * Tell a running CoolDesk app that this project's .cooldesk/ changed, so it
+ * re-reads without waiting for the user to refresh.
+ *
+ * The app is usually NOT running — that is the normal case, not an error — so
+ * every failure is swallowed and the timeout is short enough that a hook never
+ * stalls a Claude Code session on it.
+ */
+async function announce() {
+  try {
+    await fetch('http://localhost:4545/cooldesk/announce', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: cwd }),
+      signal: AbortSignal.timeout(1000),
+    });
+  } catch { /* app not running, or older build without the route */ }
+}
+
 function todos() {
   const data = readJSON(path.join(root, 'todos.json'));
   const list = Array.isArray(data?.todos) ? data.todos : [];
@@ -48,6 +67,12 @@ function inventory() {
   return present;
 }
 
+// Explicit push, for /cd-init and /cd-sync to call right after they write.
+if (cmd === 'announce') {
+  await announce();
+  process.exit(0);
+}
+
 if (cmd === 'update') {
   const manifest = readJSON(manifestPath) || {};
   const t = todos();
@@ -62,6 +87,9 @@ if (cmd === 'update') {
   if (strip(auto) !== strip(manifest.auto)) {
     fs.writeFileSync(manifestPath, JSON.stringify({ ...manifest, auto }, null, 2) + '\n');
   }
+  // Announce unconditionally: the todos/decisions the session just edited are
+  // separate files, so an unchanged `auto` block does not mean nothing changed.
+  await announce();
   process.exit(0);
 }
 
@@ -134,4 +162,7 @@ L.push('Entry points: `.cooldesk/README.md`, `architecture.md`, `decisions.md`, 
 process.stdout.write(JSON.stringify({
   hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: L.join('\n') },
 }));
+// Covers the common ordering: the project was scaffolded in an earlier session,
+// and the app only started afterwards.
+await announce();
 process.exit(0);

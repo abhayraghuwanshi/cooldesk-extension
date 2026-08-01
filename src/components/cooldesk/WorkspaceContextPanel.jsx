@@ -5,6 +5,7 @@ import { marked } from 'marked';
 import { AccentColorPicker } from './AccentColorPicker.jsx';
 import { CooldeskSection } from './CooldeskSection.jsx';
 import { fetchCooldesk, collectSharedTodos } from '../../services/cooldeskService.js';
+import { useCooldeskVersion } from '../../hooks/useCooldeskProjects.js';
 import {
   deleteNote,
   deleteWorkspaceTodo,
@@ -77,6 +78,8 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
   // each linked project's README, not only the hub's.
   const [readmeDoc, setReadmeDoc] = useState(null);
 
+  // Re-read when the plugin announces a write to this project's .cooldesk/.
+  const cdVersion = useCooldeskVersion(folderPath);
   useEffect(() => {
     if (!folderPath) { setCooldesk(null); return; }
     let cancelled = false;
@@ -84,7 +87,7 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
       .then(d => { if (!cancelled) setCooldesk(d?.exists ? d : null); })
       .catch(() => { if (!cancelled) setCooldesk(null); });
     return () => { cancelled = true; };
-  }, [folderPath]);
+  }, [folderPath, cdVersion]);
 
   const sharedTodos = useMemo(() => collectSharedTodos(cooldesk), [cooldesk]);
   // Group shared todos by project ("category-wise"), so the Next Up list reads as

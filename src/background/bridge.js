@@ -1,21 +1,24 @@
 // Host communication bridge (WebSocket, polling, redirects)
 import { getRedirectDecision } from '../services/extensionApi.js';
-import { isHostSyncEnabled, getHostUrl, getWebSocketUrl, getDeviceId } from '../services/syncConfig.js';
+import {
+  isHostSyncEnabled, getHostUrl, getWebSocketUrl, getDeviceId,
+  detectBrowser, browsersMatch,
+} from '../services/syncConfig.js';
+import { jumpKeyOf, markJumpHandled, wasJumpRecentlyHandled } from '../services/jumpGuard.js';
 
 let myDeviceId = null;
 getDeviceId().then(id => { myDeviceId = id; }).catch(() => {});
 
-// Deduplication: track recently-handled jumps so the HTTP poll doesn't re-fire
-// a jump that was already handled by the WS handler moments before.
-const recentJumps = new Map(); // key → timestamp
-function markJumpHandled(key) {
-  recentJumps.set(key, Date.now());
-  // Clean up entries older than 10s to prevent unbounded growth
-  for (const [k, t] of recentJumps) { if (Date.now() - t > 10000) recentJumps.delete(k); }
-}
-function wasJumpRecentlyHandled(key) {
-  const t = recentJumps.get(key);
-  return t && (Date.now() - t < 5000); // 5s window
+// Is this jump/close addressed to this browser instance? deviceId is the real
+// routing key — it's unique per instance and never collides. The browser field
+// is only a coarse label, so it may confirm a jump but must never override a
+// deviceId that already says the jump belongs elsewhere.
+// Returns null when the jump isn't ours, otherwise whether it was addressed to
+// this instance *precisely* (by deviceId). A precisely-routed jump's tab id is
+// authoritative — see the note in syncWebSocket.handleJumpToTab.
+function routingFor(deviceId, browser) {
+  if (deviceId && myDeviceId) return deviceId === myDeviceId ? { routed: true } : null;
+  return browsersMatch(browser, detectBrowser()) ? { routed: false } : null;
 }
 
 // Helper function to check if URL is HTTP/HTTPS
@@ -127,8 +130,9 @@ const HOST_WS_RECONNECT_MAX = 60000; // 60s
 async function pushCurrentTabs() {
   try {
     const allTabs = await chrome.tabs.query({});
-    const isEdge = navigator.userAgent.includes('Edg/');
-    const browser = isEdge ? 'edge' : 'chrome';
+    // The real browser, not "chrome for everything Chromium" — the desktop app
+    // echoes this back on jump/close, and it decides which window gets focused.
+    const browser = detectBrowser();
     const tabs = allTabs.map(t => ({
       id: t.id,
       url: t.url || '',
@@ -237,23 +241,20 @@ function startHostActionWS() {
 
         if (msg && msg.type === 'jump-to-tab') {
           const { tabId, url, deviceId, browser } = msg.payload || {};
-          if (deviceId && myDeviceId && deviceId !== myDeviceId) return;
-          if (browser) {
-            const isEdge = navigator.userAgent.includes('Edg/');
-            const myBrowser = isEdge ? 'edge' : 'chrome';
-            if (browser !== myBrowser) return;
-          }
+          const routing = routingFor(deviceId, browser);
+          if (!routing) return;
           if (!tabId && !url) return;
-          const jumpKey = `${tabId}:${url || ''}`;
+          const jumpKey = jumpKeyOf(tabId, url);
           if (wasJumpRecentlyHandled(jumpKey)) return;
           try {
             let tab = null;
 
-            // 1. Fast path: direct tabId lookup with cross-browser URL guard
+            // 1. Fast path: direct tabId lookup, url-guarded only when the jump
+            //    wasn't addressed to this instance by deviceId
             if (tabId) {
               try {
                 const candidate = await chrome.tabs.get(tabId);
-                if (url && candidate?.url) {
+                if (!routing.routed && url && candidate?.url) {
                   if (candidate.url.split('?')[0] === url.split('?')[0]) tab = candidate;
                 } else {
                   tab = candidate;
@@ -267,7 +268,10 @@ function startHostActionWS() {
               if (hostname) {
                 const matches = await chrome.tabs.query({ url: `*://${hostname}/*` });
                 if (matches.length > 0) {
-                  tab = matches.find(t => t.url?.split('?')[0] === url.split('?')[0]) || matches[0];
+                  // Any tab on the host only when routed to us precisely — see
+                  // the note in syncWebSocket.handleJumpToTab
+                  tab = matches.find(t => t.url?.split('?')[0] === url.split('?')[0])
+                    || (routing.routed ? matches[0] : null);
                 }
               }
             }
@@ -281,20 +285,7 @@ function startHostActionWS() {
               // For cross-desktop windows this is a no-op; the native focus path
               // (request-native-focus → SwitchToThisWindow) handles that case.
               try { await chrome.windows.update(tab.windowId, { focused: true }); } catch { }
-              try {
-                const win = await chrome.windows.get(tab.windowId);
-                const isEdge = navigator.userAgent.includes('Edg/');
-                if (hostWs && hostWs.readyState === WebSocket.OPEN) {
-                  hostWs.send(JSON.stringify({
-                    type: 'request-native-focus',
-                    payload: {
-                      browser: isEdge ? 'msedge' : 'chrome',
-                      bounds: { left: win.left, top: win.top, width: win.width, height: win.height },
-                      tabId: tab.id,
-                    }
-                  }));
-                }
-              } catch { }
+              try { await requestNativeFocus(tab.windowId, tab.id); } catch { }
             }
           } catch { }
         }
@@ -312,11 +303,9 @@ function startHostActionWS() {
         // restored its previously-focused tab when the window was dragged across desktops.
         if (msg && msg.type === 'native-focus-done') {
           const { tabId: confirmedTabId, browser } = msg.payload || {};
-          if (browser) {
-            const isEdge = navigator.userAgent.includes('Edg/');
-            const myBrowser = isEdge ? 'edge' : 'chrome';
-            if (browser !== myBrowser) return;
-          }
+          // The ack is broadcast to every connected browser; only the one that
+          // asked for the focus may re-activate a tab with this (per-browser) id.
+          if (!browsersMatch(browser, detectBrowser())) return;
           if (confirmedTabId) {
             try {
               await chrome.tabs.update(confirmedTabId, { active: true });
@@ -366,24 +355,19 @@ async function pollOnceForJumpNext() {
     const action = data?.action;
     if (!action) return;
     const { tabId, windowId, url, deviceId, browser } = action;
-    // Only handle if targeting this device (or broadcast to all)
-    if (deviceId && myDeviceId && deviceId !== myDeviceId) return;
-    // Only handle if targeting this browser (or broadcast to all)
-    if (browser) {
-      const isEdge = navigator.userAgent.includes('Edg/');
-      const myBrowser = isEdge ? 'edge' : 'chrome';
-      if (browser !== myBrowser) return;
-    }
+    // Only handle if targeting this instance (or broadcast to all)
+    const routing = routingFor(deviceId, browser);
+    if (!routing) return;
     if (!tabId && !url) return;
     // Skip if the WS handler already handled this jump (deduplication)
-    const jumpKey = `${tabId}:${url || ''}`;
+    const jumpKey = jumpKeyOf(tabId, url);
     if (wasJumpRecentlyHandled(jumpKey)) return;
 
     let tab = null;
     if (tabId) {
       try {
         const candidate = await chrome.tabs.get(tabId);
-        if (url && candidate?.url) {
+        if (!routing.routed && url && candidate?.url) {
           if (candidate.url.split('?')[0] === url.split('?')[0]) tab = candidate;
         } else {
           tab = candidate;
@@ -394,7 +378,9 @@ async function pollOnceForJumpNext() {
       const hostname = (() => { try { return new URL(url).hostname; } catch { return null; } })();
       if (hostname) {
         const matches = await chrome.tabs.query({ url: `*://${hostname}/*` });
-        tab = matches.find(t => t.url?.split('?')[0] === url.split('?')[0]) || matches[0] || null;
+        tab = matches.find(t => t.url?.split('?')[0] === url.split('?')[0])
+          || (routing.routed ? matches[0] : null)
+          || null;
       }
     }
     if (!tab) return;
@@ -515,8 +501,10 @@ async function openOrFocusApp() {
 export async function requestNativeFocus(windowId, tabId = null) {
   try {
     const win = await chrome.windows.get(windowId);
-    const isEdge = typeof navigator !== 'undefined' && navigator.userAgent?.includes('Edg/');
-    const browser = isEdge ? 'msedge' : 'chrome';
+    // Send the real browser id. Reporting every Chromium browser as "chrome"
+    // made the native side hunt for a chrome.exe window at Brave's coordinates —
+    // and maximised windows share coordinates, so Chrome got the focus instead.
+    const browser = detectBrowser();
     if (hostWs && hostWs.readyState === WebSocket.OPEN) {
       hostWs.send(JSON.stringify({
         type: 'request-native-focus',

@@ -57,7 +57,7 @@ import {
     setHostUrls,
     setHostWorkspaces
 } from './extensionApi';
-import { getDeviceId, isHostSyncEnabled, loadSyncConfig } from './syncConfig';
+import { getDeviceId, isHostSyncEnabled, loadSyncConfig, detectBrowser } from './syncConfig';
 import { syncWebSocket } from './syncWebSocket';
 
 // True only for browser web activity (http/https url). Desktop-app focus events
@@ -633,12 +633,10 @@ class SyncOrchestrator {
      * Detect browser type from user agent
      */
     detectBrowser() {
-        const ua = navigator.userAgent;
-        if (ua.includes('Edg/')) return 'edge';
-        if (ua.includes('Chrome/')) return 'chrome';
-        if (ua.includes('Firefox/')) return 'firefox';
-        if (ua.includes('Safari/') && !ua.includes('Chrome')) return 'safari';
-        return 'other';
+        // One detector for the whole app: this label rides along with every tab and
+        // decides which browser's window the desktop app focuses on a jump. Calling
+        // Brave "chrome" here is what made jumps focus the wrong browser.
+        return detectBrowser();
     }
 
     /**
@@ -1146,35 +1144,10 @@ class SyncOrchestrator {
         return Array.from(merged.values());
     }
 
-    /**
-     * Handle jump-to-tab command from remote (Electron)
-     */
-    async handleRemoteJumpToTab(data) {
-        if (!data || !data.tabId) return;
-
-        console.log('[SyncOrchestrator] Handling remote jump-to-tab:', data);
-
-        // Only run in extension context
-        if (!isExtension() || !chrome.tabs) return;
-
-        try {
-            // activate tab
-            await chrome.tabs.update(data.tabId, { active: true });
-
-            // focus window
-            if (data.windowId) {
-                await chrome.windows.update(data.windowId, { focused: true });
-            } else {
-                // If no windowId provided, try to find the tab's window
-                const tab = await chrome.tabs.get(data.tabId);
-                if (tab && tab.windowId) {
-                    await chrome.windows.update(tab.windowId, { focused: true });
-                }
-            }
-        } catch (error) {
-            console.error('[SyncOrchestrator] Failed to jump to tab:', error);
-        }
-    }
+    // A handleRemoteJumpToTab() used to live here: unwired (see the note in the
+    // wsEvents map above) and it activated the incoming tab id with no device or
+    // url guard, which is exactly how a jump ends up focusing the wrong browser.
+    // syncWebSocket.handleJumpToTab is the one guarded implementation.
 
     /**
      * Full bidirectional sync

@@ -18,7 +18,8 @@ import { calculateNextBackupTime, deleteBackup, getBackupsDir, listBackups, read
 import { parseBackup, restoreBackup } from '../../services/backupRestore';
 import { checkHostAvailable, loadSyncConfig, toggleHostSync } from '../../services/syncConfig';
 import { setAndSaveFontFamily, setAndSaveFontSize } from '../../utils/fontUtils';
-import { checkUpdateWithPing, isAnalyticsEnabled, setAnalyticsEnabled } from '../../services/analytics';
+import { isAnalyticsEnabled, setAnalyticsEnabled } from '../../services/analytics';
+import { checkForUpdate, getUpdateState, installUpdate } from '../../services/updateService';
 import { TEAM_FEATURE_ENABLED } from '../../config/features';
 import AIModelsTab from '../settings/AIModelsTab';
 import ExportData from '../settings/ExportData';
@@ -60,10 +61,12 @@ export function SettingsModal({
   const [syncConfigLoading, setSyncConfigLoading] = useState(false);
   const [sessionTrackingEnabled, setSessionTrackingEnabled] = useState(true);
 
-  const [updateAvailable, setUpdateAvailable] = useState(false);
+  // Seeded from the shared service so Settings agrees with the header pill
+  // without re-checking (Chrome throttles requestUpdateCheck hard).
+  const [updateAvailable, setUpdateAvailable] = useState(() => !!getUpdateState().info);
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(true);
   const [extensionVersion, setExtensionVersion] = useState('');
-  const [latestVersion, setLatestVersion] = useState('');
+  const [latestVersion, setLatestVersion] = useState(() => getUpdateState().info?.latest || '');
   const [checkingUpdate, setCheckingUpdate] = useState(false);
 
   const [autoBackupEnabled, setAutoBackupEnabled] = useState(false);
@@ -349,42 +352,29 @@ export function SettingsModal({
     setAnalyticsEnabledState(enabled);
   };
 
+  // Both handlers go through the shared update service so the header's update
+  // pill reflects whatever we find here (and vice versa).
   const handleCheckForUpdates = async () => {
-    // Desktop (Tauri/winget): compare against the latest GitHub release.
-    if (isTauri) {
-      setCheckingUpdate(true);
-      try {
-        const info = await checkUpdateWithPing();
-        if (info?.has_update) {
-          setUpdateAvailable(true);
-          setLatestVersion(info.latest);
-          setError(`Update available: v${info.latest}`);
-        } else {
-          setUpdateAvailable(false);
-          setError('You are running the latest version');
-        }
-      } catch { setError('Update check failed'); }
-      finally { setCheckingUpdate(false); }
-      return;
-    }
-    // Chrome extension build.
-    if (!chrome.runtime?.requestUpdateCheck) { setError('Update check not available in this environment'); return; }
+    setCheckingUpdate(true);
     try {
-      const { status, version } = await chrome.runtime.requestUpdateCheck();
-      if (status === 'update_available') { setUpdateAvailable(true); setError(`Update available: v${version}`); }
-      else if (status === 'no_update') setError('You are running the latest version');
-      else if (status === 'throttled') setError('Update check throttled. Try again later.');
+      const info = await checkForUpdate({ force: true });
+      if (info) {
+        setUpdateAvailable(true);
+        setLatestVersion(info.latest);
+        setError(`Update available: v${info.latest}`);
+      } else {
+        setUpdateAvailable(false);
+        setError('You are running the latest version');
+      }
     } catch { setError('Update check failed'); }
+    finally { setCheckingUpdate(false); }
   };
 
   const handleInstallUpdate = async () => {
-    // Desktop: hand off to winget; it replaces the app and relaunches.
-    if (isTauri) {
-      try { await tauriInvoke('run_winget_upgrade'); }
-      catch { setError('Could not launch winget upgrade'); }
-      return;
-    }
-    if (chrome.runtime?.reload) chrome.runtime.reload();
+    // Desktop hands off to winget (which replaces the app and relaunches it);
+    // the extension reloads itself. Either way this page goes away.
+    const ok = await installUpdate();
+    if (!ok) setError('Could not start the update — opening the release page instead');
   };
 
   const handleToggleAutoBackup = async (enabled) => {

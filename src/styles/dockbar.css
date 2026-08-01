@@ -169,24 +169,40 @@
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* Active = the app is running / the url is open in a tab. Glowing dot riding
-   just off the icon, matching the app's purple selection grammar. */
+/* Active = the app is running / the url is open in a tab. Glowing dot in the
+   app's purple selection grammar.
+
+   The dot sits INSIDE the 44px tile, in the 7px of clear space under the 30px
+   icon — not hanging off the bottom edge. It used to be at bottom: -4px, which
+   put it outside the tile and past the shelf's 2px vertical padding, so it
+   landed on the pill's bottom rim: half-swallowed by the border, reading as a
+   smudge detached from its icon. There is no room to hang below it — the whole
+   point of the short window band — so the space under the icon is the only
+   place it can live.
+
+   Staying inside also fixes it under magnification: the JS sets a scale()
+   transform on .dockbar-item (see WorkspaceDockBar.jsx), and a pseudo-element
+   scales with its host, so an edge-anchored dot grew AND drifted further out
+   the closer the cursor got. Inside the tile it scales with the icon like part
+   of the artwork, which is what it should have done all along. */
 .dockbar-item.is-active::after {
   content: '';
   position: absolute;
-  bottom: -4px;
+  bottom: 3px;
   left: 50%;
   transform: translateX(-50%);
   width: 4px;
   height: 4px;
   border-radius: 50%;
   background: #c4b5fd;
-  box-shadow: 0 0 7px 1.5px rgba(196, 181, 253, 0.9);
+  /* Tighter than the old 7px/1.5px halo: over the icon plate that much bloom
+     read as a glow with no dot in it. */
+  box-shadow: 0 0 5px rgba(196, 181, 253, 0.85);
 }
 
 .dockbar--top .dockbar-item.is-active::after {
   bottom: auto;
-  top: -4px;
+  top: 3px;
 }
 
 .dockbar-item:hover {

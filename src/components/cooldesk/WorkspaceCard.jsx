@@ -50,6 +50,7 @@ import {
 } from '../../db/index.js';
 import { recordFeedbackEvent, recordUrlWorkspace } from '../../services/feedbackService.js';
 import { fetchCooldesk } from '../../services/cooldeskService.js';
+import { useCooldeskVersion } from '../../hooks/useCooldeskProjects.js';
 import { getBaseDomainFromUrl, getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
 import { AccentColorPicker } from './AccentColorPicker.jsx';
 import { GroupedLinksPopover } from './GroupedLinksPopover.jsx';
@@ -607,6 +608,8 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     return editorFolder?.path || null;
   }, [apps]);
   const [cooldesk, setCooldesk] = useState(null);
+  // Re-read when the plugin announces a write to this project's .cooldesk/.
+  const cdVersion = useCooldeskVersion(projectFolderPath);
   useEffect(() => {
     if (!projectFolderPath) { setCooldesk(null); return; }
     let cancelled = false;
@@ -614,7 +617,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
       .then(d => { if (!cancelled) setCooldesk(d?.exists ? d : null); })
       .catch(() => { if (!cancelled) setCooldesk(null); });
     return () => { cancelled = true; };
-  }, [projectFolderPath]);
+  }, [projectFolderPath, cdVersion]);
 
   const cdFolders = useMemo(() => {
     if (!cooldesk) return [];

@@ -333,6 +333,38 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   );
 });
 
+// ── PROBE: can a native focus wake a suspended worker? ────────────────────
+// A dead MV3 worker cannot receive the sidecar's jump broadcast — the WebSocket
+// dies with the worker — so a jump currently waits for the 30s alarm above.
+// Switching a tab by hand wakes the worker instantly (tabs.onActivated), so the
+// question is whether Rust's SetForegroundWindow counts as browser activity too.
+// If windows.onFocusChanged fires on it, the native focus becomes its own wake
+// signal and the jump poll can act ~1s later instead of ~30s.
+//
+// Top level for the same reason as the alarm: the listener must already exist
+// when the waking event arrives, or that event is dropped.
+//
+// Results go to storage, not just the console: opening devtools on a service
+// worker keeps it alive, which would suppress the exact suspension we're trying
+// to observe. Read them from any extension page (not the worker inspector) with
+//   chrome.storage.local.get('cooldeskFocusProbe', console.log)
+const WORKER_STARTED_AT = Date.now();
+const FOCUS_PROBE_KEY = 'cooldeskFocusProbe';
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  // A worker only milliseconds old means this event is what started it — the
+  // signal we're looking for. An older worker was already awake, which proves
+  // nothing either way.
+  const workerAgeMs = Date.now() - WORKER_STARTED_AT;
+  const coldWake = workerAgeMs < 1000;
+  console.log(`[Background][probe] onFocusChanged windowId=${windowId} workerAge=${workerAgeMs}ms coldWake=${coldWake}`);
+  chrome.storage.local.get(FOCUS_PROBE_KEY, (got) => {
+    const log = Array.isArray(got?.[FOCUS_PROBE_KEY]) ? got[FOCUS_PROBE_KEY] : [];
+    log.push({ at: new Date().toISOString(), windowId, workerAgeMs, coldWake });
+    // Keep it bounded; this is a diagnostic, not a data store.
+    chrome.storage.local.set({ [FOCUS_PROBE_KEY]: log.slice(-50) });
+  });
+});
+
 // Initialize CommandExecutor for shared use
 // MOVED TO main() function to avoid top-level execution errors
 // const commandExecutor = new CommandExecutor((feedback) => {

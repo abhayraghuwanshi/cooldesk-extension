@@ -1,13 +1,14 @@
-import { faBrain, faClock, faCode, faDesktop, faFolderOpen, faSync, faTasks, faToggleOff, faToggleOn, faWifi } from '@fortawesome/free-solid-svg-icons';
+import { faClock, faCode, faDesktop, faFolderOpen, faSync, faTasks, faToggleOff, faToggleOn, faWifi } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { recordFeedbackEvent } from '../../services/feedbackService.js';
 import { getHostTabs } from '../../services/extensionApi.js';
 import { syncOrchestrator } from '../../services/syncOrchestrator.js';
 import { syncWebSocket } from '../../services/syncWebSocket.js';
-import { isHostSyncEnabled } from '../../services/syncConfig.js';
+import { getHostUrl, isHostSyncEnabled } from '../../services/syncConfig.js';
+import { isElectronApp } from '../../services/environmentDetector.js';
 import { runningAppsService } from '../../services/runningAppsService.js';
-import { enrichRunningAppsWithIcons, getBaseDomainFromUrl } from '../../utils/helpers.js';
+import { enrichRunningAppsWithIcons, getGroupDomainFromUrl } from '../../utils/helpers.js';
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
 import { AppCard, FolderCard, TabCard, TabGroupCard, TaskGroupCard } from './TabCard';
 import { DevServersPanel } from './DevServersPanel';
@@ -93,7 +94,6 @@ export function TabManagement() {
   const [smartSortEnabled, setSmartSortEnabled] = useState(true);
   const [visibleTabsCount, setVisibleTabsCount] = useState(12);
   const [tabActivity, setTabActivity] = useState({});
-  const [isFocusMode, setIsFocusMode] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [runningApps, setRunningApps] = useState([]);
   const [chromeTabGroups, setChromeTabGroups] = useState({});
@@ -117,10 +117,9 @@ export function TabManagement() {
 
   // Load auto-group, smart sort, and task view state on mount
   useEffect(() => {
-    chrome.storage.local.get(['autoGroupEnabled', 'smartSortEnabled', 'isFocusMode', 'taskViewEnabled'], (result) => {
+    chrome.storage.local.get(['autoGroupEnabled', 'smartSortEnabled', 'taskViewEnabled'], (result) => {
       setAutoGroupEnabled(result.autoGroupEnabled || false);
       setSmartSortEnabled(result.smartSortEnabled !== false); // Default to true
-      setIsFocusMode(result.isFocusMode || false);
       setTaskViewEnabled(result.taskViewEnabled || false);
     });
   }, []);
@@ -288,10 +287,38 @@ export function TabManagement() {
     [refreshTabs]
   );
 
-  // Subscribe to WebSocket connection events (must be after refreshTabs is defined)
+  // Subscribe to connection events (must be after refreshTabs is defined).
+  //
+  // The desktop app never opens a sync WebSocket: isElectronApp() is true there
+  // (the Tauri shim defines window.electronAPI), so syncOrchestrator.init()
+  // takes the initElectronSync() branch and syncWebSocket.connect() is never
+  // called. Reading syncWebSocket.isConnected() therefore pinned this badge to
+  // "Offline" forever, even with sync working perfectly over HTTP. Ask the
+  // sidecar directly instead — reachable host is what "synced" means here.
   useEffect(() => {
     if (!isHostSyncEnabled()) return;
 
+    let cancelled = false;
+
+    if (isElectronApp()) {
+      const checkHealth = async () => {
+        try {
+          const res = await fetch(`${getHostUrl()}/health`);
+          if (!cancelled) setWsConnected(res.ok);
+        } catch {
+          if (!cancelled) setWsConnected(false);
+        }
+      };
+      checkHealth();
+      const poll = setInterval(checkHealth, 5000);
+      return () => {
+        cancelled = true;
+        clearInterval(poll);
+      };
+    }
+
+    // Extension / browser: the WebSocket is the real transport, so its state is
+    // the honest answer.
     const checkConnection = () => setWsConnected(syncWebSocket.isConnected());
 
     // Check immediately and poll every 2s to catch state we may have missed
@@ -305,6 +332,7 @@ export function TabManagement() {
     const unsubDisconnect = syncWebSocket.on('disconnected', () => setWsConnected(false));
 
     return () => {
+      cancelled = true;
       clearInterval(poll);
       unsubConnect?.();
       unsubDisconnect?.();
@@ -658,21 +686,10 @@ export function TabManagement() {
     }
   }, []);
 
-  const filteredTabs = useMemo(() => {
-    let result = tabs;
-
-    if (isFocusMode) {
-      // Focus mode: Get the top 10 most relevant tabs
-      const topTabs = result.slice(0, 10);
-
-      // Preserve group integrity by keeping all tabs from these relevant domains
-      const focusedDomains = new Set(topTabs.map(t => getBaseDomainFromUrl(t.url)));
-
-      result = result.filter(t => t.pinned || t.active || focusedDomains.has(getBaseDomainFromUrl(t.url)));
-    }
-
-    return result;
-  }, [tabs, isFocusMode]);
+  // Focus mode used to narrow this to the top-scoring domains. It was removed:
+  // smart sort already surfaces the relevant tabs first, so hiding the rest only
+  // made tabs go missing with no clear way to tell why.
+  const filteredTabs = tabs;
 
   // Get recently active tabs (excluding current active)
   const recentTabs = useMemo(() => {
@@ -739,7 +756,7 @@ export function TabManagement() {
 
     const byDomain = {};
     domainGroupable.forEach(t => {
-      const domain = getBaseDomainFromUrl(t.url);
+      const domain = getGroupDomainFromUrl(t.url);
       if (!byDomain[domain]) byDomain[domain] = [];
       byDomain[domain].push(t);
     });
@@ -823,71 +840,6 @@ export function TabManagement() {
       }}>
         <div style={{ display: 'flex', gap: '8px' }}>
 
-          <button
-            onClick={async () => {
-              const newState = !isFocusMode;
-              setIsFocusMode(newState);
-              // Ensure smart sort is enabled when focus is on
-              if (newState) {
-                setSmartSortEnabled(true);
-                chrome.storage.local.set({ isFocusMode: newState, smartSortEnabled: true });
-              } else {
-                chrome.storage.local.set({ isFocusMode: newState });
-              }
-              // Immediately trigger a refetch/resort so the UI updates
-              debouncedRefresh();
-            }}
-            style={{
-              background: isFocusMode
-                ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(124, 58, 237, 0.15))'
-                : 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))',
-              border: isFocusMode
-                ? '1px solid rgba(139, 92, 246, 0.4)'
-                : '1px solid rgba(100, 116, 139, 0.3)',
-              borderRadius: '8px',
-              padding: '6px 12px',
-              color: isFocusMode ? '#A78BFA' : '#94A3B8',
-              cursor: 'pointer',
-              fontSize: 'var(--font-sm, 12px)',
-              fontWeight: 600,
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-            onMouseEnter={(e) => {
-              if (isFocusMode) {
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(124, 58, 237, 0.25))';
-                e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.6)';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-              } else {
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(100, 116, 139, 0.3), rgba(71, 85, 105, 0.25))';
-                e.currentTarget.style.borderColor = 'rgba(100, 116, 139, 0.5)';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (isFocusMode) {
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(124, 58, 237, 0.15))';
-                e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.4)';
-                e.currentTarget.style.transform = 'translateY(0)';
-              } else {
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))';
-                e.currentTarget.style.borderColor = 'rgba(100, 116, 139, 0.3)';
-                e.currentTarget.style.transform = 'translateY(0)';
-              }
-            }}
-            title={isFocusMode
-              ? "Focus enabled - Showing most relevant tabs"
-              : "Focus disabled - Showing all tabs"}
-          >
-            <FontAwesomeIcon
-              icon={faBrain}
-              size="lg"
-              style={{ pointerEvents: 'none' }}
-            />
-            <span style={{ pointerEvents: 'none' }}>Focus</span>
-          </button>
           <button
             onClick={() => {
               const newState = !autoGroupEnabled;
@@ -1230,7 +1182,7 @@ export function TabManagement() {
                   {partitionedTabs.chromeGroups.map(({ group, tabs: groupTabs }) => {
                     const color = CHROME_GROUP_COLORS[group.color] || '#9AA0A6';
                     // Fall back to primary domain if group has no title
-                    const label = group.title || getBaseDomainFromUrl(groupTabs[0]?.url) || 'Group';
+                    const label = group.title || getGroupDomainFromUrl(groupTabs[0]?.url) || 'Group';
                     const groupKey = `chrome-${group.id}`;
                     return (
                       <TabGroupCard

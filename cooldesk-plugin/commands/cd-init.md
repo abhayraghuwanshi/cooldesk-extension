@@ -24,6 +24,10 @@ Steps:
    - empty `.cooldesk/local/` directory (add a `.gitkeep`).
 4. Do NOT invent architecture/decisions prose you can't back up — leave those for `/cd-sync` as
    the project accrues real knowledge.
-5. Report what you created and the 2–3 things the user should review or correct.
+5. Announce the new project so a running CoolDesk app picks it up immediately — otherwise it
+   only appears after the user refreshes:
+   `node "${CLAUDE_PLUGIN_ROOT}/scripts/cooldesk-sync.mjs" announce`
+   It exits silently when the app isn't running; that is expected, not an error to report.
+6. Report what you created and the 2–3 things the user should review or correct.
 
 $ARGUMENTS may contain a project name or one-line description — use it to override what you inferred.

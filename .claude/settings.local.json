@@ -64,7 +64,11 @@
       "Bash(echo '{\"schemaVersion\":1,\"project\":{\"id\":\"alpha\",\"name\":\"Alpha App\",\"status\":\"active\"}}')",
       "Bash(echo '{\"schemaVersion\":1,\"project\":{\"id\":\"beta\",\"name\":\"Beta Service\",\"status\":\"active\"}}')",
       "Bash(python -)",
-      "Bash(powershell -NoProfile -Command \"Get-Process node -EA SilentlyContinue | Select-Object Id, StartTime | Sort-Object StartTime | Format-Table -AutoSize\")"
+      "Bash(powershell -NoProfile -Command \"Get-Process node -EA SilentlyContinue | Select-Object Id, StartTime | Sort-Object StartTime | Format-Table -AutoSize\")",
+      "Bash(nslookup cool-desk.com)",
+      "Bash(nslookup -type=NS cool-desk.com)",
+      "Bash(npm install *)",
+      "PowerShell(Stop-Process *)"
     ],
     "deny": [],
     "ask": [],

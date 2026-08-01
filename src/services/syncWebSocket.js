@@ -3,7 +3,8 @@
  * Handles connection to Electron app's WebSocket server
  */
 
-import { getWebSocketUrl, isHostSyncEnabled, getDeviceId } from './syncConfig';
+import { getWebSocketUrl, isHostSyncEnabled, getDeviceId, detectBrowser, browsersMatch } from './syncConfig';
+import { jumpKeyOf, markJumpHandled, wasJumpRecentlyHandled } from './jumpGuard';
 
 class SyncWebSocket {
     constructor() {
@@ -187,6 +188,11 @@ class SyncWebSocket {
             case 'tabs-updated':
                 this.emit('tabs', payload);
                 break;
+            case 'cooldesk-updated':
+                // The CoolDesk plugin wrote a project's .cooldesk/ folder. Carries
+                // { path, project } so listeners can re-read just that project.
+                this.emit('cooldesk', payload);
+                break;
             case 'sync-request':
                 this.emit('sync-request', payload);
                 break;
@@ -200,9 +206,12 @@ class SyncWebSocket {
                 this.handleCloseTab(payload).catch(() => {});
                 break;
             case 'native-focus-done':
-                // Rust native focus completed — re-activate the tab so Chrome shows it
-                // (Chrome may have restored its last-focused tab during the desktop switch).
-                if (payload?.tabId && typeof chrome !== 'undefined' && chrome.tabs?.update) {
+                // Rust native focus completed — re-activate the tab so the browser shows it
+                // (it may have restored its last-focused tab during the desktop switch).
+                // The ack is broadcast to every connected browser, so only the browser
+                // that asked may act: this tab id means something else in the others.
+                if (payload?.tabId && typeof chrome !== 'undefined' && chrome.tabs?.update
+                    && browsersMatch(payload.browser, detectBrowser())) {
                     chrome.tabs.update(payload.tabId, { active: true }).catch(() => {});
                 }
                 break;
@@ -340,29 +349,87 @@ class SyncWebSocket {
     }
 
     /**
-     * Handle jump-to-tab request from Electron desktop app
-     * @param {object} payload - { tabId, windowId }
+     * Handle jump-to-tab request from the desktop app.
+     * Resolves the tab by id (with a cross-browser url guard) or url, activates
+     * it, then asks the desktop app for OS-level focus.
+     * @param {object} payload - { tabId, windowId, url, deviceId, browser }
      */
     async handleJumpToTab(payload) {
-        const { tabId, windowId } = payload;
-        const isEdge = navigator.userAgent.includes('Edg');
-        const browserName = isEdge ? 'Edge' :
-            navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser';
-        const browserExeName = isEdge ? 'msedge' : 'chrome';
+        const { tabId, windowId, url, deviceId, browser } = payload || {};
+        const myBrowser = detectBrowser();
 
-        console.log(`[SyncWS][${browserName}] Jump-to-tab:`, tabId);
+        console.log(`[SyncWS][${myBrowser}] Jump-to-tab:`, tabId);
 
         // Only handle in browser extension context (not Electron)
         if (typeof chrome !== 'undefined' && chrome.tabs?.update) {
+            // Route by deviceId — it is unique per browser instance, so only the
+            // browser that owns the tab acts. Tab ids are small per-browser
+            // integers that collide freely across browsers, so without this every
+            // open browser would activate an unrelated tab of its own and then
+            // fight the others for the foreground.
+            //
+            // `routed` records that the jump was addressed to this instance
+            // *precisely*. When it was, the tab id is authoritative and must be
+            // trusted as-is: second-guessing it against the url turns a working
+            // jump into a no-op whenever the tab has navigated since the last tab
+            // push (up to 30s stale), or the url merely differs by a trailing
+            // slash, a fragment, or a redirect.
+            let routed = false;
+            if (deviceId) {
+                try {
+                    const myDeviceId = await getDeviceId();
+                    if (myDeviceId && deviceId !== myDeviceId) return;
+                    routed = !!myDeviceId;
+                } catch { /* fall through to the browser/url guards */ }
+            } else if (!browsersMatch(browser, myBrowser)) {
+                return;
+            }
+            if (!tabId && !url) return;
+
+            // Only collapses a genuine double-delivery of one broadcast (the
+            // bridge's WS push and its 1s HTTP poll can both carry it). Kept
+            // short on purpose: re-activating an already-active tab is harmless,
+            // so a missed dedupe costs nothing, while a window long enough to
+            // swallow a deliberate second click is a bug the user feels.
+            const jumpKey = jumpKeyOf(tabId, url);
+            if (wasJumpRecentlyHandled(jumpKey)) return;
+
             try {
-                // Fast fail for cross-browser broadcasts: tab won't exist in the wrong browser
-                const tab = await chrome.tabs.get(tabId);
+                let tab = null;
+                if (tabId) {
+                    try {
+                        const candidate = await chrome.tabs.get(tabId);
+                        // Unrouted jumps only: a matching id in the wrong browser
+                        // points at an unrelated tab, so make the url prove it.
+                        if (!routed && url && candidate?.url) {
+                            if (candidate.url.split('?')[0] === url.split('?')[0]) tab = candidate;
+                        } else {
+                            tab = candidate;
+                        }
+                    } catch { /* stale tabId or belongs to another browser */ }
+                }
+                // URL fallback — stale tabId. Settling for any tab on the same
+                // host is fine when the jump was routed to us precisely, but on
+                // an ambiguous jump it is how an unrelated browser grabs focus
+                // for a page it merely happens to have open, so require the exact
+                // url there.
+                if (!tab && url) {
+                    const hostname = (() => { try { return new URL(url).hostname; } catch { return null; } })();
+                    if (hostname) {
+                        const matches = await chrome.tabs.query({ url: `*://${hostname}/*` });
+                        tab = matches.find(t => t.url?.split('?')[0] === url.split('?')[0])
+                            || (routed ? matches[0] : null)
+                            || null;
+                    }
+                }
                 if (!tab) return;
 
+                markJumpHandled(jumpKey);
                 const targetWindowId = windowId || tab.windowId;
 
-                // Activate the tab (required)
-                await chrome.tabs.update(tabId, { active: true });
+                // Activate the resolved tab (the url fallback may have found a
+                // different id than the one that was broadcast)
+                await chrome.tabs.update(tab.id, { active: true });
 
                 // Focus the window — best effort, silently ignored cross-desktop
                 // (Rust SwitchToThisWindow handles the actual desktop switch)
@@ -379,19 +446,20 @@ class SyncWebSocket {
                     } catch { }
                 }
 
-                // Tell sidecar to do native OS focus — bounds let it find the correct window HWND.
+                // Tell sidecar to do native OS focus — bounds let it find the correct
+                // window HWND, and the browser id tells it whose process to look in.
                 // tabId is included so Rust sends native-focus-done back, triggering tab re-activation.
-                this.send('request-native-focus', { browser: browserExeName, tabId, bounds });
+                this.send('request-native-focus', { browser: myBrowser, tabId: tab.id, bounds });
 
-                console.log(`[SyncWS][${browserName}] Jumped to tab:`, tabId);
+                console.log(`[SyncWS][${myBrowser}] Jumped to tab:`, tab.id);
             } catch (e) {
                 // Silent fail for cross-browser tab IDs (expected when both Chrome+Edge receive the jump)
                 if (!e.message?.includes('No tab with id')) {
-                    console.warn(`[SyncWS][${browserName}] Jump failed:`, e.message);
+                    console.warn(`[SyncWS][${myBrowser}] Jump failed:`, e.message);
                 }
             }
         } else {
-            console.log(`[SyncWS][${browserName}] Not in extension context, skipping`);
+            console.log(`[SyncWS][${myBrowser}] Not in extension context, skipping`);
         }
     }
 

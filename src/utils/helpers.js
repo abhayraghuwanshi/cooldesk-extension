@@ -88,6 +88,41 @@ export const getBaseDomainFromUrl = (url) => {
   }
 };
 
+/**
+ * Grouping key for tab sections. Like getBaseDomainFromUrl, but keeps the
+ * subdomain.
+ *
+ * eTLD+1 is the right answer for "what site is this" (ranking, dedupe, URL
+ * qualification) and the wrong one for "should these tabs sit together":
+ * analytics.google.com and chromewebstore.google.com are both google.com, so
+ * grouping by base domain filed unrelated products under one heading. Large
+ * hosts put genuinely separate products on separate subdomains, so for grouping
+ * the subdomain is the signal, not noise.
+ *
+ * www./m. are dropped so the apex and its canonical alias stay one group. The
+ * tradeoff is that per-locale subdomains (en./de.wikipedia.org) now split —
+ * accepted, since sites that shard by subdomain usually shard by product too.
+ * Returns the same sentinels as getBaseDomainFromUrl so SKIP_GROUP_DOMAINS and
+ * the rest of the grouping code keep working unchanged.
+ */
+export const getGroupDomainFromUrl = (url) => {
+  if (!url) return 'Unknown';
+  const fromHostname = (hostname) => {
+    if (!hostname) return 'Local';
+    return hostname.replace(/^(www|m)\./i, '') || hostname;
+  };
+  try {
+    const u = new URL(url);
+    if (u.protocol === 'file:') return 'Local Files';
+    if (u.protocol === 'chrome:' || u.protocol === 'edge:' || u.protocol === 'about:') return 'System';
+    return fromHostname(u.hostname);
+  } catch {
+    const hostname = safeGetHostname(url);
+    if (hostname && hostname !== 'unknown') return fromHostname(hostname);
+    return 'Other';
+  }
+};
+
 export const getUrlParts = (url) => {
   try {
     const u = new URL(url)
