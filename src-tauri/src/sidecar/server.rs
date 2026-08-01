@@ -224,7 +224,6 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/activity", get(get_activity).post(post_activity))
         .route("/activity/focused", get(get_focused_app))
         .route("/activity/visible", get(get_visible_apps))
-        .route("/activity/all-desktops", get(get_all_desktop_apps))
         .route("/activity/app-usage", get(get_app_usage))
         .route("/activity/site-usage", get(get_site_usage))
         // CoolDesk project workspace folder (.cooldesk/) reader
@@ -264,10 +263,7 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/llm/download", post(llm_download))
         .route("/llm/load", post(llm_load))
         .route("/llm/unload", post(llm_unload))
-        .route("/llm/chat", post(llm_chat))
-        .route("/llm/summarize", post(llm_summarize))
         .route("/llm/group-workspaces", post(llm_group_workspaces))
-        .route("/llm/suggest-related", post(llm_suggest_related))
         .route("/llm/enhance-url", post(llm_enhance_url))
         .route("/llm/suggest-workspaces", post(llm_suggest_workspaces))
         .route("/llm/parse-command", post(llm_parse_command));

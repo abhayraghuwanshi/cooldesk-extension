@@ -18,6 +18,13 @@ dist
 dist-ssr
 *.local
 
+# Packaged builds — never commit these
+*.zip
+*.msi
+*.exe
+*.dmg
+*.AppImage
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -43,4 +50,3 @@ src-tauri/Wix/
 sync-data/
 *.gguf
 sidecar/models/
-sync-data/

@@ -580,11 +580,6 @@ pub async fn get_visible_apps() -> Json<Vec<RunningApp>> {
     Json(crate::system::get_visible_apps_info().await)
 }
 
-/// Get ALL apps across all virtual desktops (not just current)
-pub async fn get_all_desktop_apps() -> Json<Vec<RunningApp>> {
-    Json(crate::system::get_all_desktop_apps_info().await)
-}
-
 #[derive(Debug, serde::Deserialize)]
 pub struct AppUsageQuery {
     date: Option<String>,
@@ -1406,8 +1401,7 @@ pub async fn post_sync(
 // ==========================================
 
 use crate::sidecar::llm::models::{ModelInfo, LlmStatus, get_available_models, get_status, load_model, unload_model, download_model};
-use crate::sidecar::llm::inference::{chat};
-use crate::sidecar::llm::tasks::{summarize, group_workspaces, suggest_related, enhance_url, suggest_workspaces, parse_command};
+use crate::sidecar::llm::tasks::{group_workspaces, enhance_url, suggest_workspaces, parse_command};
 
 pub async fn llm_models() -> Json<HashMap<String, ModelInfo>> {
     if let Ok(models) = get_available_models().await {
@@ -1456,29 +1450,6 @@ pub async fn llm_load(Json(req): Json<LoadModelRequest>) -> Result<Json<SuccessR
 pub async fn llm_unload() -> StatusCode {
     let _ = unload_model().await;
     StatusCode::NO_CONTENT
-}
-
-#[derive(Debug, serde::Deserialize)]
-pub struct ChatRequest {
-    pub prompt: String,
-}
-
-#[derive(Debug, serde::Serialize)]
-pub struct ChatResponse {
-    pub response: String,
-}
-
-pub async fn llm_chat(Json(req): Json<ChatRequest>) -> Json<ChatResponse> {
-    if let Ok(response) = chat(&req.prompt).await {
-        Json(ChatResponse { response })
-    } else {
-        Json(ChatResponse { response: "".to_string() })
-    }
-}
-
-#[derive(Debug, serde::Deserialize)]
-pub struct SummarizeRequest {
-    pub text: String,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -1543,14 +1514,6 @@ pub async fn llm_download(
     Ok(Json(SuccessResponse { success: true }))
 }
 
-pub async fn llm_summarize(Json(req): Json<SummarizeRequest>) -> Json<ChatResponse> {
-    if let Ok(response) = summarize(&req.text, 3).await {
-        Json(ChatResponse { response })
-    } else {
-        Json(ChatResponse { response: "".to_string() })
-    }
-}
-
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GroupWorkspacesRequest {
@@ -1575,30 +1538,6 @@ pub async fn llm_group_workspaces(Json(req): Json<GroupWorkspacesRequest>) -> Js
         Json(GroupWorkspacesResponse { result, ok: true })
     } else {
         Json(GroupWorkspacesResponse { result: "".to_string(), ok: false })
-    }
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SuggestRelatedRequest {
-    pub workspace_urls: String,
-    #[serde(default)]
-    pub history: Option<String>,
-}
-
-#[derive(Debug, serde::Serialize)]
-pub struct SuggestRelatedResponse {
-    pub suggestions: String,
-    pub ok: bool,
-}
-
-pub async fn llm_suggest_related(Json(req): Json<SuggestRelatedRequest>) -> Json<SuggestRelatedResponse> {
-    let history = req.history.unwrap_or_default();
-
-    if let Ok(suggestions) = suggest_related(&req.workspace_urls, &history).await {
-        Json(SuggestRelatedResponse { suggestions, ok: true })
-    } else {
-        Json(SuggestRelatedResponse { suggestions: "[]".to_string(), ok: false })
     }
 }
 

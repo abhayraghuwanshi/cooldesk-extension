@@ -674,7 +674,6 @@ mod platform {
 pub use platform::*;
 
 /// Convenience function that handles both HWND and PID modes
-/// Similar to the original AppFocus.exe CLI interface
 pub fn focus_window(hwnd: Option<isize>, pid: Option<u32>, process_name: Option<&str>) -> FocusResult<()> {
     if let Some(h) = hwnd {
         if let Ok(()) = focus_window_by_hwnd(h) {

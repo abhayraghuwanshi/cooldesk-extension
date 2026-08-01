@@ -1,0 +1,1347 @@
+import { useCallback, useState } from 'react';
+import { fontFamilies } from '../../../utils/fontUtils';
+import FontFamilyDropdown from './FontFamilyDropdown';
+import FontSizeDropdown from './FontSizeDropdown';
+const ThemesTab = ({
+  selectedTheme,
+  fontSize,
+  fontFamily,
+  onThemeChange,
+  onFontSizeChange,
+  onFontFamilyChange,
+  wallpaperEnabled = false,
+  wallpaperUrl = 'https://source.unsplash.com/1920x1080/?nature',
+  wallpaperOpacity = 0.3,
+  wallpaperAutoRotate = false,
+  onWallpaperEnabledChange = () => { },
+  onWallpaperUrlChange = () => { },
+  onWallpaperOpacityChange = () => { },
+  onWallpaperAutoRotateChange = () => { },
+  unsplashApiKey = '',
+  onUnsplashApiKeyChange = () => { }
+}) => {
+  const [showAllThemes, setShowAllThemes] = useState(false);
+  const [showUnsplash, setShowUnsplash] = useState(false);
+  // Remember the last gradient theme so switching back from Wallpaper restores it
+  const [lastGradient, setLastGradient] = useState(
+    wallpaperEnabled ? 'crimson-fire' : (selectedTheme || 'crimson-fire')
+  );
+  const [unsplashSearchQuery, setUnsplashSearchQuery] = useState('');
+  const [unsplashResults, setUnsplashResults] = useState([]);
+  const [unsplashLoading, setUnsplashLoading] = useState(false);
+  const [unsplashError, setUnsplashError] = useState('');
+
+  // Search Unsplash for wallpapers
+  const searchUnsplash = useCallback(async (query) => {
+    if (!unsplashApiKey) {
+      setUnsplashError('Please enter your Unsplash API key first');
+      return;
+    }
+    if (!query.trim()) {
+      setUnsplashError('Please enter a search term');
+      return;
+    }
+
+    setUnsplashLoading(true);
+    setUnsplashError('');
+
+    try {
+      const response = await fetch(
+        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=12&orientation=landscape`,
+        {
+          headers: {
+            'Authorization': `Client-ID ${unsplashApiKey}`
+          }
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Invalid API key. Please check your Unsplash API key.');
+        }
+        throw new Error(`Failed to fetch: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setUnsplashResults(data.results || []);
+
+      if (data.results?.length === 0) {
+        setUnsplashError('No results found. Try a different search term.');
+      }
+    } catch (err) {
+      console.error('Unsplash search error:', err);
+      setUnsplashError(err.message || 'Failed to search Unsplash');
+    } finally {
+      setUnsplashLoading(false);
+    }
+  }, [unsplashApiKey]);
+
+
+
+
+  // Theme options with font family pairings (includes gradient themes + customizable wallpaper theme)
+  const themes = [
+    {
+      id: 'wallpaper-custom',
+      name: 'Custom Wallpaper',
+      description: 'Use your own background image',
+      type: 'wallpaper',
+      fontFamily: 'inter'
+    },
+    {
+      id: 'ai-midnight-nebula',
+      name: 'AI Midnight Nebula',
+      description: 'Deep space theme with blue and purple nebula effects',
+      type: 'gradient',
+      preview: 'radial-gradient(60% 80% at 10% 10%, #60a5fa1f, #0000 60%), radial-gradient(50% 60% at 90% 20%, #8b5cf61f, #0000 60%), linear-gradient(180deg, #0a0a0f 0%, #121218 100%)',
+      fontFamily: 'inter'
+    },
+    {
+      id: 'cosmic-aurora',
+      name: 'Cosmic Aurora',
+      description: 'Northern lights inspired with green and teal gradients',
+      type: 'gradient',
+      preview: 'radial-gradient(60% 80% at 20% 30%, #10b98120, #0000 60%), radial-gradient(50% 60% at 80% 10%, #06b6d420, #0000 60%), linear-gradient(180deg, #0f172a 0%, #1e293b 100%)',
+      fontFamily: 'poppins'
+    },
+    {
+      id: 'sunset-horizon',
+      name: 'Sunset Horizon',
+      description: 'Warm sunset colors with orange and pink tones',
+      type: 'gradient',
+      preview: 'radial-gradient(60% 80% at 10% 70%, #f9731620, #0000 60%), radial-gradient(50% 60% at 90% 30%, #ec489920, #0000 60%), linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)',
+      fontFamily: 'roboto'
+    },
+    {
+      id: 'forest-depths',
+      name: 'Forest Depths',
+      description: 'Deep forest theme with emerald and jade accents',
+      type: 'gradient',
+      preview: 'radial-gradient(60% 80% at 30% 20%, #059f4620, #0000 60%), radial-gradient(50% 60% at 70% 80%, #047c3a20, #0000 60%), linear-gradient(180deg, #0f1419 0%, #1a2332 100%)',
+      fontFamily: 'system'
+    },
+    {
+      id: 'minimal-dark',
+      name: 'Minimal Dark',
+      description: 'Clean minimal dark theme with subtle gradients',
+      type: 'gradient',
+      preview: 'linear-gradient(135deg, #1f2937 0%, #111827 100%)',
+      fontFamily: 'inter'
+    },
+    {
+      id: 'ocean-depths',
+      name: 'Ocean Depths',
+      description: 'Deep mystical waters with purple and indigo depths',
+      type: 'gradient',
+      preview: 'radial-gradient(50% 60% at 20% 30%, #8b5cf620, #0000 70%), radial-gradient(40% 50% at 80% 20%, #a78bfa20, #0000 60%), linear-gradient(140deg, #1a0c26 0%, #3b1e29 100%)',
+      fontFamily: 'poppins'
+    },
+    {
+      id: 'cherry-blossom',
+      name: 'Cherry Blossom',
+      description: 'Soft pink and purple spring theme',
+      type: 'gradient',
+      preview: 'radial-gradient(60% 70% at 25% 25%, #ec489920, #0000 65%), radial-gradient(50% 60% at 75% 15%, #a855f720, #0000 70%), linear-gradient(130deg, #1f1729 0%, #2d1b3d 100%)',
+      fontFamily: 'poppins'
+    },
+    {
+      id: 'arctic-frost',
+      name: 'Arctic Frost',
+      description: 'Cool arctic with teal and mint ice accents',
+      type: 'gradient',
+      preview: 'radial-gradient(40% 50% at 30% 20%, #14b8a615, #0000 70%), radial-gradient(60% 40% at 70% 80%, #5eead415, #0000 60%), linear-gradient(155deg, #0f1b1a 0%, #2d4a42 100%)',
+      fontFamily: 'inter'
+    },
+    {
+      id: 'volcanic-ember',
+      name: 'Volcanic Ember',
+      description: 'Fiery volcanic theme with red and orange embers',
+      type: 'gradient',
+      preview: 'radial-gradient(60% 80% at 30% 20%, #dc262620, #0000 60%), radial-gradient(50% 60% at 80% 40%, #ea580c20, #0000 60%), linear-gradient(140deg, #1a0f0f 0%, #2d1b1b 100%)',
+      fontFamily: 'roboto'
+    },
+    {
+      id: 'neon-cyberpunk',
+      name: 'Neon Cyberpunk',
+      description: 'Futuristic cyberpunk with neon pink and cyan',
+      type: 'gradient',
+      preview: 'radial-gradient(60% 50% at 30% 20%, #ec489920, #0000 65%), radial-gradient(40% 60% at 70% 80%, #06b6d420, #0000 70%), linear-gradient(135deg, #0a0a0f 0%, #2a1a2a 100%)',
+      fontFamily: 'jetbrains'
+    },
+    {
+      id: 'orange-warm',
+      name: 'Orange Warm',
+      description: 'Warm orange theme with cozy earth tones',
+      type: 'gradient',
+      preview: 'radial-gradient(60% 80% at 20% 30%, #f9731620, #0000 60%), radial-gradient(50% 60% at 80% 10%, #ea580c20, #0000 60%), linear-gradient(180deg, #2d1b1b 0%, #451a03 100%)',
+      fontFamily: 'roboto'
+    },
+    {
+      id: 'brown-earth',
+      name: 'Brown Earth',
+      description: 'Earthy brown theme with natural tones',
+      type: 'gradient',
+      preview: 'radial-gradient(60% 80% at 20% 30%, #92400e20, #0000 60%), radial-gradient(50% 60% at 80% 10%, #78350f20, #0000 60%), linear-gradient(180deg, #3c2415 0%, #451a03 100%)',
+      fontFamily: 'system'
+    },
+    {
+      id: 'royal-purple',
+      name: 'Royal Purple',
+      description: 'Elegant purple and lavender with gold accents',
+      type: 'gradient',
+      preview: 'radial-gradient(60% 80% at 20% 30%, #8b5cf620, #0000 60%), radial-gradient(50% 60% at 80% 10%, #a855f720, #0000 60%), linear-gradient(180deg, #1e1b3a 0%, #2d1b69 100%)',
+      fontFamily: 'poppins'
+    },
+    {
+      id: 'golden-honey',
+      name: 'Golden Honey',
+      description: 'Warm golden yellows with amber and bronze accents',
+      type: 'gradient',
+      preview: 'radial-gradient(60% 80% at 20% 30%, #f59e0b20, #0000 60%), radial-gradient(50% 60% at 80% 10%, #d9770620, #0000 60%), linear-gradient(180deg, #3a2817 0%, #451a03 100%)',
+      fontFamily: 'roboto'
+    },
+    {
+      id: 'mint-sage',
+      name: 'Mint Sage',
+      description: 'Fresh mint and sage greens with earthy undertones',
+      type: 'gradient',
+      preview: 'radial-gradient(60% 80% at 20% 30%, #10b98120, #0000 60%), radial-gradient(50% 60% at 80% 10%, #6ee7b720, #0000 60%), linear-gradient(180deg, #1e2e23 0%, #0f2027 100%)',
+      fontFamily: 'inter'
+    },
+    {
+      id: 'crimson-fire',
+      name: 'Crimson Fire',
+      description: 'Bold red with deep crimson and rose gold accents',
+      type: 'gradient',
+      preview: 'radial-gradient(60% 80% at 20% 30%, #dc262620, #0000 60%), radial-gradient(50% 60% at 80% 10%, #ef444420, #0000 60%), linear-gradient(180deg, #3c1518 0%, #220a0c 100%)',
+      fontFamily: 'roboto'
+    }
+  ];
+
+
+
+  // Curated 4K high-quality wallpapers for the application
+  const curatedWallpapers = [
+    {
+      id: 1,
+      name: 'Misty Valley',
+      url: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=400&q=80',
+      category: 'nature'
+    },
+    {
+      id: 2,
+      name: 'Northern Lights',
+      url: 'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=400&q=80',
+      category: 'space'
+    },
+    {
+      id: 3,
+      name: 'Starry Sky',
+      url: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=400&q=80',
+      category: 'space'
+    },
+    {
+      id: 4,
+      name: 'Mountain Sunset',
+      url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80',
+      category: 'mountains'
+    },
+    {
+      id: 5,
+      name: 'Dark Cosmos',
+      url: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=400&q=80',
+      category: 'space'
+    },
+    {
+      id: 6,
+      name: 'Enchanted Forest',
+      url: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=400&q=80',
+      category: 'forest'
+    },
+    {
+      id: 7,
+      name: 'Minimal Workspace',
+      url: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=400&q=80',
+      category: 'minimal'
+    },
+    {
+      id: 8,
+      name: 'Mountain Mirror',
+      url: 'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?w=400&q=80',
+      category: 'mountains'
+    },
+    {
+      id: 9,
+      name: 'Sunlit Forest',
+      url: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400&q=80',
+      category: 'forest'
+    },
+    {
+      id: 10,
+      name: 'Foggy Pines',
+      url: 'https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?w=400&q=80',
+      category: 'forest'
+    },
+    {
+      id: 11,
+      name: 'Alpine Lake',
+      url: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=400&q=80',
+      category: 'mountains'
+    },
+    {
+      id: 12,
+      name: 'Green Mountains',
+      url: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=400&q=80',
+      category: 'mountains'
+    },
+    {
+      id: 13,
+      name: 'Forest Trail',
+      url: 'https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?w=400&q=80',
+      category: 'forest'
+    },
+    {
+      id: 14,
+      name: 'Rolling Hills',
+      url: 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?w=400&q=80',
+      category: 'nature'
+    },
+    {
+      id: 15,
+      name: 'Valley River',
+      url: 'https://images.unsplash.com/photo-1426604966848-d7adac402bff?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1426604966848-d7adac402bff?w=400&q=80',
+      category: 'nature'
+    },
+    {
+      id: 16,
+      name: 'Mountain Wanderer',
+      url: 'https://images.unsplash.com/photo-1497436072909-60f360e1d4b1?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1497436072909-60f360e1d4b1?w=400&q=80',
+      category: 'mountains'
+    },
+    {
+      id: 17,
+      name: 'Ocean Waves',
+      url: 'https://images.unsplash.com/photo-1439066615861-d1af74d74000?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1439066615861-d1af74d74000?w=400&q=80',
+      category: 'ocean'
+    },
+    {
+      id: 18,
+      name: 'Snowy Peaks',
+      url: 'https://images.unsplash.com/photo-1500534623283-312aade485b7?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1500534623283-312aade485b7?w=400&q=80',
+      category: 'mountains'
+    },
+    {
+      id: 19,
+      name: 'Waterfall Bridge',
+      url: 'https://images.unsplash.com/photo-1433086966358-54859d0ed716?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1433086966358-54859d0ed716?w=400&q=80',
+      category: 'nature'
+    },
+    {
+      id: 20,
+      name: 'Blue Planet',
+      url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=400&q=80',
+      category: 'space'
+    },
+    {
+      id: 21,
+      name: 'Milky Way',
+      url: 'https://images.unsplash.com/photo-1465101162946-4377e57745c3?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1465101162946-4377e57745c3?w=400&q=80',
+      category: 'space'
+    },
+    {
+      id: 22,
+      name: 'Tropical Beach',
+      url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&q=80',
+      category: 'ocean'
+    },
+    {
+      id: 23,
+      name: 'City Heights',
+      url: 'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=400&q=80',
+      category: 'urban'
+    },
+    {
+      id: 24,
+      name: 'Manhattan Nights',
+      url: 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=400&q=80',
+      category: 'urban'
+    },
+    {
+      id: 25,
+      name: 'City Aerial',
+      url: 'https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=400&q=80',
+      category: 'urban'
+    },
+    {
+      id: 26,
+      name: 'Mirror Lake',
+      url: 'https://images.unsplash.com/photo-1493246507139-91e8fad9978e?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1493246507139-91e8fad9978e?w=400&q=80',
+      category: 'mountains'
+    },
+    {
+      id: 27,
+      name: 'Highland',
+      url: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=400&q=80',
+      category: 'nature'
+    },
+    {
+      id: 28,
+      name: 'Winter Night',
+      url: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=400&q=80',
+      category: 'space'
+    },
+    {
+      id: 29,
+      name: 'Coastal Cliffs',
+      url: 'https://images.unsplash.com/photo-1470115636492-6d2b56f9146d?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1470115636492-6d2b56f9146d?w=400&q=80',
+      category: 'ocean'
+    },
+    {
+      id: 30,
+      name: 'Serene Lake',
+      url: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=400&q=80',
+      category: 'nature'
+    },
+    {
+      id: 31,
+      name: 'Golden Leaves',
+      url: 'https://images.unsplash.com/photo-1518495973542-4542c06a5843?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1518495973542-4542c06a5843?w=400&q=80',
+      category: 'nature'
+    },
+    {
+      id: 32,
+      name: 'Color Flow',
+      url: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=400&q=80',
+      category: 'abstract'
+    },
+    {
+      id: 33,
+      name: 'Starlit Sky',
+      url: 'https://images.unsplash.com/photo-1454372182658-c712e4c5a1db?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1454372182658-c712e4c5a1db?w=400&q=80',
+      category: 'space'
+    },
+    {
+      id: 34,
+      name: 'Redwood Canopy',
+      url: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?w=400&q=80',
+      category: 'forest'
+    },
+    {
+      id: 35,
+      name: 'Misty Woods',
+      url: 'https://images.unsplash.com/photo-1470004914212-05527e49370b?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1470004914212-05527e49370b?w=400&q=80',
+      category: 'forest'
+    },
+    {
+      id: 36,
+      name: 'Open Sea',
+      url: 'https://images.unsplash.com/photo-1444464666168-49d633b86797?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1444464666168-49d633b86797?w=400&q=80',
+      category: 'ocean'
+    },
+    {
+      id: 37,
+      name: 'Cosmic Night',
+      url: 'https://images.unsplash.com/photo-1470813740244-df37b8c1edcb?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1470813740244-df37b8c1edcb?w=400&q=80',
+      category: 'space'
+    },
+    {
+      id: 38,
+      name: 'Aspen Grove',
+      url: 'https://images.unsplash.com/photo-1441716844725-09cedc13a4e7?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1441716844725-09cedc13a4e7?w=400&q=80',
+      category: 'forest'
+    },
+    {
+      id: 39,
+      name: 'Abstract Waves',
+      url: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=400&q=80',
+      category: 'abstract'
+    },
+    {
+      id: 40,
+      name: 'Enchanted Woods',
+      url: 'https://images.unsplash.com/photo-1523712999610-f77fbcfc3843?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1523712999610-f77fbcfc3843?w=400&q=80',
+      category: 'forest'
+    },
+  ];
+
+
+
+  // Themes and wallpaper are two modes of the same "background" choice
+  const bgMode = wallpaperEnabled ? 'wallpaper' : 'theme';
+  const gradientThemes = themes.filter(t => t.type !== 'wallpaper');
+
+  const selectBackgroundMode = (mode) => {
+    if (mode === 'wallpaper') {
+      onWallpaperEnabledChange(true);
+      onThemeChange('wallpaper-custom');
+    } else {
+      onWallpaperEnabledChange(false);
+      onThemeChange(lastGradient || gradientThemes[0].id);
+    }
+  };
+
+  return (
+    <div style={{ padding: '16px 0' }}>
+      <h4 style={{
+        margin: '0 0 16px 0',
+        color: '#e5e7eb',
+        fontSize: 'var(--font-2xl)',
+        fontWeight: '600'
+      }}>
+        Appearance
+      </h4>
+      <p style={{
+        margin: '0 0 16px 0',
+        color: '#9ca3af',
+        fontSize: 'var(--font-base)',
+        lineHeight: '1.5'
+      }}>
+        Pick a gradient theme or set your own wallpaper as the background. Changes apply instantly.
+      </p>
+
+      {/* Background mode toggle — themes vs. wallpaper */}
+      <div style={{
+        display: 'inline-flex',
+        gap: '4px',
+        padding: '4px',
+        background: 'rgba(255, 255, 255, 0.04)',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        borderRadius: '12px',
+        marginBottom: '20px'
+      }}>
+        {[
+          { id: 'theme', label: '🎨 Gradient Themes' },
+          { id: 'wallpaper', label: '🖼️ Wallpaper' }
+        ].map(({ id, label }) => {
+          const active = bgMode === id;
+          return (
+            <button
+              key={id}
+              onClick={() => selectBackgroundMode(id)}
+              style={{
+                padding: '7px 16px',
+                borderRadius: '9px',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 'var(--font-sm)',
+                fontWeight: '600',
+                background: active ? 'rgba(52, 199, 89, 0.18)' : 'transparent',
+                color: active ? '#34C759' : 'rgba(255,255,255,0.55)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = '#e5e7eb'; }}
+              onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = 'rgba(255,255,255,0.55)'; }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {bgMode === 'theme' && (
+      <>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: '8px'
+      }}>
+        {gradientThemes.slice(0, showAllThemes ? gradientThemes.length : 8).map((theme) => {
+          const themeFontFamily = fontFamilies.find(f => f.id === theme.fontFamily);
+          const isWallpaperTheme = theme.type === 'wallpaper';
+          const isSelected = selectedTheme === theme.id;
+
+          return (
+            <div
+              key={theme.id}
+              onClick={() => {
+                setLastGradient(theme.id);
+                onWallpaperEnabledChange(false);
+                onThemeChange(theme.id);
+              }}
+              style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: isSelected
+                  ? '2px solid #34C759'
+                  : '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '12px',
+                padding: '12px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                backdropFilter: 'blur(10px)',
+                position: 'relative',
+                overflow: 'hidden'
+              }}
+              onMouseEnter={(e) => {
+                if (!isSelected) {
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.3)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isSelected) {
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }
+              }}
+            >
+              <div style={{
+                width: '100%',
+                height: '50px',
+                background: isWallpaperTheme ? '#1a1a1a' : theme.preview,
+                borderRadius: '8px',
+                marginBottom: '8px',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                position: 'relative',
+                overflow: 'hidden',
+                ...(isWallpaperTheme && wallpaperUrl ? {
+                  backgroundImage: `url(${wallpaperUrl})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center'
+                } : {})
+              }}>
+                {isWallpaperTheme && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    color: 'white',
+                    fontSize: 'var(--font-3xl)',
+                    textShadow: '0 2px 4px rgba(0,0,0,0.5)'
+                  }}>
+                    🖼️
+                  </div>
+                )}
+                {isSelected && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '4px',
+                    right: '4px',
+                    width: '18px',
+                    height: '18px',
+                    background: '#34C759',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontSize: 'var(--font-xs)',
+                    fontWeight: '600'
+                  }}>
+                    ✓
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h5 style={{
+                  margin: '0 0 2px 0',
+                  color: '#e5e7eb',
+                  fontSize: 'var(--font-md)',
+                  fontWeight: '600',
+                  lineHeight: '1.2'
+                }}>
+                  {theme.name}
+                </h5>
+                <p style={{
+                  margin: '0',
+                  color: '#9ca3af',
+                  fontSize: 'var(--font-xs)',
+                  lineHeight: '1.3'
+                }}>
+                  {theme.description}
+                </p>
+                {themeFontFamily && (
+                  <p style={{
+                    margin: '2px 0 0 0',
+                    color: '#6b7280',
+                    fontSize: 'var(--font-xs)',
+                    fontFamily: themeFontFamily.family,
+                    fontStyle: 'italic'
+                  }}>
+                    {themeFontFamily.name}
+                  </p>
+                )}
+              </div>
+
+              {isSelected && (
+                <div style={{
+                  position: 'absolute',
+                  top: '0',
+                  left: '0',
+                  right: '0',
+                  bottom: '0',
+                  background: 'rgba(52, 199, 89, 0.1)',
+                  borderRadius: '10px',
+                  pointerEvents: 'none'
+                }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {gradientThemes.length > 8 && (
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
+        <button
+          onClick={() => setShowAllThemes(!showAllThemes)}
+          style={{
+            background: 'rgba(255, 255, 255, 0.05)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '20px',
+            padding: '8px 24px',
+            color: '#e5e7eb',
+            fontSize: 'var(--font-sm)',
+            fontWeight: '600',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+          }}
+        >
+          {showAllThemes ? 'Show Less Themes' : `Show All Themes (${gradientThemes.length})`}
+        </button>
+      </div>
+      )}
+      </>
+      )}
+
+      {bgMode === 'wallpaper' && (
+        <div>
+          <>
+            {/* Curated Wallpaper Gallery */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{
+                display: 'block',
+                color: '#e5e7eb',
+                fontWeight: '500',
+                marginBottom: '12px',
+                fontSize: 'var(--font-base)'
+              }}>
+                Choose a Wallpaper
+              </label>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(5, 1fr)',
+                gap: '10px',
+                marginBottom: '8px'
+              }}>
+                {curatedWallpapers.map(wallpaper => (
+                  <div
+                    key={wallpaper.id}
+                    onClick={() => onWallpaperUrlChange(wallpaper.url)}
+                    style={{
+                      position: 'relative',
+                      aspectRatio: '16/9',
+                      borderRadius: '8px',
+                      overflow: 'hidden',
+                      cursor: 'pointer',
+                      border: wallpaperUrl === wallpaper.url ? '3px solid #34C759' : '2px solid rgba(255, 255, 255, 0.1)',
+                      transition: 'all 0.2s ease',
+                      backgroundImage: `url(${wallpaper.thumbnail})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (wallpaperUrl !== wallpaper.url) {
+                        e.currentTarget.style.borderColor = 'rgba(52, 199, 89, 0.5)';
+                        e.currentTarget.style.transform = 'scale(1.05)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (wallpaperUrl !== wallpaper.url) {
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                        e.currentTarget.style.transform = 'scale(1)';
+                      }
+                    }}
+                  >
+                    {wallpaperUrl === wallpaper.url && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '4px',
+                        right: '4px',
+                        background: '#34C759',
+                        borderRadius: '50%',
+                        width: '20px',
+                        height: '20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 'var(--font-sm)',
+                        color: '#fff'
+                      }}>
+                        ✓
+                      </div>
+                    )}
+                    <div style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
+                      padding: '6px 8px',
+                      fontSize: 'var(--font-xs)',
+                      color: '#fff',
+                      fontWeight: '500'
+                    }}>
+                      {wallpaper.name}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{
+                fontSize: 'var(--font-xs)',
+                color: 'rgba(255, 255, 255, 0.4)',
+                marginTop: '6px'
+              }}>
+                Click any image to set as wallpaper
+              </div>
+            </div>
+
+            {/* Wallpaper URL Input */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                color: '#e5e7eb',
+                fontWeight: '500',
+                marginBottom: '8px',
+                fontSize: 'var(--font-base)'
+              }}>
+                Or Use Custom URL (Optional)
+              </label>
+              <input
+                type="url"
+                value={wallpaperUrl}
+                onChange={(e) => onWallpaperUrlChange(e.target.value)}
+                placeholder="https://source.unsplash.com/1920x1080/?nature"
+                style={{
+                  width: '100%',
+                  padding: '12px 14px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '10px',
+                  color: '#e5e7eb',
+                  fontSize: 'var(--font-base)',
+                  outline: 'none',
+                  transition: 'all 0.2s ease'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = 'rgba(52, 199, 89, 0.4)';
+                  e.target.style.background = 'rgba(255, 255, 255, 0.08)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                  e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+                }}
+              />
+              <div style={{
+                fontSize: 'var(--font-xs)',
+                color: 'rgba(255, 255, 255, 0.4)',
+                marginTop: '6px'
+              }}>
+                Try: source.unsplash.com/1920x1080/?nature or your own image URL
+              </div>
+            </div>
+
+            {/* Intelligent Auto-Change Toggle */}
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '12px 16px',
+                background: 'rgba(255,255,255,0.03)',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                border: '1px solid rgba(255,255,255,0.04)',
+                transition: 'all 0.2s',
+                color: '#e5e7eb'
+              }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(52, 199, 89, 0.4)'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.04)'}
+              >
+                <input
+                  type="checkbox"
+                  checked={wallpaperAutoRotate}
+                  onChange={(e) => onWallpaperAutoRotateChange(e.target.checked)}
+                  style={{ width: '18px', height: '18px', accentColor: '#34C759' }}
+                />
+                <div>
+                  <div style={{ fontWeight: '500', fontSize: 'var(--font-base)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>✨ Intelligent Auto-Change</span>
+                  </div>
+                  <div style={{ fontSize: 'var(--font-xs)', opacity: 0.6, marginTop: '2px' }}>
+                    Discover a new beautiful, curated wallpaper every time you open a new tab.
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            {/* Unsplash — collapsible search + API key */}
+            <div style={{ marginBottom: '16px' }}>
+              <button
+                onClick={() => setShowUnsplash(s => !s)}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '11px 14px',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '10px',
+                  color: '#e5e7eb',
+                  fontSize: 'var(--font-base)',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'border-color 0.2s ease'
+                }}
+              >
+                <span>
+                  🔍 Search Unsplash photos
+                  {unsplashApiKey
+                    ? <span style={{ color: '#34C759', fontSize: 'var(--font-xs)', marginLeft: 8 }}>Connected</span>
+                    : <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 'var(--font-xs)', marginLeft: 8 }}>Connect to enable</span>}
+                </span>
+                <span style={{
+                  transform: showUnsplash ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.2s ease',
+                  color: 'rgba(255,255,255,0.5)',
+                  fontSize: 'var(--font-sm)'
+                }}>▾</span>
+              </button>
+
+              {showUnsplash && !unsplashApiKey && (
+                <div style={{ marginTop: '10px' }}>
+                  <input
+                    type="password"
+                    value={unsplashApiKey}
+                    onChange={(e) => onUnsplashApiKeyChange(e.target.value)}
+                    placeholder="Paste your Unsplash API key"
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '10px',
+                      color: '#e5e7eb',
+                      fontSize: 'var(--font-base)',
+                      outline: 'none',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = 'rgba(52, 199, 89, 0.4)';
+                      e.target.style.background = 'rgba(255, 255, 255, 0.08)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                      e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+                    }}
+                  />
+                  <div style={{
+                    fontSize: 'var(--font-xs)',
+                    color: 'rgba(255, 255, 255, 0.4)',
+                    marginTop: '6px'
+                  }}>
+                    Get a free key at <a href="https://unsplash.com/developers" target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>unsplash.com/developers</a> to search millions of photos.
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Unsplash Search results */}
+            {showUnsplash && unsplashApiKey && (
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{
+                  display: 'block',
+                  color: '#e5e7eb',
+                  fontWeight: '500',
+                  marginBottom: '12px',
+                  fontSize: 'var(--font-base)'
+                }}>
+                  Search Unsplash Wallpapers
+                </label>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                  <input
+                    type="text"
+                    value={unsplashSearchQuery}
+                    onChange={(e) => setUnsplashSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        searchUnsplash(unsplashSearchQuery);
+                      }
+                    }}
+                    placeholder="Search for wallpapers (e.g., mountains, ocean, city)"
+                    style={{
+                      flex: 1,
+                      padding: '12px 14px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '10px',
+                      color: '#e5e7eb',
+                      fontSize: 'var(--font-base)',
+                      outline: 'none',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = 'rgba(96, 165, 250, 0.4)';
+                      e.target.style.background = 'rgba(255, 255, 255, 0.08)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                      e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+                    }}
+                  />
+                  <button
+                    onClick={() => searchUnsplash(unsplashSearchQuery)}
+                    disabled={unsplashLoading}
+                    style={{
+                      padding: '12px 20px',
+                      background: unsplashLoading ? 'rgba(96, 165, 250, 0.3)' : 'rgba(96, 165, 250, 0.2)',
+                      border: '1px solid rgba(96, 165, 250, 0.4)',
+                      borderRadius: '10px',
+                      color: '#60a5fa',
+                      fontSize: 'var(--font-base)',
+                      fontWeight: '600',
+                      cursor: unsplashLoading ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s ease',
+                      whiteSpace: 'nowrap'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!unsplashLoading) {
+                        e.currentTarget.style.background = 'rgba(96, 165, 250, 0.3)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!unsplashLoading) {
+                        e.currentTarget.style.background = 'rgba(96, 165, 250, 0.2)';
+                      }
+                    }}
+                  >
+                    {unsplashLoading ? 'Searching...' : 'Search'}
+                  </button>
+                </div>
+
+                {/* Error Message */}
+                {unsplashError && (
+                  <div style={{
+                    padding: '10px 14px',
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.2)',
+                    borderRadius: '8px',
+                    color: '#f87171',
+                    fontSize: 'var(--font-sm)',
+                    marginBottom: '12px'
+                  }}>
+                    {unsplashError}
+                  </div>
+                )}
+
+                {/* Search Results Grid */}
+                {unsplashResults.length > 0 && (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: '10px'
+                  }}>
+                    {unsplashResults.map(photo => (
+                      <div
+                        key={photo.id}
+                        onClick={() => {
+                          onWallpaperUrlChange(photo.urls.full);
+                          setUnsplashResults([]);
+                          setUnsplashSearchQuery('');
+                        }}
+                        style={{
+                          position: 'relative',
+                          aspectRatio: '16/9',
+                          borderRadius: '8px',
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          border: wallpaperUrl === photo.urls.full ? '3px solid #34C759' : '2px solid rgba(255, 255, 255, 0.1)',
+                          transition: 'all 0.2s ease',
+                          backgroundImage: `url(${photo.urls.small})`,
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'center'
+                        }}
+                        onMouseEnter={(e) => {
+                          if (wallpaperUrl !== photo.urls.full) {
+                            e.currentTarget.style.borderColor = 'rgba(96, 165, 250, 0.5)';
+                            e.currentTarget.style.transform = 'scale(1.03)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (wallpaperUrl !== photo.urls.full) {
+                            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                            e.currentTarget.style.transform = 'scale(1)';
+                          }
+                        }}
+                      >
+                        {wallpaperUrl === photo.urls.full && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '4px',
+                            right: '4px',
+                            background: '#34C759',
+                            borderRadius: '50%',
+                            width: '20px',
+                            height: '20px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 'var(--font-sm)',
+                            color: '#fff'
+                          }}>
+                            ✓
+                          </div>
+                        )}
+                        <div style={{
+                          position: 'absolute',
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)',
+                          padding: '20px 8px 6px 8px',
+                          fontSize: 'var(--font-xs)',
+                          color: '#fff'
+                        }}>
+                          <div style={{ fontWeight: '500', marginBottom: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {photo.alt_description || 'Untitled'}
+                          </div>
+                          <div style={{ opacity: 0.7, fontSize: '10px' }}>
+                            by {photo.user?.name || 'Unknown'}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{
+                  fontSize: 'var(--font-xs)',
+                  color: 'rgba(255, 255, 255, 0.4)',
+                  marginTop: '8px'
+                }}>
+                  Press Enter or click Search to find wallpapers. Click any image to set as wallpaper.
+                </div>
+              </div>
+            )}
+
+            {/* Live preview paired with the opacity control */}
+            <div style={{
+              padding: '16px',
+              background: 'rgba(255, 255, 255, 0.03)',
+              borderRadius: '12px',
+              border: '1px solid rgba(255, 255, 255, 0.08)'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '10px'
+              }}>
+                <span style={{ fontSize: 'var(--font-sm)', color: 'rgba(255,255,255,0.6)', fontWeight: '500' }}>
+                  Preview
+                </span>
+                <span style={{ fontSize: 'var(--font-sm)', color: '#34C759', fontWeight: '600' }}>
+                  {Math.round(wallpaperOpacity * 100)}% opacity
+                </span>
+              </div>
+
+              <div style={{
+                position: 'relative',
+                height: '140px',
+                borderRadius: '8px',
+                overflow: 'hidden',
+                background: '#0a0a0f',
+                marginBottom: '14px'
+              }}>
+                <div style={{
+                  position: 'absolute',
+                  inset: 0,
+                  backgroundImage: `url(${wallpaperUrl})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  opacity: wallpaperOpacity
+                }} />
+                <div style={{
+                  position: 'absolute',
+                  inset: 0,
+                  backdropFilter: 'blur(8px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#fff',
+                  fontSize: 'var(--font-base)',
+                  fontWeight: '500'
+                }}>
+                  Your Dashboard Preview
+                </div>
+              </div>
+
+              <label style={{
+                display: 'block',
+                color: '#9ca3af',
+                fontSize: 'var(--font-sm)',
+                fontWeight: '500',
+                marginBottom: '8px'
+              }}>
+                Background Opacity
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={wallpaperOpacity}
+                onChange={(e) => onWallpaperOpacityChange(parseFloat(e.target.value))}
+                style={{
+                  width: '100%',
+                  height: '6px',
+                  borderRadius: '3px',
+                  background: `linear-gradient(to right, #34C759 0%, #34C759 ${wallpaperOpacity * 100}%, rgba(255, 255, 255, 0.1) ${wallpaperOpacity * 100}%, rgba(255, 255, 255, 0.1) 100%)`,
+                  outline: 'none',
+                  WebkitAppearance: 'none',
+                  appearance: 'none'
+                }}
+              />
+              <div style={{
+                fontSize: 'var(--font-xs)',
+                color: 'rgba(255, 255, 255, 0.4)',
+                marginTop: '6px'
+              }}>
+                Lower opacity fades the image so the interface stays readable.
+              </div>
+            </div>
+          </>
+        </div>
+      )}
+
+      {/* Typography */}
+      <div style={{ marginTop: '32px' }}>
+        <h5 style={{
+          margin: '0 0 16px 0',
+          color: '#e5e7eb',
+          fontSize: 'var(--font-lg)',
+          fontWeight: '600'
+        }}>
+          Typography
+        </h5>
+
+        <p style={{
+          margin: '0 0 20px 0',
+          fontSize: 'var(--font-base)',
+          color: 'var(--text-secondary)',
+          lineHeight: '1.5'
+        }}>
+          Choose the typeface and text size used across the interface. Changes apply instantly.
+        </p>
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: '20px',
+          alignItems: 'start'
+        }}>
+          <div>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              color: '#9ca3af',
+              fontSize: 'var(--font-base)',
+              fontWeight: '500'
+            }}>
+              Font Family
+            </label>
+            <FontFamilyDropdown
+              fontFamily={fontFamily}
+              onFontFamilyChange={onFontFamilyChange}
+            />
+          </div>
+
+          <div>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              color: '#9ca3af',
+              fontSize: 'var(--font-base)',
+              fontWeight: '500'
+            }}>
+              Font Size
+            </label>
+            <FontSizeDropdown
+              fontSize={fontSize}
+              onFontSizeChange={onFontSizeChange}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div style={{
+        marginTop: '32px',
+        padding: '12px',
+        background: 'var(--bg-tertiary)',
+        borderRadius: '8px',
+        border: '1px solid var(--border-primary)'
+      }}>
+        <div style={{
+          fontSize: 'var(--font-sm)',
+          color: 'var(--text-secondary)',
+          lineHeight: '1.5'
+        }}>
+          <strong style={{ color: 'var(--text-primary)' }}>💡 Tip:</strong> Your theme, typography, and wallpaper preferences are automatically saved and will persist across browser sessions.
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ThemesTab;

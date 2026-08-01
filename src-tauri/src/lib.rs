@@ -1065,7 +1065,6 @@ fn categorize_app(name: String, path: String) -> categorize::AppCategory {
 
 #[tauri::command(rename_all = "snake_case")]
 async fn focus_window(_app: tauri::AppHandle, pid: u32, name: Option<String>, hwnd: Option<i64>) -> Result<(), String> {
-    // Use native Rust implementation instead of shelling out to AppFocus.exe
     let hwnd_opt = hwnd.filter(|&h| h != 0).map(|h| h as isize);
     let name_ref = name.as_deref();
 
