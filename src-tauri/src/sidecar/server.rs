@@ -229,6 +229,8 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/activity/site-usage", get(get_site_usage))
         // CoolDesk project workspace folder (.cooldesk/) reader
         .route("/cooldesk", get(get_cooldesk))
+        // Disk scan for projects the app has never been told about
+        .route("/cooldesk/discover", get(get_cooldesk_discover))
         // Project linking (star/hub group.json) — the one .cooldesk/ write path
         .route("/cooldesk/link", post(post_cooldesk_link))
         // Plugin -> app push: a .cooldesk/ folder was created or changed

@@ -111,6 +111,32 @@ export async function linkCooldeskProject(hubPath, memberPath, opts = {}) {
     }
 }
 
+/**
+ * Scan the usual project folders for committed `.cooldesk/` workspaces.
+ *
+ * `fetchCooldesk` can only read a project whose path you already know, and the
+ * only other source is the plugin's live announce — so a repo initialised while
+ * the app was closed was never seen at all. This asks the sidecar to go find
+ * them, which is what turns `.cooldesk/` folders into workspaces on first launch.
+ *
+ * @param {string[]} [roots] extra folders to scan, on top of the default dev dirs
+ * @returns {Promise<Array<{ path: string, name: string, project: object|null, isHub: boolean }>>}
+ */
+export async function discoverCooldeskProjects(roots = []) {
+    try {
+        const qs = new URLSearchParams();
+        if (roots.length) qs.set('roots', roots.filter(Boolean).join(','));
+        const url = `${SIDECAR_URL}/cooldesk/discover${qs.toString() ? `?${qs}` : ''}`;
+        const res = await fetch(url);
+        if (!res.ok) return [];
+        const body = await res.json();
+        return Array.isArray(body?.projects) ? body.projects : [];
+    } catch (err) {
+        console.warn('[cooldesk] discover failed:', err?.message || err);
+        return [];
+    }
+}
+
 /** Convenience: just the open (non-done) shared todos for a project. */
 export async function fetchCooldeskTodos(projectPath) {
     const cd = await fetchCooldesk(projectPath);

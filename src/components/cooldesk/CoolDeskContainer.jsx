@@ -19,7 +19,7 @@ import { GlobalAddButton } from './GlobalAddButton';
 import { OverviewDashboard } from './OverviewDashboard';
 import { WorkspaceDockBar } from './WorkspaceDockBar';
 import { useDockState } from '../../hooks/useDockState';
-import { useCooldeskAutoWorkspace } from '../../hooks/useCooldeskProjects.js';
+import { useCooldeskAutoWorkspace, useCooldeskDiscovery } from '../../hooks/useCooldeskProjects.js';
 // Lazy load WorkspaceList (Face 2)
 const WorkspaceList = lazy(() => import('./WorkspaceList').then(m => ({ default: m.WorkspaceList })));
 
@@ -66,6 +66,10 @@ export function CoolDeskContainer({
   // A `/cd-init` in a repo CoolDesk has never seen becomes a workspace here,
   // instead of staying invisible until someone creates one by hand.
   useCooldeskAutoWorkspace(savedWorkspaces);
+
+  // …and the repos that were already `.cooldesk` projects before this app ever
+  // ran get found by scanning disk, instead of waiting for a plugin hook to fire.
+  useCooldeskDiscovery(savedWorkspaces, { enabled: isDesktopApp });
 
   // Run AI app categorization on first launch (or when apps/workspaces change)
   useEffect(() => {

@@ -625,6 +625,46 @@ pub async fn get_cooldesk(Query(query): Query<CooldeskQuery>) -> Json<serde_json
 }
 
 #[derive(Debug, serde::Deserialize)]
+pub struct CooldeskDiscoverQuery {
+    /// Extra roots to scan, comma-separated. Added to the default dev folders.
+    roots: Option<String>,
+    /// How deep to walk each explicit root (default 4).
+    depth: Option<usize>,
+}
+
+/// Scan the usual project folders for committed `.cooldesk/` workspaces.
+///
+/// The counterpart to `/cooldesk/announce`: announce covers projects initialised
+/// while the app runs, this covers every project that already existed. Blocking
+/// filesystem work, so it runs off the async runtime's worker threads.
+/// GET /cooldesk/discover?roots=D:\work&depth=4
+pub async fn get_cooldesk_discover(
+    Query(query): Query<CooldeskDiscoverQuery>,
+) -> Json<serde_json::Value> {
+    let roots: Vec<String> = query
+        .roots
+        .unwrap_or_default()
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let depth = query.depth.unwrap_or(4).min(8);
+
+    let result = tokio::task::spawn_blocking(move || {
+        crate::sidecar::cooldesk::discover_projects(&roots, depth)
+    })
+    .await
+    .unwrap_or_else(|e| serde_json::json!({ "projects": [], "error": e.to_string() }));
+
+    log::info!(
+        "[CoolDesk] discover: {} project(s) in {}ms",
+        result.get("projects").and_then(|p| p.as_array()).map_or(0, |a| a.len()),
+        result.get("ms").and_then(|m| m.as_u64()).unwrap_or(0)
+    );
+    Json(result)
+}
+
+#[derive(Debug, serde::Deserialize)]
 pub struct CooldeskLinkBody {
     /// The project that owns the group (star model) — the one you're viewing.
     pub hub: String,

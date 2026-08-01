@@ -159,6 +159,173 @@ pub fn read_cooldesk(project_path: &str) -> Value {
 }
 
 // ---------------------------------------------------------------------------
+// Discovery
+//
+// Reading a `.cooldesk/` folder requires already knowing where it is. Until this
+// existed the app only ever learned that from the plugin's `/cooldesk/announce`
+// — which means a repo that was initialised while the app was closed (or on
+// another machine, or before a reinstall) stayed invisible forever. This walks
+// the usual places projects live and reports every `.cooldesk/` it finds, so the
+// app can surface them as workspaces without waiting for a plugin hook to fire.
+// ---------------------------------------------------------------------------
+
+/// Folders that never contain a project root but are expensive to walk.
+const SKIP_DIRS: &[&str] = &[
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    "out",
+    "vendor",
+    "coverage",
+    "__pycache__",
+    "venv",
+    "appdata",
+    "application data",
+    "$recycle.bin",
+    "windows",
+    "program files",
+    "program files (x86)",
+    "programdata",
+    "library", // macOS
+];
+
+/// Upper bound on directories visited per scan. A pathological home folder must
+/// not turn app start into a disk crawl; hitting this just truncates results.
+const SCAN_BUDGET: usize = 40_000;
+
+/// Home-relative folders people keep code in. The home dir itself is scanned too
+/// (at a shallower depth), so this list only buys extra depth where it pays off.
+fn default_roots() -> Vec<PathBuf> {
+    let home = dirs_home();
+    let Some(home) = home else { return vec![] };
+    let mut roots = vec![home.clone()];
+    for name in [
+        "projects",
+        "Projects",
+        "dev",
+        "Dev",
+        "code",
+        "Code",
+        "src",
+        "source",
+        "repos",
+        "Repos",
+        "work",
+        "git",
+        "Desktop",
+        "Documents",
+        "Documents/GitHub",
+        "OneDrive/Documents",
+    ] {
+        let p = home.join(name);
+        if p.is_dir() {
+            roots.push(p);
+        }
+    }
+    roots
+}
+
+fn dirs_home() -> Option<PathBuf> {
+    std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
+        .filter(|p| p.is_dir())
+}
+
+fn should_skip(name: &str) -> bool {
+    // Dot-folders are config, caches and VCS internals — never project roots.
+    // `.cooldesk` itself is probed directly, never descended into.
+    name.starts_with('.') || SKIP_DIRS.contains(&name.to_lowercase().as_str())
+}
+
+/// Depth-first walk collecting project roots (canonical paths) into `found`.
+fn walk(dir: &Path, depth_left: usize, budget: &mut usize, found: &mut Vec<PathBuf>) {
+    if *budget == 0 {
+        return;
+    }
+    *budget -= 1;
+
+    if dir.join(".cooldesk").join("cooldesk.json").is_file() {
+        found.push(dir.to_path_buf());
+        // Keep descending: a monorepo hub can own member projects in subfolders.
+    }
+    if depth_left == 0 {
+        return;
+    }
+
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            continue;
+        }
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        if should_skip(name) {
+            continue;
+        }
+        walk(&entry.path(), depth_left - 1, budget, found);
+    }
+}
+
+/// Find every `.cooldesk/` project under the given roots (or the default dev
+/// folders when none are given) and return an identity summary for each.
+///
+/// Deliberately shallow: only the manifest's `project` block plus group role,
+/// which is all the app needs to decide "is this a workspace I should show?".
+/// The full read still goes through `read_cooldesk` for whichever one is opened.
+pub fn discover_projects(extra_roots: &[String], depth: usize) -> Value {
+    let started = std::time::Instant::now();
+    let mut budget = SCAN_BUDGET;
+    let mut found: Vec<PathBuf> = vec![];
+
+    let mut roots: Vec<PathBuf> = extra_roots
+        .iter()
+        .map(PathBuf::from)
+        .filter(|p| p.is_dir())
+        .collect();
+    roots.extend(default_roots());
+
+    // The home dir is broad and shallow; explicit dev roots earn full depth.
+    let home = dirs_home();
+    for root in &roots {
+        let d = if Some(root) == home.as_ref() { 2 } else { depth };
+        walk(root, d, &mut budget, &mut found);
+    }
+
+    // Roots overlap by design (home contains ~/projects), so dedupe by resolved
+    // path — the same project reached two ways must appear once.
+    let mut seen = std::collections::HashSet::new();
+    let mut projects = vec![];
+    for root in found {
+        let canonical = fs::canonicalize(&root).unwrap_or_else(|_| root.clone());
+        if !seen.insert(canonical.clone()) {
+            continue;
+        }
+        let one = read_one(&root);
+        if one.get("exists").and_then(|v| v.as_bool()) != Some(true) {
+            continue;
+        }
+        let manifest = one.get("manifest");
+        projects.push(json!({
+            "path": display_path(&canonical),
+            "name": project_name(&root),
+            "project": manifest.and_then(|m| m.get("project")).cloned().unwrap_or(Value::Null),
+            // Group role, so the app can prefer hubs when presenting a suite.
+            "isHub": root.join(".cooldesk").join("group.json").is_file(),
+            "group": manifest.and_then(|m| m.get("group")).cloned().unwrap_or(Value::Null),
+        }));
+    }
+
+    json!({
+        "projects": projects,
+        "scanned": SCAN_BUDGET - budget,
+        "truncated": budget == 0,
+        "ms": started.elapsed().as_millis() as u64,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Linking (write path)
 //
 // The rest of this module is read-only by design — the plugin/AI authors
@@ -490,6 +657,67 @@ mod link_tests {
         let h = read_cooldesk(&hub.to_string_lossy());
         assert!(h.get("hub").is_none());
         assert_eq!(h["group"]["name"], "Alpha App Suite");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    #[ignore = "manual: scans the real machine"]
+    fn discovery_real_machine() {
+        let out = discover_projects(&[], 4);
+        println!("{}", serde_json::to_string_pretty(&out).unwrap());
+    }
+
+    #[test]
+    fn discovery_finds_projects_and_skips_noise() {
+        let (root, hub, _member) = scratch("discover");
+        // Nested project: a monorepo member must still be found.
+        let nested = hub.join("packages").join("api");
+        fs::create_dir_all(nested.join(".cooldesk")).unwrap();
+        fs::write(
+            nested.join(".cooldesk").join("cooldesk.json"),
+            r#"{"schemaVersion":1,"project":{"id":"api","name":"API"}}"#,
+        )
+        .unwrap();
+        // Noise that must never be walked into or reported.
+        fs::create_dir_all(root.join("node_modules").join("pkg").join(".cooldesk")).unwrap();
+        fs::write(
+            root.join("node_modules").join("pkg").join(".cooldesk").join("cooldesk.json"),
+            r#"{"schemaVersion":1,"project":{"id":"nope","name":"Nope"}}"#,
+        )
+        .unwrap();
+
+        let out = discover_projects(&[root.to_string_lossy().to_string()], 4);
+        let names: Vec<&str> = out["projects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["name"].as_str().unwrap())
+            .collect();
+
+        assert!(names.contains(&"Alpha App"), "hub found, got {names:?}");
+        assert!(names.contains(&"Beta Service"), "sibling found, got {names:?}");
+        assert!(names.contains(&"API"), "nested project found, got {names:?}");
+        assert!(!names.contains(&"Nope"), "node_modules skipped, got {names:?}");
+
+        // Overlapping roots must not produce the same project twice.
+        let dupe = discover_projects(
+            &[
+                root.to_string_lossy().to_string(),
+                hub.to_string_lossy().to_string(),
+            ],
+            4,
+        );
+        let paths: Vec<&str> = dupe["projects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["path"].as_str().unwrap())
+            .collect();
+        let mut uniq = paths.clone();
+        uniq.sort_unstable();
+        uniq.dedup();
+        assert_eq!(paths.len(), uniq.len(), "duplicate roots deduped, got {paths:?}");
 
         let _ = fs::remove_dir_all(root);
     }
