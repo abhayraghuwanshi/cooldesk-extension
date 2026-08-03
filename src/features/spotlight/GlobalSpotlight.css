@@ -1467,3 +1467,639 @@ body.spotlight-window {
 .spotlight-embedded .spotlight-feedback--floating.error {
   border-color: rgba(239, 68, 68, 0.25);
 }
+
+/* ── Agent mode (/agent) ───────────────────────────────────────────────────
+   A terminal AI CLI proposing workspace changes. Green throughout, matching
+   the add-mode badge, so "this is going to change my workspaces" reads the
+   same wherever it appears. */
+.spotlight-agent-adapters {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.spotlight-agent-chip {
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.spotlight-agent-chip.is-active {
+  border-color: rgba(34, 197, 94, 0.5);
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+/* Not on PATH — still clickable, so the tooltip explaining why is reachable. */
+.spotlight-agent-chip.is-missing {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+.spotlight-agent-cancel {
+  margin-left: 8px;
+  padding: 2px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.12);
+  color: #f87171;
+  cursor: pointer;
+}
+
+.spotlight-agent-warn {
+  margin-top: 8px;
+  color: #fbbf24;
+  font-size: 11px;
+}
+
+.spotlight-agent-warn code {
+  background: rgba(251, 191, 36, 0.15);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* Raw stdout. Monospace and scrollable — this is a terminal, and pretending
+   otherwise makes agent output unreadable. */
+.spotlight-agent-stream {
+  max-height: 220px;
+  overflow: auto;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(2, 6, 23, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  font-family: var(--font-family-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  color: #cbd5e1;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.spotlight-agent-stream .is-stderr {
+  color: #fca5a5;
+}
+
+.spotlight-agent-proposal {
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.spotlight-agent-proposal-head {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #4ade80;
+  margin-bottom: 8px;
+}
+
+.spotlight-agent-actions {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  font-size: 12px;
+  color: #e2e8f0;
+}
+
+.spotlight-agent-actions li {
+  padding: 3px 0 3px 14px;
+  position: relative;
+  word-break: break-word;
+}
+
+.spotlight-agent-actions li::before {
+  position: absolute;
+  left: 0;
+  font-weight: 700;
+}
+
+.spotlight-agent-actions li.is-add::before {
+  content: '+';
+  color: #4ade80;
+}
+
+.spotlight-agent-actions li.is-remove::before {
+  content: '−';
+  color: #f87171;
+}
+
+.spotlight-agent-rejected {
+  font-size: 11px;
+  color: #fbbf24;
+  margin-bottom: 10px;
+}
+
+.spotlight-agent-rejected summary {
+  cursor: pointer;
+}
+
+.spotlight-agent-confirm {
+  display: flex;
+  gap: 8px;
+}
+
+.spotlight-agent-apply,
+.spotlight-agent-discard {
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.spotlight-agent-apply {
+  border: 1px solid #22c55e;
+  background: #22c55e;
+  color: #052e16;
+}
+
+.spotlight-agent-apply:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.spotlight-agent-discard {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: transparent;
+  color: #94a3b8;
+}
+
+/* Agent finished with an empty action list — one line, not a framed panel. */
+.spotlight-agent-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* Transcript: one scroll region for the whole conversation, so follow-ups
+   stay readable instead of each run replacing the last. */
+.spotlight-agent-log {
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.spotlight-agent-turn + .spotlight-agent-turn {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.spotlight-agent-request {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #e2e8f0;
+  margin-bottom: 8px;
+  word-break: break-word;
+}
+
+.spotlight-agent-request-mark {
+  color: #4ade80;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.spotlight-agent-waiting {
+  font-size: 12px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+/* The mode chip reuses the add badge's shape; only the icon differs. */
+.spotlight-mode-badge {
+  max-width: none;
+}
+
+/* The agent's prose answer — the common case, so it leads the turn. */
+.spotlight-agent-reply {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.spotlight-agent-reply-who {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #4ade80;
+}
+
+.spotlight-agent-reply-text {
+  font-size: 13px;
+  line-height: 1.55;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Raw stdout, folded away once there is an answer to read instead. */
+.spotlight-agent-raw {
+  margin-bottom: 8px;
+}
+
+.spotlight-agent-raw > summary {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(148, 163, 184, 0.7);
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.spotlight-agent-raw > summary:hover {
+  color: #cbd5e1;
+}
+
+.spotlight-agent-raw .spotlight-agent-stream {
+  margin-top: 6px;
+}
+
+/* The transcript scrolls vertically only. Long unbroken output (a url, a
+   stack trace) was widening the flex children instead of wrapping, which
+   pushed a horizontal scrollbar across the whole panel. min-width:0 is the
+   part that actually lets a flex/grid child shrink below its content. */
+.spotlight-agent-log,
+.spotlight-agent-turn,
+.spotlight-agent-reply,
+.spotlight-agent-reply-text,
+.spotlight-agent-proposal {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.spotlight-agent-log {
+  overflow-x: hidden;
+}
+
+/* Raw output is the one thing allowed to scroll sideways — wrapping a
+   terminal dump destroys its alignment — but it scrolls inside its own box. */
+.spotlight-agent-stream {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* ── Agent markdown ────────────────────────────────────────────────────────
+   Rendered from marked's token stream (see AgentMarkdown.jsx), so this styles
+   real elements rather than a pre-wrapped blob. */
+.spotlight-agent-reply-text {
+  white-space: normal;
+}
+
+.agent-md-plain {
+  white-space: pre-wrap;
+}
+
+.agent-md > :first-child { margin-top: 0; }
+.agent-md > :last-child { margin-bottom: 0; }
+
+.agent-md-p {
+  margin: 0 0 8px;
+  line-height: 1.55;
+}
+
+.agent-md-h {
+  font-weight: 700;
+  margin: 12px 0 6px;
+  color: #f1f5f9;
+}
+
+.agent-md-h1 { font-size: 15px; }
+.agent-md-h2 { font-size: 14px; }
+.agent-md-h3 { font-size: 13px; }
+
+.agent-md-list {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.agent-md-list li {
+  margin-bottom: 5px;
+  line-height: 1.5;
+}
+
+.agent-md-list li::marker {
+  color: #4ade80;
+}
+
+.agent-md-code {
+  font-family: var(--font-family-mono, ui-monospace, monospace);
+  font-size: 0.92em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.16);
+  color: #e2e8f0;
+}
+
+.agent-md-pre {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(2, 6, 23, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  font-family: var(--font-family-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  color: #cbd5e1;
+  overflow-x: auto;
+}
+
+.agent-md-quote {
+  margin: 0 0 8px;
+  padding-left: 10px;
+  border-left: 2px solid rgba(74, 222, 128, 0.4);
+  color: #cbd5e1;
+}
+
+.agent-md-hr {
+  border: none;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+  margin: 10px 0;
+}
+
+.agent-md-link {
+  color: #60a5fa;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(96, 165, 250, 0.35);
+  cursor: pointer;
+  word-break: break-word;
+}
+
+.agent-md-link:hover {
+  color: #93c5fd;
+  border-bottom-color: #93c5fd;
+}
+
+.agent-md-muted {
+  color: rgba(148, 163, 184, 0.7);
+  font-style: italic;
+}
+
+/* ── Agent request history ─────────────────────────────────────────────────
+   Anchored to its button in the header row. */
+.spotlight-agent-history-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.spotlight-agent-history {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: 320px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 8px;
+  background: rgb(24, 24, 30);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.spotlight-agent-history-item {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  color: #cbd5e1;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  /* One line per entry — the title attribute carries the full text. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spotlight-agent-history-item:hover {
+  background: rgba(34, 197, 94, 0.14);
+  color: #f1f5f9;
+}
+
+.spotlight-agent-history-empty {
+  padding: 8px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.spotlight-agent-history-clear {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border: none;
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+  background: transparent;
+  color: #f87171;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.spotlight-agent-history-clear:hover {
+  background: rgba(248, 113, 113, 0.12);
+}
+
+/* History rows: open the saved exchange, or reuse just the prompt. */
+.spotlight-agent-history-row {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  border-radius: 5px;
+}
+
+.spotlight-agent-history-row:hover {
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.spotlight-agent-history-item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  white-space: normal;
+}
+
+.spotlight-agent-history-q {
+  font-size: 12px;
+  color: #e2e8f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Two-line answer preview, so the list shows what you got, not just what
+   you asked. */
+.spotlight-agent-history-a {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #94a3b8;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.spotlight-agent-history-reuse {
+  flex-shrink: 0;
+  width: 24px;
+  border: none;
+  background: transparent;
+  color: rgba(148, 163, 184, 0.6);
+  font-size: 10px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.spotlight-agent-history-reuse:hover {
+  background: rgba(148, 163, 184, 0.18);
+  color: #e2e8f0;
+}
+
+/* ── Turn typography ───────────────────────────────────────────────────────
+   The "COOLDESK" label used to sit on a bare line of its own above the
+   answer, with nothing tying the two together — it read as a stray caption
+   rather than an attribution. The answer is now a contained surface and the
+   label lives inside it. */
+.spotlight-agent-request {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+  gap: 10px;
+  margin-bottom: 10px;
+  color: #f1f5f9;
+}
+
+.spotlight-agent-request-mark {
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.spotlight-agent-reply {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(74, 222, 128, 0.18);
+  border-left: 2px solid rgba(74, 222, 128, 0.55);
+  background: rgba(34, 197, 94, 0.05);
+}
+
+.spotlight-agent-reply-who {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+}
+
+.spotlight-agent-reply-text {
+  font-size: 14px;
+  line-height: 1.62;
+}
+
+.agent-md-p {
+  margin: 0 0 10px;
+  line-height: 1.62;
+}
+
+.agent-md-list li {
+  margin-bottom: 7px;
+  line-height: 1.55;
+}
+
+.agent-md-list {
+  padding-left: 20px;
+}
+
+/* The Output disclosure sat flush against the answer; give it air so the
+   turn separator does the dividing instead. */
+.spotlight-agent-raw {
+  margin-top: 8px;
+}
+
+/* ── Copy + text selection ─────────────────────────────────────────────────
+   The transcript is prose to be read and quoted, so selection is explicit
+   here: the search surface sets user-select:none on its chips and prompt,
+   and it would be easy for that to creep over this. */
+.spotlight-agent-log,
+.spotlight-agent-reply-text,
+.spotlight-agent-stream,
+.spotlight-agent-request {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: auto;
+}
+
+.spotlight-agent-reply-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.spotlight-agent-reply-head .spotlight-agent-reply-who {
+  margin-bottom: 0;
+}
+
+.spotlight-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 5px;
+  background: transparent;
+  color: rgba(148, 163, 184, 0.85);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.spotlight-copy-btn:hover {
+  background: rgba(148, 163, 184, 0.14);
+  color: #e2e8f0;
+  border-color: rgba(148, 163, 184, 0.4);
+}
+
+.spotlight-copy-btn.is-copied {
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.5);
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.spotlight-copy-btn > svg {
+  font-size: 9px;
+}
+
+/* Sits inline with the disclosure label rather than on its own row. */
+.spotlight-agent-raw > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.spotlight-agent-raw > summary .spotlight-copy-btn {
+  margin-left: auto;
+}

@@ -14,6 +14,7 @@ mod matcher;
 mod tab_uia;
 mod webapp_embed;
 mod dock;
+mod ai_cli;
 
 use system::RunningApp;
 
@@ -2420,6 +2421,9 @@ pub fn run() {
         dock_collapse,
         dock_set_width,
         dock_get_state,
+        ai_cli::ai_cli_run,
+        ai_cli::ai_cli_cancel,
+        ai_cli::ai_cli_detect,
         save_backup,
         get_backups_dir,
         list_backups,

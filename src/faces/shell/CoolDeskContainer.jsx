@@ -8,13 +8,11 @@ import { isElectronApp } from '../../services/environmentDetector';
 import { runningAppsService } from '../../services/runningAppsService';
 import { getPendingSuggestions, runSeedingIfNeeded } from '../../services/appCategorizationService';
 import '../../styles/cooldesk.css';
-import '../../styles/global-add.css';
 import '../../styles/spatial.css';
 import '../../styles/tabCard.css';
 import { Face, WorkspaceShell } from './WorkspaceShell';
 import { GlobalSpotlight } from '../../features/spotlight/GlobalSpotlight';
 import { UpdateButton } from '../../features/updates/UpdateButton';
-import { GlobalAddButton } from '../../features/global-add/GlobalAddButton';
 import { OverviewDashboard } from '../overview/OverviewDashboard';
 import { WorkspaceDockBar } from '../../features/dock/WorkspaceDockBar';
 import { useDockState } from '../../features/dock/useDockState';
@@ -772,20 +770,11 @@ export function CoolDeskContainer({
         )}
       </WorkspaceShell>
 
-      {/* Global Add Button - Desktop App Only.
-          Uncontrolled: it owns its own open state now that no other surface
-          drives it. Dropping `onOpenAIManager` also restores its built-in
-          "New Workspace" form — that button used to hand off to the AI
-          manager, which no longer exists. */}
-      {isDesktopApp && (
-        <GlobalAddButton
-          workspaces={savedWorkspaces}
-          onCreateWorkspace={onCreateWorkspace}
-          onAddUrlToWorkspace={onAddUrlToWorkspace}
-          onAddNote={onAddNote}
-          data-onboarding="global-add-btn"
-        />
-      )}
+      {/* The floating "Quick Add" button used to live here. Adding to a
+          workspace is now right-click → Add item, which arms the header
+          search — so a permanent action button for the same job was one
+          entry point too many. `features/global-add/` is unreferenced as a
+          result; it still holds the only manual New Workspace form. */}
 
       {/* Knowledge Graph — lazy; only mount when opened so d3/force-graph stays out of main */}
       {graphOpen && (

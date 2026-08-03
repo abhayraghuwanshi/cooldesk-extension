@@ -23,6 +23,10 @@ import { enrichRunningAppsWithIcons, getFaviconUrl, getGroupDomainFromUrl } from
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth';
 import { useSlashCommands } from './useSlashCommands';
 import { useVoiceCommands } from './useVoiceCommands';
+import { useAiCli } from './useAiCli';
+import { AgentMarkdown } from './AgentMarkdown';
+import { CopyButton } from './CopyButton';
+import { describeAction } from '../../services/workspaceActions';
 import { VOICE_SEARCH_ENABLED } from '../../config/features';
 import './GlobalSpotlight.css';
 
@@ -358,6 +362,66 @@ export function GlobalSpotlight({
     useEffect(() => () => {
         if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
     }, []);
+
+    // Terminal AI CLI behind /agent (see useAiCli / aiAdapters).
+    const aiCli = useAiCli();
+    const agentLogRef = useRef(null);
+    const [agentHistoryOpen, setAgentHistoryOpen] = useState(false);
+
+    // Follow the transcript as output streams in. Without this the newest line
+    // lands below the fold and a long run looks like it stopped.
+    useEffect(() => {
+        const el = agentLogRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+    }, [aiCli.turns]);
+
+    // Send the current /agent request. Workspaces are re-read here rather than
+    // taken from the `workspaces` state above: that list is only populated when
+    // the workspaces *section* is enabled, and the agent needs the real set
+    // regardless of which sections this surface renders.
+    const runAgent = useCallback(async (request) => {
+        let list = [];
+        try {
+            const { listWorkspaces } = await import('../../db/index.js');
+            const res = await listWorkspaces();
+            list = res?.success ? res.data : (Array.isArray(res) ? res : []);
+        } catch (e) {
+            console.warn('[Spotlight] agent: failed to load workspaces', e);
+        }
+        // Run in the active project's folder when there is one, so a repo-aware
+        // agent has something to look at.
+        const cwd = list.find(w => (w.apps || []).some(a => a.appType === 'folder'))
+            ?.apps.find(a => a.appType === 'folder')?.path || null;
+        aiCli.run(request, list, cwd);
+    }, [aiCli]);
+
+    // Apply one turn's proposal. The transcript stays up afterwards — the whole
+    // point of history is that "now also do X" is a follow-up, not a new session.
+    const applyProposal = useCallback(async (turn) => {
+        if (!turn?.proposal?.valid?.length) return;
+        try {
+            const { applyActions } = await import('../../services/workspaceActions');
+            const { listWorkspaces } = await import('../../db/index.js');
+            const res = await listWorkspaces();
+            const list = res?.success ? res.data : (Array.isArray(res) ? res : []);
+            const { applied, errors } = await applyActions(turn.proposal.valid, list);
+            showFeedback(
+                errors.length ? `Applied ${applied}, ${errors.length} failed` : `Applied ${applied} change${applied === 1 ? '' : 's'}`,
+                errors.length ? 'error' : 'success'
+            );
+            if (errors.length) console.warn('[Spotlight] agent apply errors:', errors);
+            aiCli.clearProposal(turn.id);
+        } catch (e) {
+            console.error('[Spotlight] agent apply failed:', e);
+            showFeedback('Could not apply changes — see console', 'error');
+        }
+    }, [aiCli, showFeedback]);
+
+    const exitAgentMode = useCallback(() => {
+        aiCli.reset();
+        setCommandMode(null);
+        setQuery('');
+    }, [aiCli]);
 
     // Entering add mode hands the user straight to the input with the panel
     // down — the card's "+" is the click that starts this, so a second click
@@ -905,6 +969,27 @@ export function GlobalSpotlight({
             return;
         }
 
+        // Detect /agent — the terminal AI CLI (Claude Code, opencode …).
+        // Separate from /ai, which is the LM Studio chat: this one produces
+        // workspace edits and needs a confirm step, that one just talks.
+        //
+        // The prefix is *consumed*, not left in the box: it becomes a chip next
+        // to the input, the same way add mode shows its target. Leaving the
+        // literal "/agent " there meant every follow-up had to be typed after
+        // it, and re-typing it was the only way back into the mode.
+        if (trimmedQuery === '/agent' || trimmedQuery.startsWith('/agent ')) {
+            if (commandMode !== 'agent') {
+                setCommandMode('agent');
+                setResults([]);
+            }
+            setQuery(query.replace(/^\s*\/agent\s*/i, ''));
+            return;
+        }
+
+        // Once the chip is up the mode owns the input: the text is the request,
+        // and only the chip's × or Esc leaves.
+        if (commandMode === 'agent') return;
+
         // Detect /model command
         if (trimmedQuery === '/model' || trimmedQuery.startsWith('/model ')) {
             if (commandMode !== 'model') {
@@ -1060,14 +1145,22 @@ export function GlobalSpotlight({
         setExpandedPaths(new Set());
         setTreeChildren({});
 
-        // Skip search if in command mode
-        if (commandMode) {
+        // Agent mode still searches: the box is a search bar first, and the
+        // agent is one more thing it can answer with. /ai and /model take the
+        // input over completely, so they still skip.
+        if (commandMode && commandMode !== 'agent') {
             return;
         }
 
         if (!trimmedQuery) {
             setResults([]);
             setSelectedIndex(-1);
+            // Bumping the id orphans any search still in flight, so its late
+            // response can't repopulate an empty box; clearing loading here is
+            // then required, because that orphaned run's `finally` no longer
+            // matches the id and will never turn the spinner off itself.
+            searchIdRef.current++;
+            setLoading(false);
             return;
         }
 
@@ -1090,6 +1183,8 @@ export function GlobalSpotlight({
             // Prefix typed but no term yet — wait for input instead of searching ''
             setResults([]);
             setSelectedIndex(-1);
+            searchIdRef.current++;
+            setLoading(false);
             return;
         }
         const searchTerm = scope ? scopedTerm : trimmedQuery;
@@ -1110,8 +1205,10 @@ export function GlobalSpotlight({
         // Increment search ID to track this request
         const currentSearchId = ++searchIdRef.current;
 
-        // Short debounce - 50ms for fast typing, 0ms if we have cache
-        const debounceMs = cached ? 100 : 50;
+        // Short debounce - 50ms for fast typing, 0ms if we have cache.
+        // Agent mode waits longer: the text being typed is a sentence for the
+        // agent, not a search term, so there is no point chasing every keystroke.
+        const debounceMs = commandMode === 'agent' ? 400 : (cached ? 100 : 50);
 
         const timeoutId = setTimeout(async () => {
             // Check if this search is still relevant
@@ -1124,14 +1221,23 @@ export function GlobalSpotlight({
                 // Determine search type and run search
                 // In Electron: quickSearch uses in-memory cache (includes apps, tabs, workspaces)
                 // In Chrome: quickSearch uses local index or IPC fallback
-                const isNaturalLanguage = isNaturalLanguageQuery(searchTerm);
+                //
+                // Agent mode always takes the cheap path. An agent request is a
+                // sentence, so isNaturalLanguageQuery says yes to nearly all of
+                // them and routes to the slow AI-backed search — which is what
+                // made the spinner sit there for the whole time you were typing.
+                // Here search is a secondary convenience; the agent is the point.
+                const isAgent = commandMode === 'agent';
+                const isNaturalLanguage = !isAgent && isNaturalLanguageQuery(searchTerm);
 
                 const searchPromise = isNaturalLanguage
                     ? naturalLanguageSearch(searchTerm, 15)
                     : quickSearch(searchTerm, 15);
 
-                // File search only matters for unscoped or /f searches
-                const wantFiles = !scope || scope === SEARCH_SCOPES.f;
+                // File search only matters for unscoped or /f searches. Skipped
+                // in agent mode: an OS-wide scan per sentence is the slowest
+                // thing here and can't match a natural-language request anyway.
+                const wantFiles = !isAgent && (!scope || scope === SEARCH_SCOPES.f);
                 const filesPromise = wantFiles && window.electronAPI?.searchFiles
                     ? window.electronAPI.searchFiles(searchTerm)
                     : Promise.resolve([]);
@@ -1335,6 +1441,35 @@ export function GlobalSpotlight({
 
     // Handle Keyboard Navigation
     const handleKeyDown = (e) => {
+        if (commandMode === 'agent') {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                const pending = aiCli.turns.find(t => t.proposal?.valid.length);
+                // With a proposal on screen Enter is the confirm — the run is
+                // over and the only thing left to do is accept it.
+                if (pending) { applyProposal(pending); return; }
+                if (query.trim() && !aiCli.running) {
+                    runAgent(query.trim());
+                    setQuery('');
+                }
+                return;
+            }
+            // Backspace on an empty box removes the chip, the way a tag input
+            // works — otherwise the only way out is Esc, which also closes.
+            if (e.key === 'Backspace' && !query) {
+                e.preventDefault();
+                exitAgentMode();
+                return;
+            }
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                if (aiCli.running) { aiCli.cancel(); return; }  // stop the agent before closing
+                exitAgentMode();
+                return;
+            }
+            return; // no result navigation in agent mode
+        }
+
         // Handle command modes first
         if (commandMode === 'ai') {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -2017,11 +2152,15 @@ export function GlobalSpotlight({
         return () => window.removeEventListener('keydown', handleGlobalKeys);
     }, [isEmbedded]);
 
-    // Close on click outside (embedded: only while the dropdown is open)
+    // Close on click outside (embedded: only while the dropdown is open).
+    // A command mode holds the panel open: /agent runs for tens of seconds and
+    // carries a transcript, so a stray click anywhere else used to throw away a
+    // conversation mid-answer. The chip's × and Esc are the ways out.
     const handleClickOutside = useCallback(() => {
         if (isEmbedded && !panelOpen) return;
+        if (commandMode) return;
         handleClose();
-    }, [isEmbedded, panelOpen, handleClose]);
+    }, [isEmbedded, panelOpen, handleClose, commandMode]);
     useOnClickOutside(containerRef, handleClickOutside);
 
     // Format URL helper
@@ -2087,6 +2226,23 @@ export function GlobalSpotlight({
                             </button>
                         </span>
                     )}
+                    {/* Command-mode chip — same grammar as the add badge, so
+                        "the box is in a mode" always looks the same. */}
+                    {commandMode === 'agent' && (
+                        <span className="spotlight-add-badge spotlight-mode-badge">
+                            <FontAwesomeIcon icon={faTerminal} />
+                            <span>Agent</span>
+                            <button
+                                type="button"
+                                className="spotlight-add-badge-exit"
+                                onMouseDown={(e) => { e.preventDefault(); exitAgentMode(); }}
+                                title="Leave agent mode (Esc)"
+                                aria-label="Leave agent mode"
+                            >
+                                <FontAwesomeIcon icon={faTimes} />
+                            </button>
+                        </span>
+                    )}
                     {(() => {
                         const { scope } = parseScopedQuery(query.trim());
                         return scope ? <span className="spotlight-scope-badge">{scope.label}</span> : null;
@@ -2094,9 +2250,11 @@ export function GlobalSpotlight({
                     <input
                         ref={inputRef}
                         className="spotlight-input"
-                        placeholder={addTarget
-                            ? `Search to add to ${addTarget.name}…`
-                            : (placeholder || (isEmbedded ? 'Search or type / for commands...' : 'Almighty Search...'))}
+                        placeholder={commandMode === 'agent'
+                            ? (aiCli.turns.length ? 'Ask a follow-up…' : 'Describe how to reorganise your workspaces…')
+                            : addTarget
+                                ? `Search to add to ${addTarget.name}…`
+                                : (placeholder || (isEmbedded ? 'Search or type / for commands...' : 'Almighty Search...'))}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleKeyDown}
@@ -2189,6 +2347,242 @@ export function GlobalSpotlight({
                         <button className="spotlight-feedback-close" onClick={() => setFeedback(null)}>×</button>
                     </div>
                 )}
+                {/* Agent mode — a terminal AI CLI proposes workspace changes.
+                    Three states in one panel: the picker (idle), the live
+                    stdout stream (running), and the proposal (done). */}
+                {commandMode === 'agent' && (
+                    <div className="spotlight-ai-mode spotlight-agent-mode">
+                        <div className="spotlight-ai-header">
+                            <FontAwesomeIcon icon={faTerminal} style={{ color: '#4ade80' }} />
+                            <span>Agent</span>
+                            <div className="spotlight-agent-adapters">
+                                {aiCli.adapters.map(a => {
+                                    const found = aiCli.available?.[a.bin];
+                                    return (
+                                        <button
+                                            key={a.id}
+                                            type="button"
+                                            className={`spotlight-agent-chip${a.id === aiCli.adapterId ? ' is-active' : ''}${found === false ? ' is-missing' : ''}`}
+                                            onMouseDown={(e) => { e.preventDefault(); aiCli.selectAdapter(a.id); }}
+                                            title={found === false ? `${a.bin} not found on PATH` : `Run with ${a.label}`}
+                                        >
+                                            {a.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Past requests. The transcript is per-session by
+                                design; this is the part that persists, so a
+                                prompt worth reusing isn't lost on close. */}
+                            <div className="spotlight-agent-history-wrap">
+                                <button
+                                    type="button"
+                                    className={`spotlight-agent-chip${agentHistoryOpen ? ' is-active' : ''}`}
+                                    onMouseDown={(e) => { e.preventDefault(); setAgentHistoryOpen(v => !v); }}
+                                    title="Previous requests"
+                                    aria-expanded={agentHistoryOpen}
+                                >
+                                    <FontAwesomeIcon icon={faHistory} />
+                                </button>
+                                {agentHistoryOpen && (
+                                    <div className="spotlight-agent-history">
+                                        {aiCli.history.length === 0 ? (
+                                            <div className="spotlight-agent-history-empty">Nothing asked yet.</div>
+                                        ) : (
+                                            <>
+                                                {aiCli.history.map((h) => (
+                                                    <div key={`${h.at}-${h.text}`} className="spotlight-agent-history-row">
+                                                        {/* Opens the saved exchange — question and
+                                                            answer — rather than re-running it. An
+                                                            agent run costs time and tokens, and the
+                                                            answer you already paid for is right here. */}
+                                                        <button
+                                                            type="button"
+                                                            className="spotlight-agent-history-item"
+                                                            title={h.reply ? `${h.text}\n\n${h.reply}` : h.text}
+                                                            onMouseDown={(e) => {
+                                                                e.preventDefault();
+                                                                aiCli.restoreFromHistory(h);
+                                                                setAgentHistoryOpen(false);
+                                                            }}
+                                                        >
+                                                            <span className="spotlight-agent-history-q">{h.text}</span>
+                                                            {h.reply && (
+                                                                <span className="spotlight-agent-history-a">{h.reply}</span>
+                                                            )}
+                                                        </button>
+                                                        {/* Separate control, because reusing a prompt
+                                                            and rereading an answer are different jobs. */}
+                                                        <button
+                                                            type="button"
+                                                            className="spotlight-agent-history-reuse"
+                                                            title="Edit and ask again"
+                                                            aria-label="Edit and ask again"
+                                                            onMouseDown={(e) => {
+                                                                e.preventDefault();
+                                                                setQuery(h.text);
+                                                                setAgentHistoryOpen(false);
+                                                                inputRef.current?.focus();
+                                                            }}
+                                                        >
+                                                            <FontAwesomeIcon icon={faPlus} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                                <button
+                                                    type="button"
+                                                    className="spotlight-agent-history-clear"
+                                                    onMouseDown={(e) => { e.preventDefault(); aiCli.clearHistory(); }}
+                                                >
+                                                    Clear history
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {aiCli.running && (
+                                <button
+                                    type="button"
+                                    className="spotlight-agent-cancel"
+                                    onMouseDown={(e) => { e.preventDefault(); aiCli.cancel(); }}
+                                >
+                                    Stop
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="spotlight-ai-messages spotlight-agent-log" ref={agentLogRef}>
+                            {aiCli.turns.length === 0 && (
+                                <div className="spotlight-ai-hint">
+                                    Describe how to reorganise your workspaces, then press Enter.
+                                    {aiCli.available?.[aiCli.adapter.bin] === false && (
+                                        <div className="spotlight-agent-warn">
+                                            <code>{aiCli.adapter.bin}</code> isn’t on your PATH — install it or pick another above.
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {aiCli.turns.map(turn => (
+                                <div key={turn.id} className="spotlight-agent-turn">
+                                    <div className="spotlight-agent-request">
+                                        <span className="spotlight-agent-request-mark">›</span>
+                                        {turn.request}
+                                    </div>
+
+                                    {/* The answer. Ordinary conversation is the common
+                                        case, so this is the headline; raw stdout is
+                                        folded away below since it's mostly protocol. */}
+                                    {turn.reply && (
+                                        <div className="spotlight-agent-reply">
+                                            <div className="spotlight-agent-reply-head">
+                                                <span className="spotlight-agent-reply-who">CoolDesk</span>
+                                                <CopyButton
+                                                    getText={() => turn.reply}
+                                                    title="Copy answer (or select part of it and press Ctrl+C)"
+                                                />
+                                            </div>
+                                            <div className="spotlight-agent-reply-text">
+                                                <AgentMarkdown text={turn.reply} />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Raw output. While the run is in flight this is the
+                                        only sign of life, so it stays open; once there's
+                                        an answer it collapses out of the way. */}
+                                    {turn.lines.length > 0 && (turn.running || (!turn.reply && !turn.proposal) ? (
+                                        <pre className="spotlight-agent-stream">
+                                            {turn.lines.map((l, i) => (
+                                                <div key={i} className={l.stream === 'stderr' ? 'is-stderr' : undefined}>{l.text}</div>
+                                            ))}
+                                        </pre>
+                                    ) : (
+                                        <details className="spotlight-agent-raw">
+                                            <summary>
+                                                Output
+                                                <CopyButton
+                                                    getText={() => turn.lines.map(l => l.text).join('\n')}
+                                                    title="Copy raw output"
+                                                />
+                                            </summary>
+                                            <pre className="spotlight-agent-stream">
+                                                {turn.lines.map((l, i) => (
+                                                    <div key={i} className={l.stream === 'stderr' ? 'is-stderr' : undefined}>{l.text}</div>
+                                                ))}
+                                            </pre>
+                                        </details>
+                                    ))}
+
+                                    {turn.running && !turn.lines.length && (
+                                        <div className="spotlight-agent-waiting">Waiting for {aiCli.adapter.label}…</div>
+                                    )}
+
+                                    {turn.error && (
+                                        <div className="spotlight-ai-message error">
+                                            <div className="message-avatar">⚠️</div>
+                                            <div className="message-content">{turn.error}</div>
+                                        </div>
+                                    )}
+
+                                    {/* An action block that survived validation empty —
+                                        only worth a line, and only when there was no
+                                        prose answer to show instead. */}
+                                    {turn.proposal && turn.proposal.valid.length === 0 && !turn.reply && (
+                                        <div className="spotlight-agent-empty">No changes proposed.</div>
+                                    )}
+
+                                    {turn.proposal && turn.proposal.valid.length > 0 && (
+                                        <div className="spotlight-agent-proposal">
+                                            <div className="spotlight-agent-proposal-head">
+                                                Proposed changes ({turn.proposal.valid.length})
+                                            </div>
+                                            <ul className="spotlight-agent-actions">
+                                                {turn.proposal.valid.map((a, i) => (
+                                                    <li key={i} className={a.type.startsWith('remove') ? 'is-remove' : 'is-add'}>
+                                                        {describeAction(a)}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                            {/* Rejected actions are surfaced, not swallowed: applying
+                                                half a plan without saying so is worse than failing. */}
+                                            {turn.proposal.rejected.length > 0 && (
+                                                <details className="spotlight-agent-rejected">
+                                                    <summary>{turn.proposal.rejected.length} action(s) discarded as invalid</summary>
+                                                    <ul>
+                                                        {turn.proposal.rejected.map((r, i) => (
+                                                            <li key={i}>{r.reason}</li>
+                                                        ))}
+                                                    </ul>
+                                                </details>
+                                            )}
+                                            <div className="spotlight-agent-confirm">
+                                                <button
+                                                    type="button"
+                                                    className="spotlight-agent-apply"
+                                                    onMouseDown={(e) => { e.preventDefault(); applyProposal(turn); }}
+                                                >
+                                                    Apply
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="spotlight-agent-discard"
+                                                    onMouseDown={(e) => { e.preventDefault(); aiCli.clearProposal(turn.id); }}
+                                                >
+                                                    Discard
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {/* AI Chat Mode */}
                 {commandMode === 'ai' && (
                     <div className="spotlight-ai-mode">
@@ -2511,8 +2905,11 @@ export function GlobalSpotlight({
                     </div>
                 )}
 
-                {/* Results — expandable folder tree (Explorer-style hierarchy) */}
-                {flatRows.length > 0 && !commandMode && (
+                {/* Results — expandable folder tree (Explorer-style hierarchy).
+                    Rendered in agent mode too, so asking the agent something
+                    doesn't cost you the ordinary search: Enter goes to the
+                    agent, clicking a row opens it as usual. */}
+                {flatRows.length > 0 && (!commandMode || commandMode === 'agent') && (
                     <div className="spotlight-results">
                         {flatRows.map((row, index) => (
                             <ResultItem
@@ -2540,8 +2937,21 @@ export function GlobalSpotlight({
                     </div>
                 )}
 
-                {/* Footer */}
-                {sections.footer && (
+                {/* Footer — the hints below are all about navigating results,
+                    so a command mode gets its own or none at all. Showing
+                    "↑↓ Navigate" and "⌘P Pin" under a panel with no result
+                    list is what made this bar look like it was floating loose. */}
+                {sections.footer && commandMode === 'agent' && (
+                    <div className="spotlight-footer">
+                        <div className="shortcut-hint">
+                            <span className="shortcut-key">↵</span> {aiCli.proposal ? 'Apply' : 'Run'}
+                        </div>
+                        <div className="shortcut-hint">
+                            <span className="shortcut-key">Esc</span> {aiCli.running ? 'Stop' : 'Close'}
+                        </div>
+                    </div>
+                )}
+                {sections.footer && !commandMode && (
                 <div className="spotlight-footer">
                     <div className="shortcut-hint"><span className="shortcut-key">↵</span> Open</div>
                     <div className="shortcut-hint"><span className="shortcut-key">↑↓</span> Navigate</div>
