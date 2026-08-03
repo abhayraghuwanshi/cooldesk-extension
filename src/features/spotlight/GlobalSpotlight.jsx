@@ -367,6 +367,7 @@ export function GlobalSpotlight({
     const aiCli = useAiCli();
     const agentLogRef = useRef(null);
     const [agentHistoryOpen, setAgentHistoryOpen] = useState(false);
+    const [agentAdapterOpen, setAgentAdapterOpen] = useState(false);
 
     // Follow the transcript as output streams in. Without this the newest line
     // lands below the fold and a long run looks like it stopped.
@@ -2352,25 +2353,77 @@ export function GlobalSpotlight({
                     stdout stream (running), and the proposal (done). */}
                 {commandMode === 'agent' && (
                     <div className="spotlight-ai-mode spotlight-agent-mode">
+                        {/* No "Agent" title here — the chip in the search box
+                            already says which mode you're in, and repeating it
+                            two rows apart just took space the controls needed. */}
                         <div className="spotlight-ai-header">
-                            <FontAwesomeIcon icon={faTerminal} style={{ color: '#4ade80' }} />
-                            <span>Agent</span>
-                            <div className="spotlight-agent-adapters">
-                                {aiCli.adapters.map(a => {
-                                    const found = aiCli.available?.[a.bin];
-                                    return (
-                                        <button
-                                            key={a.id}
-                                            type="button"
-                                            className={`spotlight-agent-chip${a.id === aiCli.adapterId ? ' is-active' : ''}${found === false ? ' is-missing' : ''}`}
-                                            onMouseDown={(e) => { e.preventDefault(); aiCli.selectAdapter(a.id); }}
-                                            title={found === false ? `${a.bin} not found on PATH` : `Run with ${a.label}`}
-                                        >
-                                            {a.label}
-                                        </button>
-                                    );
-                                })}
+                            <div className="spotlight-agent-menu-wrap">
+                                <button
+                                    type="button"
+                                    className={`spotlight-agent-chip is-active${agentAdapterOpen ? ' is-open' : ''}`}
+                                    onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        setAgentAdapterOpen(v => !v);
+                                        setAgentHistoryOpen(false);
+                                    }}
+                                    title={`Running with ${aiCli.adapter.label}`}
+                                    aria-expanded={agentAdapterOpen}
+                                >
+                                    <FontAwesomeIcon icon={faTerminal} />
+                                    <span>{aiCli.adapter.label}</span>
+                                    <span className="spotlight-agent-caret">▾</span>
+                                </button>
+                                {agentAdapterOpen && (
+                                    <div className="spotlight-agent-menu">
+                                        {aiCli.adapters.map(a => {
+                                            const found = aiCli.available?.[a.bin];
+                                            return (
+                                                <button
+                                                    key={a.id}
+                                                    type="button"
+                                                    className={`spotlight-agent-menu-item${a.id === aiCli.adapterId ? ' is-selected' : ''}${found === false ? ' is-missing' : ''}`}
+                                                    onMouseDown={(e) => {
+                                                        e.preventDefault();
+                                                        aiCli.selectAdapter(a.id);
+                                                        setAgentAdapterOpen(false);
+                                                    }}
+                                                    title={found === false ? `${a.bin} not found on PATH` : `Run with ${a.label}`}
+                                                >
+                                                    <span>{a.label}</span>
+                                                    {/* Still selectable when missing — the label is
+                                                        the explanation, not a lockout. */}
+                                                    {found === false && <span className="spotlight-agent-menu-note">not installed</span>}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
+
+                            <div className="spotlight-agent-header-spacer" />
+
+                            {/* Clears the transcript without leaving the mode.
+                                Worth its own control: every prompt carries the
+                                last six turns, so asking something unrelated
+                                otherwise drags irrelevant context along — and
+                                the only alternative was Esc and retyping
+                                /agent. Hidden until there's something to clear. */}
+                            {aiCli.turns.length > 0 && (
+                                <button
+                                    type="button"
+                                    className="spotlight-agent-chip"
+                                    onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        aiCli.reset();
+                                        setQuery('');
+                                        setAgentHistoryOpen(false);
+                                        inputRef.current?.focus();
+                                    }}
+                                    title="New chat — the next question won't carry this conversation's context"
+                                >
+                                    New chat
+                                </button>
+                            )}
 
                             {/* Past requests. The transcript is per-session by
                                 design; this is the part that persists, so a
@@ -2379,7 +2432,7 @@ export function GlobalSpotlight({
                                 <button
                                     type="button"
                                     className={`spotlight-agent-chip${agentHistoryOpen ? ' is-active' : ''}`}
-                                    onMouseDown={(e) => { e.preventDefault(); setAgentHistoryOpen(v => !v); }}
+                                    onMouseDown={(e) => { e.preventDefault(); setAgentHistoryOpen(v => !v); setAgentAdapterOpen(false); }}
                                     title="Previous requests"
                                     aria-expanded={agentHistoryOpen}
                                 >

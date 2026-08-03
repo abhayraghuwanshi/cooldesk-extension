@@ -2103,3 +2103,87 @@ body.spotlight-window {
 .spotlight-agent-raw > summary .spotlight-copy-btn {
   margin-left: auto;
 }
+
+/* ── Adapter dropdown ──────────────────────────────────────────────────────
+   Three chips in a row cost more width than the header had once New chat and
+   History arrived, and only one of them is ever active — a picker, not a
+   toolbar. */
+.spotlight-agent-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.spotlight-agent-caret {
+  font-size: 8px;
+  opacity: 0.75;
+  margin-left: 1px;
+}
+
+.spotlight-agent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.spotlight-agent-chip.is-open {
+  border-color: rgba(34, 197, 94, 0.7);
+}
+
+.spotlight-agent-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  min-width: 190px;
+  padding: 4px;
+  border-radius: 8px;
+  background: rgb(24, 24, 30);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.spotlight-agent-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  color: #cbd5e1;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.spotlight-agent-menu-item:hover {
+  background: rgba(34, 197, 94, 0.14);
+  color: #f1f5f9;
+}
+
+.spotlight-agent-menu-item.is-selected {
+  color: #4ade80;
+  font-weight: 600;
+}
+
+.spotlight-agent-menu-item.is-missing > span:first-child {
+  opacity: 0.55;
+}
+
+.spotlight-agent-menu-note {
+  font-size: 10px;
+  color: #fbbf24;
+  flex-shrink: 0;
+}
+
+/* Pushes New chat / History / Stop to the right edge, now that the header has
+   no title to do it. */
+.spotlight-agent-header-spacer {
+  flex: 1;
+}
+
+.spotlight-agent-adapters {
+  display: none;
+}
