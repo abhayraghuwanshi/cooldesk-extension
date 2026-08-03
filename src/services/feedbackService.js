@@ -1,3 +1,4 @@
+import { SIDECAR_HTTP } from '../shared/config/sidecar.js';
 /**
  * Feedback Service - RAG-based implicit feedback collection
  *
@@ -8,7 +9,7 @@
  * - Retrieve URL affinity scores for related content
  */
 
-const SIDECAR_URL = 'http://localhost:4545';
+const SIDECAR_URL = SIDECAR_HTTP;
 
 // ==========================================
 // Core Feedback Recording

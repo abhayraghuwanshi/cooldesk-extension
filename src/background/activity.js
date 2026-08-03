@@ -1,19 +1,12 @@
 // Activity tracking, time series, and session management
 import { cleanupOldTimeSeriesData, getAllActivity, getTimeSeriesStorageStats, getUrlAnalytics, putActivityTimeSeriesEvent } from '../db/index.js';
 import { setHostActivity } from '../services/extensionApi.js';
-import { getUrlParts } from '../utils/helpers.js';
+import { cleanUrl, getUrlParts } from '../utils/helpers.js';
+import { rawEngagementScore } from '../utils/engagement.js';
 // import { autoSavePredictor } from '../ml/inference/autoSavePredictor.js'; // DISABLED - ML modules removed
 
 
 // Helper function to clean URLs (returns base domain for app-like aggregation)
-function cleanUrl(url) {
-    try {
-        const parts = getUrlParts(url);
-        return parts?.key || new URL(url).hostname; // scheme + eTLD+1 (e.g., https://github.com) or fallback
-    } catch {
-        try { return new URL(url).hostname; } catch { return null; }
-    }
-}
 
 // Extract a meaningful sub-URL label from a full URL.
 // Used to track which parts of a domain the user actually visits.
@@ -164,24 +157,6 @@ function isValidTrackingUrl(url) {
     } catch {
         return false;
     }
-}
-
-// Calculate engagement score based on user interactions
-function calculateEngagementScore(data) {
-    const time = Number(data.time) || 0;
-    const clicks = Number(data.clicks) || 0;
-    const scroll = Number(data.scroll) || 0;
-    const forms = Number(data.forms) || 0;
-
-    // Weighted scoring: forms > clicks > scroll > time
-    const score = (
-        forms * 100 +      // Form submissions are high-value interactions
-        clicks * 10 +      // Clicks show active engagement
-        scroll * 0.5 +     // Scrolling shows content consumption
-        (time / 1000) * 0.1 // Time has lowest weight (per second)
-    );
-
-    return Math.round(score * 100) / 100; // Round to 2 decimal places
 }
 
 // Check if session has minimum engagement to be worth tracking
@@ -1062,7 +1037,7 @@ export async function handleActivityMessage(msg, sender) {
         }
 
         // Calculate engagement score for better tracking
-        const engagementScore = calculateEngagementScore(activityData[cleaned]);
+        const engagementScore = rawEngagementScore(activityData[cleaned]);
         console.log('[Activity Debug] Engagement score for', cleaned, ':', engagementScore);
 
         // Only mark for persistence if engagement meets minimum threshold

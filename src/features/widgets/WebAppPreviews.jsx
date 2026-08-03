@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getFaviconUrl } from '../../utils/helpers.js';
 import './WebAppCanvas.css';
+import { SIDECAR_HTTP } from '../../shared/config/sidecar.js';
 
 // Web app widgets on a freeform canvas: draggable, resizable tiles that are
 // live views of web apps. Three rendering tiers per tile:
@@ -95,7 +96,7 @@ const embeddedIds = new Set();
 async function checkFrameable(url) {
   if (frameCheckCache.has(url)) return frameCheckCache.get(url);
   try {
-    const res = await fetch(`http://localhost:4545/webapp/frame-check?url=${encodeURIComponent(url)}`);
+    const res = await fetch(`${SIDECAR_HTTP}/webapp/frame-check?url=${encodeURIComponent(url)}`);
     const data = await res.json();
     const result = data?.ok ? !!data.frameable : null;
     if (result !== null) frameCheckCache.set(url, result);

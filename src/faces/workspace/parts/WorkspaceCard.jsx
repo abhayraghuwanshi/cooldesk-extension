@@ -27,6 +27,7 @@ import {
   faNewspaper,
   faPalette,
   faPlane,
+  faPlus,
   faRobot,
   faSearch,
   faShoppingBag,
@@ -39,7 +40,8 @@ import {
   faUtensils,
   faVial,
   faVideo,
-  faVrCardboard
+  faVrCardboard,
+  faXmark
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -702,6 +704,34 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     );
   };
 
+  // ── Removing items ───────────────────────────────────────────────────────
+  // The workspace record is the source of truth for urls[]/apps[], so removal
+  // is a filtered save — same shape as applyColor above. Items carrying `_cd`
+  // come from a project's committed .cooldesk manifest rather than this
+  // record, so they have no × : filtering them here would save a record they
+  // aren't in and the chip would reappear on the next read.
+  const removeItem = (key, match) => {
+    const next = {
+      ...workspace,
+      [key]: (workspace[key] || []).filter(x => !match(x)),
+      updatedAt: Date.now(),
+    };
+    Promise.resolve(saveWorkspace(next)).catch((err) =>
+      console.error(`[WorkspaceCard] Failed to remove ${key} item:`, err)
+    );
+  };
+
+  const handleRemoveUrl = (e, urlObj) => {
+    e.stopPropagation();
+    removeItem('urls', u => u.url === urlObj.url);
+  };
+
+  const handleRemoveApp = (e, app) => {
+    e.stopPropagation();
+    // Apps are identified by path; fall back to name for records saved without one.
+    removeItem('apps', a => (app.path ? a.path === app.path : a.name === app.name));
+  };
+
   // Dismiss context menu on outside click. The menu is portaled to document.body,
   // so its React onClick stopPropagation can't stop these native window listeners —
   // we must skip clicks that land inside the menu ourselves, otherwise interacting
@@ -873,6 +903,19 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                     {showLabel && !isGroup && (
                       <span className="compact-icon-label">{displayName}</span>
                     )}
+                    {/* Groups have no × — one chip stands for several links, so
+                        a single cross would silently drop all of them. */}
+                    {!isGroup && !item._cd && (
+                      <button
+                        type="button"
+                        className="item-remove-btn"
+                        onClick={(e) => handleRemoveUrl(e, item)}
+                        title={`Remove ${displayName}`}
+                        aria-label={`Remove ${displayName} from ${name}`}
+                      >
+                        <FontAwesomeIcon icon={faXmark} />
+                      </button>
+                    )}
                   </div>
                 );
               };
@@ -906,6 +949,17 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                     )}
                     {showLabel && (
                       <span className="compact-icon-label" style={{ color: appColor }}>{app.name}</span>
+                    )}
+                    {!app._cd && (
+                      <button
+                        type="button"
+                        className="item-remove-btn"
+                        onClick={(e) => handleRemoveApp(e, app)}
+                        title={`Remove ${app.name}`}
+                        aria-label={`Remove ${app.name} from ${name}`}
+                      >
+                        <FontAwesomeIcon icon={faXmark} />
+                      </button>
                     )}
                   </div>
                 );
@@ -1099,6 +1153,17 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                           triggerRect={popoverState.rect}
                         />
                       )}
+                      {!urlObj._cd && (
+                        <button
+                          type="button"
+                          className="item-remove-btn is-inline"
+                          onClick={(e) => handleRemoveUrl(e, urlObj)}
+                          title={`Remove ${urlObj.title || urlObj.url}`}
+                          aria-label={`Remove ${urlObj.title || urlObj.url} from ${name}`}
+                        >
+                          <FontAwesomeIcon icon={faXmark} />
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -1138,6 +1203,17 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                         <FontAwesomeIcon icon={appIcon} style={{ color: appColor, fontSize: '12px' }} />
                       )}
                       <span>{app.name}</span>
+                      {!app._cd && (
+                        <button
+                          type="button"
+                          className="item-remove-btn is-inline"
+                          onClick={(e) => handleRemoveApp(e, app)}
+                          title={`Remove ${app.name}`}
+                          aria-label={`Remove ${app.name} from ${name}`}
+                        >
+                          <FontAwesomeIcon icon={faXmark} />
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -1176,6 +1252,17 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                         <FontAwesomeIcon icon={appIcon} style={{ color: appColor, fontSize: '12px' }} />
                       )}
                       <span>{app.name}</span>
+                      {!app._cd && (
+                        <button
+                          type="button"
+                          className="item-remove-btn is-inline"
+                          onClick={(e) => handleRemoveApp(e, app)}
+                          title={`Remove ${app.name}`}
+                          aria-label={`Remove ${app.name} from ${name}`}
+                        >
+                          <FontAwesomeIcon icon={faXmark} />
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -1338,6 +1425,19 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
             onSelect={(color, source) => applyColor(color, source === 'custom')}
           />
           <div className="context-menu-divider" />
+          {/* Arms add mode on the header search for this workspace. It lives
+              here rather than as a permanent "+" on the card: every card would
+              carry one, and an always-visible button competes with the items
+              the card exists to show. */}
+          {onAddUrl && (
+            <button
+              className="context-menu-item"
+              onClick={() => { onAddUrl(workspace); setContextMenu(null); }}
+            >
+              <FontAwesomeIcon icon={faPlus} />
+              Add item
+            </button>
+          )}
           {onPin && (
             <button
               className="context-menu-item"

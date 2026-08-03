@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "CoolDesk",
-  "version": "2.0.7",
+  "version": "2.0.8",
   "identifier": "com.cooldesk.desktop",
   "build": {
     "frontendDist": "../dist-tauri",
@@ -40,7 +40,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://localhost:4545 ws://localhost:4545 https://github.com https://api.github.com https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob: https:; font-src 'self' data:; media-src 'self'; frame-src 'self' https:",
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:4545 ws://127.0.0.1:4545 http://localhost:4545 ws://localhost:4545 https://github.com https://api.github.com https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' data: https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; media-src 'self'; frame-src 'self' https:",
       "freezePrototype": false,
       "dangerousDisableAssetCspModification": false
     }

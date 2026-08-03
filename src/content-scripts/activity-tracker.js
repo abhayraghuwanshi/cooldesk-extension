@@ -261,11 +261,11 @@ class ActivityTracker {
                 this.visibilityStartTime = now;
             }
 
-            this.calculateEngagementScore();
+            this.updatePageEngagement();
         }, 1000);
     }
 
-    calculateEngagementScore() {
+    updatePageEngagement() {
         const timeScore = Math.min(30, (this.metrics.visibleTime / 1000) / 10);
         const scrollScore = Math.min(25, this.metrics.maxScrollDepth / 4);
         const interactionScore = Math.min(25, (this.metrics.clicks + this.metrics.keypresses) / 2);
@@ -283,7 +283,7 @@ class ActivityTracker {
             this.visibilityStartTime = now;
         }
 
-        this.calculateEngagementScore();
+        this.updatePageEngagement();
 
         return {
             ...this.metrics,

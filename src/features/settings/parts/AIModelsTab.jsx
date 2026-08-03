@@ -22,9 +22,10 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import { isElectronApp } from '../../../services/environmentDetector';
+import { SIDECAR_HTTP, SIDECAR_WS } from '../../../shared/config/sidecar.js';
 
 // Sidecar API URL (Tauri desktop app runs sidecar on port 4545)
-const SIDECAR_URL = 'http://127.0.0.1:4545';
+const SIDECAR_URL = SIDECAR_HTTP;
 
 // Helper to call sidecar HTTP API
 async function sidecarGet(path) {
@@ -78,7 +79,7 @@ export default function AIModelsTab() {
                     loadModels();
 
                     // Connect WebSocket for progress updates
-                    ws = new WebSocket(`ws://127.0.0.1:4545`);
+                    ws = new WebSocket(`${SIDECAR_WS}`);
                     ws.onopen = () => {
                         ws.send(JSON.stringify({ type: 'identify', client: 'aiModelsTab' }));
                     };

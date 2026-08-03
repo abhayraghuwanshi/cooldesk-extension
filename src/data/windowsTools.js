@@ -15,7 +15,7 @@
 //
 // Reference: https://learn.microsoft.com/windows/win32/shell/launch (Run commands)
 
-import { fuzzyScore } from '../services/searchService';
+import { scoreEntry } from '../services/searchService';
 
 export const WINDOWS_TOOLS = [
     // ── Control Panel applets (.cpl / .msc) ───────────────────────────────────
@@ -67,16 +67,6 @@ export const WINDOWS_TOOLS = [
 // Score one entry — title is the strongest signal, keyword/category matches are
 // accepted but slightly discounted. Reuses the shared fuzzyScore so matching is
 // consistent with the rest of Spotlight (acronyms, subsequences, multi-word).
-function scoreEntry(entry, query) {
-    let best = fuzzyScore(entry.title, query);
-    for (const kw of entry.keywords) {
-        const s = fuzzyScore(kw, query);
-        if (s - 6 > best) best = s - 6;
-    }
-    const c = fuzzyScore(entry.category, query) - 14;
-    if (c > best) best = c;
-    return best;
-}
 
 // Search the Control Panel / system-tools catalog. Returns Spotlight result items
 // ({ type: 'tool', exec, args?, score, ... }). Windows-only; the caller gates on

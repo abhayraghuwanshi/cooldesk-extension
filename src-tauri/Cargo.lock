@@ -695,7 +695,7 @@ dependencies = [
 
 [[package]]
 name = "cooldesk"
-version = "2.0.7"
+version = "2.0.8"
 dependencies = [
  "async-stream",
  "async-trait",

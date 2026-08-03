@@ -21,6 +21,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import NanoAIService from '../../services/nanoAIService';
 import { safeGetHostname } from '../../utils/helpers';
+import { SIDECAR_HTTP } from '../../shared/config/sidecar.js';
 
 export function GlobalAddButton({
   workspaces = [],
@@ -161,7 +162,7 @@ export function GlobalAddButton({
 
     try {
       // First try pattern-based suggestion from feedback system
-      const feedbackResponse = await fetch('http://127.0.0.1:4545/feedback/suggest-workspace', {
+      const feedbackResponse = await fetch(`${SIDECAR_HTTP}/feedback/suggest-workspace`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url, title, limit: 3 })

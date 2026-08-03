@@ -144,6 +144,23 @@ export const getUrlParts = (url) => {
   }
 }
 
+/**
+ * Site key for grouping activity by destination: scheme + eTLD+1
+ * (e.g. `https://github.com`), falling back to the bare hostname, then null.
+ *
+ * Distinct from `getDomainFromUrl` here, which returns a display-friendly
+ * hostname — this one is a grouping key and must stay stable, since stored
+ * activity records are keyed on it.
+ */
+export const cleanUrl = (url) => {
+  try {
+    const parts = getUrlParts(url)
+    return parts?.key || new URL(url).hostname
+  } catch {
+    try { return new URL(url).hostname } catch { return null }
+  }
+}
+
 export const getFaviconUrl = (url, _size = 32, favIconUrl = null, useBaseDomain = false) => {
   try {
     // 1️⃣ Chrome cached favicon (best quality, works offline)

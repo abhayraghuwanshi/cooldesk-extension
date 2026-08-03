@@ -98,6 +98,62 @@ body.spotlight-window {
   user-select: none;
 }
 
+/* Add mode — the search is filing results into a workspace rather than
+   launching them. Green, to read as "collecting" against the purple scope
+   badge, and the whole box picks up a matching ring so the mode is legible
+   from the input alone. */
+.spotlight-add-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 40%;
+  font-size: 11px;
+  font-weight: 600;
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  padding: 3px 5px 3px 8px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.spotlight-add-badge > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spotlight-add-badge > svg {
+  font-size: 9px;
+  flex-shrink: 0;
+}
+
+.spotlight-add-badge-exit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 2px 3px;
+  margin: 0;
+  border-radius: 3px;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  font-size: 9px;
+  flex-shrink: 0;
+}
+
+.spotlight-add-badge-exit:hover {
+  opacity: 1;
+  background: rgba(34, 197, 94, 0.25);
+}
+
+.spotlight-search-box.add-mode {
+  border-color: rgba(34, 197, 94, 0.45);
+}
+
 .spotlight-input {
   flex: 1;
   background: transparent;

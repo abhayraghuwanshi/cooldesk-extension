@@ -2439,13 +2439,22 @@ pub fn run() {
       let autostarted = launched_by_autostart();
       log::info!("[Startup] autostart={}", autostarted);
 
-      if cfg!(debug_assertions) {
-        app.handle().plugin(
-          tauri_plugin_log::Builder::default()
-            .level(log::LevelFilter::Info)
-            .build(),
-        )?;
-      }
+      // Registered in release too, not just under `cfg!(debug_assertions)`.
+      // A packaged build has no console and no dev server, so a bug that only
+      // shows up there (CSP rejections, a failed AppBar registration) used to
+      // leave no trace at all — the log file is the only way to see it.
+      // Targets are explicit so the on-disk file is guaranteed rather than
+      // dependent on the plugin's default target list; it lands in
+      // `app_log_dir()` (Windows: %APPDATA%\com.cooldesk.desktop\logs).
+      app.handle().plugin(
+        tauri_plugin_log::Builder::default()
+          .level(log::LevelFilter::Info)
+          .targets([
+            tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+            tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir { file_name: None }),
+          ])
+          .build(),
+      )?;
 
       // Spawn Rust Sidecar Server (replaces Node.js sidecar)
       tauri::async_runtime::spawn(async {

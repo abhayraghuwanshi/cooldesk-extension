@@ -6,6 +6,7 @@ import { isElectronApp } from '../../services/environmentDetector';
 import { getHostTabs } from '../../services/extensionApi';
 import { ensureFontLoaded, fontFamilies, setAndSaveFontFamily } from '../../utils/fontUtils';
 import { IS_MAC, accelTokens, appKey } from '../../utils/platformKeys';
+import { onboardingWallpapers } from '../../shared/data/wallpapers';
 // CSS is imported in App.jsx to avoid lazy-load preload issues
 
 /* ------------------------------------------------------------------ *
@@ -25,18 +26,7 @@ const THEME_CHOICES = [
   { id: 'arctic-frost', name: 'Arctic', font: 'inter', preview: 'radial-gradient(40% 50% at 30% 20%, #14b8a615, #0000 70%), radial-gradient(60% 40% at 70% 80%, #5eead415, #0000 60%), linear-gradient(155deg, #0f1b1a 0%, #2d4a42 100%)' },
 ];
 
-// The first 8 of the 40 curated wallpapers in ThemesTab. These are plain
-// Unsplash CDN image URLs — no API key, no request — so they work on first run.
-const WALLPAPER_CHOICES = [
-  { id: 1, name: 'Misty Valley', url: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=3840&q=90&fm=jpg', thumbnail: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=400&q=80' },
-  { id: 2, name: 'Northern Lights', url: 'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=3840&q=90&fm=jpg', thumbnail: 'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=400&q=80' },
-  { id: 3, name: 'Starry Sky', url: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=3840&q=90&fm=jpg', thumbnail: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=400&q=80' },
-  { id: 4, name: 'Mountain Sunset', url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=3840&q=90&fm=jpg', thumbnail: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80' },
-  { id: 5, name: 'Dark Cosmos', url: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=3840&q=90&fm=jpg', thumbnail: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=400&q=80' },
-  { id: 6, name: 'Enchanted Forest', url: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=3840&q=90&fm=jpg', thumbnail: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=400&q=80' },
-  { id: 7, name: 'Minimal Desk', url: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=3840&q=90&fm=jpg', thumbnail: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=400&q=80' },
-  { id: 8, name: 'Mountain Mirror', url: 'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?w=3840&q=90&fm=jpg', thumbnail: 'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?w=400&q=80' },
-];
+const WALLPAPER_CHOICES = onboardingWallpapers(8);
 
 const FONT_CHOICES = ['system', 'inter', 'poppins', 'dm-sans', 'lora', 'jetbrains'];
 

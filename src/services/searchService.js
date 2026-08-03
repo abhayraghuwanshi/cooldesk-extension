@@ -1,4 +1,5 @@
 import { listWorkspaces } from '../db/unified-api';
+import { SIDECAR_HTTP } from '../shared/config/sidecar.js';
 
 /**
  * High-Speed Search Service
@@ -137,7 +138,7 @@ async function isSidecarAvailable() {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 1000);
-    const res = await fetch('http://localhost:4545/health', { signal: controller.signal });
+    const res = await fetch(`${SIDECAR_HTTP}/health`, { signal: controller.signal });
     clearTimeout(timeoutId);
     sidecarAvailable = res.ok;
   } catch {
@@ -316,7 +317,7 @@ async function searchAppsFromBackend(query, maxResults = 20) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 1000);
     const res = await fetch(
-      `http://localhost:4545/search?q=${encodeURIComponent(query)}&limit=${maxResults}`,
+      `${SIDECAR_HTTP}/search?q=${encodeURIComponent(query)}&limit=${maxResults}`,
       { signal: controller.signal }
     );
     clearTimeout(timeoutId);
@@ -363,7 +364,7 @@ async function fetchUrlBoosts(query) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 800);
     const res = await fetch(
-      `http://localhost:4545/feedback/url-boosts?q=${encodeURIComponent(query)}`,
+      `${SIDECAR_HTTP}/feedback/url-boosts?q=${encodeURIComponent(query)}`,
       { signal: controller.signal }
     );
     clearTimeout(timeoutId);
@@ -605,6 +606,25 @@ export function fuzzyScore(text, query) {
   }
 
   return 0;
+}
+
+/**
+ * Score a catalogue entry ({ title, keywords[], category }) against a query.
+ *
+ * Best of: the title's own fuzzy score, each keyword's score less a 6-point
+ * penalty, and the category's less 14 — so a title hit always outranks a
+ * keyword hit, which always outranks a category hit. Used by the Windows
+ * settings and tools catalogues in src/data/.
+ */
+export function scoreEntry(entry, query) {
+  let best = fuzzyScore(entry.title, query);
+  for (const kw of entry.keywords) {
+    const s = fuzzyScore(kw, query);
+    if (s - 6 > best) best = s - 6;
+  }
+  const c = fuzzyScore(entry.category, query) - 14;
+  if (c > best) best = c;
+  return best;
 }
 
 // --- PROVIDER 1: Local Index (High Speed) ---

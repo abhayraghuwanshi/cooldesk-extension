@@ -3,10 +3,11 @@
 // Maps existing Electron usage to Tauri Invokes (System) and Sidecar Fetch/WS (Data/AI)
 
 import { invoke } from '@tauri-apps/api/core';
+import { SIDECAR_HTTP, SIDECAR_WS } from '../shared/config/sidecar.js';
 
-// Sidecar Sync/LLM endpoints are on localhost:4545
-const SIDECAR_URL = 'http://localhost:4545';
-const WS_URL = 'ws://localhost:4545';
+// Sidecar Sync/LLM endpoints are on 127.0.0.1:4545
+const SIDECAR_URL = SIDECAR_HTTP;
+const WS_URL = SIDECAR_WS;
 
 let ws = null;
 const listeners = new Map(); // channel -> Set<callback>

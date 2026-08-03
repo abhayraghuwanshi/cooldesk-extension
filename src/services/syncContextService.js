@@ -1,3 +1,4 @@
+import { SIDECAR_HTTP } from '../shared/config/sidecar.js';
 /**
  * syncContextService.js
  *
@@ -5,10 +6,10 @@
  * strips noise fields, deduplicates activity, and returns a compact
  * context string ready to be injected into LLM prompts.
  *
- * Nothing here is sent to any external server — the sidecar is localhost:4545.
+ * Nothing here is sent to any external server — the sidecar is 127.0.0.1:4545.
  */
 
-const SIDECAR_URL = 'http://127.0.0.1:4545';
+const SIDECAR_URL = SIDECAR_HTTP;
 const FETCH_TIMEOUT_MS = 3000;
 
 // ─── Raw fetch helpers ─────────────────────────────────────────────────────

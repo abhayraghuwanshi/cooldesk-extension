@@ -1,4 +1,5 @@
-const SIDECAR_URL = 'http://localhost:4545';
+import { SIDECAR_HTTP } from '../shared/config/sidecar.js';
+const SIDECAR_URL = SIDECAR_HTTP;
 const FETCH_TIMEOUT_MS = 5000;
 const CACHE_TTL_MS = 30_000;
 

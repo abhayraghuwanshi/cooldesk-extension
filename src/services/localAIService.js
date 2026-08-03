@@ -1,3 +1,4 @@
+import { SIDECAR_HTTP, SIDECAR_WS } from '../shared/config/sidecar.js';
 /**
  * Local AI Service - Browser Extension Client
  *
@@ -7,8 +8,8 @@
  */
 
 // Default sidecar WebSocket URL
-const SIDECAR_WS_URL = 'ws://127.0.0.1:4545';
-const SIDECAR_HTTP_URL = 'http://127.0.0.1:4545';
+const SIDECAR_WS_URL = SIDECAR_WS;
+const SIDECAR_HTTP_URL = SIDECAR_HTTP;
 
 // ==========================================
 // STATE

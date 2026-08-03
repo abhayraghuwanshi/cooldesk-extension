@@ -1,15 +1,8 @@
 import { getUrlAnalytics } from '../db/index.js';
-import { getUrlParts } from './helpers.js';
+import { normalizedEngagementScore } from './engagement.js';
+import { cleanUrl } from './helpers.js';
 
 // Helper function to clean URLs (same as activity.js)
-function cleanUrl(url) {
-    try {
-        const parts = getUrlParts(url);
-        return parts?.key || new URL(url).hostname;
-    } catch {
-        try { return new URL(url).hostname; } catch { return null; }
-    }
-}
 
 // Calculate recency score (0-100) based on time since last visit
 function calculateRecencyScore(timeSinceLastVisit) {
@@ -30,23 +23,6 @@ function calculateFrequencyScore(visitCount) {
 }
 
 // Calculate engagement score (0-100) based on interactions
-function calculateEngagementScore(activity) {
-    const time = Number(activity.time) || 0;
-    const clicks = Number(activity.clicks) || 0;
-    const scroll = Number(activity.scroll) || 0;
-    const forms = Number(activity.forms) || 0;
-
-    // Weighted scoring
-    const rawScore = (
-        forms * 100 +           // Form submissions are high-value
-        clicks * 10 +           // Clicks show active engagement
-        scroll * 0.5 +          // Scrolling shows content consumption
-        (time / 1000) * 0.1     // Time (per second)
-    );
-
-    // Normalize to 0-100 scale (assume 1000 is "perfect" engagement)
-    return Math.min(100, (rawScore / 1000) * 100);
-}
 
 // Calculate session quality score (0-100)
 function calculateSessionQualityScore(activity) {
@@ -98,7 +74,7 @@ function calculateTabScore(tab, activityData) {
     const timeSinceLastVisit = Date.now() - (activity.lastVisit || 0);
     const recencyScore = calculateRecencyScore(timeSinceLastVisit);
     const frequencyScore = calculateFrequencyScore(activity.visitCount);
-    const engagementScore = calculateEngagementScore(activity);
+    const engagementScore = normalizedEngagementScore(activity);
     const sessionQualityScore = calculateSessionQualityScore(activity);
 
     // Weighted composite score
@@ -176,7 +152,7 @@ export async function scoreAndSortTabs(tabs) {
 
 // Export individual scoring functions for testing
 export {
-    calculateEngagementScore, calculateFrequencyScore, calculateRecencyScore, calculateSessionQualityScore,
+    calculateFrequencyScore, calculateRecencyScore, calculateSessionQualityScore,
     calculateTabScore
 };
 

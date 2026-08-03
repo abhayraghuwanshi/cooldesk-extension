@@ -2,7 +2,7 @@ import { faDiagramProject, faGear, faGripLines, faTableColumns, faWindowMaximize
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import logo from '../../../logo-2.png';
-import { addUrlToWorkspace, deleteWorkspace, saveWorkspace } from '../../db/unified-api';
+import { saveWorkspace } from '../../db/unified-api';
 import { TEAM_FEATURE_ENABLED } from '../../config/features';
 import { isElectronApp } from '../../services/environmentDetector';
 import { runningAppsService } from '../../services/runningAppsService';
@@ -12,7 +12,6 @@ import '../../styles/global-add.css';
 import '../../styles/spatial.css';
 import '../../styles/tabCard.css';
 import { Face, WorkspaceShell } from './WorkspaceShell';
-import AIWorkspaceManager from '../../features/ai-workspace/AIWorkspaceManager';
 import { GlobalSpotlight } from '../../features/spotlight/GlobalSpotlight';
 import { UpdateButton } from '../../features/updates/UpdateButton';
 import { GlobalAddButton } from '../../features/global-add/GlobalAddButton';
@@ -132,25 +131,19 @@ export function CoolDeskContainer({
     return stored || fallback;
   });
 
-  // Add Modal State
-  const [addModalState, setAddModalState] = useState({
-    isOpen: false,
-    initialWorkspace: null
-  });
+  // ── Add mode ─────────────────────────────────────────────────────────────
+  // Adding to a workspace reuses the header search rather than a modal of its
+  // own: finding the thing to add is the same problem the spotlight already
+  // solves, and a card-local search box would be a second, worse index.
+  // `addTarget` is the workspace the next picked result lands in.
+  const [addTarget, setAddTarget] = useState(null);
 
-  const handleOpenAddModal = (workspace = null) => {
-    handleOpenAIManager(workspace);
-  };
+  const handleOpenAddModal = useCallback((workspace = null) => {
+    if (!workspace) return;
+    setAddTarget({ id: workspace.id, name: workspace.name });
+  }, []);
 
-  const handleCloseAddModal = () => {
-    setAddModalState(prev => ({ ...prev, isOpen: false }));
-  };
-
-  // AI Workspace Manager State
-  const [aiManagerState, setAiManagerState] = useState({
-    isOpen: false,
-    initialWorkspace: null
-  });
+  const handleExitAddMode = useCallback(() => setAddTarget(null), []);
 
   const [graphOpen, setGraphOpen] = useState(false);
 
@@ -211,61 +204,41 @@ export function CoolDeskContainer({
     applyLayout(LAYOUTS[currentLayout].next);
   }, [applyLayout, LAYOUTS, currentLayout]);
 
-  const handleOpenAIManager = useCallback((workspace = null) => {
-    setAiManagerState({
-      isOpen: true,
-      initialWorkspace: workspace
+  // Persist one item picked from the header search into the target workspace.
+  // Links go through the URL index (`onAddUrlToWorkspace`) so analytics and
+  // the workspace↔url association stay consistent with every other add path;
+  // apps/folders/files are plain members of the workspace record.
+  const handleAddFromSearch = useCallback(async (target, item) => {
+    const workspace = savedWorkspaces.find(w => w.id === target.id);
+    if (!workspace) throw new Error(`Workspace ${target.id} no longer exists`);
+
+    if (item.kind === 'url') {
+      await onAddUrlToWorkspace?.(workspace.id, {
+        url: item.url,
+        title: item.title,
+        favicon: item.favicon,
+      });
+      return;
+    }
+
+    // Apps dedupe on path — re-adding the same folder from search is a
+    // no-op rather than a second identical chip on the card.
+    const path = (item.path || '').toLowerCase();
+    if (path && (workspace.apps || []).some(a => (a.path || '').toLowerCase() === path)) return;
+    await saveWorkspace({
+      ...workspace,
+      apps: [...(workspace.apps || []), { name: item.name, path: item.path, icon: item.icon ?? null, ...(item.appType ? { appType: item.appType } : {}) }],
+      updatedAt: Date.now(),
     });
-  }, []);
+  }, [savedWorkspaces, onAddUrlToWorkspace]);
 
-  const handleCloseAIManager = useCallback(() => {
-    setAiManagerState(prev => ({ ...prev, isOpen: false }));
-  }, []);
-
-  const handleAIManagerSave = useCallback(async (workspaceData) => {
-    try {
-      // Save workspace to database
-      await saveWorkspace(workspaceData);
-
-      // Add URLs to the workspace URL index
-      if (workspaceData.urls?.length > 0) {
-        for (const urlItem of workspaceData.urls) {
-          await addUrlToWorkspace(urlItem.url, workspaceData.id, {
-            title: urlItem.title,
-            favicon: urlItem.favicon,
-            status: 'active'
-          });
-        }
-      }
-
-      console.log('[CoolDesk] Workspace saved via AI Manager:', workspaceData.name);
-    } catch (err) {
-      console.error('[CoolDesk] Failed to save workspace:', err);
-      throw err;
-    }
-  }, []);
-
-  const handleAIManagerDelete = useCallback(async (workspaceId) => {
-    try {
-      await deleteWorkspace(workspaceId);
-      console.log('[CoolDesk] Workspace deleted:', workspaceId);
-    } catch (err) {
-      console.error('[CoolDesk] Failed to delete workspace:', err);
-      throw err;
-    }
-  }, []);
-
-  // Keyboard shortcuts: AI Workspace Manager (Ctrl+Shift+K), Graph (Ctrl+Shift+G),
-  // sidebar dock toggle (Ctrl+Shift+D).
+  // Keyboard shortcuts: Graph (Ctrl+Shift+G), sidebar dock toggle (Ctrl+Shift+D).
   // `e.key` is the *shifted* character, so compare case-insensitively.
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (!((e.metaKey || e.ctrlKey) && e.shiftKey)) return;
       const key = e.key.toLowerCase();
-      if (key === 'k') {
-        e.preventDefault();
-        if (!aiManagerState.isOpen) handleOpenAIManager(null);
-      } else if (key === 'g') {
+      if (key === 'g') {
         e.preventDefault();
         setGraphOpen(prev => !prev);
       } else if (key === 'd' && isDesktopApp) {
@@ -275,7 +248,7 @@ export function CoolDeskContainer({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [aiManagerState.isOpen, handleOpenAIManager, isDesktopApp, cycleLayout]);
+  }, [isDesktopApp, cycleLayout]);
 
   // Onboarding navigation via custom event (face names: workspace, tabs, team, overview)
   useEffect(() => {
@@ -667,6 +640,9 @@ export function CoolDeskContainer({
             isDesktopApp={isDesktopApp}
             enableVoice
             enableSlashCommands
+            addTarget={addTarget}
+            onAddItem={handleAddFromSearch}
+            onExitAddMode={handleExitAddMode}
           />
         </div>
 
@@ -739,7 +715,6 @@ export function CoolDeskContainer({
                       pinnedWorkspaces={pinnedWorkspaces}
                       onTogglePin={onTogglePin}
                       onAddUrl={handleOpenAddModal}
-                      onEditWorkspace={handleOpenAIManager}
                       appSuggestions={appSuggestions}
                       onAddAppsToWorkspace={handleAddAppsToWorkspace}
                     />
@@ -770,7 +745,6 @@ export function CoolDeskContainer({
               onAddNote={onAddNote}
               pinnedWorkspaces={pinnedWorkspaces}
               onAddUrl={handleOpenAddModal}
-              onEditWorkspace={handleOpenAIManager}
             />
           </Face>
         )}
@@ -798,31 +772,20 @@ export function CoolDeskContainer({
         )}
       </WorkspaceShell>
 
-      {/* Global Add Button - Desktop App Only */}
+      {/* Global Add Button - Desktop App Only.
+          Uncontrolled: it owns its own open state now that no other surface
+          drives it. Dropping `onOpenAIManager` also restores its built-in
+          "New Workspace" form — that button used to hand off to the AI
+          manager, which no longer exists. */}
       {isDesktopApp && (
         <GlobalAddButton
           workspaces={savedWorkspaces}
           onCreateWorkspace={onCreateWorkspace}
           onAddUrlToWorkspace={onAddUrlToWorkspace}
           onAddNote={onAddNote}
-          isOpen={addModalState.isOpen}
-          onOpen={() => handleOpenAddModal(null)}
-          onClose={handleCloseAddModal}
-          initialWorkspace={addModalState.initialWorkspace}
-          onOpenAIManager={() => handleOpenAIManager(null)}
           data-onboarding="global-add-btn"
         />
       )}
-
-      {/* AI Workspace Manager - Two-column AI-powered workspace management */}
-      <AIWorkspaceManager
-        workspaces={savedWorkspaces}
-        onSave={handleAIManagerSave}
-        onDelete={handleAIManagerDelete}
-        isOpen={aiManagerState.isOpen}
-        onClose={handleCloseAIManager}
-        initialWorkspace={aiManagerState.initialWorkspace}
-      />
 
       {/* Knowledge Graph — lazy; only mount when opened so d3/force-graph stays out of main */}
       {graphOpen && (

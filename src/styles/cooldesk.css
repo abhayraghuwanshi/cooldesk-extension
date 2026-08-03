@@ -3023,6 +3023,8 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 
 /* Single URL Icon (not grouped) */
 .compact-url-icon {
+  /* Anchor for the hover × overlay (.item-remove-btn) */
+  position: relative;
   height: calc(var(--font-5xl) * 1.5) !important;
   width: calc(var(--font-5xl) * 1.5) !important;
   border-radius: 50%;
@@ -3115,6 +3117,63 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   background: rgba(139, 92, 246, 0.15) !important;
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
+}
+
+/* ── Remove (×) on hover ───────────────────────────────────────────────────
+   Hidden until the item is hovered, so a workspace at rest shows its contents
+   and not a row of delete buttons. Kept out of the layout with position:
+   absolute (the icon variant) so appearing on hover doesn't reflow the row. */
+.item-remove-btn {
+  /* Inside the item's bounds, not overhanging it: the icon rows scroll
+     horizontally, and a corner that pokes outside gets clipped by the
+     scroll container at the ends of the row. */
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 3;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  border-radius: 50%;
+  background: #1e1b2e;
+  color: #f87171;
+  font-size: 8px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* Inline variant for the wider grid-view chips: sits in the flow at the end
+   of the chip rather than overhanging its corner. */
+.item-remove-btn.is-inline {
+  position: static;
+  width: 14px;
+  height: 14px;
+  margin-left: 2px;
+  border: none;
+  background: transparent;
+  border-radius: 3px;
+}
+
+.compact-url-icon:hover > .item-remove-btn,
+.compact-app-icon:hover > .item-remove-btn,
+.workspace-url-chip:hover > .item-remove-btn,
+.workspace-app-chip:hover > .item-remove-btn {
+  display: inline-flex;
+}
+
+.item-remove-btn:hover {
+  background: #f87171;
+  border-color: #f87171;
+  color: #1e1b2e;
+}
+
+.item-remove-btn.is-inline:hover {
+  background: rgba(248, 113, 113, 0.2);
+  color: #f87171;
 }
 
 .compact-app-icon img {

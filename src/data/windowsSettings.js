@@ -11,7 +11,7 @@
 //
 // Reference: https://learn.microsoft.com/windows/uwp/launch-resume/launch-settings-app
 
-import { fuzzyScore } from '../services/searchService';
+import { scoreEntry } from '../services/searchService';
 
 export const WINDOWS_SETTINGS = [
     // ── System ────────────────────────────────────────────────────────────────
@@ -114,16 +114,6 @@ export const WINDOWS_SETTINGS = [
 // the shared fuzzyScore keeps matching consistent with the rest of Spotlight
 // (acronyms like "wu" → Windows Update, subsequences like "blth" → Bluetooth,
 // multi-word like "default browser" → Default Apps).
-function scoreEntry(entry, query) {
-    let best = fuzzyScore(entry.title, query);
-    for (const kw of entry.keywords) {
-        const s = fuzzyScore(kw, query);
-        if (s - 6 > best) best = s - 6;
-    }
-    const c = fuzzyScore(entry.category, query) - 14;
-    if (c > best) best = c;
-    return best;
-}
 
 // Search the Windows Settings catalog. Returns Spotlight result items
 // ({ type: 'setting', uri, score, ... }). Windows-only; the caller gates on

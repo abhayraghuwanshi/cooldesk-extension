@@ -32,6 +32,7 @@ import { teamManager } from '../services/p2p/teamManager';
 import { initializeFontSize, setAndSaveFontSize } from '../utils/fontUtils';
 import GenericUrlParser from '../utils/GenericUrlParser';
 import { getFaviconUrl } from '../utils/helpers';
+import { CURATED_WALLPAPER_URLS } from '../shared/data/wallpapers';
 import '../utils/realTimeCategorizor'; // Auto-enables real-time categorization@
 
 library.add(
@@ -193,18 +194,7 @@ export default function App() {
       });
 
       const fallbackToCurated = () => {
-        const curatedWallpapers = [
-          'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=3840&q=90&fm=jpg',
-          'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=3840&q=90&fm=jpg',
-          'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=3840&q=90&fm=jpg',
-          'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=3840&q=90&fm=jpg',
-          'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=3840&q=90&fm=jpg',
-          'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=3840&q=90&fm=jpg',
-          'https://images.unsplash.com/photo-1448375240586-882707db888b?w=3840&q=90&fm=jpg',
-          'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=3840&q=90&fm=jpg',
-          'https://images.unsplash.com/photo-1557683316-973673baf926?w=3840&q=90&fm=jpg',
-          'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?w=3840&q=90&fm=jpg',
-        ];
+        const curatedWallpapers = CURATED_WALLPAPER_URLS;
         // Pick a random wallpaper different from the current one if possible
         let nextWallpaper = curatedWallpapers[Math.floor(Math.random() * curatedWallpapers.length)];
         if (nextWallpaper === wallpaperUrl && curatedWallpapers.length > 1) {

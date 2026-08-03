@@ -1,3 +1,4 @@
+import { SIDECAR_HTTP } from '../shared/config/sidecar.js';
 /**
  * CoolDesk workspace-folder service.
  *
@@ -7,7 +8,7 @@
  * authored by the plugin/AI, and the app only renders it.
  */
 
-const SIDECAR_URL = 'http://localhost:4545';
+const SIDECAR_URL = SIDECAR_HTTP;
 
 /**
  * Fetch and normalize the `.cooldesk/` workspace for a project folder path.

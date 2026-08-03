@@ -1,5 +1,5 @@
 import { faChrome, faCss3Alt, faDiscord, faEdge, faFirefox, faGithub, faGolang, faHtml5, faJava, faJs, faMarkdown, faNodeJs, faPhp, faPython, faReact, faRust, faSlack, faSpotify, faSwift, faVuejs } from '@fortawesome/free-brands-svg-icons';
-import { faBriefcase, faCalculator, faChartLine, faCloud, faCode, faCog, faComments, faDatabase, faDesktop, faEnvelope, faFile, faFileCode, faFileCsv, faFileExcel, faFileLines, faFilePdf, faFilePowerpoint, faFileWord, faFileZipper, faFlask, faFolder, faFolderOpen, faFont, faGamepad, faGlobe, faGraduationCap, faHashtag, faHeartPulse, faHistory, faHome, faImage, faLightbulb, faLink, faMicrochip, faMicrophone, faMusic, faNewspaper, faPalette, faPlane, faRobot, faSearch, faShoppingBag, faStar, faStickyNote, faTasks, faTerminal, faThumbtack, faTools, faUtensils, faVial, faVideo } from '@fortawesome/free-solid-svg-icons';
+import { faBriefcase, faCalculator, faChartLine, faCloud, faCode, faCog, faComments, faDatabase, faDesktop, faEnvelope, faFile, faFileCode, faFileCsv, faFileExcel, faFileLines, faFilePdf, faFilePowerpoint, faFileWord, faFileZipper, faFlask, faFolder, faFolderOpen, faFont, faGamepad, faGlobe, faGraduationCap, faHashtag, faHeartPulse, faHistory, faHome, faImage, faLightbulb, faLink, faMicrochip, faMicrophone, faMusic, faNewspaper, faPalette, faPlane, faPlus, faRobot, faSearch, faShoppingBag, faStar, faStickyNote, faTasks, faTerminal, faThumbtack, faTimes, faTools, faUtensils, faVial, faVideo } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
     SiC, SiClojure, SiCplusplus, SiCss, SiDart, SiDocker, SiElixir, SiGnubash, SiGo,
@@ -220,6 +220,41 @@ function useOnClickOutside(ref, handler) {
     }, [ref, handler]);
 }
 
+// Map a search result onto the shape a workspace stores. Workspaces hold two
+// kinds of thing — urls[] and apps[] — so every result has to land as one or
+// the other, and anything that is neither (a Windows setting, a control-panel
+// applet, another workspace) simply isn't addable. Returning null says so;
+// the caller reports it rather than silently dropping the click.
+function resultToWorkspaceItem(item) {
+    if (!item) return null;
+    // A workspace can't be filed into a workspace. It's called out rather than
+    // left to the default branch because workspace rows can carry a `url`,
+    // which would otherwise quietly add the workspace as a link.
+    if (item.type === 'workspace') return null;
+    switch (item.type) {
+        case 'tab':
+        case 'bookmark':
+        case 'history':
+        case 'url':
+            return item.url
+                ? { kind: 'url', url: item.url, title: item.title || item.name || item.url, favicon: item.favicon || null }
+                : null;
+        case 'folder':
+            return item.path ? { kind: 'app', name: item.name || item.title, path: item.path, appType: 'folder', icon: null } : null;
+        case 'file':
+            return item.path ? { kind: 'app', name: item.name || item.title, path: item.path, appType: 'file', icon: null } : null;
+        case 'app':
+            return item.path
+                ? { kind: 'app', name: item.name || item.title, path: item.path, icon: item.icon || null }
+                : null;
+        default:
+            // A bare url with no recognised type still files as a link.
+            return item.url
+                ? { kind: 'url', url: item.url, title: item.title || item.name || item.url, favicon: item.favicon || null }
+                : null;
+    }
+}
+
 // The one search component for every surface.
 //   variant="overlay"  — the dedicated Alt+K spotlight window (default; closes
 //                        via SPOTLIGHT_HIDE like before)
@@ -229,6 +264,10 @@ function useOnClickOutside(ref, handler) {
 //   enableVoice / enableSlashCommands — mic + /nav & !bang command palette
 //   onNavigate / onWorkspaceNavigate  — host face/workspace switching
 //   sections — hide idle sections ({ context, pins, workspaces, footer })
+//   addTarget / onAddItem / onExitAddMode — "add mode": while a workspace is
+//     the target, picking a result collects it into that workspace instead of
+//     launching it. This is why workspace cards have no search box of their
+//     own: the same index that finds a tab to jump to finds the tab to file.
 export function GlobalSpotlight({
     variant = 'overlay',
     onNavigate = null,
@@ -238,6 +277,9 @@ export function GlobalSpotlight({
     enableSlashCommands = false,
     placeholder = null,
     sections: sectionsProp = null,
+    addTarget = null,
+    onAddItem = null,
+    onExitAddMode = null,
 } = {}) {
     const isEmbedded = variant === 'embedded';
     const sections = { context: true, pins: true, workspaces: true, footer: true, ...(sectionsProp || {}) };
@@ -316,6 +358,18 @@ export function GlobalSpotlight({
     useEffect(() => () => {
         if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
     }, []);
+
+    // Entering add mode hands the user straight to the input with the panel
+    // down — the card's "+" is the click that starts this, so a second click
+    // just to focus the box would be one too many.
+    useEffect(() => {
+        if (!addTarget) return;
+        setQuery('');
+        setResults([]);
+        setSelectedIndex(-1);
+        setPanelOpen(true);
+        inputRef.current?.focus();
+    }, [addTarget]);
 
     // Opt-in capabilities (activated per surface via props)
     const slash = useSlashCommands({ enabled: enableSlashCommands, isDesktopApp, onNavigate, showFeedback });
@@ -1505,9 +1559,11 @@ export function GlobalSpotlight({
                 handleSelect({ url: query, type: 'url' });
             } else if (flatRows.length > 0) {
                 handleSelect(flatRows[0].item);
-            } else if (query.trim()) {
+            } else if (query.trim() && !addTarget) {
                 // No results — search the web instead (without any /u /a /f prefix;
-                // a bare prefix with no term does nothing)
+                // a bare prefix with no term does nothing). Suppressed in add
+                // mode: Enter there means "file the thing I picked", and
+                // launching a browser tab is the opposite of that.
                 const { scope: qScope, term: qTerm } = parseScopedQuery(query.trim());
                 const webQuery = qScope ? qTerm : query.trim();
                 if (webQuery) {
@@ -1553,6 +1609,31 @@ export function GlobalSpotlight({
 
     const handleSelect = async (item) => {
         if (!item) return;
+
+        // Add mode: a result is something to file into the target workspace,
+        // not something to launch. Commands are exempt — they aren't items.
+        // The panel deliberately stays open and the query clears, because
+        // filling a workspace means adding several things in a row.
+        if (addTarget && onAddItem && item.type !== 'command') {
+            const mapped = resultToWorkspaceItem(item);
+            if (!mapped) {
+                showFeedback(`"${item.title || item.name || 'That'}" can't be added to a workspace`, 'error');
+                return;
+            }
+            try {
+                await onAddItem(addTarget, mapped);
+                showFeedback(`Added to ${addTarget.name}`, 'success');
+            } catch (e) {
+                console.error('[Spotlight] Failed to add item to workspace:', e);
+                showFeedback('Could not add that — see console', 'error');
+                return;
+            }
+            setQuery('');
+            setResults([]);
+            setSelectedIndex(-1);
+            inputRef.current?.focus();
+            return;
+        }
 
         // Command palette rows: templates insert their prefix into the input,
         // complete commands execute via the slash hook.
@@ -1809,6 +1890,19 @@ export function GlobalSpotlight({
     // keyboard selection behaves exactly like clicking the chip.
     const handleWorkspaceItemSelect = (entry) => {
         if (!entry) return;
+
+        // Add mode has to be checked here too, not just in handleSelect: this
+        // handler launches and opens on its own for anything that isn't
+        // already running, so without this a click in add mode opened the item
+        // instead of filing it — and the branches that *do* delegate to
+        // handleSelect added it, making the two halves disagree.
+        if (addTarget && onAddItem) {
+            handleSelect(entry.kind === 'url'
+                ? { type: 'url', url: entry.data.url, title: entry.data.title, favicon: entry.data.favicon }
+                : { type: entry.data.appType || 'app', name: entry.data.name, path: entry.data.path, icon: entry.data.icon });
+            return;
+        }
+
         if (entry.kind === 'url') {
             if (entry.openTab) { handleSelect(entry.openTab); return; }
             if (window.electronAPI?.openExternal) {
@@ -1892,17 +1986,20 @@ export function GlobalSpotlight({
         }
     }, [isEmbedded]);
 
-    // Handle Escape key to close (workspace picker first, then the spotlight)
+    // Handle Escape key to close (workspace picker first, then add mode, then
+    // the spotlight). Add mode outranks closing: Escape should put the search
+    // back to being a search, not dismiss it and leave the mode armed.
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (e.key === 'Escape') {
                 if (wsDropdownOpen) setWsDropdownOpen(false);
+                else if (addTarget && onExitAddMode) onExitAddMode();
                 else if (!isEmbedded || panelOpen) handleClose();
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [handleClose, wsDropdownOpen, isEmbedded, panelOpen]);
+    }, [handleClose, wsDropdownOpen, isEmbedded, panelOpen, addTarget, onExitAddMode]);
 
     // Embedded: '/' anywhere on the page focuses the search (like the old header search)
     useEffect(() => {
@@ -1970,8 +2067,26 @@ export function GlobalSpotlight({
         <div className={isEmbedded ? 'spotlight-embedded' : 'spotlight-overlay'}>
             <div className="spotlight-container" ref={containerRef}>
                 {/* Search Header */}
-                <div className={`spotlight-search-box${voice.isListening ? ' listening' : ''}`}>
+                <div className={`spotlight-search-box${voice.isListening ? ' listening' : ''}${addTarget ? ' add-mode' : ''}`}>
                     <span className="spotlight-prompt">{'>'}</span>
+                    {/* Add-mode chip — the search looks identical in both modes,
+                        so the target workspace has to be visible or a click
+                        files something instead of opening it with no warning. */}
+                    {addTarget && (
+                        <span className="spotlight-add-badge">
+                            <FontAwesomeIcon icon={faPlus} />
+                            <span>{addTarget.name}</span>
+                            <button
+                                type="button"
+                                className="spotlight-add-badge-exit"
+                                onMouseDown={(e) => { e.preventDefault(); onExitAddMode?.(); }}
+                                title="Stop adding (Esc)"
+                                aria-label="Stop adding to workspace"
+                            >
+                                <FontAwesomeIcon icon={faTimes} />
+                            </button>
+                        </span>
+                    )}
                     {(() => {
                         const { scope } = parseScopedQuery(query.trim());
                         return scope ? <span className="spotlight-scope-badge">{scope.label}</span> : null;
@@ -1979,7 +2094,9 @@ export function GlobalSpotlight({
                     <input
                         ref={inputRef}
                         className="spotlight-input"
-                        placeholder={placeholder || (isEmbedded ? 'Search or type / for commands...' : 'Almighty Search...')}
+                        placeholder={addTarget
+                            ? `Search to add to ${addTarget.name}…`
+                            : (placeholder || (isEmbedded ? 'Search or type / for commands...' : 'Almighty Search...'))}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleKeyDown}
