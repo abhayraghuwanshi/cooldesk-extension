@@ -349,10 +349,16 @@ fn focus_left_the_app(app: &tauri::AppHandle) -> bool {
             .any(|w| w.hwnd().ok().map(|h| h.0 as isize) == Some(fg));
         !ours
     }
+    // No raw window-handle API here (unlike `dock::foreground_hwnd` on
+    // Windows), but `is_focused` gets the same answer: if one of our own
+    // windows already holds focus, this blur is internal bounce, not the
+    // user leaving.
     #[cfg(not(windows))]
     {
-        let _ = app;
-        true
+        !app
+            .webview_windows()
+            .values()
+            .any(|w| w.is_focused().unwrap_or(false))
     }
 }
 
@@ -431,9 +437,11 @@ struct DockState {
     /// "left", "right", "top" or "bottom". Top/bottom render the horizontal
     /// taskbar-style workspace bar instead of the sidebar panel.
     side: String,
-    /// Panel width in physical pixels (vertical docks).
+    /// Panel width in logical (CSS) pixels (vertical docks) — converted to
+    /// physical pixels via the window's scale factor when applied, so the
+    /// panel is the same *visual* size on a 1x display and a 2x Retina one.
     width: u32,
-    /// Bar thickness in physical pixels (horizontal docks).
+    /// Bar thickness in logical (CSS) pixels (horizontal docks); see `width`.
     bar_height: u32,
 }
 
@@ -460,7 +468,19 @@ const DOCK_MIN_WIDTH: u32 = 220;
 const DOCK_MAX_WIDTH: u32 = 900;
 const BAR_MIN_HEIGHT: u32 = 40;
 const BAR_MAX_HEIGHT: u32 = 220;
-// Physical-pixel size of the collapsed edge handle (a centered tab; the long
+
+/// Converts a logical/CSS pixel size (what `DockState.width`/`bar_height` and
+/// the `HANDLE_W`/`HANDLE_H` constants represent) to the physical pixels the
+/// window-positioning APIs need. Every monitor geometry value we combine this
+/// with (`primary_geom`, `dock::work_area`, `dock::monitor_rect`) is already
+/// physical, so skipping this step made the dock panel render at half its
+/// intended width on any 2x display — which is every Mac and many Windows
+/// HiDPI laptops. At 1x scaling this is a no-op.
+fn logical_to_physical(logical_px: i32, scale_factor: f64) -> i32 {
+    (logical_px as f64 * scale_factor).round() as i32
+}
+
+// Logical-pixel size of the collapsed edge handle (a centered tab; the long
 // side runs along the docked edge, so it's rotated for top/bottom docks).
 const HANDLE_W: i32 = 22;
 const HANDLE_H: i32 = 132;
@@ -540,11 +560,12 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
         log::error!("[Dock] expand_drawer: no main window");
         return;
     };
+    let scale = main.scale_factor().unwrap_or(1.0);
     match drawer_geom(app, &main, horizontal) {
         None => log::error!("[Dock] expand_drawer: no monitor geometry"),
         Some((mx, my, mw, mh)) => {
             let (x, y, w, h) = if horizontal {
-                let h = st.bar_height.clamp(BAR_MIN_HEIGHT, BAR_MAX_HEIGHT) as i32;
+                let h = logical_to_physical(st.bar_height.clamp(BAR_MIN_HEIGHT, BAR_MAX_HEIGHT) as i32, scale);
                 let y = if st.side == "top" { my } else { my + mh - h };
                 // Span the full monitor width (not the work-area width) so the bar
                 // reaches both screen edges even when a side taskbar/appbar insets
@@ -562,13 +583,19 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
                 let (bx, bw) = (mx, mw);
                 (bx, y, bw, h)
             } else {
-                let w = st.width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH) as i32;
+                let w = logical_to_physical(st.width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH) as i32, scale);
                 let x = if st.side == "left" { mx } else { mx + mw - w };
                 (x, my, w, mh)
             };
             let _ = main.set_decorations(false);
             let _ = main.set_resizable(false);
             let _ = main.set_always_on_top(true);
+            // Same reasoning as the handle: a dock/taskbar panel that vanishes
+            // when you switch Spaces (or when some other app goes fullscreen)
+            // isn't a dock. Undone in `disable_dock` once the window goes back
+            // to being a normal per-Space document window.
+            #[cfg(target_os = "macos")]
+            dock::allow_over_fullscreen_spaces(&main);
             let _ = main.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w as u32, height: h as u32 }));
             let _ = main.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
             let _ = main.show();
@@ -592,19 +619,27 @@ fn collapse_drawer(app: &tauri::AppHandle, st: &DockState) {
     }
     let horizontal = dock_is_horizontal(&st.side);
     if let Some(handle) = app.get_webview_window("handle") {
+        let scale = handle.scale_factor().unwrap_or(1.0);
+        let (handle_w, handle_h) = (logical_to_physical(HANDLE_W, scale), logical_to_physical(HANDLE_H, scale));
         if let Some((mx, my, mw, mh)) = drawer_geom(app, &handle, horizontal) {
             let (x, y, w, h) = if horizontal {
                 // Rotated tab: the long side runs along the edge.
-                let (w, h) = (HANDLE_H, HANDLE_W);
+                let (w, h) = (handle_h, handle_w);
                 let x = mx + (mw - w) / 2;
                 let y = if st.side == "top" { my } else { my + mh - h };
                 (x, y, w, h)
             } else {
-                let x = if st.side == "left" { mx } else { mx + mw - HANDLE_W };
-                let y = my + (mh - HANDLE_H) / 2;
-                (x, y, HANDLE_W, HANDLE_H)
+                let x = if st.side == "left" { mx } else { mx + mw - handle_w };
+                let y = my + (mh - handle_h) / 2;
+                (x, y, handle_w, handle_h)
             };
             let _ = handle.set_always_on_top(true);
+            // Without this, the handle stays pinned to whichever Space/virtual
+            // desktop (including another app's fullscreen Space) it was last
+            // shown on — switch away and it (and the panel it opens) is simply
+            // gone until you switch back. macOS-only.
+            #[cfg(target_os = "macos")]
+            dock::allow_over_fullscreen_spaces(&handle);
             // Windows clamps every top-level window to a minimum tracking size
             // (SM_CXMINTRACK ≈ 136px wide, SM_CYMINTRACK ≈ 39px tall, DPI-scaled)
             // via WM_GETMINMAXINFO. A vertical handle asks for 22px wide, which
@@ -688,8 +723,10 @@ fn apply_dock(app: &tauri::AppHandle, side: String, thickness: u32) -> Result<Do
             .ok_or_else(|| "main window not found".to_string())?;
         let _ = window.set_decorations(false);
         let _ = window.set_resizable(false);
+        let scale = window.scale_factor().unwrap_or(1.0);
+        let physical_thickness = logical_to_physical(thickness as i32, scale);
         let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
-        let (x, y, cx, cy) = dock::set_dock(hwnd, &side, thickness as i32)?;
+        let (x, y, cx, cy) = dock::set_dock(hwnd, &side, physical_thickness)?;
         log::info!(
             "[Dock] Reserved strip: x={x} y={y} w={cx} h={cy} (side={side}, thickness={thickness})"
         );
@@ -717,6 +754,8 @@ fn disable_dock(app: &tauri::AppHandle) -> DockState {
     }
     if let Some(window) = ensure_main_window(app) {
         let _ = window.set_always_on_top(false);
+        #[cfg(target_os = "macos")]
+        dock::restrict_to_current_space(&window);
         let _ = window.set_decorations(true);
         let _ = window.set_resizable(true);
         let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 1400.0, height: 900.0 }));
@@ -1217,6 +1256,13 @@ fn toggle_spotlight(app: tauri::AppHandle) {
                 let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
             }
 
+            // Without this, the (already-built, just hidden) spotlight window
+            // stays pinned to whatever Space it last appeared on — invoking it
+            // from a different Space (including another app's fullscreen Space)
+            // either shows nothing there or force-switches the user back.
+            // macOS-only.
+            #[cfg(target_os = "macos")]
+            dock::allow_over_fullscreen_spaces(&window);
             let _ = window.show();
             let _ = window.set_focus();
             let _ = app.emit("spotlight-shown", ());
