@@ -1,0 +1,561 @@
+// Windows window-focus implementation: SetForegroundWindow / AttachThreadInput
+// activation, shell activation (AUMID) for packaged/MSIX apps, WM_CLOSE, and
+// bounds-based window matching. See `focus.rs` for the module-level overview
+// and the shared public API (`focus_window`, `close_window`,
+// `find_hwnd_by_bounds`) that dispatches here.
+
+use super::*;
+use windows::Win32::Foundation::HWND;
+use windows::Win32::UI::WindowsAndMessaging::{
+    BringWindowToTop, EnumWindows, GetAncestor,
+    GetForegroundWindow, GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
+    SetForegroundWindow, ShowWindow, SwitchToThisWindow, GA_ROOT, SW_RESTORE, SW_SHOW,
+};
+use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+
+/// Run a foreground-changing sequence with this thread temporarily attached to
+/// the input queue of whichever thread currently owns the foreground.
+///
+/// Windows honours `SetForegroundWindow` only from the process that already
+/// owns the foreground, or one pre-authorised via `AllowSetForegroundWindow`.
+/// We call that exactly once, in `hide_spotlight` — so the spotlight works and
+/// every *other* caller does not. A focus pushed by the browser extension, by
+/// the sidecar, or by any click made while a different app owns the foreground
+/// gets silently downgraded: the window activates and its taskbar button
+/// flashes, but it never rises in z-order. That is the "switch works but it
+/// doesn't come to the top" symptom.
+///
+/// Attaching to the foreground thread's input queue makes Windows treat this
+/// thread as sharing that foreground state, so the call is honoured no matter
+/// who invoked it. The attachment is always undone.
+unsafe fn with_foreground_rights<T>(f: impl FnOnce() -> T) -> T {
+    let fg = GetForegroundWindow();
+    let fg_thread = if fg.is_invalid() {
+        0
+    } else {
+        GetWindowThreadProcessId(fg, None)
+    };
+    let this_thread = GetCurrentThreadId();
+
+    // Attaching a thread to itself is invalid, and when we already own the
+    // foreground (the spotlight path, post-AllowSetForegroundWindow) the
+    // rights are present anyway — so this is a no-op there, not a regression.
+    let attached = fg_thread != 0
+        && fg_thread != this_thread
+        && AttachThreadInput(fg_thread, this_thread, true).as_bool();
+
+    let out = f();
+
+    if attached {
+        let _ = AttachThreadInput(fg_thread, this_thread, false);
+    }
+    out
+}
+
+/// Focus a window by its handle (HWND)
+pub fn focus_window_by_hwnd(hwnd: isize) -> FocusResult<()> {
+    let hwnd = normalize_focus_hwnd(HWND(hwnd as *mut _));
+    if focus_window_aggressive(hwnd, None) {
+        Ok(())
+    } else {
+        Err(FocusError::CommandFailed("Failed to bring target window to foreground".to_string()))
+    }
+}
+
+/// Focus a window by process ID, optionally with process name fallback
+pub fn focus_window_by_pid(pid: u32, process_name: Option<&str>) -> FocusResult<()> {
+    // Try by PID first (Win32 SetForegroundWindow path)
+    if try_focus_pid(pid) {
+        return Ok(());
+    }
+
+    // For MSIX/packaged apps (e.g. Windows Terminal) Win32 focus can fail
+    // even though the window exists. Try the shell activation path: this calls
+    // IApplicationActivationManager::ActivateApplication, the same channel
+    // Windows uses when you click the taskbar button, so the app's WinUI
+    // activation handler receives it cleanly with no focus race.
+    if let Some(aumid) = get_aumid_for_pid(pid) {
+        log::info!("[Focus] Packaged app detected (AUMID: {}), trying shell activation", aumid);
+        if activate_via_aumid(&aumid) {
+            return Ok(());
+        }
+    }
+
+    // Fallback: try by process name if provided
+    if let Some(name) = process_name {
+        let name_clean = name.trim_end_matches(".exe").to_lowercase();
+        let stems = super::browser_exe_stems(name);
+
+        // Use sysinfo to find processes by name
+        use sysinfo::{System, ProcessRefreshKind};
+        let mut sys = System::new();
+        sys.refresh_processes_specifics(ProcessRefreshKind::new());
+
+        // Pass 1: exact executable match. A substring match would let a
+        // request for "edge" land on msedgewebview2.exe and foreground some
+        // unrelated WebView2 app, so the precise name always wins.
+        for (proc_pid, process) in sys.processes() {
+            if super::process_name_matches(process.name(), &stems) {
+                if try_focus_pid(proc_pid.as_u32()) {
+                    return Ok(());
+                }
+            }
+        }
+
+        // Pass 2: substring match for callers that pass a partial name.
+        // WebView2 hosts stay excluded unless they were what was asked for.
+        let wants_webview = name_clean.contains("webview");
+        for (proc_pid, process) in sys.processes() {
+            let pname = process.name().to_lowercase();
+            if !wants_webview && pname.contains("webview") {
+                continue;
+            }
+            if pname.contains(&name_clean) {
+                if try_focus_pid(proc_pid.as_u32()) {
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    Err(FocusError::WindowNotFound)
+}
+
+fn try_focus_pid(pid: u32) -> bool {
+    use windows::Win32::Foundation::LPARAM;
+
+    struct Ctx {
+        target_pid: u32,
+        found: bool,
+    }
+
+    let mut ctx = Ctx { target_pid: pid, found: false };
+
+    unsafe extern "system" fn enum_callback(hwnd: HWND, lparam: LPARAM) -> windows::Win32::Foundation::BOOL {
+        let ctx = &mut *(lparam.0 as *mut Ctx);
+        let mut window_pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, Some(&mut window_pid));
+
+        if window_pid == ctx.target_pid {
+            let len = GetWindowTextLengthW(hwnd);
+            let visible = IsWindowVisible(hwnd).as_bool();
+
+            // Require both a non-empty title AND visible — avoids focusing
+            // invisible GPU/renderer helper windows that browsers spawn.
+            if len > 0 && visible {
+                if focus_window_aggressive(hwnd, Some(ctx.target_pid)) {
+                    ctx.found = true;
+                    return windows::Win32::Foundation::FALSE; // Stop enumeration
+                }
+            }
+        }
+        windows::Win32::Foundation::TRUE // Continue
+    }
+
+    unsafe {
+        let _ = EnumWindows(Some(enum_callback), LPARAM(&mut ctx as *mut Ctx as isize));
+    }
+
+    ctx.found
+}
+
+/// Returns the AUMID for a packaged (MSIX) process, or None for plain Win32 apps.
+fn get_aumid_for_pid(pid: u32) -> Option<String> {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::Storage::Packaging::Appx::GetApplicationUserModelId;
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+
+        // First call: null buffer → get required length
+        let mut len: u32 = 0;
+        let _ = GetApplicationUserModelId(
+            handle,
+            &mut len,
+            windows::core::PWSTR(std::ptr::null_mut()),
+        );
+
+        if len == 0 {
+            let _ = CloseHandle(handle);
+            return None;
+        }
+
+        let mut buf = vec![0u16; len as usize];
+        let err = GetApplicationUserModelId(
+            handle,
+            &mut len,
+            windows::core::PWSTR(buf.as_mut_ptr()),
+        );
+        let _ = CloseHandle(handle);
+
+        // ERROR_SUCCESS = WIN32_ERROR(0)
+        if err.0 != 0 {
+            return None;
+        }
+
+        let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+        let aumid = String::from_utf16_lossy(&buf[..end]);
+        if aumid.is_empty() { None } else { Some(aumid) }
+    }
+}
+
+/// Activate a packaged app via IApplicationActivationManager — the "building
+/// manager" path. Windows routes the request through the app's own activation
+/// channel (same as clicking the taskbar button), so WinUI apps like Windows
+/// Terminal handle it cleanly without a focus race.
+///
+/// ⚠ For multi-instance apps (Windows Terminal's default) this may open a
+/// new window rather than focusing the existing one. Prefer Win32
+/// SetForegroundWindow for a specific known HWND; use this only as a fallback.
+fn activate_via_aumid(aumid: &str) -> bool {
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
+    };
+    use windows::Win32::UI::Shell::{IApplicationActivationManager, ACTIVATEOPTIONS};
+    use windows::core::GUID;
+
+    // CLSID_ApplicationActivationManager = {45BA127D-10A8-46EA-8AB7-56EA9078943C}
+    const CLSID_AAM: GUID = GUID {
+        data1: 0x45BA_127D,
+        data2: 0x10A8,
+        data3: 0x46EA,
+        data4: [0x8A, 0xB7, 0x56, 0xEA, 0x90, 0x78, 0x94, 0x3C],
+    };
+
+    unsafe {
+        // Ignore S_FALSE / RPC_E_CHANGED_MODE — thread may already have COM.
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+
+        let manager: windows::core::Result<IApplicationActivationManager> =
+            CoCreateInstance(&CLSID_AAM, None, CLSCTX_ALL);
+
+        let manager = match manager {
+            Ok(m) => m,
+            Err(e) => {
+                log::warn!("[Focus] IApplicationActivationManager unavailable: {}", e);
+                return false;
+            }
+        };
+
+        // &HSTRING implements Param<PCWSTR>; PWSTR(null) for empty arguments.
+        let aumid_h = windows::core::HSTRING::from(aumid);
+        // ActivateApplication returns Result<u32> where the u32 is the new PID.
+        match manager.ActivateApplication(
+            &aumid_h,
+            windows::core::PWSTR(std::ptr::null_mut()),
+            ACTIVATEOPTIONS(0),
+        ) {
+            Ok(new_pid) => {
+                log::info!(
+                    "[Focus] AUMID activation ok: '{}' → new_pid={}",
+                    aumid, new_pid
+                );
+                true
+            }
+            Err(e) => {
+                log::warn!("[Focus] AUMID activation failed for '{}': {}", aumid, e);
+                false
+            }
+        }
+    }
+}
+
+fn normalize_focus_hwnd(hwnd: HWND) -> HWND {
+    unsafe {
+        let root = GetAncestor(hwnd, GA_ROOT);
+        if root.0.is_null() { hwnd } else { root }
+    }
+}
+
+fn foreground_matches_target(target_hwnd: HWND, target_pid: Option<u32>) -> bool {
+    unsafe {
+        let foreground = GetForegroundWindow();
+        if foreground == target_hwnd {
+            return true;
+        }
+
+        let foreground_root = normalize_focus_hwnd(foreground);
+        if foreground_root == target_hwnd {
+            return true;
+        }
+
+        if let Some(pid) = target_pid {
+            let mut foreground_pid: u32 = 0;
+            GetWindowThreadProcessId(foreground, Some(&mut foreground_pid));
+            if foreground_pid == pid {
+                return true;
+            }
+            let mut foreground_root_pid: u32 = 0;
+            GetWindowThreadProcessId(foreground_root, Some(&mut foreground_root_pid));
+            if foreground_root_pid == pid {
+                return true;
+            }
+        }
+
+        false
+    }
+}
+
+/// Check whether a window lives on the current virtual desktop.
+/// Returns true as a safe default if the COM query fails.
+fn is_window_on_current_desktop(hwnd: HWND) -> bool {
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
+    };
+    use windows::Win32::UI::Shell::IVirtualDesktopManager;
+    use windows::core::GUID;
+
+    // CLSID_VirtualDesktopManager = {AA509086-5CA9-4C25-8F95-589D3C07B48A}
+    const CLSID_VDM: GUID = GUID {
+        data1: 0xaa509086,
+        data2: 0x5ca9,
+        data3: 0x4c25,
+        data4: [0x8f, 0x95, 0x58, 0x9d, 0x3c, 0x07, 0xb4, 0x8a],
+    };
+
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let mgr: windows::core::Result<IVirtualDesktopManager> =
+            CoCreateInstance(&CLSID_VDM, None, CLSCTX_ALL);
+        match mgr {
+            Ok(m) => m.IsWindowOnCurrentVirtualDesktop(hwnd)
+                .map(|b| b.as_bool())
+                .unwrap_or(true),
+            Err(_) => true,
+        }
+    }
+}
+
+fn focus_window_aggressive(hwnd: HWND, target_pid: Option<u32>) -> bool {
+    let hwnd = normalize_focus_hwnd(hwnd);
+    unsafe {
+        let before_foreground = normalize_focus_hwnd(GetForegroundWindow());
+        let mut before_pid: u32 = 0;
+        GetWindowThreadProcessId(before_foreground, Some(&mut before_pid));
+
+        // Restore if minimized
+        if IsIconic(hwnd).as_bool() {
+            let _ = ShowWindow(hwnd, SW_RESTORE);
+        }
+
+        // Detect virtual desktop to tune sleep duration only.
+        // SwitchToThisWindow is always called — it works for both same-desktop
+        // and cross-desktop. Never skip it: if COM detection fails and returns
+        // true (same desktop), cross-desktop windows would get no focus attempt.
+        let on_current_desktop = is_window_on_current_desktop(hwnd);
+        log::info!("[Focus] hwnd={:?} on_current_desktop={}", hwnd.0, on_current_desktop);
+
+        // The whole activation sequence runs with borrowed foreground rights,
+        // so it behaves identically no matter which entry point asked for it:
+        // spotlight (which also pre-calls AllowSetForegroundWindow via
+        // hide_spotlight), a dock click, or a jump pushed from the extension.
+        // fAltTab=FALSE = direct launcher-style activation (not Alt+Tab switcher).
+        let mut focused = with_foreground_rights(|| {
+            SwitchToThisWindow(hwnd, false);
+
+            // Longer sleep for cross-desktop to allow the desktop animation to finish.
+            let switch_sleep_ms = if on_current_desktop { 50 } else { 150 };
+            std::thread::sleep(std::time::Duration::from_millis(switch_sleep_ms));
+
+            let _ = BringWindowToTop(hwnd);
+            let _ = SetForegroundWindow(hwnd);
+            let _ = ShowWindow(hwnd, SW_SHOW);
+
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let mut ok = foreground_matches_target(hwnd, target_pid);
+
+            if !ok {
+                let _ = SetForegroundWindow(hwnd);
+                std::thread::sleep(std::time::Duration::from_millis(80));
+                ok = foreground_matches_target(hwnd, target_pid);
+            }
+            ok
+        });
+
+        // Last resort, outside the attachment: a fresh foreground owner may
+        // have appeared while we slept, in which case the borrowed rights were
+        // taken from the wrong thread. Re-borrow from whoever owns it now.
+        if !focused {
+            focused = with_foreground_rights(|| {
+                let _ = BringWindowToTop(hwnd);
+                let _ = SetForegroundWindow(hwnd);
+                std::thread::sleep(std::time::Duration::from_millis(60));
+                foreground_matches_target(hwnd, target_pid)
+            });
+        }
+
+        let after_foreground = normalize_focus_hwnd(GetForegroundWindow());
+        let mut after_pid: u32 = 0;
+        GetWindowThreadProcessId(after_foreground, Some(&mut after_pid));
+
+        log::info!(
+            "[Focus] target_hwnd={:?} target_pid={:?} cross_desktop={} before_pid={} after_pid={} success={}",
+            hwnd.0, target_pid, !on_current_desktop, before_pid, after_pid, focused
+        );
+
+        focused
+    }
+}
+
+/// Gracefully close the window(s) of a process by posting WM_CLOSE.
+/// Prefers a specific HWND when given; otherwise closes every visible, titled
+/// top-level window owned by `pid`. WM_CLOSE lets the app run its own shutdown
+/// (save prompts etc.) instead of force-killing the process.
+pub fn close_window(hwnd: Option<isize>, pid: Option<u32>) -> FocusResult<()> {
+    use windows::Win32::Foundation::{BOOL, HWND, LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowTextLengthW, GetWindowThreadProcessId, IsWindowVisible,
+        PostMessageW, WM_CLOSE,
+    };
+
+    // Fast path: a specific window handle was supplied.
+    if let Some(h) = hwnd.filter(|&h| h != 0) {
+        unsafe {
+            return PostMessageW(HWND(h as *mut _), WM_CLOSE, WPARAM(0), LPARAM(0))
+                .map_err(|e| FocusError::CommandFailed(e.to_string()));
+        }
+    }
+
+    let target_pid = pid.ok_or(FocusError::WindowNotFound)?;
+
+    struct Ctx {
+        target_pid: u32,
+        closed: u32,
+    }
+    let mut ctx = Ctx { target_pid, closed: 0 };
+
+    unsafe extern "system" fn enum_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        let ctx = &mut *(lparam.0 as *mut Ctx);
+        let mut window_pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, Some(&mut window_pid));
+
+        // Mirror the focus path: only visible, titled top-level windows of the
+        // target process — skip invisible helper/renderer windows.
+        if window_pid == ctx.target_pid
+            && IsWindowVisible(hwnd).as_bool()
+            && GetWindowTextLengthW(hwnd) > 0
+        {
+            let _ = PostMessageW(hwnd, WM_CLOSE, WPARAM(0), LPARAM(0));
+            ctx.closed += 1;
+        }
+        BOOL(1) // continue — close all matching top-level windows
+    }
+
+    unsafe {
+        let _ = EnumWindows(Some(enum_callback), LPARAM(&mut ctx as *mut Ctx as isize));
+    }
+
+    if ctx.closed > 0 {
+        Ok(())
+    } else {
+        Err(FocusError::WindowNotFound)
+    }
+}
+
+/// Find the OS window handle for a browser window by matching its screen bounds.
+/// Used to target a specific browser window precisely when multiple windows are open.
+pub fn find_hwnd_by_bounds(process_name: &str, x: i32, y: i32, width: i32, height: i32) -> Option<isize> {
+    use windows::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowRect, GetWindowThreadProcessId, IsWindowVisible,
+    };
+    use sysinfo::{ProcessRefreshKind, System};
+
+    let mut sys = System::new();
+    sys.refresh_processes_specifics(ProcessRefreshKind::new());
+    // Only windows belonging to *this* browser are candidates. Bounds alone can't
+    // tell two browsers apart — maximised windows on the same monitor have
+    // identical bounds, so a wrong process name here focuses the wrong browser.
+    let stems = browser_exe_stems(process_name);
+    let pids: Vec<u32> = sys
+        .processes()
+        .iter()
+        .filter(|(_, p)| process_name_matches(p.name(), &stems))
+        .map(|(pid, _)| pid.as_u32())
+        .collect();
+
+    if pids.is_empty() {
+        log::warn!("[Focus] find_hwnd_by_bounds: no running process for '{}' (stems {:?})", process_name, stems);
+        return None;
+    }
+
+    struct SearchCtx {
+        pids: Vec<u32>,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        tolerance: i32,
+        result: Option<isize>,
+    }
+
+    unsafe extern "system" fn callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        let ctx = &mut *(lparam.0 as *mut SearchCtx);
+        let mut pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        if !ctx.pids.contains(&pid) || !IsWindowVisible(hwnd).as_bool() {
+            return BOOL(1);
+        }
+
+        // Prefer DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS) over GetWindowRect.
+        // On Windows 10/11, GetWindowRect includes the invisible DWM shadow/extended frame
+        // (~7px on each side) while Chrome's chrome.windows.get() reports visible bounds.
+        // DWMWA_EXTENDED_FRAME_BOUNDS returns the actual visible rect in physical pixels.
+        use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
+        use windows::Win32::UI::HiDpi::GetDpiForWindow;
+        let mut rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+        let got_rect = DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            &mut rect as *mut RECT as *mut std::ffi::c_void,
+            std::mem::size_of::<RECT>() as u32,
+        ).is_ok();
+        // Fallback to GetWindowRect if DWM attribute unavailable (e.g. minimised)
+        if !got_rect {
+            if GetWindowRect(hwnd, &mut rect).is_err() {
+                return BOOL(1);
+            }
+        }
+
+        // Convert physical pixels → logical pixels using per-window DPI.
+        // Chrome API reports logical (CSS) pixels; Win32 reports physical pixels.
+        let dpi = GetDpiForWindow(hwnd) as f64;
+        let scale = if dpi > 0.0 { dpi / 96.0 } else { 1.0 };
+        let log_left = (rect.left  as f64 / scale).round() as i32;
+        let log_top  = (rect.top   as f64 / scale).round() as i32;
+        let log_w    = ((rect.right  - rect.left) as f64 / scale).round() as i32;
+        let log_h    = ((rect.bottom - rect.top)  as f64 / scale).round() as i32;
+
+        let t = ctx.tolerance;
+        if (log_left - ctx.x).abs() <= t
+            && (log_top - ctx.y).abs() <= t
+            && (log_w - ctx.w).abs() <= t
+            && (log_h - ctx.h).abs() <= t
+        {
+            ctx.result = Some(hwnd.0 as isize);
+            return BOOL(0); // stop enumeration
+        }
+        BOOL(1)
+    }
+
+    // Pass 1: tight tolerance (20px) — avoids matching a neighbouring window
+    let mut ctx = SearchCtx { pids: pids.clone(), x, y, w: width, h: height, tolerance: 20, result: None };
+    unsafe { let _ = EnumWindows(Some(callback), LPARAM(&mut ctx as *mut SearchCtx as isize)); }
+
+    if ctx.result.is_some() {
+        log::info!("[Focus] find_hwnd_by_bounds: matched '{}' at ({},{} {}x{}) with tight tolerance", process_name, x, y, width, height);
+        return ctx.result;
+    }
+
+    // Pass 2: relaxed tolerance (50px) — handles fractional DPI and slight window drift
+    let mut ctx2 = SearchCtx { pids, x, y, w: width, h: height, tolerance: 50, result: None };
+    unsafe { let _ = EnumWindows(Some(callback), LPARAM(&mut ctx2 as *mut SearchCtx as isize)); }
+
+    if ctx2.result.is_some() {
+        log::info!("[Focus] find_hwnd_by_bounds: matched '{}' at ({},{} {}x{}) with relaxed tolerance", process_name, x, y, width, height);
+    } else {
+        log::warn!("[Focus] find_hwnd_by_bounds: no match for '{}' at ({},{} {}x{})", process_name, x, y, width, height);
+    }
+    ctx2.result
+}

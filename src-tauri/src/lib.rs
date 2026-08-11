@@ -594,8 +594,16 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
             // when you switch Spaces (or when some other app goes fullscreen)
             // isn't a dock. Undone in `disable_dock` once the window goes back
             // to being a normal per-Space document window.
+            //
+            // `expand_drawer` can run off the main thread (`dock_expand` is an
+            // async command, dispatched on a tokio worker), but this reaches
+            // into the raw NSWindow via objc2 — AppKit asserts/crashes
+            // (EXC_BREAKPOINT) if that happens off the main thread.
             #[cfg(target_os = "macos")]
-            dock::allow_over_fullscreen_spaces(&main);
+            {
+                let main_for_appkit = main.clone();
+                let _ = app.run_on_main_thread(move || dock::allow_over_fullscreen_spaces(&main_for_appkit));
+            }
             let _ = main.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w as u32, height: h as u32 }));
             let _ = main.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
             let _ = main.show();
@@ -638,8 +646,16 @@ fn collapse_drawer(app: &tauri::AppHandle, st: &DockState) {
             // desktop (including another app's fullscreen Space) it was last
             // shown on — switch away and it (and the panel it opens) is simply
             // gone until you switch back. macOS-only.
+            //
+            // Dispatched via `run_on_main_thread`: this reaches into the raw
+            // NSWindow via objc2, which AppKit requires happen on the main
+            // thread — some callers (e.g. the fullscreen watcher) invoke
+            // `collapse_drawer` off it.
             #[cfg(target_os = "macos")]
-            dock::allow_over_fullscreen_spaces(&handle);
+            {
+                let handle_for_appkit = handle.clone();
+                let _ = app.run_on_main_thread(move || dock::allow_over_fullscreen_spaces(&handle_for_appkit));
+            }
             // Windows clamps every top-level window to a minimum tracking size
             // (SM_CXMINTRACK ≈ 136px wide, SM_CYMINTRACK ≈ 39px tall, DPI-scaled)
             // via WM_GETMINMAXINFO. A vertical handle asks for 22px wide, which
@@ -754,8 +770,13 @@ fn disable_dock(app: &tauri::AppHandle) -> DockState {
     }
     if let Some(window) = ensure_main_window(app) {
         let _ = window.set_always_on_top(false);
+        // Raw NSWindow access via objc2 — must run on the main thread, see
+        // `expand_drawer`'s equivalent call for why.
         #[cfg(target_os = "macos")]
-        dock::restrict_to_current_space(&window);
+        {
+            let window_for_appkit = window.clone();
+            let _ = app.run_on_main_thread(move || dock::restrict_to_current_space(&window_for_appkit));
+        }
         let _ = window.set_decorations(true);
         let _ = window.set_resizable(true);
         let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 1400.0, height: 900.0 }));
@@ -1260,9 +1281,13 @@ fn toggle_spotlight(app: tauri::AppHandle) {
             // stays pinned to whatever Space it last appeared on — invoking it
             // from a different Space (including another app's fullscreen Space)
             // either shows nothing there or force-switches the user back.
-            // macOS-only.
+            // macOS-only. Dispatched on the main thread: raw NSWindow access via
+            // objc2, and this can be triggered by a global-shortcut callback.
             #[cfg(target_os = "macos")]
-            dock::allow_over_fullscreen_spaces(&window);
+            {
+                let window_for_appkit = window.clone();
+                let _ = app.run_on_main_thread(move || dock::allow_over_fullscreen_spaces(&window_for_appkit));
+            }
             let _ = window.show();
             let _ = window.set_focus();
             let _ = app.emit("spotlight-shown", ());
