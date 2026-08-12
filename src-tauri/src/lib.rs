@@ -1246,14 +1246,32 @@ fn toggle_spotlight(app: tauri::AppHandle) {
             #[cfg(not(any(target_os = "windows", target_os = "macos")))]
             let cursor_pos: Option<(i32, i32)> = None;
 
-            // Find which monitor contains this cursor point
+            // Find which monitor contains this cursor point.
+            //
+            // On macOS, CGEvent's location is in *logical* global display
+            // coordinates (points), while tauri's Monitor::position()/size()
+            // are in *physical* pixels (points * scale_factor). Comparing them
+            // directly only happens to work for a monitor sitting at the
+            // origin — any secondary/external display (the common
+            // multi-monitor case) would never match, silently falling back to
+            // the primary monitor regardless of where the cursor actually is.
+            // Scale each monitor's physical rect back to points before the
+            // hit-test so it lines up with the cursor's coordinate space.
             let monitors = app.available_monitors().unwrap_or_default();
             let target_monitor = if let Some((cx, cy)) = cursor_pos {
                 monitors.into_iter().find(|m| {
                     let pos = m.position();
                     let size = m.size();
-                    cx >= pos.x && cx < pos.x + size.width as i32 &&
-                    cy >= pos.y && cy < pos.y + size.height as i32
+                    #[cfg(target_os = "macos")]
+                    let scale = m.scale_factor();
+                    #[cfg(not(target_os = "macos"))]
+                    let scale = 1.0_f64;
+                    let mx = pos.x as f64 / scale;
+                    let my = pos.y as f64 / scale;
+                    let mw = size.width as f64 / scale;
+                    let mh = size.height as f64 / scale;
+                    (cx as f64) >= mx && (cx as f64) < mx + mw &&
+                    (cy as f64) >= my && (cy as f64) < my + mh
                 }).or_else(|| app.primary_monitor().ok().flatten())
             } else {
                 app.primary_monitor().ok().flatten()
