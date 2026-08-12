@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Menu-bar-only app (no Dock icon, no Cmd+Tab entry) so the spotlight
+	     overlay can render over other apps' fullscreen Spaces, matching how
+	     macOS Spotlight / Alfred / Raycast behave. -->
+	<key>LSUIElement</key>
+	<true/>
+</dict>
+</plist>
