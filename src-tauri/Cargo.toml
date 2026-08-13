@@ -72,10 +72,14 @@ tempfile = "3.10"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = "0.23"
-# Pinned to the exact versions tao/wry already resolve, so this doesn't
+# Already resolved transitively at this version via core-graphics — declaring
+# it directly doesn't add to the dependency tree. Needed for CFArray/CFNumber
+# wrappers around the private CGS Spaces calls in `dock::mac` (see the
+# `cgs` submodule) that make windows join another app's fullscreen Space.
+core-foundation = "0.9"
+# Pinned to the exact version tao/wry already resolve, so this doesn't
 # duplicate the dependency tree — just gives us typed access to NSWindow
 # APIs (collection behavior) that Tauri doesn't expose itself.
-objc2 = "=0.6.3"
 objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["NSWindow", "NSResponder"] }
 
 [target.'cfg(windows)'.dependencies]

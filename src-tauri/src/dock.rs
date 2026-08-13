@@ -58,6 +58,8 @@ pub fn foreground_hwnd() -> isize {
 }
 
 #[cfg(target_os = "macos")]
+mod cgs;
+#[cfg(target_os = "macos")]
 mod mac;
 #[cfg(target_os = "macos")]
-pub use mac::{allow_over_fullscreen_spaces, restrict_to_current_space};
+pub use mac::{allow_over_fullscreen_spaces, restrict_to_current_space, show_over_fullscreen_spaces};

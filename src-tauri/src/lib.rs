@@ -1222,29 +1222,48 @@ fn toggle_spotlight(app: tauri::AppHandle) {
         if window.is_visible().unwrap_or(false) {
             let _ = window.hide();
         } else {
-            // Get cursor position to find the active monitor
+            // Get cursor position to find the active monitor.
+            //
+            // On Windows, GetCursorPos and monitor bounds are both in
+            // physical pixels, so a direct comparison is safe.
+            //
+            // On macOS this is deliberately NOT `app.cursor_position()`
+            // (tao/winit): that helper converts the cursor's logical
+            // position to physical pixels using ONLY the primary monitor's
+            // scale factor (see tao's platform_impl/macos/util/mod.rs). On
+            // a mixed-DPI setup (e.g. built-in Retina display at 2x plus an
+            // external monitor at a different scale) that produces a
+            // physical value that doesn't fall inside any real monitor's
+            // bounds once the cursor is on the secondary display, so the
+            // match below would always fail and silently fall back to the
+            // primary monitor. Instead we read the raw cursor position in
+            // *points* via CGEvent (unscaled, so it isn't tied to any one
+            // monitor's scale factor) and compare it against each
+            // candidate monitor's own bounds converted back to points using
+            // that monitor's own scale factor — avoiding the chicken-and-egg
+            // problem of not yet knowing which scale factor to apply.
             #[cfg(target_os = "windows")]
-            let cursor_pos: Option<(i32, i32)> = {
+            let cursor_pos: Option<(f64, f64)> = {
                 let mut pt = windows::Win32::Foundation::POINT::default();
                 if unsafe { windows::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut pt) }.is_ok() {
-                    Some((pt.x, pt.y))
+                    Some((pt.x as f64, pt.y as f64))
                 } else {
                     None
                 }
             };
             #[cfg(target_os = "macos")]
-            let cursor_pos: Option<(i32, i32)> = {
+            let cursor_pos: Option<(f64, f64)> = {
                 use core_graphics::event::CGEvent;
                 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
                 CGEventSource::new(CGEventSourceStateID::HIDSystemState).ok().and_then(|src| {
                     CGEvent::new(src).ok().map(|e| {
                         let loc = e.location();
-                        (loc.x as i32, loc.y as i32)
+                        (loc.x, loc.y)
                     })
                 })
             };
             #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-            let cursor_pos: Option<(i32, i32)> = None;
+            let cursor_pos: Option<(f64, f64)> = None;
 
             // Find which monitor contains this cursor point
             let monitors = app.available_monitors().unwrap_or_default();
@@ -1252,8 +1271,22 @@ fn toggle_spotlight(app: tauri::AppHandle) {
                 monitors.into_iter().find(|m| {
                     let pos = m.position();
                     let size = m.size();
-                    cx >= pos.x && cx < pos.x + size.width as i32 &&
-                    cy >= pos.y && cy < pos.y + size.height as i32
+                    #[cfg(target_os = "macos")]
+                    {
+                        // Compare in points: convert this monitor's physical
+                        // bounds back to points using its OWN scale factor.
+                        let scale = m.scale_factor();
+                        let px = pos.x as f64 / scale;
+                        let py = pos.y as f64 / scale;
+                        let pw = size.width as f64 / scale;
+                        let ph = size.height as f64 / scale;
+                        cx >= px && cx < px + pw && cy >= py && cy < py + ph
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        cx >= pos.x as f64 && cx < pos.x as f64 + size.width as f64 &&
+                        cy >= pos.y as f64 && cy < pos.y as f64 + size.height as f64
+                    }
                 }).or_else(|| app.primary_monitor().ok().flatten())
             } else {
                 app.primary_monitor().ok().flatten()
@@ -1263,18 +1296,53 @@ fn toggle_spotlight(app: tauri::AppHandle) {
                 let m_pos = monitor.position();
                 let m_size = monitor.size();
 
-                // Size the (transparent) window to most of the monitor height so the
-                // panel can grow with content — the 800x600 default capped it and made
-                // the workspace section collapse when the tabs grid got tall.
-                let w_width = window.outer_size().map(|s| s.width).unwrap_or(800);
-                let w_height = (m_size.height as f64 * 0.85) as u32;
-                let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w_width, height: w_height }));
+                // macOS: do this whole computation in logical points and
+                // apply it via `Logical` position/size, not `Physical`. On
+                // macOS, `set_size`/`set_position` given `Physical` values
+                // get converted to points using the WINDOW's current scale
+                // factor (whatever screen it was on before this move), not
+                // the target screen's — so moving between screens with
+                // different scale factors (e.g. built-in Retina at 2x and
+                // an external display at 1x) landed the window off-center
+                // or partly off-screen depending on which screen it came
+                // from. `Logical` values are passed straight to AppKit
+                // unconverted, sidestepping that mismatch entirely.
+                #[cfg(target_os = "macos")]
+                {
+                    let scale = monitor.scale_factor();
+                    let mx = m_pos.x as f64 / scale;
+                    let my = m_pos.y as f64 / scale;
+                    let mw = m_size.width as f64 / scale;
+                    let mh = m_size.height as f64 / scale;
 
-                // Multi-monitor aware centering: Center X, and find Y at 1/3 of the gap from top
-                let x = m_pos.x + (m_size.width as i32 - w_width as i32) / 2;
-                let y = m_pos.y + (m_size.height as i32 - w_height as i32) / 3;
+                    // Width is kept stable in points (not re-derived from the
+                    // window's current physical size) so it doesn't silently
+                    // double/halve after moving between screens with
+                    // different scale factors.
+                    let cur_scale = window.scale_factor().unwrap_or(scale);
+                    let w_width = window.outer_size().map(|s| s.width as f64 / cur_scale).unwrap_or(800.0);
+                    let w_height = mh * 0.85;
+                    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width: w_width, height: w_height }));
 
-                let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
+                    let x = mx + (mw - w_width) / 2.0;
+                    let y = my + (mh - w_height) / 3.0;
+                    let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
+                }
+
+                #[cfg(not(target_os = "macos"))]
+                {
+                    // Size the (transparent) window to most of the monitor height so the
+                    // panel can grow with content — the 800x600 default capped it and made
+                    // the workspace section collapse when the tabs grid got tall.
+                    let w_width = window.outer_size().map(|s| s.width).unwrap_or(800);
+                    let w_height = (m_size.height as f64 * 0.85) as u32;
+                    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w_width, height: w_height }));
+
+                    // Multi-monitor aware centering: Center X, and find Y at 1/3 of the gap from top
+                    let x = m_pos.x + (m_size.width as i32 - w_width as i32) / 2;
+                    let y = m_pos.y + (m_size.height as i32 - w_height as i32) / 3;
+                    let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
+                }
             }
 
             // Without this, the (already-built, just hidden) spotlight window
@@ -1283,13 +1351,25 @@ fn toggle_spotlight(app: tauri::AppHandle) {
             // either shows nothing there or force-switches the user back.
             // macOS-only. Dispatched on the main thread: raw NSWindow access via
             // objc2, and this can be triggered by a global-shortcut callback.
+            //
+            // `window.show()` / `.set_focus()` are deliberately skipped on
+            // macOS in favor of `dock::show_over_fullscreen_spaces`, which
+            // also joins the window to the current (possibly fullscreen)
+            // Space via the private Spaces API — see that function's doc
+            // comment.
             #[cfg(target_os = "macos")]
             {
                 let window_for_appkit = window.clone();
-                let _ = app.run_on_main_thread(move || dock::allow_over_fullscreen_spaces(&window_for_appkit));
+                let _ = app.run_on_main_thread(move || {
+                    dock::allow_over_fullscreen_spaces(&window_for_appkit);
+                    dock::show_over_fullscreen_spaces(&window_for_appkit);
+                });
             }
-            let _ = window.show();
-            let _ = window.set_focus();
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
             let _ = app.emit("spotlight-shown", ());
         }
     }
@@ -2786,6 +2866,21 @@ pub fn run() {
               toggle_spotlight(handle.clone());
           }
       }).map_err(|e| format!("Failed to register shortcut '{}': {}", startup_shortcut, e))?;
+
+      // Grant the spotlight window permission to render over other apps'
+      // fullscreen Spaces exactly once, here, instead of inside
+      // `toggle_spotlight`. `.setup()` runs synchronously on the main
+      // thread, so this is race-free; doing it per-toggle via
+      // `run_on_main_thread` was racing against that same toggle's
+      // `window.show()` — both got queued onto the main run loop with no
+      // guaranteed order, so on a fresh launch the very first show (i.e.
+      // every test after a rebuild) could fire before the collection
+      // behavior was actually applied, making the window invisible over a
+      // fullscreen app until a second, later toggle happened to win the race.
+      #[cfg(target_os = "macos")]
+      if let Some(spotlight) = app.get_webview_window("spotlight") {
+          dock::allow_over_fullscreen_spaces(&spotlight);
+      }
 
       Ok(())
     })
