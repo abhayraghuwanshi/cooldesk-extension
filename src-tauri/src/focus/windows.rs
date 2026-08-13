@@ -131,7 +131,7 @@ fn try_focus_pid(pid: u32) -> bool {
 
     let mut ctx = Ctx { target_pid: pid, found: false };
 
-    unsafe extern "system" fn enum_callback(hwnd: HWND, lparam: LPARAM) -> windows::Win32::Foundation::BOOL {
+    unsafe extern "system" fn enum_callback(hwnd: HWND, lparam: LPARAM) -> ::windows::Win32::Foundation::BOOL {
         let ctx = &mut *(lparam.0 as *mut Ctx);
         let mut window_pid: u32 = 0;
         GetWindowThreadProcessId(hwnd, Some(&mut window_pid));
@@ -145,11 +145,11 @@ fn try_focus_pid(pid: u32) -> bool {
             if len > 0 && visible {
                 if focus_window_aggressive(hwnd, Some(ctx.target_pid)) {
                     ctx.found = true;
-                    return windows::Win32::Foundation::FALSE; // Stop enumeration
+                    return ::windows::Win32::Foundation::FALSE; // Stop enumeration
                 }
             }
         }
-        windows::Win32::Foundation::TRUE // Continue
+        ::windows::Win32::Foundation::TRUE // Continue
     }
 
     unsafe {
@@ -173,7 +173,7 @@ fn get_aumid_for_pid(pid: u32) -> Option<String> {
         let _ = GetApplicationUserModelId(
             handle,
             &mut len,
-            windows::core::PWSTR(std::ptr::null_mut()),
+            ::windows::core::PWSTR(std::ptr::null_mut()),
         );
 
         if len == 0 {
@@ -185,7 +185,7 @@ fn get_aumid_for_pid(pid: u32) -> Option<String> {
         let err = GetApplicationUserModelId(
             handle,
             &mut len,
-            windows::core::PWSTR(buf.as_mut_ptr()),
+            ::windows::core::PWSTR(buf.as_mut_ptr()),
         );
         let _ = CloseHandle(handle);
 
@@ -227,7 +227,7 @@ fn activate_via_aumid(aumid: &str) -> bool {
         // Ignore S_FALSE / RPC_E_CHANGED_MODE — thread may already have COM.
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
 
-        let manager: windows::core::Result<IApplicationActivationManager> =
+        let manager: ::windows::core::Result<IApplicationActivationManager> =
             CoCreateInstance(&CLSID_AAM, None, CLSCTX_ALL);
 
         let manager = match manager {
@@ -239,11 +239,11 @@ fn activate_via_aumid(aumid: &str) -> bool {
         };
 
         // &HSTRING implements Param<PCWSTR>; PWSTR(null) for empty arguments.
-        let aumid_h = windows::core::HSTRING::from(aumid);
+        let aumid_h = ::windows::core::HSTRING::from(aumid);
         // ActivateApplication returns Result<u32> where the u32 is the new PID.
         match manager.ActivateApplication(
             &aumid_h,
-            windows::core::PWSTR(std::ptr::null_mut()),
+            ::windows::core::PWSTR(std::ptr::null_mut()),
             ACTIVATEOPTIONS(0),
         ) {
             Ok(new_pid) => {
@@ -316,7 +316,7 @@ fn is_window_on_current_desktop(hwnd: HWND) -> bool {
 
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-        let mgr: windows::core::Result<IVirtualDesktopManager> =
+        let mgr: ::windows::core::Result<IVirtualDesktopManager> =
             CoCreateInstance(&CLSID_VDM, None, CLSCTX_ALL);
         match mgr {
             Ok(m) => m.IsWindowOnCurrentVirtualDesktop(hwnd)

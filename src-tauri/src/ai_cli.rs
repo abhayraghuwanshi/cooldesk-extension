@@ -32,6 +32,7 @@ lazy_static::lazy_static! {
 // `compute_enriched_path`, called from `ENRICHED_PATH`'s initializer, even
 // though both were `#[cfg(not(windows))]`). Gating the whole macro invocation
 // itself is the reliable way to exclude a `lazy_static!` item on one platform.
+#[cfg(not(target_os = "windows"))]
 lazy_static::lazy_static! {
     /// PATH as the user's login shell would build it, computed once and cached.
     ///
