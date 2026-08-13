@@ -265,7 +265,7 @@
   white-space: nowrap;
 }
 
-/* ---- Controls: collapse to handle / back to full app ---- */
+/* ---- Controls: dock to side / back to full app / collapse to handle ---- */
 .dockbar-controls {
   display: flex;
   align-items: center;

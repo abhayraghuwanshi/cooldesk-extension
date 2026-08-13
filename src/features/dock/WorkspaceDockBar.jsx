@@ -1,4 +1,4 @@
-import { faChevronDown, faChevronUp, faCode, faDesktop, faFileLines, faFolderOpen, faUpRightAndDownLeftFromCenter } from '@fortawesome/free-solid-svg-icons';
+import { faChevronDown, faChevronUp, faCode, faDesktop, faFileLines, faFolderOpen, faTableColumns, faUpRightAndDownLeftFromCenter } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import logo from '../../../logo-2.png';
@@ -180,6 +180,22 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
   }, []);
   useEffect(() => () => { if (bounceTimerRef.current) clearTimeout(bounceTimerRef.current); }, []);
 
+  // Bar mode has no way back to a vertical layout except backing out to full
+  // window first — this jumps straight from bottom/top bar to a side dock.
+  // The bar doesn't track which vertical edge was last used (dock state's
+  // `side` field is overwritten by "top"/"bottom" while docked as a bar), so
+  // this defaults to the right edge, same as the header's layout cycle does
+  // in the same situation.
+  const dockToSide = useCallback(async () => {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('dock_enable', { mode: 'drawer', side: 'right' });
+      await invoke('dock_expand');
+    } catch (e) {
+      console.error('[DockBar] dock_enable/dock_expand failed:', e);
+    }
+  }, []);
+
   return (
     <div className={`dockbar dockbar--${side}`} role="toolbar" aria-label="Workspace dock">
       <div className="dockbar-shelf">
@@ -254,10 +270,10 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
         <div className="dockbar-controls">
           <button
             className="dockbar-ctrl"
-            onClick={() => invokeDock('dock_collapse')}
-            title="Hide to edge handle"
+            onClick={dockToSide}
+            title="Dock to side"
           >
-            <FontAwesomeIcon icon={side === 'top' ? faChevronUp : faChevronDown} />
+            <FontAwesomeIcon icon={faTableColumns} />
           </button>
           <button
             className="dockbar-ctrl"
@@ -265,6 +281,13 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
             title="Back to full app"
           >
             <FontAwesomeIcon icon={faUpRightAndDownLeftFromCenter} />
+          </button>
+          <button
+            className="dockbar-ctrl"
+            onClick={() => invokeDock('dock_collapse')}
+            title="Hide to edge handle"
+          >
+            <FontAwesomeIcon icon={side === 'top' ? faChevronUp : faChevronDown} />
           </button>
         </div>
       </div>

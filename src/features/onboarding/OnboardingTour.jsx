@@ -384,7 +384,7 @@ function StepMoves() {
         <div className="ob-shortcut"><Kbd>Shift</Kbd><span>+ scroll wheel does the same as the swipe, on a mouse</span></div>
       </div>
 
-      <p className="ob-note">That's it. Everything else you'll find as you go.</p>
+      <p className="ob-note">That's it. Everything else you'll find as you go — and anything from this tour (look, hotkey, and more) can be changed later in Settings.</p>
     </div>
   );
 }

@@ -3701,6 +3701,77 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   min-height: 0;
 }
 
+/* Per-column accent (hover ◍ chip → Card color). Same --card-accent grammar
+   as the workspace card and the per-widget --tile-accent: a tint layered over
+   each column's own glass base so the hue reads without hurting contrast. */
+.overview-left-column,
+.overview-activity-column {
+  position: relative;
+}
+
+.overview-left-column.has-accent {
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--card-accent) 20%, transparent),
+      color-mix(in srgb, var(--card-accent) 6%, transparent)),
+    rgba(11, 11, 14, 0.35);
+}
+
+.overview-activity-column.has-accent {
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--card-accent) 20%, transparent),
+      color-mix(in srgb, var(--card-accent) 6%, transparent)),
+    rgba(11, 11, 14, 0.55);
+}
+
+/* Floating trigger — hidden until the column is hovered, portaled popover
+   handles the actual swatch picking (see ColumnColorChip in
+   OverviewDashboard.jsx). */
+.overview-column-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  border-radius: 8px;
+  background: rgba(12, 14, 18, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 0.15s, transform 0.15s;
+  pointer-events: none;
+}
+
+.overview-left-column:hover .overview-column-controls,
+.overview-activity-column:hover .overview-column-controls {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.overview-column-color-chip {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: rgba(230, 234, 240, 0.6);
+  font-size: var(--font-sm, 12px);
+  line-height: 1.2;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.overview-column-color-chip:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.overview-column-color-chip.active {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
 /* Feed scroll behavior — the wide two-pane defaults. The card fills its fixed
    height frame and the list scrolls inside it. Overridden below 600px so the
    whole feed flows into the single page scroll instead. */

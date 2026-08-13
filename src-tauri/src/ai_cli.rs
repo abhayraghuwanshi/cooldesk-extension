@@ -23,6 +23,69 @@ use tokio::process::{Child, Command};
 lazy_static::lazy_static! {
     /// Live runs, so a slow agent can be cancelled from the UI.
     static ref RUNNING: Mutex<HashMap<String, Child>> = Mutex::new(HashMap::new());
+
+    /// PATH as the user's login shell would build it, computed once and cached.
+    ///
+    /// A macOS (or Linux) app launched from Finder/Dock/Spotlight is a child of
+    /// launchd, not of a shell, so it only inherits launchd's minimal PATH
+    /// (`/usr/bin:/bin:/usr/sbin:/sbin` plus a couple of Apple entries). Every
+    /// directory a user adds themselves — nvm, a Homebrew prefix, `~/.local/bin`
+    /// where `npm install -g` and plenty of installers put things — is added by
+    /// `.zshrc`/`.zprofile`, which nothing but an interactive login shell ever
+    /// sources. Windows has no equivalent gap: PATH there is a registry-wide
+    /// environment variable every process inherits, which is why this only
+    /// shows up on macOS/Linux ("works on Windows, not on Mac").
+    #[cfg(not(target_os = "windows"))]
+    static ref ENRICHED_PATH: String = compute_enriched_path();
+}
+
+/// Ask `$SHELL -ilc` for its PATH and merge it in front of launchd's, so
+/// directories a dotfile adds win over the bare-bones default without losing
+/// anything already present. Run on a side thread with a timeout: an rc file
+/// that hangs (network mount, slow `nvm`/`conda` init) must not freeze the
+/// whole app on first launch — it just falls back to whatever PATH we started
+/// with.
+#[cfg(not(target_os = "windows"))]
+fn compute_enriched_path() -> String {
+    let current = std::env::var("PATH").unwrap_or_default();
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let result = std::process::Command::new(&shell)
+            .args(["-ilc", "echo -n \"$PATH\""])
+            .output();
+        let _ = tx.send(result);
+    });
+
+    let shell_path = rx
+        .recv_timeout(std::time::Duration::from_secs(3))
+        .ok()
+        .and_then(|r| r.ok())
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    match shell_path {
+        Some(shell_path) => merge_paths(&shell_path, &current),
+        None => current,
+    }
+}
+
+/// Concatenate two PATHs, keeping first occurrence order (`a` wins ties).
+#[cfg(not(target_os = "windows"))]
+fn merge_paths(a: &str, b: &str) -> String {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for dir in std::env::split_paths(a).chain(std::env::split_paths(b)) {
+        if seen.insert(dir.clone()) {
+            out.push(dir);
+        }
+    }
+    std::env::join_paths(out)
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| a.to_string())
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -80,7 +143,12 @@ fn resolve_bin(bin: &str) -> String {
         return bin.to_string();
     }
 
-    let Ok(path) = std::env::var("PATH") else {
+    #[cfg(target_os = "windows")]
+    let path = std::env::var("PATH").ok();
+    #[cfg(not(target_os = "windows"))]
+    let path = Some(ENRICHED_PATH.clone());
+
+    let Some(path) = path else {
         return bin.to_string();
     };
     let dirs: Vec<_> = std::env::split_paths(&path).collect();
@@ -225,6 +293,11 @@ pub async fn ai_cli_run(app: AppHandle, id: String, spec: AiCliSpec) -> Result<(
     let mut cmd = {
         let mut c = Command::new(&bin);
         c.args(&spec.args);
+        // Same reasoning as `resolve_bin`: this process only has launchd's
+        // bare PATH, and the child needs the login shell's version too, both
+        // to run at all (`claude` is a node shebang script) and to find
+        // whatever it shells out to internally (git, node, ripgrep, …).
+        c.env("PATH", &*ENRICHED_PATH);
         c
     };
 

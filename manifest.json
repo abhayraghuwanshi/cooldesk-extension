@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "New Tab by Cooldesk",
-  "version": "2.0.8",
+  "version": "2.0.9",
   "icons": {
     "16": "logo-2.png",
     "32": "logo-2.png",

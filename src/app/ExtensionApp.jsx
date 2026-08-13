@@ -253,6 +253,16 @@ export default function ExtensionApp() {
               onComplete={completeOnboarding}
               onSkip={skipOnboarding}
               autoPlay={!isManualStart}
+              wallpaperEnabled={wallpaperEnabled}
+              wallpaperUrl={wallpaperUrl}
+              onWallpaperEnabledChange={(v) => {
+                setWallpaperEnabled(v);
+                localStorage.setItem('wallpaperEnabled', String(v));
+              }}
+              onWallpaperUrlChange={(v) => {
+                setWallpaperUrl(v);
+                localStorage.setItem('wallpaperUrl', v);
+              }}
             />
           </Suspense>
         )}

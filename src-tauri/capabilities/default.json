@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Core permissions (window, event, app, …) for every CoolDesk window.",
+  "windows": [
+    "main",
+    "spotlight",
+    "handle",
+    "webapp-*"
+  ],
+  "permissions": [
+    "core:default"
+  ]
+}

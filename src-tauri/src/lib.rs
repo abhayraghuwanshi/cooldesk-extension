@@ -590,22 +590,33 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
             let _ = main.set_decorations(false);
             let _ = main.set_resizable(false);
             let _ = main.set_always_on_top(true);
+            let _ = main.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w as u32, height: h as u32 }));
+            let _ = main.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
             // Same reasoning as the handle: a dock/taskbar panel that vanishes
             // when you switch Spaces (or when some other app goes fullscreen)
             // isn't a dock. Undone in `disable_dock` once the window goes back
-            // to being a normal per-Space document window.
+            // to being a normal per-Space document window. Also clamps a
+            // horizontal bar back inside the visible frame so it doesn't end
+            // up rendered (and unclickable) underneath the real macOS Dock or
+            // menu bar — see `clamp_to_visible_frame`'s doc comment.
             //
             // `expand_drawer` can run off the main thread (`dock_expand` is an
             // async command, dispatched on a tokio worker), but this reaches
             // into the raw NSWindow via objc2 — AppKit asserts/crashes
-            // (EXC_BREAKPOINT) if that happens off the main thread.
+            // (EXC_BREAKPOINT) if that happens off the main thread. Dispatched
+            // after the size/position calls above so `clamp_to_visible_frame`
+            // reads the frame they just set.
             #[cfg(target_os = "macos")]
             {
                 let main_for_appkit = main.clone();
-                let _ = app.run_on_main_thread(move || dock::allow_over_fullscreen_spaces(&main_for_appkit));
+                let side_for_appkit = st.side.clone();
+                let _ = app.run_on_main_thread(move || {
+                    dock::allow_over_fullscreen_spaces(&main_for_appkit);
+                    if horizontal {
+                        dock::clamp_to_visible_frame(&main_for_appkit, &side_for_appkit);
+                    }
+                });
             }
-            let _ = main.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w as u32, height: h as u32 }));
-            let _ = main.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
             let _ = main.show();
             let _ = main.set_focus();
             log::info!("[Dock] Panel expanded on {}: x={x} y={y} w={w} h={h}", st.side);
@@ -642,20 +653,6 @@ fn collapse_drawer(app: &tauri::AppHandle, st: &DockState) {
                 (x, y, handle_w, handle_h)
             };
             let _ = handle.set_always_on_top(true);
-            // Without this, the handle stays pinned to whichever Space/virtual
-            // desktop (including another app's fullscreen Space) it was last
-            // shown on — switch away and it (and the panel it opens) is simply
-            // gone until you switch back. macOS-only.
-            //
-            // Dispatched via `run_on_main_thread`: this reaches into the raw
-            // NSWindow via objc2, which AppKit requires happen on the main
-            // thread — some callers (e.g. the fullscreen watcher) invoke
-            // `collapse_drawer` off it.
-            #[cfg(target_os = "macos")]
-            {
-                let handle_for_appkit = handle.clone();
-                let _ = app.run_on_main_thread(move || dock::allow_over_fullscreen_spaces(&handle_for_appkit));
-            }
             // Windows clamps every top-level window to a minimum tracking size
             // (SM_CXMINTRACK ≈ 136px wide, SM_CYMINTRACK ≈ 39px tall, DPI-scaled)
             // via WM_GETMINMAXINFO. A vertical handle asks for 22px wide, which
@@ -668,6 +665,30 @@ fn collapse_drawer(app: &tauri::AppHandle, st: &DockState) {
             let _ = handle.set_min_size(Some(target.clone()));
             let _ = handle.set_size(target);
             let _ = handle.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
+            // Without this, the handle stays pinned to whichever Space/virtual
+            // desktop (including another app's fullscreen Space) it was last
+            // shown on — switch away and it (and the panel it opens) is simply
+            // gone until you switch back. Also clamps a horizontal tab back
+            // inside the visible frame so it doesn't render underneath the
+            // real macOS Dock or menu bar — unclickable, with no other way to
+            // re-expand the drawer. macOS-only.
+            //
+            // Dispatched via `run_on_main_thread`, after the size/position
+            // calls above so `clamp_to_visible_frame` reads the frame they
+            // just set: this reaches into the raw NSWindow via objc2, which
+            // AppKit requires happen on the main thread — some callers (e.g.
+            // the fullscreen watcher) invoke `collapse_drawer` off it.
+            #[cfg(target_os = "macos")]
+            {
+                let handle_for_appkit = handle.clone();
+                let side_for_appkit = st.side.clone();
+                let _ = app.run_on_main_thread(move || {
+                    dock::allow_over_fullscreen_spaces(&handle_for_appkit);
+                    if horizontal {
+                        dock::clamp_to_visible_frame(&handle_for_appkit, &side_for_appkit);
+                    }
+                });
+            }
             let _ = handle.show();
         }
     }
@@ -679,7 +700,13 @@ fn collapse_drawer(app: &tauri::AppHandle, st: &DockState) {
 /// Turn on drawer mode: persist state and show the handle (collapsed).
 /// `thickness` is the panel width for vertical sides, the bar height for
 /// top/bottom; the other dimension's stored value is preserved.
-fn enable_drawer(app: &tauri::AppHandle, side: String, thickness: u32) -> DockState {
+///
+/// `force_visible`: skip the visibility check below and always expand. Used
+/// by the tray's explicit per-layout recovery items — if the app is
+/// genuinely stuck (e.g. `main.is_visible()` wrongly reporting hidden), the
+/// point of those items is to guarantee the user actually sees the window,
+/// not to collapse it to a handle they may not be able to find either.
+fn enable_drawer(app: &tauri::AppHandle, side: String, thickness: u32, force_visible: bool) -> DockState {
     let prev = load_dock_state(app);
     let horizontal = dock_is_horizontal(&side);
     let state = DockState {
@@ -695,10 +722,11 @@ fn enable_drawer(app: &tauri::AppHandle, side: String, thickness: u32) -> DockSt
     // hiding the panel down to the handle. Hiding it here also raced the blur
     // handler, which is how "release to full window, then go back to the side
     // dock" used to end up with no panel at all — just the edge tab.
-    let visible = app
-        .get_webview_window("main")
-        .and_then(|w| w.is_visible().ok())
-        .unwrap_or(false);
+    let visible = force_visible
+        || app
+            .get_webview_window("main")
+            .and_then(|w| w.is_visible().ok())
+            .unwrap_or(false);
     if visible {
         expand_drawer(app, &state);
     } else {
@@ -822,7 +850,7 @@ async fn dock_enable(
     let state = if mode == "reserve" {
         apply_dock(&app, side, thickness)?
     } else {
-        enable_drawer(&app, side, thickness)
+        enable_drawer(&app, side, thickness, false)
     };
     emit_dock_state(&app, &state);
     Ok(state)
@@ -1361,7 +1389,7 @@ fn toggle_spotlight(app: tauri::AppHandle) {
             {
                 let window_for_appkit = window.clone();
                 let _ = app.run_on_main_thread(move || {
-                    dock::allow_over_fullscreen_spaces(&window_for_appkit);
+                    dock::promote_spotlight_over_fullscreen_spaces(&window_for_appkit);
                     dock::show_over_fullscreen_spaces(&window_for_appkit);
                 });
             }
@@ -2781,11 +2809,26 @@ pub fn run() {
           show_main_window(app.handle());
       }
 
-      // System tray icon — lets users show/hide the window and quit cleanly
+      // System tray icon — lets users show/hide the window and quit cleanly.
+      // The three "layout_*" items exist specifically as an always-reachable
+      // recovery path: if the window ends up stuck (wrong layout, off-screen,
+      // occluded — a docked panel/handle rendered behind the real macOS Dock
+      // was one real case of this), the in-app layout controls live inside
+      // that same possibly-unreachable window. The tray icon doesn't, so each
+      // layout gets its own explicit, unambiguous entry here rather than a
+      // single toggle whose effect depends on state the user may not be able
+      // to see.
       let show_item = MenuItem::with_id(app, "show", "Show CoolDesk", true, None::<&str>)?;
-      let dock_item = MenuItem::with_id(app, "toggle_dock", "Toggle Workspace Dock", true, None::<&str>)?;
+      let full_item = MenuItem::with_id(app, "layout_full", "Full Window", true, None::<&str>)?;
+      let side_item = MenuItem::with_id(app, "layout_side", "Side Dock", true, None::<&str>)?;
+      let bar_item = MenuItem::with_id(app, "layout_bar", "Bottom Bar", true, None::<&str>)?;
       let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-      let tray_menu = Menu::with_items(app, &[&show_item, &dock_item, &quit_item])?;
+      let sep1 = tauri::menu::PredefinedMenuItem::separator(app)?;
+      let sep2 = tauri::menu::PredefinedMenuItem::separator(app)?;
+      let tray_menu = Menu::with_items(
+          app,
+          &[&show_item, &sep1, &full_item, &side_item, &bar_item, &sep2, &quit_item],
+      )?;
 
       TrayIconBuilder::new()
           .icon(app.default_window_icon().unwrap().clone())
@@ -2801,15 +2844,22 @@ pub fn run() {
                       show_main_window(app);
                   }
               }
-              "toggle_dock" => {
-                  // Toggle the drawer handle on/off.
-                  let state = load_dock_state(app);
-                  let new_state = if state.enabled {
-                      disable_dock(app)
-                  } else {
-                      enable_drawer(app, state.side.clone(), dock_thickness(&state))
-                  };
-                  emit_dock_state(app, &new_state);
+              "layout_full" => {
+                  let state = disable_dock(app);
+                  emit_dock_state(app, &state);
+              }
+              "layout_side" => {
+                  let prev = load_dock_state(app);
+                  // Preserve whichever vertical edge was last used; default to
+                  // right the same way the in-app layout cycle does.
+                  let side = if prev.side == "left" { "left" } else { "right" }.to_string();
+                  let state = enable_drawer(app, side, prev.width, true);
+                  emit_dock_state(app, &state);
+              }
+              "layout_bar" => {
+                  let prev = load_dock_state(app);
+                  let state = enable_drawer(app, "bottom".to_string(), prev.bar_height, true);
+                  emit_dock_state(app, &state);
               }
               "quit" => {
                   app.exit(0);
@@ -2879,7 +2929,7 @@ pub fn run() {
       // fullscreen app until a second, later toggle happened to win the race.
       #[cfg(target_os = "macos")]
       if let Some(spotlight) = app.get_webview_window("spotlight") {
-          dock::allow_over_fullscreen_spaces(&spotlight);
+          dock::promote_spotlight_over_fullscreen_spaces(&spotlight);
       }
 
       Ok(())
