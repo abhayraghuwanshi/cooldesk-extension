@@ -1,6 +1,6 @@
 cask "cooldesk" do
-  version "1.3.0"
-  sha256 "18987bd1ae6ebb657530752ac8afdf9e3a0d0972f2ef71351c673a2d2ce4038e"
+  version "2.0.8"
+  sha256 "958b8c3431c8e1825e091736924dd2906c4744fd22c4948a72215a31f4992c86"
 
   url "https://github.com/abhayraghuwanshi/cooldesk-extension/releases/download/v#{version}/CoolDesk_#{version}_aarch64.dmg",
       verified: "github.com/abhayraghuwanshi/cooldesk-extension/"
@@ -16,8 +16,9 @@ cask "cooldesk" do
 
   # The DMG is not yet notarized. Clear the quarantine flag on install so
   # Gatekeeper does not block first launch — this mirrors the bundled
-  # "Fix Mac Install.command" and the CI repack workaround. Remove this block
-  # once the app is signed + notarized (and submitted to homebrew/cask).
+  # "① RUN THIS FIRST — Fix & Open CoolDesk.command" and the CI repack
+  # workaround. Remove this block once the app is signed + notarized (and
+  # submitted to homebrew/cask).
   postflight do
     system_command "/usr/bin/xattr",
                    args: ["-cr", "#{appdir}/CoolDesk.app"],

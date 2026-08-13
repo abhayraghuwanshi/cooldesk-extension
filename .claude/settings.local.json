@@ -78,7 +78,8 @@
       "Bash(sort -u -t'\"' -k2)",
       "Bash(TAURI_ENV_PLATFORM=windows npx vite build)",
       "Bash(git rm *)",
-      "Bash(git restore *)"
+      "Bash(git restore *)",
+      "Bash(gh release *)"
     ],
     "deny": [],
     "ask": [],

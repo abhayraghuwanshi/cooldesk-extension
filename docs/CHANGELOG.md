@@ -2,6 +2,23 @@
 
 All notable changes to CoolDesk (desktop app + Chrome extension) are documented here.
 
+## [2.0.8] — 2026-08-04
+
+### Added
+- **Terminal AI agents inside the spotlight** (`src-tauri/src/ai_cli.rs`, `src/features/spotlight/useAiCli.js`, `aiAdapters.js`, `AgentMarkdown.jsx`, `CopyButton.jsx`): a new agent mode runs Claude Code, opencode, or Codex CLI headlessly and streams the reply straight into the search panel, with a switcher to pick the adapter, a "New chat" control to drop context, and a history of past prompts. The Rust side only knows how to spawn a binary and stream stdout/stderr as Tauri events — which CLI, its args, and whether the prompt goes on argv or stdin is config in `aiAdapters.js`, so adding a new terminal agent is a config entry, not a Rust change. `resolve_bin` walks PATHEXT across every PATH directory on Windows so npm's `.cmd` shim is found instead of the extensionless sh script that Win32 can't start (os error 193).
+- **Add-to-workspace via search**: workspace cards no longer own a modal or a search box of their own — clicking their add affordance puts the shared spotlight into "add mode" (`addTarget`/`onAddItem`/`onExitAddMode` props on `GlobalSpotlight`), so the same index used to find a tab to jump to is used to file that tab into a workspace. Picking a result adds it and keeps the panel open for filing several items in a row; Escape exits add mode before it closes the spotlight.
+- **Remove items from a workspace card** (`WorkspaceCard.jsx`): every url/app chip now has a × to remove it via a filtered save, in both the compact icon and expanded list layouts. Items that came from a project's committed `.cooldesk` manifest (carrying `_cd`) have no ×, since removing them here wouldn't touch the manifest they actually live in.
+
+### Changed
+- **Agent adapter switcher redesigned** (`GlobalSpotlight.jsx`): the row of adapter chips became a single dropdown so it fits alongside the new "New chat" and history controls without crowding the header.
+
+### Removed
+- **`AIWorkspaceManager` and its whole tree** (`src/features/ai-workspace/`, ~2,700 lines: `AIWorkspaceManager.jsx`, `AIPromptBar.jsx`, `AISuggestionPanel.jsx`, `WorkspaceEditor.jsx`, `WorkspaceSwitcher.jsx`, `useAISuggestions.js`, `useBrowserData.js`, `useMemory.js`, `useWorkspaceAgent.js`) — its own internal sidebar was the source of a stuck/unresponsive panel; deleting the component in favour of spotlight add-mode above removes the bug along with the code.
+- Duplicate curated-wallpaper URL lists in `App.jsx`, `ExtensionApp.jsx`, `ThemesTab.jsx`, and `OnboardingTour.jsx` consolidated into `src/shared/data/wallpapers.js`.
+
+### Fixed
+- Stray test scripts and docs moved into `scripts/` and `docs/` (`test_*.js` → `scripts/`, `CHANGELOG.md`/`DEPLOY.md`/`SECURITY_REVIEW.md` → `docs/`) instead of living at the repo root.
+
 ## [2.0.7] — 2026-08-01
 
 Desktop app and Chrome extension now share one version number.

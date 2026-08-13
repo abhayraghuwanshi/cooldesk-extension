@@ -432,9 +432,10 @@ jobs:
           DMG_URL=$(gh release view "$TAG" --repo "$REPO" --json assets \
             --jq '.assets[] | select(.name | endswith("aarch64.dmg")) | .browserDownloadUrl' | head -1)
           if [ -z "$DMG_URL" ]; then
-            echo "No aarch64 DMG in release — skipping cask update"
-            exit 0
+            echo "ERROR: no aarch64 DMG found in release $TAG — cannot update cask"
+            exit 1
           fi
+          echo "==> DMG_URL=$DMG_URL"
 
           curl -fsSL --retry 5 --retry-all-errors "$DMG_URL" -o cooldesk.dmg
           SHA=$(sha256sum cooldesk.dmg | cut -d' ' -f1)
@@ -442,11 +443,22 @@ jobs:
 
           git fetch origin "$DEFAULT_BRANCH"
           git checkout "$DEFAULT_BRANCH"
+          echo "==> checked out $(git rev-parse --abbrev-ref HEAD) at $(git rev-parse HEAD)"
+
+          CURRENT_VERSION=$(grep -E '^\s*version "' Casks/cooldesk.rb | head -1)
+          echo "==> before: $CURRENT_VERSION"
 
           sed -i -E "s/^  version \".*\"/  version \"$VERSION\"/" Casks/cooldesk.rb
           sed -i -E "s/^  sha256 \".*\"/  sha256 \"$SHA\"/" Casks/cooldesk.rb
 
+          NEW_VERSION=$(grep -E '^\s*version "' Casks/cooldesk.rb | head -1)
+          echo "==> after:  $NEW_VERSION"
+
           if git diff --quiet Casks/cooldesk.rb; then
+            if [ "$CURRENT_VERSION" != "  version \"$VERSION\"" ]; then
+              echo "ERROR: sed made no change to Casks/cooldesk.rb but version doesn't match $VERSION — regex likely didn't match the file format"
+              exit 1
+            fi
             echo "Cask already up to date — nothing to commit"
             exit 0
           fi
@@ -456,3 +468,15 @@ jobs:
           git add Casks/cooldesk.rb
           git commit -m "homebrew: update cask to $VERSION"
           git push origin "HEAD:$DEFAULT_BRANCH"
+          echo "==> pushed $(git rev-parse HEAD) to $DEFAULT_BRANCH"
+
+          # Verify the push actually landed on the remote — a rejected/no-op push
+          # under branch protection can otherwise pass silently.
+          git fetch origin "$DEFAULT_BRANCH"
+          REMOTE_VERSION=$(git show "origin/$DEFAULT_BRANCH:Casks/cooldesk.rb" | grep -E '^\s*version "' | head -1)
+          if [ "$REMOTE_VERSION" != "  version \"$VERSION\"" ]; then
+            echo "ERROR: push did not land — origin/$DEFAULT_BRANCH still shows: $REMOTE_VERSION"
+            echo "This usually means branch protection rejected the push despite git reporting success."
+            exit 1
+          fi
+          echo "==> verified: origin/$DEFAULT_BRANCH now has $REMOTE_VERSION"
