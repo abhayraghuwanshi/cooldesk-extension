@@ -5,13 +5,13 @@
 // `find_hwnd_by_bounds`) that dispatches here.
 
 use super::*;
-use windows::Win32::Foundation::HWND;
-use windows::Win32::UI::WindowsAndMessaging::{
+use ::windows::Win32::Foundation::HWND;
+use ::windows::Win32::UI::WindowsAndMessaging::{
     BringWindowToTop, EnumWindows, GetAncestor,
     GetForegroundWindow, GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
     SetForegroundWindow, ShowWindow, SwitchToThisWindow, GA_ROOT, SW_RESTORE, SW_SHOW,
 };
-use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+use ::windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 
 /// Run a foreground-changing sequence with this thread temporarily attached to
 /// the input queue of whichever thread currently owns the foreground.
@@ -122,7 +122,7 @@ pub fn focus_window_by_pid(pid: u32, process_name: Option<&str>) -> FocusResult<
 }
 
 fn try_focus_pid(pid: u32) -> bool {
-    use windows::Win32::Foundation::LPARAM;
+    use ::windows::Win32::Foundation::LPARAM;
 
     struct Ctx {
         target_pid: u32,
@@ -161,9 +161,9 @@ fn try_focus_pid(pid: u32) -> bool {
 
 /// Returns the AUMID for a packaged (MSIX) process, or None for plain Win32 apps.
 fn get_aumid_for_pid(pid: u32) -> Option<String> {
-    use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::Storage::Packaging::Appx::GetApplicationUserModelId;
-    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    use ::windows::Win32::Foundation::CloseHandle;
+    use ::windows::Win32::Storage::Packaging::Appx::GetApplicationUserModelId;
+    use ::windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
 
     unsafe {
         let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
@@ -209,11 +209,11 @@ fn get_aumid_for_pid(pid: u32) -> Option<String> {
 /// new window rather than focusing the existing one. Prefer Win32
 /// SetForegroundWindow for a specific known HWND; use this only as a fallback.
 fn activate_via_aumid(aumid: &str) -> bool {
-    use windows::Win32::System::Com::{
+    use ::windows::Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
     };
-    use windows::Win32::UI::Shell::{IApplicationActivationManager, ACTIVATEOPTIONS};
-    use windows::core::GUID;
+    use ::windows::Win32::UI::Shell::{IApplicationActivationManager, ACTIVATEOPTIONS};
+    use ::windows::core::GUID;
 
     // CLSID_ApplicationActivationManager = {45BA127D-10A8-46EA-8AB7-56EA9078943C}
     const CLSID_AAM: GUID = GUID {
@@ -300,11 +300,11 @@ fn foreground_matches_target(target_hwnd: HWND, target_pid: Option<u32>) -> bool
 /// Check whether a window lives on the current virtual desktop.
 /// Returns true as a safe default if the COM query fails.
 fn is_window_on_current_desktop(hwnd: HWND) -> bool {
-    use windows::Win32::System::Com::{
+    use ::windows::Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
     };
-    use windows::Win32::UI::Shell::IVirtualDesktopManager;
-    use windows::core::GUID;
+    use ::windows::Win32::UI::Shell::IVirtualDesktopManager;
+    use ::windows::core::GUID;
 
     // CLSID_VirtualDesktopManager = {AA509086-5CA9-4C25-8F95-589D3C07B48A}
     const CLSID_VDM: GUID = GUID {
@@ -403,8 +403,8 @@ fn focus_window_aggressive(hwnd: HWND, target_pid: Option<u32>) -> bool {
 /// top-level window owned by `pid`. WM_CLOSE lets the app run its own shutdown
 /// (save prompts etc.) instead of force-killing the process.
 pub fn close_window(hwnd: Option<isize>, pid: Option<u32>) -> FocusResult<()> {
-    use windows::Win32::Foundation::{BOOL, HWND, LPARAM, WPARAM};
-    use windows::Win32::UI::WindowsAndMessaging::{
+    use ::windows::Win32::Foundation::{BOOL, HWND, LPARAM, WPARAM};
+    use ::windows::Win32::UI::WindowsAndMessaging::{
         EnumWindows, GetWindowTextLengthW, GetWindowThreadProcessId, IsWindowVisible,
         PostMessageW, WM_CLOSE,
     };
@@ -456,8 +456,8 @@ pub fn close_window(hwnd: Option<isize>, pid: Option<u32>) -> FocusResult<()> {
 /// Find the OS window handle for a browser window by matching its screen bounds.
 /// Used to target a specific browser window precisely when multiple windows are open.
 pub fn find_hwnd_by_bounds(process_name: &str, x: i32, y: i32, width: i32, height: i32) -> Option<isize> {
-    use windows::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
-    use windows::Win32::UI::WindowsAndMessaging::{
+    use ::windows::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
+    use ::windows::Win32::UI::WindowsAndMessaging::{
         EnumWindows, GetWindowRect, GetWindowThreadProcessId, IsWindowVisible,
     };
     use sysinfo::{ProcessRefreshKind, System};
@@ -502,8 +502,8 @@ pub fn find_hwnd_by_bounds(process_name: &str, x: i32, y: i32, width: i32, heigh
         // On Windows 10/11, GetWindowRect includes the invisible DWM shadow/extended frame
         // (~7px on each side) while Chrome's chrome.windows.get() reports visible bounds.
         // DWMWA_EXTENDED_FRAME_BOUNDS returns the actual visible rect in physical pixels.
-        use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
-        use windows::Win32::UI::HiDpi::GetDpiForWindow;
+        use ::windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
+        use ::windows::Win32::UI::HiDpi::GetDpiForWindow;
         let mut rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
         let got_rect = DwmGetWindowAttribute(
             hwnd,

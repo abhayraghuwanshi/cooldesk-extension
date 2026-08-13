@@ -23,7 +23,16 @@ use tokio::process::{Child, Command};
 lazy_static::lazy_static! {
     /// Live runs, so a slow agent can be cancelled from the UI.
     static ref RUNNING: Mutex<HashMap<String, Child>> = Mutex::new(HashMap::new());
+}
 
+// A separate `lazy_static!` invocation, not a second item in the block above:
+// `#[cfg]` on one item inside a shared `lazy_static!{}` block doesn't reliably
+// strip that item on the cfg'd-out platform — the macro's generated init code
+// can still reference it, which broke the Windows build (E0425: couldn't find
+// `compute_enriched_path`, called from `ENRICHED_PATH`'s initializer, even
+// though both were `#[cfg(not(windows))]`). Gating the whole macro invocation
+// itself is the reliable way to exclude a `lazy_static!` item on one platform.
+lazy_static::lazy_static! {
     /// PATH as the user's login shell would build it, computed once and cached.
     ///
     /// A macOS (or Linux) app launched from Finder/Dock/Spotlight is a child of
