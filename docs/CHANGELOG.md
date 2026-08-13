@@ -2,6 +2,23 @@
 
 All notable changes to CoolDesk (desktop app + Chrome extension) are documented here.
 
+## [2.0.9] — 2026-08-14
+
+### Fixed
+- **Sidebar/bottom-bar dock could get permanently stuck, unreachable from the in-app "back to full window" control.** The fullscreen-Spotlight-overlay work in 2.0.8 raised the main window to `NSStatusWindowLevel` and marked it `Stationary`/`IgnoresCycle` whenever the sidebar or taskbar dock was expanded — behavior meant only for the transient Spotlight overlay, not a window the user needs to keep interacting with. Split into `allow_over_fullscreen_spaces` (sidebar/handle — unchanged, safe scope) and `promote_spotlight_over_fullscreen_spaces` (Spotlight only) in `src-tauri/src/dock/mac.rs`.
+- **The docked taskbar bar (and its collapsed edge handle) could render underneath the real macOS Dock or menu bar** — invisible and unclickable, with no way back once collapsed. `drawer_geom` positions horizontal docks against the full monitor rect; `dock::clamp_to_visible_frame` (macOS-only, via `NSScreen.visibleFrame`) now nudges the bar/handle back above whatever the Dock or menu bar actually reserves.
+- **macOS installs showing "CoolDesk is damaged and can't be opened."** The DMG is still unsigned/unnotarized, so this can't be fully eliminated yet, but the bundled fix is no longer easy to miss: renamed to "① RUN THIS FIRST — Fix & Open CoolDesk.command", a README explaining why the dialog appears, and the DMG's Finder window is now arranged (`scripts/repack-mac-dmg.sh`) instead of an unstyled file listing.
+- **The Homebrew cask silently stopped tracking new releases** — stuck on 1.3.0 while the `homebrew` release job kept reporting success. The update script now fails loudly (with diagnostics) instead of no-oping, and verifies the push actually landed on `origin/master` before declaring victory.
+- AI CLI agents (Claude Code, opencode, Codex) spawned from the spotlight could fail to find a binary that works fine in Terminal, on macOS/Linux. The app only inherits launchd's bare `PATH`; `ai_cli.rs` now asks the user's login shell for its real `PATH` (nvm, Homebrew, `~/.local/bin`, etc.) once at startup and merges it in.
+
+### Added
+- **Dock-to-side button in the bottom/top taskbar bar** (`WorkspaceDockBar.jsx`): jumps straight to a vertical side dock without backing out to full window first.
+- **Explicit per-layout recovery options in the tray/menu-bar icon**: "Full Window", "Side Dock", and "Bottom Bar" now each have their own always-reachable menu item (replacing a single ambiguous "Toggle Workspace Dock") that forces the window visible regardless of whatever state it's currently stuck in.
+- **Per-column accent color on the Overview dashboard** (`OverviewDashboard.jsx`): a hover-revealed "card color" chip on both the widget-board and activity-feed columns, same swatch picker as widget tiles.
+
+### Changed
+- Onboarding tour's wallpaper step now works in extension mode too (`ExtensionApp.jsx` passes through the wallpaper enabled/url props it was missing).
+
 ## [2.0.8] — 2026-08-04
 
 ### Added
