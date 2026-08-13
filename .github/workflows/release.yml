@@ -345,7 +345,7 @@ jobs:
         run: |
           # Download the signed MSI from the release
           MSI_URL=$(gh release view "$TAG" --repo "$REPO" --json assets \
-            --jq '.assets[] | select(.name | endswith("_en-US.msi")) | .browserDownloadUrl' | head -1)
+            --jq '.assets[] | select(.name | endswith("_en-US.msi")) | .url' | head -1)
 
           if [ -z "$MSI_URL" ]; then
             echo "No MSI found in release — skipping R2 upload"
@@ -383,8 +383,8 @@ jobs:
         run: |
           ASSETS=$(gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets')
 
-          NSIS_URL=$(echo "$ASSETS" | jq -r '.[] | select(.name | endswith("-setup.exe")) | .browserDownloadUrl' | head -1)
-          MSI_URL=$(echo "$ASSETS" | jq -r '.[] | select(.name | endswith("_en-US.msi")) | .browserDownloadUrl' | head -1)
+          NSIS_URL=$(echo "$ASSETS" | jq -r '.[] | select(.name | endswith("-setup.exe")) | .url' | head -1)
+          MSI_URL=$(echo "$ASSETS" | jq -r '.[] | select(.name | endswith("_en-US.msi")) | .url' | head -1)
 
           echo "==> Hashing final signed artifacts from release URLs"
           if [ -n "$NSIS_URL" ]; then
@@ -430,7 +430,7 @@ jobs:
           VERSION="${TAG#v}"
 
           DMG_URL=$(gh release view "$TAG" --repo "$REPO" --json assets \
-            --jq '.assets[] | select(.name | endswith("aarch64.dmg")) | .browserDownloadUrl' | head -1)
+            --jq '.assets[] | select(.name | endswith("aarch64.dmg")) | .url' | head -1)
           if [ -z "$DMG_URL" ]; then
             echo "ERROR: no aarch64 DMG found in release $TAG — cannot update cask"
             exit 1
