@@ -49,3 +49,5 @@ src-tauri/Wix/
 sync-data/
 *.gguf
 sidecar/models/
+# Claude Code worktrees (local scratch checkouts, never committed)
+.claude/worktrees/
