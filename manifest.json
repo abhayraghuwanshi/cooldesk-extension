@@ -1,7 +1,8 @@
 {
   "manifest_version": 3,
   "name": "New Tab by Cooldesk",
-  "version": "2.0.9",
+  "description": "Turn scattered browsing into an organized productivity workspace.",
+  "version": "2.0.10",
   "icons": {
     "16": "logo-2.png",
     "32": "logo-2.png",

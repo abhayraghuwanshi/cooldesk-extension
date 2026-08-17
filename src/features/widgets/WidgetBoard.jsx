@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AccentColorPicker } from '../../shared/components/AccentColorPicker.jsx';
 import {
@@ -301,6 +301,8 @@ function CustomWidgetForm({ onCreate }) {
     const [height, setHeight] = useState('180');
     const [html, setHtml] = useState('');
     const [copied, setCopied] = useState(false);
+    const [importError, setImportError] = useState('');
+    const fileInputRef = useRef(null);
 
     const copyPrompt = () => {
         navigator.clipboard.writeText(CUSTOM_WIDGET_PROMPT).then(() => {
@@ -309,15 +311,43 @@ function CustomWidgetForm({ onCreate }) {
         }).catch(() => { });
     };
 
+    const importFile = (file) => {
+        if (!file) return;
+        setImportError('');
+        const reader = new FileReader();
+        reader.onload = () => {
+            setHtml(String(reader.result || ''));
+            setName(prev => prev || file.name.replace(/\.html?$/i, ''));
+        };
+        reader.onerror = () => setImportError('Could not read that file.');
+        reader.readAsText(file);
+    };
+
     return (
         <div className="wgb-custom-form">
             <p className="wgb-custom-hint">
                 1 — Copy the prompt and give it to any AI chat, describing your widget.<br />
-                2 — Paste the HTML file it returns below.
+                2 — Paste the HTML it returns below, or import a saved .html file.
             </p>
-            <button className="wgb-pill wgb-custom-copy" onClick={copyPrompt}>
-                {copied ? 'Prompt copied ✓' : '⧉ Copy AI prompt'}
-            </button>
+            <div className="wgb-custom-fields">
+                <button className="wgb-pill wgb-custom-copy" onClick={copyPrompt}>
+                    {copied ? 'Prompt copied ✓' : '⧉ Copy AI prompt'}
+                </button>
+                <button className="wgb-pill wgb-custom-import" onClick={() => fileInputRef.current?.click()}>
+                    ⇪ Import .html file
+                </button>
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".html,text/html"
+                    className="wgb-custom-file-input"
+                    onChange={e => {
+                        importFile(e.target.files?.[0]);
+                        e.target.value = '';
+                    }}
+                />
+            </div>
+            {importError && <p className="wgb-custom-error">{importError}</p>}
             <div className="wgb-custom-fields">
                 <input
                     className="wgb-picker-search wgb-custom-name"
@@ -406,7 +436,7 @@ function WidgetPicker({ board, theme, customs, onAdd, onRemove, onClose, onCreat
                     <button className="wgb-chip wgb-picker-close" title="Close" onClick={onClose}>✕</button>
                 </div>
                 <div className="wgb-picker-cats">
-                    {['All', ...WIDGET_CATEGORIES].map(c => (
+                    {['All', ...WIDGET_CATEGORIES, 'Custom'].map(c => (
                         <button
                             key={c}
                             className={`wgb-pill ${category === c ? 'active' : ''}`}
@@ -418,6 +448,15 @@ function WidgetPicker({ board, theme, customs, onAdd, onRemove, onClose, onCreat
                 </div>
                 <div className="wgb-picker-body">
                     <div className="wgb-picker-list">
+                        {category === 'Custom' && (
+                            <div
+                                className={`wgb-picker-row wgb-picker-create ${creating ? 'active' : ''}`}
+                                onClick={() => setSelectedId(NEW_CUSTOM)}
+                                onMouseEnter={() => setSelectedId(NEW_CUSTOM)}
+                            >
+                                <span className="wgb-picker-name">＋ Create your own widget</span>
+                            </div>
+                        )}
                         {list.map(w => {
                             const added = onBoard.has(w.id);
                             const active = selected && selected.id === w.id;

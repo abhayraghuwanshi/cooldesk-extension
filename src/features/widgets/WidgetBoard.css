@@ -633,9 +633,20 @@
     color: var(--text-secondary, #8b93a1);
 }
 
-.wgb-custom-copy {
+.wgb-custom-copy,
+.wgb-custom-import {
     align-self: flex-start;
     border: 1px solid rgba(160, 168, 180, 0.22);
+}
+
+.wgb-custom-file-input {
+    display: none;
+}
+
+.wgb-custom-error {
+    margin: -4px 0 0;
+    font-size: var(--font-xs, 11px);
+    color: #f0918b;
 }
 
 .wgb-custom-fields {

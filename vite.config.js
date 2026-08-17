@@ -43,6 +43,11 @@ export default defineConfig(({ command }) => {
             main: resolve(__dirname, 'index.html'),
             spotlight: resolve(__dirname, 'spotlight.html'),
             handle: resolve(__dirname, 'handle.html'),
+            // Sandboxed host page for user-authored widgets — only ever loaded
+            // at runtime via <iframe src="widget-sandbox.html">, so it has no
+            // static reference for Rollup to discover; must be a declared
+            // entry or it's silently missing from dist-tauri.
+            'widget-sandbox': resolve(__dirname, 'widget-sandbox.html'),
           },
           output: {
             // Split only libs already on the EAGER path into stable vendor chunks.
