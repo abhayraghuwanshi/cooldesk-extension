@@ -26,9 +26,9 @@ across your apps, tabs, notes, history and bookmarks — all stored locally.
 
 ## ✨ Screenshots
 
-> Drop your images into `docs/screenshots/` and they'll show up here.
 
-<!-- Replace these placeholders with your real images. Keep names or rename freely. -->
+
+
 
 | Spotlight search | Workspace view |
 | :--------------: | :------------: |
