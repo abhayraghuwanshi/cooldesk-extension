@@ -2,6 +2,14 @@
 
 All notable changes to CoolDesk (desktop app + Chrome extension) are documented here.
 
+## [2.0.10] — 2026-08-22
+
+### Fixed
+- **Clicking a running-but-backgrounded macOS app (Music, Notes, ...) from CoolDesk's dock, workspace cards, Tab Management, or the activity feed did nothing — even though the same app opened fine from the real Dock.** `focus_window_by_pid` (`src-tauri/src/focus/mac.rs`) tried AppleScript (`tell application "X" to activate`, then `System Events` frontmost-by-pid) to bring the app forward. Both can report success without ever presenting a window for an app that's running headless — e.g. Music launched at login as a background media/Continuity helper with zero open windows. The real Dock instead goes through LaunchServices' `open -a <name>`, which reliably triggers the app's reopen-and-show-main-window behavior; `focus_window_by_pid` now tries that first, falling back to AppleScript only if `open -a` can't resolve the app.
+- **A failed `focusApp` call was silently swallowed on most screens**, so a click just did nothing with no fallback. `workspaceActivityService.activate()` (used by the dock bar and workspace cards), `TabManagement.jsx`'s `handleAppClick`, and `ActivityFeed.jsx`'s running-app click handler now all fall back to `launchApp` when `focusApp` fails — matching the fallback `GlobalSpotlight.jsx` already had.
+- **`launch_app`'s macOS branch fired `open` with `.spawn()` and never checked whether it actually succeeded** — a bad path or a LaunchServices failure was silently discarded. It now uses `.output()` and returns the real error (surfacing to the UI's fallback/error paths) instead of pretending the launch worked.
+- macOS window scanning (`scanner/mac.rs`) now only applies the `LSUIElement`/`LSBackgroundOnly` Info.plist filter to processes with no on-screen window, instead of dropping any process matching those flags outright — a menu-bar app that ships `LSUIElement=YES` but flips to a regular activation policy at runtime (putting a real window on screen) was being excluded from the running-apps list entirely.
+
 ## [2.0.9] — 2026-08-14
 
 ### Fixed
