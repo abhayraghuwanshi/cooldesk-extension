@@ -270,13 +270,25 @@ fn build_window_entries(raw: Vec<RawWindow>) -> Vec<WindowEntry> {
             continue;
         }
 
+        let is_visible = wins.iter().any(|w| w.is_onscreen);
+
         // For any .app bundle, check LSUIElement / LSBackgroundOnly in its Info.plist.
-        // This catches system agents in /System/Applications (AutoFill, Notification Center…).
-        if let Some(app_root) = app_bundle_root(&exe_path) {
-            let plist = app_root.join("Contents/Info.plist");
-            if plist_is_true(&plist, "LSUIElement") || plist_is_true(&plist, "LSBackgroundOnly")
-            {
-                continue;
+        // This catches system agents in /System/Applications (AutoFill, Notification Center…)
+        // that own an off-screen utility window but never present real UI.
+        //
+        // LSUIElement only declares the app's *default* activation policy — many menu-bar
+        // apps ship LSUIElement=YES but call setActivationPolicy(.regular) at runtime
+        // whenever they open a real window, which is what puts a Dock icon on screen. If
+        // this pid currently has an on-screen window, that's live evidence of exactly that,
+        // so it overrides the static plist flag rather than being dropped from search.
+        if !is_visible {
+            if let Some(app_root) = app_bundle_root(&exe_path) {
+                let plist = app_root.join("Contents/Info.plist");
+                if plist_is_true(&plist, "LSUIElement")
+                    || plist_is_true(&plist, "LSBackgroundOnly")
+                {
+                    continue;
+                }
             }
         }
 
@@ -286,8 +298,6 @@ fn build_window_entries(raw: Vec<RawWindow>) -> Vec<WindowEntry> {
             .filter(|n| !n.is_empty())
             .or_else(|| wins.first().map(|w| w.owner_name.clone()))
             .unwrap_or_default();
-
-        let is_visible = wins.iter().any(|w| w.is_onscreen);
 
         // Collect titled windows.  Without Screen Recording permission most
         // titles will be None — in that case emit one entry with the owner name

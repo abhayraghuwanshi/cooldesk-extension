@@ -397,7 +397,16 @@ class WorkspaceActivityService {
                 return;
             }
             if (api.focusApp) {
-                api.focusApp(live.pid, live.name, live.hwnd);
+                // focusApp goes through OS-level window scripting (AppleScript
+                // on macOS), which can fail silently from the user's POV — e.g.
+                // missing Automation/Apple Events permission for this build, or
+                // a background process with no window to raise. `launchApp`
+                // goes through `open`/ShellExecute instead, which needs none of
+                // that and reliably raises an already-running app's window too,
+                // so it's a safe fallback rather than a duplicate launch.
+                api.focusApp(live.pid, live.name, live.hwnd).catch(() => {
+                    api.launchApp?.(item.path);
+                });
                 return;
             }
         }

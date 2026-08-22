@@ -539,6 +539,7 @@
     flex-direction: column;
     min-width: 0;
     min-height: 0;
+    overflow-y: auto;
 }
 
 .wgb-preview-stage {
@@ -563,7 +564,7 @@
 }
 
 .wgb-preview-meta {
-    padding: 14px 20px 18px;
+    padding: 10px 20px 12px;
     border-top: 1px solid rgba(160, 168, 180, 0.09);
 }
 
@@ -582,7 +583,7 @@
 }
 
 .wgb-preview-desc {
-    margin: 4px 0 0;
+    margin: 3px 0 0;
     font-size: var(--font-sm, 12px);
     line-height: 1.5;
     color: var(--text-secondary, #8b93a1);
@@ -597,9 +598,9 @@
 }
 
 .wgb-preview-add {
-    margin-top: 12px;
+    margin-top: 8px;
     width: 100%;
-    padding: 7px 12px;
+    padding: 6px 12px;
     text-align: center;
     border: 1px solid rgba(160, 168, 180, 0.22);
     font-size: var(--font-base, 13px);
@@ -683,16 +684,59 @@
     color: var(--text-secondary, #6d7684);
 }
 
+.wgb-preview-rename-input {
+    flex: 1;
+    min-width: 0;
+    padding: 2px 6px;
+    border-radius: 5px;
+    border: 1px solid var(--accent-blue, #60a5fa);
+    background: rgba(160, 168, 180, 0.09);
+    color: var(--text-primary, #f0f2f5);
+    font-size: var(--font-xl, 15px);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    outline: none;
+}
+
+.wgb-custom-actions {
+    margin-top: 5px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.wgb-custom-rename,
+.wgb-custom-source,
 .wgb-custom-delete {
-    margin-top: 6px;
-    width: 100%;
-    text-align: center;
+    flex: 0 0 auto;
+    border: 1px solid rgba(160, 168, 180, 0.22);
+}
+
+.wgb-custom-delete {
+    margin-left: auto;
     color: #f0918b;
+    border-color: rgba(240, 145, 139, 0.25);
 }
 
 .wgb-custom-delete:hover {
     background: rgba(239, 68, 68, 0.1);
     color: #fca5a5;
+    border-color: rgba(240, 145, 139, 0.4);
+}
+
+.wgb-custom-source-view {
+    margin: 6px 0 0;
+    max-height: 130px;
+    overflow: auto;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(160, 168, 180, 0.09);
+    color: var(--text-secondary, #8b93a1);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: var(--font-xs, 11px);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 .wgb-picker-create .wgb-picker-name {

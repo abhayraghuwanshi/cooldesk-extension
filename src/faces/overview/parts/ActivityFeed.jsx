@@ -2210,7 +2210,17 @@ export function ActivityFeed() {
                                         <div key={item.id}
                                             onClick={async () => {
                                                 if (window.electronAPI?.focusApp && item.pid) {
-                                                    await window.electronAPI.focusApp(item.pid, item.name);
+                                                    try {
+                                                        await window.electronAPI.focusApp(item.pid, item.name);
+                                                    } catch (e) {
+                                                        // focusApp needs OS-level scripting permission and a
+                                                        // window to raise; launchApp needs neither and reliably
+                                                        // raises an already-running app's window too.
+                                                        console.warn('[ActivityFeed] focusApp failed, falling back to launchApp:', e);
+                                                        if (item.path && window.electronAPI?.launchApp) {
+                                                            await window.electronAPI.launchApp(item.path);
+                                                        }
+                                                    }
                                                 }
                                             }}
                                             style={{

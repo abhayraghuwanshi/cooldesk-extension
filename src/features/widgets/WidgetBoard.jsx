@@ -14,6 +14,7 @@ import {
     deleteCustomWidget,
     isCustomWidgetId,
     loadCustomWidgets,
+    renameCustomWidget,
     saveCustomWidget,
 } from '../../data/customWidgets';
 import { attachWidgetHostBridge } from '../../services/widgetHostBridge';
@@ -50,7 +51,7 @@ function CustomWidgetFrame({ widget, theme, className, style }) {
             className={className}
             src="widget-sandbox.html"
             title={widget.name}
-            sandbox="allow-scripts allow-forms allow-popups allow-modals"
+            sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"
             style={style}
             onLoad={onLoad}
         />
@@ -386,10 +387,13 @@ function CustomWidgetForm({ onCreate }) {
 
 const NEW_CUSTOM = '::new-custom';
 
-function WidgetPicker({ board, theme, customs, onAdd, onRemove, onClose, onCreateCustom, onDeleteCustom }) {
+function WidgetPicker({ board, theme, customs, onAdd, onRemove, onClose, onCreateCustom, onDeleteCustom, onRenameCustom }) {
     const [category, setCategory] = useState('All');
     const [query, setQuery] = useState('');
     const [selectedId, setSelectedId] = useState(WIDGET_CATALOG[0].id);
+    const [renaming, setRenaming] = useState(false);
+    const [renameValue, setRenameValue] = useState('');
+    const [showSource, setShowSource] = useState(false);
     const onBoard = useMemo(() => new Set(board.map(t => t.id)), [board]);
 
     const list = useMemo(() => {
@@ -412,6 +416,12 @@ function WidgetPicker({ board, theme, customs, onAdd, onRemove, onClose, onCreat
     }, [onClose]);
 
     const selectedAdded = selected ? onBoard.has(selected.id) : false;
+
+    // Exit rename/source view whenever the selection changes underneath it.
+    useEffect(() => {
+        setRenaming(false);
+        setShowSource(false);
+    }, [selectedId]);
 
     // Portal to <body>: the overlay is position:fixed, but an ancestor
     // (.overview-left-column) uses backdrop-filter, which makes it the
@@ -529,7 +539,30 @@ function WidgetPicker({ board, theme, customs, onAdd, onRemove, onClose, onCreat
                             </div>
                             <div className="wgb-preview-meta">
                                 <div className="wgb-preview-title-row">
-                                    <span className="wgb-preview-name">{selected.name}</span>
+                                    {renaming ? (
+                                        <input
+                                            className="wgb-preview-rename-input"
+                                            value={renameValue}
+                                            autoFocus
+                                            onChange={e => setRenameValue(e.target.value)}
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter') {
+                                                    e.stopPropagation();
+                                                    onRenameCustom(selected.id, renameValue);
+                                                    setRenaming(false);
+                                                } else if (e.key === 'Escape') {
+                                                    e.stopPropagation();
+                                                    setRenaming(false);
+                                                }
+                                            }}
+                                            onBlur={() => {
+                                                onRenameCustom(selected.id, renameValue);
+                                                setRenaming(false);
+                                            }}
+                                        />
+                                    ) : (
+                                        <span className="wgb-preview-name">{selected.name}</span>
+                                    )}
                                     <span className="wgb-picker-cat">{selected.category}</span>
                                 </div>
                                 <p className="wgb-preview-desc">{selected.desc}</p>
@@ -543,12 +576,32 @@ function WidgetPicker({ board, theme, customs, onAdd, onRemove, onClose, onCreat
                                     {selectedAdded ? 'On your board ✓ — remove' : '＋ Add to board'}
                                 </button>
                                 {selected.custom && (
-                                    <button
-                                        className="wgb-pill wgb-custom-delete"
-                                        onClick={() => onDeleteCustom(selected.id)}
-                                    >
-                                        Delete this custom widget
-                                    </button>
+                                    <div className="wgb-custom-actions">
+                                        <button
+                                            className="wgb-pill wgb-custom-rename"
+                                            onClick={() => {
+                                                setRenameValue(selected.name);
+                                                setRenaming(true);
+                                            }}
+                                        >
+                                            ✎ Rename
+                                        </button>
+                                        <button
+                                            className="wgb-pill wgb-custom-source"
+                                            onClick={() => setShowSource(v => !v)}
+                                        >
+                                            {showSource ? 'Hide source' : '</> View source'}
+                                        </button>
+                                        <button
+                                            className="wgb-pill wgb-custom-delete"
+                                            onClick={() => onDeleteCustom(selected.id)}
+                                        >
+                                            Delete this custom widget
+                                        </button>
+                                    </div>
+                                )}
+                                {selected.custom && showSource && (
+                                    <pre className="wgb-custom-source-view">{selected.html}</pre>
                                 )}
                             </div>
                         </div>
@@ -664,6 +717,11 @@ const WidgetBoard = memo(function WidgetBoard({ storageArea, compact = false, de
         setBoard(prev => [...prev, { id: entry.id, size: 's' }]);
         return entry;
     }, [setBoard]);
+
+    const renameCustom = useCallback((id, name) => {
+        renameCustomWidget(id, name);
+        setCustoms(loadCustomWidgets());
+    }, []);
 
     const removeCustom = useCallback((id) => {
         deleteCustomWidget(id);
@@ -805,6 +863,7 @@ const WidgetBoard = memo(function WidgetBoard({ storageArea, compact = false, de
                     onClose={closePicker}
                     onCreateCustom={createCustom}
                     onDeleteCustom={removeCustom}
+                    onRenameCustom={renameCustom}
                 />
             )}
         </div>

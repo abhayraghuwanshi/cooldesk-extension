@@ -1157,8 +1157,27 @@ async fn focus_window(_app: tauri::AppHandle, pid: u32, name: Option<String>, hw
     let hwnd_opt = hwnd.filter(|&h| h != 0).map(|h| h as isize);
     let name_ref = name.as_deref();
 
-    focus::focus_window(hwnd_opt, Some(pid), name_ref)
-        .map_err(|e| e.to_string())
+    log::info!(
+        "[focus_window] pid={} name={:?} hwnd={:?}",
+        pid,
+        name_ref,
+        hwnd_opt
+    );
+    match focus::focus_window(hwnd_opt, Some(pid), name_ref) {
+        Ok(()) => {
+            log::info!("[focus_window] succeeded for pid={} name={:?}", pid, name_ref);
+            Ok(())
+        }
+        Err(e) => {
+            log::error!(
+                "[focus_window] failed for pid={} name={:?}: {}",
+                pid,
+                name_ref,
+                e
+            );
+            Err(e.to_string())
+        }
+    }
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -1520,10 +1539,28 @@ async fn launch_app(path: String) -> Result<(), String> {
         } else {
             path.clone()
         };
-        std::process::Command::new("open")
+        log::info!("[launch_app] macOS: `open '{}'` (raw path: '{}')", open_path, path);
+        // `.output()` (not `.spawn()`) so a LaunchServices failure — wrong
+        // path, quarantined/damaged bundle, etc — surfaces as an Err instead
+        // of being silently discarded once the `open` helper process exits.
+        let output = std::process::Command::new("open")
             .arg(&open_path)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+            .output()
+            .map_err(|e| {
+                log::error!("[launch_app] failed to spawn `open`: {}", e);
+                e.to_string()
+            })?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            log::error!(
+                "[launch_app] `open '{}'` exited with {}: {}",
+                open_path,
+                output.status,
+                stderr.trim()
+            );
+            return Err(format!("open failed: {}", stderr.trim()));
+        }
+        log::info!("[launch_app] `open '{}'` succeeded", open_path);
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {

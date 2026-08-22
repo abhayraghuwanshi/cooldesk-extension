@@ -58,6 +58,17 @@ export function deleteCustomWidget(id) {
     persist(loadCustomWidgets().filter(w => w.id !== id));
 }
 
+export function renameCustomWidget(id, name) {
+    const clean = (name || '').trim();
+    if (!clean) return null;
+    const list = loadCustomWidgets();
+    const idx = list.findIndex(w => w.id === id);
+    if (idx === -1) return null;
+    list[idx] = { ...list[idx], name: clean };
+    persist(list);
+    return list[idx];
+}
+
 /**
  * Prompt the user copies into any AI chat. The contract mirrors what the
  * official widgets rely on (theme tokens, 100vh flex root, cooldesk.store).

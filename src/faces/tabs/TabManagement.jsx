@@ -679,7 +679,19 @@ export function TabManagement() {
 
       if (window.electronAPI?.focusApp && app.pid) {
         console.log('[TabManagement] Focusing app:', app.name, app.pid, 'HWND:', app.hwnd);
-        await window.electronAPI.focusApp(app.pid, app.name, app.hwnd);
+        try {
+          await window.electronAPI.focusApp(app.pid, app.name, app.hwnd);
+        } catch (focusError) {
+          // focusApp goes through OS-level window scripting, which can fail
+          // silently from the user's POV (missing Automation permission, or a
+          // background process with no window to raise). launchApp goes
+          // through `open`/ShellExecute instead, which needs neither and
+          // reliably raises an already-running app's window too.
+          console.warn('[TabManagement] focusApp failed, falling back to launchApp:', focusError);
+          if (app.path && window.electronAPI?.launchApp) {
+            await window.electronAPI.launchApp(app.path);
+          }
+        }
       }
     } catch (error) {
       console.error('[TabManagement] Failed to focus app:', error);
