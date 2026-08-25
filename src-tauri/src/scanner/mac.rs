@@ -20,11 +20,11 @@ use std::os::raw::{c_char, c_int};
 use std::path::Path;
 use sysinfo::{Pid, System};
 
-pub fn scan_apps_macos() -> ScannerOutput {
+pub fn scan_apps_macos(extra_dirs: &[String]) -> ScannerOutput {
     let raw_windows = get_raw_windows();
     let mut windows = build_window_entries(raw_windows);
     add_windowless_app_processes(&mut windows);
-    let installed = get_installed_apps();
+    let installed = get_installed_apps(extra_dirs);
 
     log::info!(
         "[scanner] macOS: {} installed apps, {} running processes with windows",
@@ -565,7 +565,7 @@ fn scan_app_dir(dir: &Path, source: &str) -> Vec<InstalledApp> {
     apps
 }
 
-fn get_installed_apps() -> Vec<InstalledApp> {
+fn get_installed_apps(extra_dirs: &[String]) -> Vec<InstalledApp> {
     let mut apps: Vec<InstalledApp> = Vec::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
 
@@ -587,6 +587,16 @@ fn get_installed_apps() -> Vec<InstalledApp> {
     // Per-user ~/Applications
     if let Some(home) = dirs::home_dir() {
         for app in scan_app_dir(&home.join("Applications"), "user_applications") {
+            if seen.insert(app.name.clone()) {
+                apps.push(app);
+            }
+        }
+    }
+
+    // User-linked folders (Settings → Folders & Index, "include apps" on) —
+    // same flat `.app`-bundle scan, for locations outside the standard set.
+    for dir in extra_dirs {
+        for app in scan_app_dir(Path::new(dir), "linked_folder") {
             if seen.insert(app.name.clone()) {
                 apps.push(app);
             }

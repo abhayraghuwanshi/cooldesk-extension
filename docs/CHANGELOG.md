@@ -2,6 +2,12 @@
 
 All notable changes to CoolDesk (desktop app + Chrome extension) are documented here.
 
+## [2.0.11] — 2026-08-25
+
+### Added
+- **The collapsed dock/sidebar edge handle now expands on hover-intent, not just a click.** `handle-main.js` starts a 200ms timer on `mouseenter` before calling `dock_expand`, cancelled on `mouseleave` — long enough that just passing the cursor over the edge (reaching for a traffic-light button, Mission Control, a scroll edge) doesn't pop the panel open, short enough not to feel laggy. Click still expands instantly as before; collapsing back down is unchanged (the panel's existing blur handler).
+- **macOS dock/sidebar can now render over another app's fullscreen Space**, not just follow ordinary Space switches. `dock::join_fullscreen_space` (`src-tauri/src/dock/mac.rs`) reuses the same private CGS Spaces API call that powers the Spotlight overlay, but deliberately skips the elevated `NSStatusWindowLevel`/`Stationary`/`IgnoresCycle` treatment (see 2.0.9's fix) so the drawer/handle stay normal, Cmd+Tab-able windows. Since a CGS Space join is a one-time snapshot rather than a standing subscription, a new macOS-only watcher thread in `lib.rs` (gated on `MAC_DOCK_ACTIVE`) rejoins the active Space every 600ms while the dock is visible.
+
 ## [2.0.10] — 2026-08-22
 
 ### Fixed

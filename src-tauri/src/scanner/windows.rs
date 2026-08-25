@@ -1068,9 +1068,53 @@ fn builtin_windows_apps(seen_names: &HashSet<String>) -> Vec<InstalledApp> {
     out
 }
 
+// User-linked folders (Settings → Folders & Index, "include apps" on) — a
+// flat `.exe` scan, same shape as the registry path's `InstallLocation`
+// fallback above, for app locations the Start Menu/registry scans above
+// don't cover (a portable-apps folder, an external drive, ...).
+fn scan_extra_dirs(
+    extra_dirs: &[String],
+    seen_exe_paths: &mut HashSet<String>,
+    seen_names: &mut HashSet<String>,
+) -> Vec<InstalledApp> {
+    let mut out = Vec::new();
+    for dir in extra_dirs {
+        let Ok(entries) = std::fs::read_dir(dir) else { continue };
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.extension().and_then(|e| e.to_str()) != Some("exe") {
+                continue;
+            }
+            let exe = p.to_string_lossy().into_owned();
+            if should_skip_path(&exe) {
+                continue;
+            }
+            let exe_stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+            if should_skip(exe_stem) {
+                continue;
+            }
+            let name = normalize_app_name(exe_stem);
+            let key_lower = name.to_lowercase();
+            if seen_names.contains(&key_lower) || !seen_exe_paths.insert(exe.to_lowercase()) {
+                continue;
+            }
+            seen_names.insert(key_lower);
+            out.push(InstalledApp {
+                id: format!("installed-{}", name),
+                name,
+                path: exe.clone(),
+                source: "linked_folder".to_string(),
+                category: None,
+                icon: extract_icon_as_base64(&exe),
+            });
+        }
+    }
+    out
+}
+
 // ── Public entry point ────────────────────────────────────────────────────────
 
-pub fn scan_apps_windows() -> ScannerOutput {
+pub fn scan_apps_windows(extra_dirs: &[String]) -> ScannerOutput {
     let _com = ComInit::new();
 
     let mut seen_exe_paths: HashSet<String> = HashSet::new();
@@ -1089,6 +1133,7 @@ pub fn scan_apps_windows() -> ScannerOutput {
     // Seed built-in system apps (cmd, powershell, explorer) that may have no
     // Start Menu shortcut on Win11, so they remain searchable. Deduped by name.
     installed.extend(builtin_windows_apps(&seen_names));
+    installed.extend(scan_extra_dirs(extra_dirs, &mut seen_exe_paths, &mut seen_names));
     let windows = scan_running();
 
     log::info!(

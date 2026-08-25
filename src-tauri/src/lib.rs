@@ -15,6 +15,7 @@ mod tab_uia;
 mod webapp_embed;
 mod dock;
 mod ai_cli;
+mod folder_index;
 
 use system::RunningApp;
 
@@ -1148,9 +1149,12 @@ fn run_winget_upgrade() -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn get_running_apps(_app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+async fn get_running_apps(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    return Ok(serde_json::json!([]));
+    {
+        let _ = &app;
+        return Ok(serde_json::json!([]));
+    }
 
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
@@ -1185,8 +1189,12 @@ async fn get_running_apps(_app: tauri::AppHandle) -> Result<serde_json::Value, S
             }
         }
 
-        // Run the scan in-process: no sidecar EXEs spawned.
-        let scan_output = tokio::task::spawn_blocking(|| scanner::scan_apps())
+        // Run the scan in-process: no sidecar EXEs spawned. Extra app-scan
+        // dirs come from the user's linked folders (Settings → Folders &
+        // Index, "include apps" on) — read here, before handing off to the
+        // blocking thread, since `folder_index::app_scan_dirs` needs `app`.
+        let extra_app_dirs = folder_index::app_scan_dirs(&app);
+        let scan_output = tokio::task::spawn_blocking(move || scanner::scan_apps(&extra_app_dirs))
             .await
             .map_err(|e| format!("scan_apps panicked: {}", e))?;
 
@@ -2153,11 +2161,11 @@ fn search_dir_recursive(
 
 /// Search user files (Downloads, Documents, Desktop) cross-platform
 #[tauri::command]
-async fn search_files(query: String) -> Result<Vec<SearchFileResult>, String> {
+async fn search_files(app: tauri::AppHandle, query: String) -> Result<Vec<SearchFileResult>, String> {
     if query.trim().is_empty() {
         return Ok(vec![]);
     }
-    
+
     let query_lower = query.to_lowercase();
     // Split into words so separators (space/-/_) are interchangeable when matching.
     let tokens: Vec<String> = query_lower.split_whitespace().map(String::from).collect();
@@ -2171,6 +2179,17 @@ async fn search_files(query: String) -> Result<Vec<SearchFileResult>, String> {
         if let Some(dl) = dirs::download_dir() { targets.push(dl); }
         if let Some(doc) = dirs::document_dir() { targets.push(doc); }
         if let Some(desk) = dirs::desktop_dir() { targets.push(desk); }
+    }
+    // Folders the user explicitly linked in Settings — covers paths outside
+    // the home folder (an external drive, a mounted network share, ...) that
+    // the sections above never reach. Cross-platform: same registry powers
+    // both the mac `mdfind -onlyin` targets and the Windows/Linux recursive
+    // walk below, not a platform-specific mechanism of its own.
+    for path in folder_index::enabled_paths(&app) {
+        let p = std::path::PathBuf::from(path);
+        if p.is_dir() && !targets.contains(&p) {
+            targets.push(p);
+        }
     }
 
     // Match the well-known user folders by their OWN name first, so typing
@@ -2239,7 +2258,14 @@ async fn search_files(query: String) -> Result<Vec<SearchFileResult>, String> {
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        let _ = &targets;
+        // Linux has no bundled Spotlight/Everything equivalent to shell out
+        // to, so it gets the same budgeted recursive walk as the Windows
+        // fallback rather than the previous no-op.
+        let mut budget: u32 = 8000;
+        for target in &targets {
+            search_dir_recursive(target, &tokens, &mut final_results, 5, &mut budget);
+            if final_results.len() >= 15 || budget == 0 { break; }
+        }
         final_results.truncate(15);
         Ok(final_results)
     }
@@ -2712,7 +2738,13 @@ pub fn run() {
         get_backups_dir,
         list_backups,
         read_backup,
-        delete_backup
+        delete_backup,
+        folder_index::folder_index_list,
+        folder_index::folder_index_add,
+        folder_index::folder_index_remove,
+        folder_index::folder_index_set_options,
+        folder_index::folder_index_reindex,
+        folder_index::folder_index_reindex_all
     ])
     .setup(|app| {
       // No instance was running, so `--quit` reached us as the primary. Exit
@@ -3046,6 +3078,19 @@ pub fn run() {
                       expand_drawer(&app_handle, &st);
                   }
               }
+          });
+      }
+
+      // Cross-platform: sweep linked folders (Settings → Folders & Index) for
+      // ones due for auto-reindex. Checked every minute — reindexing itself is
+      // a walk-the-tree operation (see `folder_index::reindex_one`), not
+      // something worth polling faster than the coarsest `auto_reindex_minutes`
+      // a user can set.
+      {
+          let app_handle = app.handle().clone();
+          std::thread::spawn(move || loop {
+              std::thread::sleep(std::time::Duration::from_secs(60));
+              folder_index::run_due_auto_reindex(&app_handle);
           });
       }
 

@@ -1,4 +1,4 @@
-import { faCog, faDatabase, faPalette, faRocket, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faCog, faDatabase, faFolderOpen, faPalette, faRocket, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import logo from '../../../logo-2.png';
@@ -23,6 +23,7 @@ import { checkForUpdate, getUpdateState, installUpdate } from '../../services/up
 import { TEAM_FEATURE_ENABLED } from '../../config/features';
 import AIModelsTab from './parts/AIModelsTab';
 import ExportData from './parts/ExportData';
+import FolderIndexTab from './parts/FolderIndexTab';
 import TeamsTab from './parts/TeamsTab';
 import ThemesTab from './parts/ThemesTab';
 import WorkspaceCleanupSettings from './parts/WorkspaceCleanupSettings';
@@ -96,6 +97,7 @@ export function SettingsModal({
     { id: 'general',    label: 'General',    icon: faCog     },
     { id: 'appearance', label: 'Appearance', icon: faPalette },
     { id: 'local-ai',   label: 'Local AI',   icon: faRocket  },
+    ...(isTauri ? [{ id: 'folders', label: 'Folders & Index', icon: faFolderOpen }] : []),
     ...(isDesktopApp && TEAM_FEATURE_ENABLED ? [{ id: 'team', label: 'Team', icon: faUsers }] : []),
   ];
 
@@ -1044,6 +1046,16 @@ export function SettingsModal({
                 <section>
                   <SectionHeader title="AI Models" description="On-device AI for categorization, summarization, and smart features." />
                   <AIModelsTab />
+                </section>
+              </div>
+            )}
+
+            {/* ── FOLDERS & INDEX ─────────────────────────────────────────────── */}
+            {activeTabId === 'folders' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <section>
+                  <SectionHeader title="Folders & Index" description="Link folders outside your home directory so file search covers them too, and control how often each one gets reindexed." />
+                  <FolderIndexTab />
                 </section>
               </div>
             )}
