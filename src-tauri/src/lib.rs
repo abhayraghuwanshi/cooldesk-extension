@@ -464,6 +464,35 @@ impl Default for DockState {
 // read from disk) so the watcher's hot loop needs no file I/O.
 static DRAWER_COLLAPSED: AtomicBool = AtomicBool::new(false);
 
+// True while the drawer feature is enabled and showing (either surface) —
+// cross-platform, unlike `MAC_DOCK_ACTIVE` below. Gates the cross-platform
+// monitor re-anchor watcher in `setup()` so it doesn't read dock_state.json
+// off disk every tick while the dock is off.
+static DOCK_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+// True while the drawer/handle should be actively rejoining the current macOS
+// Space (see the periodic watcher in `setup()`). Set alongside a real show in
+// `expand_drawer`/`collapse_drawer`, cleared in `disable_dock` — a CGS Space
+// join is a one-time snapshot (see `dock::join_fullscreen_space`'s doc
+// comment), so a window that's meant to stay visible across Space switches
+// needs this rejoined on a timer, not just once when it's (re)shown.
+#[cfg(target_os = "macos")]
+static MAC_DOCK_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+// AppKit screen-coordinate frame (bottom-left origin) of the collapsed
+// handle, cached by `collapse_drawer` so the hover-intent watcher in
+// `setup()` can compare it against polled cursor positions without an
+// NSWindow touch (main-thread-only) on every poll tick. See
+// `dock::window_frame`'s doc comment.
+#[cfg(target_os = "macos")]
+static HANDLE_SCREEN_FRAME: std::sync::Mutex<Option<(f64, f64, f64, f64)>> = std::sync::Mutex::new(None);
+
+// Same idea as `HANDLE_SCREEN_FRAME`, cached by `expand_drawer` instead —
+// backs the mirror-image "collapse a beat after the cursor leaves the
+// expanded panel" watcher in `setup()`.
+#[cfg(target_os = "macos")]
+static MAIN_SCREEN_FRAME: std::sync::Mutex<Option<(f64, f64, f64, f64)>> = std::sync::Mutex::new(None);
+
 const DOCK_MIN_WIDTH: u32 = 220;
 const DOCK_MAX_WIDTH: u32 = 900;
 const BAR_MIN_HEIGHT: u32 = 40;
@@ -522,14 +551,37 @@ fn save_dock_state(app: &tauri::AppHandle, state: &DockState) {
     }
 }
 
-/// Primary monitor geometry in physical pixels: (x, y, width, height).
-/// V1 anchors the dock to the primary monitor; multi-monitor targeting is a
-/// later step (ties into "move to the cursor's screen").
+/// Primary monitor geometry in physical pixels: (x, y, width, height). Used
+/// only as `cursor_geom`'s last-resort fallback now (headless CI, an exotic
+/// display setup where the cursor position/monitor lookup fails) — see that
+/// function for the drawer's actual anchor.
 fn primary_geom(app: &tauri::AppHandle) -> Option<(i32, i32, i32, i32)> {
     let m = app.primary_monitor().ok().flatten()?;
     let p = m.position();
     let s = m.size();
     Some((p.x, p.y, s.width as i32, s.height as i32))
+}
+
+/// Geometry (physical pixels) of whichever monitor currently has the cursor,
+/// falling back to the primary monitor. Replaces the old permanently-primary
+/// anchor: the drawer/handle should follow the user across screens the same
+/// way the hover-to-open/close behavior follows them within one screen.
+/// `cursor_position`/`monitor_from_point` are on `AppHandle` too (tauri's
+/// `shared_app_impl!` macro), so this is callable from the background
+/// watcher threads in `setup()`, not just from a command on the main thread.
+fn cursor_geom(app: &tauri::AppHandle) -> Option<(i32, i32, i32, i32)> {
+    let monitor = app
+        .cursor_position()
+        .ok()
+        .and_then(|pos| app.monitor_from_point(pos.x, pos.y).ok().flatten());
+    match monitor {
+        Some(m) => {
+            let p = m.position();
+            let s = m.size();
+            Some((p.x, p.y, s.width as i32, s.height as i32))
+        }
+        None => primary_geom(app),
+    }
 }
 
 // ── Drawer mode ────────────────────────────────────────────────────────────
@@ -548,7 +600,7 @@ fn drawer_geom(app: &tauri::AppHandle, win: &tauri::WebviewWindow, horizontal: b
     }
     #[cfg(not(windows))]
     let _ = (win, horizontal);
-    primary_geom(app)
+    cursor_geom(app)
 }
 
 /// Slide the panel in: size the main window to a strip at the docked edge
@@ -612,10 +664,17 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
                 let side_for_appkit = st.side.clone();
                 let _ = app.run_on_main_thread(move || {
                     dock::allow_over_fullscreen_spaces(&main_for_appkit);
+                    dock::join_fullscreen_space(&main_for_appkit);
                     if horizontal {
                         dock::clamp_to_visible_frame(&main_for_appkit, &side_for_appkit);
                     }
+                    // Snapshot the final on-screen frame (post-clamp) for the
+                    // leave-intent watcher to poll against.
+                    let frame = dock::window_frame(&main_for_appkit);
+                    log::info!("[Dock] Cached main panel frame for leave-intent watcher: {:?}", frame);
+                    *MAIN_SCREEN_FRAME.lock().unwrap() = frame;
                 });
+                MAC_DOCK_ACTIVE.store(true, Ordering::Relaxed);
             }
             let _ = main.show();
             let _ = main.set_focus();
@@ -628,6 +687,7 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
     // Panel is now the visible surface — the handle isn't, so the fullscreen
     // watcher should stand down.
     DRAWER_COLLAPSED.store(false, Ordering::Relaxed);
+    DOCK_ACTIVE.store(true, Ordering::Relaxed);
 }
 
 /// Collapse to the handle: hide the panel, show the slim edge tab (vertical tab
@@ -684,10 +744,15 @@ fn collapse_drawer(app: &tauri::AppHandle, st: &DockState) {
                 let side_for_appkit = st.side.clone();
                 let _ = app.run_on_main_thread(move || {
                     dock::allow_over_fullscreen_spaces(&handle_for_appkit);
+                    dock::join_fullscreen_space(&handle_for_appkit);
                     if horizontal {
                         dock::clamp_to_visible_frame(&handle_for_appkit, &side_for_appkit);
                     }
+                    // Snapshot the final on-screen frame (post-clamp) for the
+                    // hover-intent watcher to poll against.
+                    *HANDLE_SCREEN_FRAME.lock().unwrap() = dock::window_frame(&handle_for_appkit);
                 });
+                MAC_DOCK_ACTIVE.store(true, Ordering::Relaxed);
             }
             let _ = handle.show();
         }
@@ -695,6 +760,7 @@ fn collapse_drawer(app: &tauri::AppHandle, st: &DockState) {
     // Handle is now the visible dock surface — let the watcher hide/show it as
     // fullscreen apps come and go.
     DRAWER_COLLAPSED.store(true, Ordering::Relaxed);
+    DOCK_ACTIVE.store(true, Ordering::Relaxed);
 }
 
 /// Turn on drawer mode: persist state and show the handle (collapsed).
@@ -793,6 +859,7 @@ fn disable_dock(app: &tauri::AppHandle) -> DockState {
     dock::remove_dock();
 
     DRAWER_COLLAPSED.store(false, Ordering::Relaxed);
+    DOCK_ACTIVE.store(false, Ordering::Relaxed);
     if let Some(handle) = app.get_webview_window("handle") {
         let _ = handle.hide();
     }
@@ -802,6 +869,7 @@ fn disable_dock(app: &tauri::AppHandle) -> DockState {
         // `expand_drawer`'s equivalent call for why.
         #[cfg(target_os = "macos")]
         {
+            MAC_DOCK_ACTIVE.store(false, Ordering::Relaxed);
             let window_for_appkit = window.clone();
             let _ = app.run_on_main_thread(move || dock::restrict_to_current_space(&window_for_appkit));
         }
@@ -2812,6 +2880,171 @@ pub fn run() {
                       let _ = handle.show();
                   }
                   hidden_for_fullscreen = false;
+              }
+          });
+      }
+
+      // macOS: rejoin the current Space on a timer while the drawer/handle is
+      // meant to be visible. `dock::join_fullscreen_space` (see its doc
+      // comment) is a one-time snapshot of whatever Space is active right
+      // now — without re-calling it, the dock would only render on top of
+      // the Space that happened to be active the moment it was last
+      // expanded/collapsed, and go missing again the next time the user
+      // switches Spaces (including into another app's fullscreen Space).
+      // Gated on `MAC_DOCK_ACTIVE` so the loop does nothing while the dock
+      // feature is off. Same 600ms cadence as the Windows fullscreen watcher
+      // above — no evidence either way on the right interval yet, this just
+      // matches its established polling cost.
+      #[cfg(target_os = "macos")]
+      {
+          let app_handle = app.handle().clone();
+          std::thread::spawn(move || loop {
+              std::thread::sleep(std::time::Duration::from_millis(600));
+              if !MAC_DOCK_ACTIVE.load(Ordering::Relaxed) {
+                  continue;
+              }
+              let label = if DRAWER_COLLAPSED.load(Ordering::Relaxed) { "handle" } else { "main" };
+              let Some(window) = app_handle.get_webview_window(label) else { continue };
+              let _ = app_handle.run_on_main_thread(move || {
+                  dock::join_fullscreen_space(&window);
+              });
+          });
+      }
+
+      // macOS: hover-intent to expand the collapsed handle without a click.
+      // As explained in `dock::cursor_location`'s doc comment, the handle's
+      // own `:hover`/`mouseenter` JS listener (in `handle-main.js`) never
+      // fires here — its NSTrackingArea only reports hover while CoolDesk is
+      // the frontmost app, which it normally isn't while the handle sits at
+      // the screen edge over whatever app the user is using. This polls the
+      // real cursor position instead (unaffected by which app is active) and
+      // fires the same 200ms hover-intent debounce natively. Finer-grained
+      // than the Space-rejoin watcher above (50ms vs 600ms) since hover
+      // timing is directly user-perceptible.
+      #[cfg(target_os = "macos")]
+      {
+          let app_handle = app.handle().clone();
+          std::thread::spawn(move || {
+              const HOVER_INTENT: std::time::Duration = std::time::Duration::from_millis(200);
+              let mut hover_since: Option<std::time::Instant> = None;
+              loop {
+                  std::thread::sleep(std::time::Duration::from_millis(50));
+                  if !MAC_DOCK_ACTIVE.load(Ordering::Relaxed) || !DRAWER_COLLAPSED.load(Ordering::Relaxed) {
+                      hover_since = None;
+                      continue;
+                  }
+                  let Some((fx, fy, fw, fh)) = *HANDLE_SCREEN_FRAME.lock().unwrap() else {
+                      hover_since = None;
+                      continue;
+                  };
+                  let (cx, cy) = dock::cursor_location();
+                  let over = cx >= fx && cx <= fx + fw && cy >= fy && cy <= fy + fh;
+                  if !over {
+                      hover_since = None;
+                      continue;
+                  }
+                  let since = *hover_since.get_or_insert_with(std::time::Instant::now);
+                  if since.elapsed() < HOVER_INTENT {
+                      continue;
+                  }
+                  hover_since = None;
+                  let st = load_dock_state(&app_handle);
+                  if st.enabled && st.mode == "drawer" {
+                      expand_drawer(&app_handle, &st);
+                  }
+              }
+          });
+      }
+
+      // macOS: mirror image of the hover-intent watcher above — collapse the
+      // expanded panel a beat after the cursor leaves it, instead of only on
+      // the existing "click away to hide" blur handler
+      // (`attach_main_window_events`). That handler only fires when focus
+      // moves to *another app's* window, which needs a click — just moving
+      // the cursor off the panel without clicking anywhere doesn't change
+      // which app is frontmost on macOS, so before this the panel stayed
+      // open indefinitely once opened by hover. Same 350ms-ish debounce
+      // shape as the open side, just a little longer so ordinary in-panel
+      // mouse movement near an edge doesn't collapse it prematurely.
+      #[cfg(target_os = "macos")]
+      {
+          let app_handle = app.handle().clone();
+          std::thread::spawn(move || {
+              const LEAVE_INTENT: std::time::Duration = std::time::Duration::from_millis(350);
+              let mut away_since: Option<std::time::Instant> = None;
+              loop {
+                  std::thread::sleep(std::time::Duration::from_millis(50));
+                  if !MAC_DOCK_ACTIVE.load(Ordering::Relaxed) || DRAWER_COLLAPSED.load(Ordering::Relaxed) {
+                      away_since = None;
+                      continue;
+                  }
+                  let Some((fx, fy, fw, fh)) = *MAIN_SCREEN_FRAME.lock().unwrap() else {
+                      away_since = None;
+                      continue;
+                  };
+                  let (cx, cy) = dock::cursor_location();
+                  let over = cx >= fx && cx <= fx + fw && cy >= fy && cy <= fy + fh;
+                  if over {
+                      away_since = None;
+                      continue;
+                  }
+                  let is_new = away_since.is_none();
+                  let since = *away_since.get_or_insert_with(std::time::Instant::now);
+                  if is_new {
+                      log::info!(
+                          "[Dock] Cursor ({cx:.0},{cy:.0}) left panel frame ({fx:.0},{fy:.0},{fw:.0}x{fh:.0}) — leave-intent timer started"
+                      );
+                  }
+                  if since.elapsed() < LEAVE_INTENT {
+                      continue;
+                  }
+                  away_since = None;
+                  let st = load_dock_state(&app_handle);
+                  log::info!("[Dock] Leave-intent elapsed — collapsing panel (enabled={} mode={})", st.enabled, st.mode);
+                  if st.enabled && st.mode == "drawer" {
+                      collapse_drawer(&app_handle, &st);
+                  }
+              }
+          });
+      }
+
+      // Cross-platform: keep the drawer/handle anchored to whichever monitor
+      // currently has the cursor, instead of staying pinned to wherever it
+      // was last shown. `drawer_geom` (via `cursor_geom`) already re-targets
+      // the cursor's monitor every time `expand_drawer`/`collapse_drawer`
+      // run, so hovering/clicking/blurring already relocates things on their
+      // own — this only covers the *idle* case: the handle just sitting
+      // collapsed (or the panel sitting open) while the user walks over to a
+      // different monitor without touching it. Coarser interval than the
+      // hover-intent watchers above — a monitor switch is a much rarer, more
+      // deliberate action than sub-second cursor movement — and gated on
+      // `DOCK_ACTIVE` so it costs nothing while the dock feature is off.
+      {
+          let app_handle = app.handle().clone();
+          std::thread::spawn(move || {
+              let mut anchor: Option<(i32, i32)> = None;
+              loop {
+                  std::thread::sleep(std::time::Duration::from_millis(500));
+                  if !DOCK_ACTIVE.load(Ordering::Relaxed) {
+                      anchor = None;
+                      continue;
+                  }
+                  let Some((mx, my, _, _)) = cursor_geom(&app_handle) else { continue };
+                  let moved = anchor.is_some_and(|(ax, ay)| (ax, ay) != (mx, my));
+                  anchor = Some((mx, my));
+                  if !moved {
+                      continue;
+                  }
+                  let st = load_dock_state(&app_handle);
+                  if !st.enabled || st.mode != "drawer" {
+                      continue;
+                  }
+                  log::info!("[Dock] Cursor moved to a different monitor — re-anchoring dock");
+                  if DRAWER_COLLAPSED.load(Ordering::Relaxed) {
+                      collapse_drawer(&app_handle, &st);
+                  } else {
+                      expand_drawer(&app_handle, &st);
+                  }
               }
           });
       }

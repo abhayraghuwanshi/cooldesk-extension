@@ -1,6 +1,6 @@
 [package]
 name = "cooldesk"
-version = "2.0.10"
+version = "2.0.11"
 description = "AI-powered desktop workspace manager"
 authors = ["CoolDesk"]
 license = ""
@@ -80,7 +80,7 @@ core-foundation = "0.9"
 # Pinned to the exact version tao/wry already resolve, so this doesn't
 # duplicate the dependency tree — just gives us typed access to NSWindow
 # APIs (collection behavior) that Tauri doesn't expose itself.
-objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["NSWindow", "NSResponder", "NSScreen"] }
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["NSWindow", "NSResponder", "NSScreen", "NSEvent"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [

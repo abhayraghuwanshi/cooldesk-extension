@@ -63,6 +63,7 @@ mod cgs;
 mod mac;
 #[cfg(target_os = "macos")]
 pub use mac::{
-    allow_over_fullscreen_spaces, clamp_to_visible_frame, promote_spotlight_over_fullscreen_spaces,
-    restrict_to_current_space, show_over_fullscreen_spaces,
+    allow_over_fullscreen_spaces, clamp_to_visible_frame, cursor_location, join_fullscreen_space,
+    promote_spotlight_over_fullscreen_spaces, restrict_to_current_space, show_over_fullscreen_spaces,
+    window_frame,
 };

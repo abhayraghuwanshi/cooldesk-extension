@@ -23,7 +23,7 @@
 // `AppHandle::run_on_main_thread` rather than calling these directly from a
 // background thread (e.g. an async Tauri command runs on a tokio worker).
 
-use objc2_app_kit::{NSWindow, NSWindowCollectionBehavior, NSFloatingWindowLevel, NSStatusWindowLevel};
+use objc2_app_kit::{NSEvent, NSWindow, NSWindowCollectionBehavior, NSFloatingWindowLevel, NSStatusWindowLevel};
 
 /// Nudges a horizontal (top/bottom) drawer bar or its collapsed handle back
 /// inside the screen's *visible* frame after it's been positioned against
@@ -122,6 +122,66 @@ pub fn show_over_fullscreen_spaces(window: &tauri::WebviewWindow) {
     super::cgs::join_active_spaces(ns_window.windowNumber() as i64);
     ns_window.orderFrontRegardless();
     ns_window.makeKeyWindow();
+}
+
+/// Dock/sidebar-only: joins whatever Space(s) are currently active/on-screen
+/// (including a fullscreen one belonging to another app) via the same private
+/// Spaces API `show_over_fullscreen_spaces` uses for the spotlight overlay —
+/// but, unlike that function, does NOT raise the window's level, mark it
+/// `Stationary`/`IgnoresCycle`, or steal key-window focus. The drawer/handle
+/// must stay a normal, single-level, Cmd+Tab-able window reachable from the
+/// in-app "back to full window" control (see `allow_over_fullscreen_spaces`'s
+/// doc comment for the regression that came from skipping that constraint).
+///
+/// A CGS Space join is a one-time snapshot of whatever Space is active right
+/// now, not a standing subscription — call this again whenever the window is
+/// (re)shown AND periodically while it stays visible, so it keeps following
+/// the user across later Space switches instead of only covering the Space
+/// active at the moment it was first expanded/collapsed.
+///
+/// Note: per the module doc comment, an elevated window level
+/// (`NSStatusWindowLevel`+) is what actually lets a window's *content* render
+/// above another app's fullscreen Space, separate from merely joining that
+/// Space. Skipping the elevated level here (as requested, to avoid the
+/// regression above) means the dock/sidebar joins the fullscreen Space but
+/// may still render behind that app's own content — this needs verifying
+/// against a real fullscreen app before relying on it.
+pub fn join_fullscreen_space(window: &tauri::WebviewWindow) {
+    let Ok(ptr) = window.ns_window() else { return };
+    let ns_window: &NSWindow = unsafe { &*(ptr as *mut NSWindow) };
+    super::cgs::join_active_spaces(ns_window.windowNumber() as i64);
+}
+
+/// Global screen-coordinate location of the real system cursor (AppKit's
+/// bottom-left-origin space), regardless of which app is currently active.
+/// Needed for the handle's hover-to-expand behaviour: a WKWebView's DOM hover
+/// events (`:hover`, `mouseenter`/`mouseleave`) are backed by an
+/// `NSTrackingArea` created with the default `.activeInActiveApp` option,
+/// which only fires while *this* app is the active/frontmost one — never
+/// true for a handle that sits at the screen edge over whatever app the user
+/// is actually using, so the DOM events silently never fire. Polling the real
+/// cursor position from the Rust side sidesteps that restriction entirely.
+///
+/// Unlike the rest of this file, this is safe to call from a background
+/// thread: `NSEvent.mouseLocation` only reads global window-server cursor
+/// state — it doesn't touch any NSWindow/NSView, which is what forces the
+/// other functions here onto the main thread.
+pub fn cursor_location() -> (f64, f64) {
+    let point = NSEvent::mouseLocation();
+    (point.x, point.y)
+}
+
+/// AppKit screen-coordinate frame (bottom-left origin), as
+/// `(x, y, width, height)`, of a window's current position — a one-time
+/// snapshot meant to be cached by the caller and compared against repeated
+/// `cursor_location()` polls, rather than re-read on every poll tick (which
+/// would need a `run_on_main_thread` round-trip per tick, since — unlike
+/// `cursor_location` — this does touch the NSWindow).
+pub fn window_frame(window: &tauri::WebviewWindow) -> Option<(f64, f64, f64, f64)> {
+    let ptr = window.ns_window().ok()?;
+    let ns_window: &NSWindow = unsafe { &*(ptr as *mut NSWindow) };
+    let frame = ns_window.frame();
+    Some((frame.origin.x, frame.origin.y, frame.size.width, frame.size.height))
 }
 
 /// Reverses `allow_over_fullscreen_spaces` — used when a window goes back to
