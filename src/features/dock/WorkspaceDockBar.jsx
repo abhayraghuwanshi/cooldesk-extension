@@ -3,6 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import logo from '../../../logo-2.png';
 import { isEditorApp, workspaceActivityService } from '../../services/workspaceActivityService';
+import { LayoutSwitchButton } from './LayoutSwitchButton';
 import '../../styles/dockbar.css';
 
 // Favicon resolution as an ordered fallback chain rather than a single source:
@@ -207,6 +208,8 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
           <img src={logo} alt="" className="dockbar-ws-logo" />
           <span className="dockbar-ws-name">{workspace?.name || 'CoolDesk'}</span>
         </button>
+
+        <LayoutSwitchButton className="dockbar-ctrl" />
 
         {(urls.length > 0 || apps.length > 0) && <span className="dockbar-sep" />}
 

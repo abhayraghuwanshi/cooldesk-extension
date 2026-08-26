@@ -149,6 +149,47 @@ const SEARCH_SCOPES = {
     a: { label: 'Apps', types: ['app'] },
     f: { label: 'Files', types: ['file', 'folder'] },
 };
+// Fixed id, not a generated one: this is a singleton workspace, so re-running
+// this on every /agent call must find the same record instead of piling up
+// duplicates.
+const AGENT_WORKSPACE_ID = 'ws_cooldesk_agent';
+
+/**
+ * Resolve (and lazily create) the dedicated folder + workspace record that
+ * every `/agent` run uses as its working directory. The folder itself is
+ * owned and pre-trusted by the Rust side (see `get_agent_workspace_dir` /
+ * `agent_workspace_dir` in `src-tauri/src/lib.rs`); this just mirrors it into
+ * the workspace list so it's visible like any other project.
+ */
+async function getOrCreateAgentWorkspaceCwd() {
+    try {
+        const [{ invoke }, { getWorkspace, saveWorkspace }] = await Promise.all([
+            import('@tauri-apps/api/core'),
+            import('../../db/index.js'),
+        ]);
+        const dir = await invoke('get_agent_workspace_dir');
+
+        const existing = await getWorkspace(AGENT_WORKSPACE_ID).catch(() => null);
+        const existingData = existing?.success ? existing.data : existing;
+        if (!existingData) {
+            await saveWorkspace({
+                id: AGENT_WORKSPACE_ID,
+                name: 'Cooldesk',
+                description: 'Working directory for chats started from the Cooldesk spotlight agent.',
+                createdAt: Date.now(),
+                gridType: 'ItemGrid',
+                status: 'active',
+                urls: [],
+                apps: [{ name: 'Cooldesk', path: dir, appType: 'folder' }],
+            });
+        }
+        return dir;
+    } catch (e) {
+        console.warn('[Spotlight] agent: failed to resolve agent workspace dir', e);
+        return null;
+    }
+}
+
 function parseScopedQuery(q) {
     const m = /^\/([uaf])(?:\s+(.*))?$/i.exec(q || '');
     if (!m) return { scope: null, term: q || '' };
@@ -389,10 +430,14 @@ export function GlobalSpotlight({
         } catch (e) {
             console.warn('[Spotlight] agent: failed to load workspaces', e);
         }
-        // Run in the active project's folder when there is one, so a repo-aware
-        // agent has something to look at.
-        const cwd = list.find(w => (w.apps || []).some(a => a.appType === 'folder'))
-            ?.apps.find(a => a.appType === 'folder')?.path || null;
+        // Every /agent run gets its own fixed, dedicated folder rather than
+        // guessing at "the active project" from whichever workspace was most
+        // recently touched — that heuristic drifted whenever an unrelated
+        // workspace got edited, silently pointing the agent at the wrong repo
+        // (and an untrusted one, which surfaced as a trust-dialog warning on
+        // every run). This directory is app-owned and pre-trusted in Claude
+        // Code's config, so it never hits that prompt.
+        const cwd = await getOrCreateAgentWorkspaceCwd();
         aiCli.run(request, list, cwd);
     }, [aiCli]);
 

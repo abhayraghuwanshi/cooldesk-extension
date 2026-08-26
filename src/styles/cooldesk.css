@@ -3836,30 +3836,10 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 
 
 /* Corner control bar for sidebar widths — hidden while the full header shows.
-   The button styling lives outside the media query so the wallpaper override
-   glass look composes with it either way. */
+   Only holds the update badge now (see CoolDeskContainer); the layout switch
+   lives in the Tab Management toolbar instead. */
 .sidebar-control-bar {
   display: none;
-}
-
-.sidebar-control-btn {
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary, #94A3B8);
-  cursor: pointer;
-  font-size: 13px;
-  padding: 0;
-}
-
-.sidebar-control-btn:hover {
-  color: var(--text-primary, #E5E7EB);
-  background: rgba(255, 255, 255, 0.08);
 }
 
 /* Sidebar mode (narrow screens below 500px) */
@@ -3875,16 +3855,19 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
     display: none;
   }
 
-  /* Corner control bar stands in for the hidden header. */
+  /* Corner control bar stands in for the hidden header. Offset further in
+     from the true window corner (not just 10px) so the buttons aren't the
+     very last pixels of a frameless, non-resizable window — that corner is
+     where the cursor is least precise. */
   .sidebar-control-bar {
     position: fixed;
-    top: 10px;
-    right: 10px;
+    top: 16px;
+    right: 16px;
     z-index: 10005;
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px;
+    gap: 6px;
+    padding: 6px;
     border-radius: 12px;
     background: rgba(15, 23, 42, 0.72);
     border: 1px solid var(--border-primary, rgba(148, 163, 184, 0.18));

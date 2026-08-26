@@ -1,6 +1,6 @@
-import { faDiagramProject, faGear, faGripLines, faTableColumns, faWindowMaximize } from '@fortawesome/free-solid-svg-icons';
+import { faDiagramProject, faGear } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import logo from '../../../logo-2.png';
 import { saveWorkspace } from '../../db/unified-api';
 import { TEAM_FEATURE_ENABLED } from '../../config/features';
@@ -16,6 +16,8 @@ import { UpdateButton } from '../../features/updates/UpdateButton';
 import { OverviewDashboard } from '../overview/OverviewDashboard';
 import { WorkspaceDockBar } from '../../features/dock/WorkspaceDockBar';
 import { useDockState } from '../../features/dock/useDockState';
+import { useLayoutSwitch } from '../../features/dock/useLayoutSwitch';
+import { LayoutSwitchButton } from '../../features/dock/LayoutSwitchButton';
 import { useCooldeskAutoWorkspace, useCooldeskDiscovery } from '../../shared/hooks/useCooldeskProjects.js';
 // Lazy load WorkspaceList (Face 2)
 const WorkspaceList = lazy(() => import('../workspace/WorkspaceList').then(m => ({ default: m.WorkspaceList })));
@@ -164,43 +166,9 @@ export function CoolDeskContainer({
   /* ── Layout cycle ────────────────────────────────────────────────────────
      One button walks the window through three layouts:
        full → side (drawer on the saved vertical edge) → bar (bottom strip) → full
-     The button renders the *next* layout's icon, so it always reads as an
-     action rather than a status light. */
-
-  const LAYOUTS = useMemo(() => ({
-    full: { key: 'full', label: 'Full window', icon: faWindowMaximize, next: 'side' },
-    side: { key: 'side', label: 'Side dock', icon: faTableColumns, next: 'bar' },
-    bar: { key: 'bar', label: 'Bottom bar', icon: faGripLines, next: 'full' },
-  }), []);
-
-  const currentLayout = !dockState?.enabled
-    ? 'full'
-    : (dockState.side === 'bottom' || dockState.side === 'top') ? 'bar' : 'side';
-
-  const nextLayout = LAYOUTS[LAYOUTS[currentLayout].next];
-
-  const applyLayout = useCallback(async (layout) => {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      if (layout === 'full') {
-        await invoke('dock_disable');
-        return;
-      }
-      // Keep the user's chosen vertical edge; the stored side may be "bottom"
-      // from bar mode, in which case fall back to right.
-      const side = layout === 'bar'
-        ? 'bottom'
-        : (dockState?.side === 'left' ? 'left' : 'right');
-      await invoke('dock_enable', { mode: 'drawer', side });
-      await invoke('dock_expand');
-    } catch (e) {
-      console.error(`[CoolDesk] Failed to switch layout to "${layout}":`, e);
-    }
-  }, [dockState]);
-
-  const cycleLayout = useCallback(() => {
-    applyLayout(LAYOUTS[currentLayout].next);
-  }, [applyLayout, LAYOUTS, currentLayout]);
+     Shared with the Tab Management toolbar and the workspace dock bar via
+     `useLayoutSwitch` — see `src/features/dock/useLayoutSwitch.js`. */
+  const { currentLayoutInfo, nextLayout, cycleLayout } = useLayoutSwitch(dockState);
 
   // Persist one item picked from the header search into the target workspace.
   // Links go through the URL index (`onAddUrlToWorkspace`) so analytics and
@@ -649,14 +617,12 @@ export function CoolDeskContainer({
               be reachable without opening Settings. */}
           <UpdateButton />
           {isDesktopApp && (
-            <button
+            <LayoutSwitchButton
               className="cooldesk-settings-btn"
               data-onboarding="dock-btn"
-              onClick={cycleLayout}
-              title={`${LAYOUTS[currentLayout].label} → ${nextLayout.label} (Ctrl+Shift+D)`}
-            >
-              <FontAwesomeIcon icon={nextLayout.icon} />
-            </button>
+              dockState={dockState}
+              title={`${currentLayoutInfo.label} → ${nextLayout.label} (Ctrl+Shift+D)`}
+            />
           )}
           <button className="cooldesk-settings-btn" onClick={() => setGraphOpen(true)} title="Cool Activity (Ctrl+Shift+G)">
             <FontAwesomeIcon icon={faDiagramProject} />
@@ -668,8 +634,9 @@ export function CoolDeskContainer({
       </div>
 
       {/* Corner control bar — only visible at sidebar widths (CSS), where the
-          top header above is hidden. Collapsed it's a single dots button;
-          expanded it offers the header's actions plus "back to full app". */}
+          top header above is hidden. Just the update badge now: the layout
+          switch lives in the Tab Management toolbar instead, so this corner
+          isn't a second copy of it. */}
       <div className="sidebar-control-bar">
         {/* Outside the collapse: a pending update shouldn't hide behind the
             dots button, and it disappears again once installed. */}
@@ -678,19 +645,7 @@ export function CoolDeskContainer({
             SettingsModal is a fixed two-column dialog and the activity graph
             wants real canvas area — and neither adapts to sidebar widths, so
             offering them from the drawer only led somewhere broken. Both stay
-            reachable from the full-width header, which is where the layout
-            button returns you. With them gone the dots disclosure that used to
-            wrap them is gone too: a collapse guarding a single button is just
-            an extra tap, and in extension mode it expanded to nothing at all. */}
-        {isDesktopApp && (
-          <button
-            className="sidebar-control-btn"
-            onClick={cycleLayout}
-            title={`${LAYOUTS[currentLayout].label} → ${nextLayout.label}`}
-          >
-            <FontAwesomeIcon icon={nextLayout.icon} />
-          </button>
-        )}
+            reachable from the full-width header. */}
       </div>
 
       {/* Spatial Workspace Shell - Takes remaining height */}

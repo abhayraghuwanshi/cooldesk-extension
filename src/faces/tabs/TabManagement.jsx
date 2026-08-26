@@ -14,6 +14,8 @@ import { AppCard, FolderCard, TabCard, TabGroupCard, TaskGroupCard } from './par
 import { DevServersPanel } from './parts/DevServersPanel';
 import { FileManager } from '../../features/file-manager/FileManager';
 import { WidgetBoard } from '../../features/widgets/WidgetBoard';
+import { LayoutSwitchButton } from '../../features/dock/LayoutSwitchButton';
+import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
 
 // The Tabs page gets its own widget strip (independent of the overview board).
 const TABS_WIDGET_DEFAULT = [
@@ -114,6 +116,9 @@ export function TabManagement() {
   const isRemoteTabMode = !window.electronAPI && !(typeof chrome !== 'undefined' && chrome?.tabs?.query);
   // Tauri desktop app — only here is the Rust `kill_process_on_port` command available.
   const isTauriApp = typeof window !== 'undefined' && !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+  // The header already carries a layout-switch button at full width; only
+  // show this one where that header is hidden (sidebar widths).
+  const isSidebarWidth = useIsSidebarWidth();
 
   // Load auto-group, smart sort, and task view state on mount
   useEffect(() => {
@@ -917,6 +922,24 @@ export function TabManagement() {
             />
             <span style={{ pointerEvents: 'none' }}>Auto Group</span>
           </button>
+          {isElectronApp() && isSidebarWidth && (
+            <LayoutSwitchButton
+              style={{
+                width: '30px',
+                height: '30px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '8px',
+                border: '1px solid rgba(100, 116, 139, 0.3)',
+                background: 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))',
+                color: '#94A3B8',
+                cursor: 'pointer',
+                fontSize: '13px',
+                padding: 0
+              }}
+            />
+          )}
           {/* <button
             onClick={() => {
               const newState = !taskViewEnabled;
@@ -986,38 +1009,6 @@ export function TabManagement() {
             <span style={{ pointerEvents: 'none' }}>Tasks</span>
           </button> */}
         </div>
-
-        {/* WS Connection Status Indicator */}
-        {isHostSyncEnabled() && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '5px 10px',
-            borderRadius: '8px',
-            background: wsConnected
-              ? 'rgba(34, 197, 94, 0.1)'
-              : 'rgba(100, 116, 139, 0.1)',
-            border: `1px solid ${wsConnected ? 'rgba(34, 197, 94, 0.25)' : 'rgba(100, 116, 139, 0.2)'}`,
-            fontSize: 'var(--font-xs, 11px)',
-            fontWeight: 500,
-            color: wsConnected ? '#4ADE80' : '#64748B',
-            userSelect: 'none'
-          }}
-            title={wsConnected ? 'Sync connected — tabs are live' : 'Sync disconnected — tabs may be outdated'}
-          >
-            <div style={{
-              width: '6px',
-              height: '6px',
-              borderRadius: '50%',
-              background: wsConnected ? '#22C55E' : '#64748B',
-              boxShadow: wsConnected ? '0 0 6px #22C55E' : 'none',
-              flexShrink: 0
-            }} />
-            <FontAwesomeIcon icon={faWifi} style={{ fontSize: '10px', opacity: 0.8 }} />
-            <span>{wsConnected ? 'Synced' : 'Offline'}</span>
-          </div>
-        )}
       </div>
 
       {/* Stale tabs warning — shown when sync is down in remote-tab mode */}

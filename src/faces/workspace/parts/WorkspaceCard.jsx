@@ -58,6 +58,7 @@ import { AccentColorPicker } from '../../../shared/components/AccentColorPicker.
 import { GroupedLinksPopover } from './GroupedLinksPopover.jsx';
 import { UrlAnalyticsPopover } from './UrlAnalyticsPopover.jsx';
 import { isEditorApp, workspaceActivityService } from '../../../services/workspaceActivityService.js';
+import { useIsSidebarWidth } from '../../../shared/hooks/useIsSidebarWidth.js';
 
 const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
 
@@ -162,6 +163,9 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   const [hoveredLink, setHoveredLink] = useState(null);
   const [showDrafts, setShowDrafts] = useState(false);
   const [contextMenu, setContextMenu] = useState(null); // { x, y }
+  // "Add item" arms the header search's add mode — hidden in the sidebar,
+  // so offering it there just opens a menu item that does nothing visible.
+  const isSidebarWidth = useIsSidebarWidth();
   // User-chosen accent color. Optimistic local state so the tint applies
   // instantly; persisted to the workspace record (survives reload / sync).
   const [colorOverride, setColorOverride] = useState(workspace.color || null);
@@ -1429,7 +1433,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
               here rather than as a permanent "+" on the card: every card would
               carry one, and an always-visible button competes with the items
               the card exists to show. */}
-          {onAddUrl && (
+          {onAddUrl && !isSidebarWidth && (
             <button
               className="context-menu-item"
               onClick={() => { onAddUrl(workspace); setContextMenu(null); }}

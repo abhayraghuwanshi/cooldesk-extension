@@ -10,6 +10,7 @@ import { ShareToTeamModal } from '../team/ShareToTeamModal';
 import { WorkspaceCard } from './parts/WorkspaceCard';
 import { WorkspaceContextPanel } from './parts/WorkspaceContextPanel.jsx';
 import { AppGrid } from './parts/AppGrid';
+import { LayoutSwitchButton } from '../../features/dock/LayoutSwitchButton';
 
 // Same desktop-app detection as WorkspaceCard: positive signal only, since
 // WebView2 populates chrome.runtime inside the Tauri app.
@@ -543,9 +544,10 @@ export function WorkspaceList({
                     marginBottom: '20px',
                     padding: '0 4px'
                 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {isNarrow ? (
                         /* Sidebar width: single dropdown instead of the chip row */
-                        <div className="mode-dropdown" ref={modeMenuRef}>
+                        <div className="mode-dropdown" ref={modeMenuRef} style={{ flex: 1, minWidth: 0 }}>
                             <button
                                 className="mode-dropdown-trigger"
                                 onClick={() => setIsModeMenuOpen(open => !open)}
@@ -595,7 +597,7 @@ export function WorkspaceList({
                             )}
                         </div>
                     ) : (
-                        <div className="mode-selector-container">
+                        <div className="mode-selector-container" style={{ flex: 1, minWidth: 0 }}>
                             <button
                                 className={`mode-item ${activeMode === 'all' ? 'active' : ''}`}
                                 onClick={() => handleModeChange('all')}
@@ -628,6 +630,27 @@ export function WorkspaceList({
                             })}
                         </div>
                     )}
+
+                    {isDesktopApp && isNarrow && (
+                        <LayoutSwitchButton
+                            style={{
+                                width: '34px',
+                                height: '34px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderRadius: '8px',
+                                border: '1px solid rgba(100, 116, 139, 0.3)',
+                                background: 'rgba(100, 116, 139, 0.12)',
+                                color: '#94A3B8',
+                                cursor: 'pointer',
+                                fontSize: '13px',
+                                padding: 0,
+                                flexShrink: 0
+                            }}
+                        />
+                    )}
+                </div>
 
                     {/* Active Mode Greeting */}
                     <div style={{

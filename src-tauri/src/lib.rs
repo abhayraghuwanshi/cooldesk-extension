@@ -270,6 +270,82 @@ fn prune_backups(dir: &std::path::Path) {
     }
 }
 
+// ── Agent workspace ──────────────────────────────────────────────────────────
+// `/agent` in the global spotlight used to pick `cwd` by scanning the user's
+// saved workspaces for whichever one was updated most recently and happened to
+// have a folder app — a proxy for "the active project" that drifts the moment
+// an unrelated workspace gets touched, silently redirecting agent runs to the
+// wrong directory. This gives spotlight a fixed directory it owns outright, so
+// every `/agent` run always lands in the same, known-trusted place.
+
+fn agent_workspace_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("agent-workspace");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+/// Mark a directory as trusted in Claude Code's own `~/.claude.json`, so a CLI
+/// run there doesn't stop to ask the user to accept a trust dialog.
+///
+/// Only ever called with `agent_workspace_dir()`'s own path — a directory this
+/// app created and controls, never a user-chosen project folder — because
+/// pre-trusting arbitrary code the user didn't knowingly vouch for would defeat
+/// the point of the prompt. `serde_json`'s `preserve_order` feature is required
+/// here: without it, round-tripping through `Value` would alphabetically
+/// reorder every key in the user's global CLI config as a side effect of
+/// flipping one flag.
+fn trust_claude_workspace(path: &std::path::Path) -> Result<(), String> {
+    let Some(home) = dirs::home_dir() else {
+        return Ok(());
+    };
+    let config_path = home.join(".claude.json");
+    if !config_path.is_file() {
+        // No Claude Code config yet on this machine — nothing to pre-trust;
+        // the CLI will create its own config and prompt normally on first run.
+        return Ok(());
+    }
+
+    let raw = std::fs::read_to_string(&config_path).map_err(|e| e.to_string())?;
+    let mut root: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+
+    let path_str = path.to_string_lossy().to_string();
+    let projects = root
+        .as_object_mut()
+        .ok_or("~/.claude.json is not a JSON object")?
+        .entry("projects")
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+    let projects = projects
+        .as_object_mut()
+        .ok_or("~/.claude.json's \"projects\" is not an object")?;
+    let entry = projects
+        .entry(path_str)
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+    if let Some(entry) = entry.as_object_mut() {
+        entry.insert("hasTrustDialogAccepted".to_string(), serde_json::Value::Bool(true));
+    }
+
+    let serialized = serde_json::to_string_pretty(&root).map_err(|e| e.to_string())?;
+    std::fs::write(&config_path, serialized).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Directory `/agent` should run in: created if missing, pre-trusted in Claude
+/// Code's config so the first run there doesn't hit the trust-dialog warning.
+#[tauri::command]
+fn get_agent_workspace_dir(app: tauri::AppHandle) -> Result<String, String> {
+    let dir = agent_workspace_dir(&app)?;
+    if let Err(e) = trust_claude_workspace(&dir) {
+        // Best-effort: the directory is still usable, just falls back to the
+        // CLI's normal trust prompt on first run.
+        log::warn!("[AgentWorkspace] Failed to pre-trust {}: {}", dir.display(), e);
+    }
+    Ok(dir.to_string_lossy().to_string())
+}
+
 // ── Autostart args ───────────────────────────────────────────────────────────
 // At login the Run key launches us with ARG_AUTOSTART. Every well-behaved
 // startup app does this (OneDrive /background, Steam -silent, Chrome
@@ -2739,6 +2815,7 @@ pub fn run() {
         list_backups,
         read_backup,
         delete_backup,
+        get_agent_workspace_dir,
         folder_index::folder_index_list,
         folder_index::folder_index_add,
         folder_index::folder_index_remove,
