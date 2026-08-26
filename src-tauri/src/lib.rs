@@ -397,6 +397,11 @@ fn ensure_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
         .resizable(true)
         .fullscreen(false)
         .visible(false)
+        // Needed so the inset gap around the docked vertical sidebar (see
+        // `SIDEBAR_MARGIN`) shows real desktop rather than an opaque window
+        // background. A no-op for the normal 1400x900 window, whose body CSS
+        // stays fully opaque.
+        .transparent(true)
         .build();
 
     match built {
@@ -576,6 +581,19 @@ const DOCK_MAX_WIDTH: u32 = 900;
 const BAR_MIN_HEIGHT: u32 = 40;
 const BAR_MAX_HEIGHT: u32 = 220;
 
+/// Gap (logical px) between the vertical sidebar panel and its left/right
+/// edges (inner edge and outer/docked edge alike) — a floating panel, not a
+/// flush-docked strip. Relies on the main window being `.transparent(true)`
+/// (see `ensure_main_window`) plus the `sidebar-docked` body class
+/// (`CoolDeskContainer.jsx`) so the gap and rounded corners reveal real
+/// desktop instead of window-colored margin.
+const SIDEBAR_MARGIN: i32 = 16;
+
+/// Gap (logical px) between the vertical sidebar panel and the screen's
+/// top/bottom — kept larger than `SIDEBAR_MARGIN` since it reads as clearance
+/// below the menu bar, not just panel styling.
+const SIDEBAR_MARGIN_VERTICAL: i32 = 40;
+
 /// Converts a logical/CSS pixel size (what `DockState.width`/`bar_height` and
 /// the `HANDLE_W`/`HANDLE_H` constants represent) to the physical pixels the
 /// window-positioning APIs need. Every monitor geometry value we combine this
@@ -713,13 +731,28 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
                 let (bx, bw) = (mx, mw);
                 (bx, y, bw, h)
             } else {
-                let w = logical_to_physical(st.width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH) as i32, scale);
-                let x = if st.side == "left" { mx } else { mx + mw - w };
-                (x, my, w, mh)
+                // Floating panel: gap on every edge, including the outer/docked
+                // one — flush against the physical screen edge looked cramped in
+                // practice (butts right up against neighboring windows). Top/bottom
+                // use a separate, larger margin — see `SIDEBAR_MARGIN_VERTICAL`.
+                // (On macOS this y/height is only a starting point: `apply_sidebar_margin`
+                // below re-derives both from the screen's menu-bar-excluded
+                // `visibleFrame`, which this cross-platform calc can't see.)
+                let margin = logical_to_physical(SIDEBAR_MARGIN, scale);
+                let margin_v = logical_to_physical(SIDEBAR_MARGIN_VERTICAL, scale);
+                let w = (logical_to_physical(st.width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH) as i32, scale) - margin * 2).max(1);
+                let x = if st.side == "left" { mx + margin } else { mx + mw - w - margin };
+                (x, my + margin_v, w, (mh - margin_v * 2).max(1))
             };
             let _ = main.set_decorations(false);
             let _ = main.set_resizable(false);
             let _ = main.set_always_on_top(true);
+            // A native rectangular drop shadow would poke past the rounded
+            // corners drawn by the `sidebar-docked` body CSS — only relevant for
+            // the vertical panel; the horizontal bar keeps its existing shadow.
+            if !horizontal {
+                let _ = main.set_shadow(false);
+            }
             let _ = main.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w as u32, height: h as u32 }));
             let _ = main.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
             // Same reasoning as the handle: a dock/taskbar panel that vanishes
@@ -745,6 +778,8 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
                     dock::join_fullscreen_space(&main_for_appkit);
                     if horizontal {
                         dock::clamp_to_visible_frame(&main_for_appkit, &side_for_appkit);
+                    } else {
+                        dock::apply_sidebar_margin(&main_for_appkit, SIDEBAR_MARGIN_VERTICAL as f64);
                     }
                     // Snapshot the final on-screen frame (post-clamp) for the
                     // leave-intent watcher to poll against.
@@ -953,6 +988,7 @@ fn disable_dock(app: &tauri::AppHandle) -> DockState {
         }
         let _ = window.set_decorations(true);
         let _ = window.set_resizable(true);
+        let _ = window.set_shadow(true);
         let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 1400.0, height: 900.0 }));
         let _ = window.center();
         let _ = window.show();
@@ -3143,7 +3179,15 @@ pub fn run() {
                       continue;
                   };
                   let (cx, cy) = dock::cursor_location();
-                  let over = cx >= fx && cx <= fx + fw && cy >= fy && cy <= fy + fh;
+                  // Grown by the sidebar margins: the vertical panel now floats
+                  // with a real gap on every edge (see `expand_drawer`), so the
+                  // cursor passes through that gap — technically outside `frame`
+                  // — just moving to/from the panel. Without this buffer that
+                  // dead zone was read as "left the panel," flapping the
+                  // collapse timer.
+                  let buffer_x = SIDEBAR_MARGIN as f64;
+                  let buffer_y = SIDEBAR_MARGIN_VERTICAL as f64;
+                  let over = cx >= fx - buffer_x && cx <= fx + fw + buffer_x && cy >= fy - buffer_y && cy <= fy + fh + buffer_y;
                   if over {
                       away_since = None;
                       continue;

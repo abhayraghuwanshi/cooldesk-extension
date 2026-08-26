@@ -23,7 +23,7 @@
 // `AppHandle::run_on_main_thread` rather than calling these directly from a
 // background thread (e.g. an async Tauri command runs on a tokio worker).
 
-use objc2_app_kit::{NSApplication, NSEvent, NSWindow, NSWindowCollectionBehavior, NSFloatingWindowLevel, NSStatusWindowLevel};
+use objc2_app_kit::{NSApplication, NSEvent, NSScreen, NSWindow, NSWindowCollectionBehavior, NSFloatingWindowLevel, NSStatusWindowLevel};
 
 /// Nudges a horizontal (top/bottom) drawer bar or its collapsed handle back
 /// inside the screen's *visible* frame after it's been positioned against
@@ -59,6 +59,58 @@ pub fn clamp_to_visible_frame(window: &tauri::WebviewWindow, side: &str) {
         (visible.origin.y + visible.size.height) - frame.size.height
     };
     ns_window.setFrameOrigin(origin);
+}
+
+/// Corrects the vertical sidebar panel's vertical placement after
+/// `expand_drawer` sets it via Tauri's cross-platform position API. Two
+/// separate problems, both fixed here:
+///
+/// 1. That position API (tao's `set_outer_position` → `window_position()`)
+///    flips tao's top-down Y into AppKit's bottom-up Y using only
+///    `CGDisplay::main().pixels_high()` — the *primary* display's height —
+///    regardless of which screen the window is actually on. On a secondary
+///    monitor this produces a wrong Y (observed: the panel pinned flush to
+///    y=0 instead of respecting `SIDEBAR_MARGIN`).
+/// 2. `expand_drawer` sizes the vertical panel against the monitor's *full*
+///    physical rect (deliberately, for the flush-edge historical behavior —
+///    see `drawer_geom`'s doc comment), not its menu-bar/Dock-excluded
+///    `visibleFrame`. Each display gets its own menu bar in a multi-monitor
+///    setup, so a small `SIDEBAR_MARGIN` from the raw physical top edge
+///    still lands the panel's top underneath that display's menu bar
+///    (observed: no visible gap at all, top or bottom).
+///
+/// Re-derives both `y` and `height` from `visibleFrame` instead of patching
+/// just the origin. `x` and `width` are unaffected by either problem (no Y
+/// flip involved, and the sidebar was always narrower than the monitor) so
+/// they're left as tao already set them.
+///
+/// Must run on the main thread, after size/position have been applied — same
+/// constraints as `clamp_to_visible_frame`.
+pub fn apply_sidebar_margin(window: &tauri::WebviewWindow, margin_logical: f64) {
+    let Ok(ptr) = window.ns_window() else { return };
+    let ns_window: &NSWindow = unsafe { &*(ptr as *mut NSWindow) };
+    let mut frame = ns_window.frame();
+
+    // `ns_window.screen()` picks whichever NSScreen the window's *current*
+    // frame overlaps most — unreliable right here since the Y half of that
+    // frame is the very value tao just miscalculated (see doc comment above)
+    // and may not land on the intended monitor at all. `x` is always correct
+    // (untouched by the flip), so find the screen by horizontal containment
+    // instead of trusting the window's already-wrong frame.
+    let Some(mtm) = objc2::MainThreadMarker::new() else { return };
+    let visible = NSScreen::screens(mtm)
+        .iter()
+        .find(|s| {
+            let f = s.frame();
+            frame.origin.x >= f.origin.x && frame.origin.x < f.origin.x + f.size.width
+        })
+        .or_else(|| ns_window.screen())
+        .map(|s| s.visibleFrame());
+    let Some(visible) = visible else { return };
+
+    frame.origin.y = visible.origin.y + margin_logical;
+    frame.size.height = (visible.size.height - margin_logical * 2.0).max(1.0);
+    ns_window.setFrame_display(frame, true);
 }
 
 /// Lets a window follow the user across *ordinary* Space switches (the
