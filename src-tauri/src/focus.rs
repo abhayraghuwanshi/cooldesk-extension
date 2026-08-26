@@ -124,15 +124,25 @@ mod other {
         Err(FocusError::PlatformNotSupported)
     }
 
-    pub fn focus_window_by_pid(_pid: u32, _process_name: Option<&str>) -> FocusResult<()> {
+    pub fn focus_window_by_pid(_pid: u32, _process_name: Option<&str>, _path: Option<&str>) -> FocusResult<()> {
         Err(FocusError::PlatformNotSupported)
     }
 }
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
 pub use other::*;
 
-/// Convenience function that handles both HWND and PID modes
-pub fn focus_window(hwnd: Option<isize>, pid: Option<u32>, process_name: Option<&str>) -> FocusResult<()> {
+/// Convenience function that handles both HWND and PID modes. `path` is the
+/// app's executable path when known — macOS uses it to resolve the exact
+/// `.app` bundle via `open <bundle path>` instead of guessing an app name for
+/// Launch Services, which fails whenever the process name differs from the
+/// bundle's registered display name (VS Code's process is "Code", but its
+/// bundle is "Visual Studio Code.app" — `open -a Code` fails outright).
+pub fn focus_window(
+    hwnd: Option<isize>,
+    pid: Option<u32>,
+    process_name: Option<&str>,
+    path: Option<&str>,
+) -> FocusResult<()> {
     if let Some(h) = hwnd {
         if let Ok(()) = focus_window_by_hwnd(h) {
             return Ok(());
@@ -140,7 +150,7 @@ pub fn focus_window(hwnd: Option<isize>, pid: Option<u32>, process_name: Option<
     }
 
     if let Some(p) = pid {
-        return focus_window_by_pid(p, process_name);
+        return focus_window_by_pid(p, process_name, path);
     }
 
     Err(FocusError::WindowNotFound)
@@ -173,7 +183,7 @@ mod tests {
     #[cfg(target_os = "windows")]
     fn test_focus_nonexistent_pid() {
         // Should return WindowNotFound for a PID that doesn't exist
-        let result = focus_window_by_pid(999999, None);
+        let result = focus_window_by_pid(999999, None, None);
         assert!(matches!(result, Err(FocusError::WindowNotFound)));
     }
 

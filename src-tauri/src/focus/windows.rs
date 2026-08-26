@@ -62,8 +62,9 @@ pub fn focus_window_by_hwnd(hwnd: isize) -> FocusResult<()> {
     }
 }
 
-/// Focus a window by process ID, optionally with process name fallback
-pub fn focus_window_by_pid(pid: u32, process_name: Option<&str>) -> FocusResult<()> {
+/// Focus a window by process ID, optionally with process name fallback.
+/// `path` is macOS-only (bundle resolution); unused here.
+pub fn focus_window_by_pid(pid: u32, process_name: Option<&str>, _path: Option<&str>) -> FocusResult<()> {
     // Try by PID first (Win32 SetForegroundWindow path)
     if try_focus_pid(pid) {
         return Ok(());

@@ -10,8 +10,33 @@ pub fn focus_window_by_hwnd(_hwnd: isize) -> FocusResult<()> {
     Err(FocusError::PlatformNotSupported)
 }
 
+/// The `.app` bundle a Unix executable path lives inside, e.g.
+/// ".../Visual Studio Code.app/Contents/MacOS/Code" → ".../Visual Studio Code.app".
+/// Every macOS app executable is nested this way, so this is exact — no name
+/// guessing involved.
+fn app_bundle_path(exe_path: &str) -> Option<&str> {
+    let idx = exe_path.find(".app/")?;
+    Some(&exe_path[..idx + 4])
+}
+
 /// Focus a window by process ID.
-pub fn focus_window_by_pid(pid: u32, process_name: Option<&str>) -> FocusResult<()> {
+pub fn focus_window_by_pid(pid: u32, process_name: Option<&str>, path: Option<&str>) -> FocusResult<()> {
+    // Method 0: `open <bundle path>` — identifies the exact app by its bundle
+    // on disk, sidestepping Launch Services name lookup entirely. This is the
+    // only method here that can't be defeated by a process/display name
+    // mismatch (e.g. VS Code's process is "Code", not "Visual Studio Code"),
+    // and — like Method 1 — needs no Automation/Apple Events permission.
+    if let Some(exe_path) = path {
+        if let Some(bundle) = app_bundle_path(exe_path) {
+            let result = Command::new("open").arg(bundle).output();
+            if let Ok(output) = &result {
+                if output.status.success() {
+                    return Ok(());
+                }
+            }
+        }
+    }
+
     // Method 1: `open -a <name>` — the same LaunchServices "open application"
     // path Finder/the Dock use for a Dock-icon click. This is NOT equivalent
     // to AppleScript `activate`: for an app that's running but currently has

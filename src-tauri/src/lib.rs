@@ -1305,17 +1305,19 @@ fn categorize_app(name: String, path: String) -> categorize::AppCategory {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-async fn focus_window(_app: tauri::AppHandle, pid: u32, name: Option<String>, hwnd: Option<i64>) -> Result<(), String> {
+async fn focus_window(_app: tauri::AppHandle, pid: u32, name: Option<String>, hwnd: Option<i64>, path: Option<String>) -> Result<(), String> {
     let hwnd_opt = hwnd.filter(|&h| h != 0).map(|h| h as isize);
     let name_ref = name.as_deref();
+    let path_ref = path.as_deref();
 
     log::info!(
-        "[focus_window] pid={} name={:?} hwnd={:?}",
+        "[focus_window] pid={} name={:?} hwnd={:?} path={:?}",
         pid,
         name_ref,
-        hwnd_opt
+        hwnd_opt,
+        path_ref
     );
-    match focus::focus_window(hwnd_opt, Some(pid), name_ref) {
+    match focus::focus_window(hwnd_opt, Some(pid), name_ref, path_ref) {
         Ok(()) => {
             log::info!("[focus_window] succeeded for pid={} name={:?}", pid, name_ref);
             Ok(())
@@ -1970,7 +1972,53 @@ async fn get_frequent_folders() -> Vec<FrequentFolder> {
         .await
         .unwrap_or_default()
     }
-    #[cfg(not(target_os = "windows"))]
+    // macOS has no bundled Quick-Access-style API to call, but Spotlight
+    // already tracks last-used dates per item (kMDItemLastUsedDate) — the
+    // same signal Finder's "Recents" uses — so `mdfind` gets a real answer
+    // here instead of the empty list this returned unconditionally before.
+    #[cfg(target_os = "macos")]
+    {
+        tauri::async_runtime::spawn_blocking(|| {
+            let Some(home) = dirs::home_dir() else { return Vec::new() };
+            let output = std::process::Command::new("mdfind")
+                .arg("-onlyin")
+                .arg(&home)
+                .arg("kMDItemContentType == 'public.folder' && kMDItemLastUsedDate >= $time.today(-90)")
+                .output();
+            let Ok(output) = output else { return Vec::new() };
+            let stdout = String::from_utf8_lossy(&output.stdout);
+
+            // Noise, not "folders the user works in": default libraries,
+            // package internals, VCS/dependency dirs, build output — a
+            // compile run touches these constantly, which floods "recently
+            // used" with directories the user never navigates to themselves.
+            let excluded_names = [
+                "Library", "Applications", "Trash", ".Trash",
+                "Desktop", "Downloads", "Documents", "Pictures", "Movies", "Music",
+                "node_modules", ".git", "target", "dist", "build", ".next", "out",
+            ];
+            let noisy_segment = |p: &str| {
+                p.contains("/Library/") || p.contains("/node_modules/") || p.contains("/.git/")
+                    || p.contains("/target/") || p.contains("/dist/") || p.contains("/build/")
+                    || p.contains(".app/")
+            };
+
+            let mut folders = Vec::new();
+            for path in stdout.lines().filter(|s| !s.is_empty()) {
+                if path == home.to_string_lossy() { continue; }
+                if noisy_segment(path) { continue; }
+                let Some(name) = std::path::Path::new(path).file_name().and_then(|n| n.to_str()) else { continue };
+                if excluded_names.contains(&name) { continue; }
+                folders.push(FrequentFolder { name: name.to_string(), path: path.to_string() });
+                if folders.len() >= 20 { break; }
+            }
+            folders
+        })
+        .await
+        .unwrap_or_default()
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
         Vec::new()
     }
