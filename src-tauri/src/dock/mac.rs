@@ -23,7 +23,7 @@
 // `AppHandle::run_on_main_thread` rather than calling these directly from a
 // background thread (e.g. an async Tauri command runs on a tokio worker).
 
-use objc2_app_kit::{NSEvent, NSWindow, NSWindowCollectionBehavior, NSFloatingWindowLevel, NSStatusWindowLevel};
+use objc2_app_kit::{NSApplication, NSEvent, NSWindow, NSWindowCollectionBehavior, NSFloatingWindowLevel, NSStatusWindowLevel};
 
 /// Nudges a horizontal (top/bottom) drawer bar or its collapsed handle back
 /// inside the screen's *visible* frame after it's been positioned against
@@ -111,6 +111,15 @@ pub fn promote_spotlight_over_fullscreen_spaces(window: &tauri::WebviewWindow) {
 /// module doc comment), `orderFrontRegardless()` + `makeKeyWindow()` here
 /// keeps focus behavior consistent with the CGS join below without
 /// depending on tao's internal call path.
+///
+/// `activateIgnoringOtherApps(true)` IS still called below, same as tao's
+/// path — omitting it (as this function originally did) makes our window
+/// key *within our own app*, but doesn't take frontmost-application status
+/// away from whatever app currently has it. Invoking spotlight while a
+/// different app (e.g. VS Code) is focused then shows the window without
+/// actually routing keyboard input to it: the OS keeps delivering keystrokes
+/// to the still-frontmost other app, so the search input never receives
+/// focus even though `makeKeyWindow()` succeeded at the window level.
 pub fn show_over_fullscreen_spaces(window: &tauri::WebviewWindow) {
     let Ok(ptr) = window.ns_window() else { return };
     let ns_window: &NSWindow = unsafe { &*(ptr as *mut NSWindow) };
@@ -122,6 +131,9 @@ pub fn show_over_fullscreen_spaces(window: &tauri::WebviewWindow) {
     super::cgs::join_active_spaces(ns_window.windowNumber() as i64);
     ns_window.orderFrontRegardless();
     ns_window.makeKeyWindow();
+    if let Some(mtm) = objc2::MainThreadMarker::new() {
+        NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
+    }
 }
 
 /// Dock/sidebar-only: joins whatever Space(s) are currently active/on-screen

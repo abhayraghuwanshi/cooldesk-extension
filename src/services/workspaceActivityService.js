@@ -404,7 +404,7 @@ class WorkspaceActivityService {
                 // goes through `open`/ShellExecute instead, which needs none of
                 // that and reliably raises an already-running app's window too,
                 // so it's a safe fallback rather than a duplicate launch.
-                api.focusApp(live.pid, live.name, live.hwnd).catch(() => {
+                api.focusApp(live.pid, live.name, live.hwnd, live.path).catch(() => {
                     api.launchApp?.(item.path);
                 });
                 return;

@@ -1,0 +1,344 @@
+/* Quick-Look-style preview pane. The .preview-pane box itself (flex sizing,
+   border, background) lives in GlobalSpotlight.css, not here — this file is
+   lazy-loaded alongside Prism only once a preview is actually shown (see the
+   lazy() import in GlobalSpotlight.jsx), so the Suspense fallback needs that
+   base layout available immediately, before this stylesheet has loaded. */
+
+.preview-pane-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.preview-pane-header-icon {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
+}
+
+.preview-pane-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.preview-pane-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preview-pane-path {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+  font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+}
+
+.preview-pane-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.preview-pane-footer-meta {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.32);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ── Loading skeleton ─────────────────────────────────────────── */
+
+.preview-pane-skeleton {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.preview-pane-skeleton-line {
+  height: 10px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 25%,
+    rgba(255, 255, 255, 0.09) 50%,
+    rgba(255, 255, 255, 0.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: previewShimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes previewShimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* ── Error state ──────────────────────────────────────────────── */
+
+.preview-pane-error {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 12px;
+  text-align: center;
+}
+
+.preview-pane-error svg {
+  font-size: 20px;
+  color: rgba(234, 179, 8, 0.5);
+}
+
+/* ── Image preview ────────────────────────────────────────────── */
+
+.preview-pane-image-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 16px;
+  gap: 10px;
+}
+
+.preview-pane-image {
+  max-width: 100%;
+  max-height: 100%;
+  min-height: 0;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.03) 25%, transparent 25%) -8px 0,
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.03) 25%, transparent 25%) -8px 0,
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.03) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.03) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+
+.preview-pane-image-dims {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
+}
+
+/* ── Code preview ─────────────────────────────────────────────── */
+
+.preview-pane-code-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: auto;
+  font-family: 'SF Mono', 'Cascadia Code', Consolas, 'Fira Code', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.preview-pane-gutter {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 0;
+  text-align: right;
+  user-select: none;
+  color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.015);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  position: sticky;
+  left: 0;
+}
+
+.preview-pane-gutter span {
+  padding: 0 10px;
+  white-space: pre;
+}
+
+.preview-pane-code {
+  flex: 1;
+  margin: 0;
+  padding: 12px 16px;
+  white-space: pre;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.preview-pane-truncated {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 11px;
+  color: rgba(234, 179, 8, 0.75);
+  background: rgba(234, 179, 8, 0.06);
+  border-top: 1px solid rgba(234, 179, 8, 0.15);
+  flex-shrink: 0;
+}
+
+/* ── Prism token colors — a bespoke palette tuned to this dark UI rather
+   than an imported theme, so it reads as part of the app, not a pasted-in
+   widget. Loosely One Dark-inspired. ────────────────────────────────── */
+
+.preview-pane-code .token.comment,
+.preview-pane-code .token.prolog,
+.preview-pane-code .token.doctype,
+.preview-pane-code .token.cdata {
+  color: rgba(255, 255, 255, 0.32);
+  font-style: italic;
+}
+
+.preview-pane-code .token.punctuation {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.preview-pane-code .token.property,
+.preview-pane-code .token.tag,
+.preview-pane-code .token.boolean,
+.preview-pane-code .token.number,
+.preview-pane-code .token.constant,
+.preview-pane-code .token.symbol,
+.preview-pane-code .token.deleted {
+  color: #d19a66;
+}
+
+.preview-pane-code .token.selector,
+.preview-pane-code .token.attr-name,
+.preview-pane-code .token.string,
+.preview-pane-code .token.char,
+.preview-pane-code .token.builtin,
+.preview-pane-code .token.inserted {
+  color: #98c379;
+}
+
+.preview-pane-code .token.operator,
+.preview-pane-code .token.entity,
+.preview-pane-code .token.url,
+.preview-pane-code .language-css .token.string,
+.preview-pane-code .style .token.string {
+  color: #56b6c2;
+}
+
+.preview-pane-code .token.atrule,
+.preview-pane-code .token.attr-value,
+.preview-pane-code .token.keyword {
+  color: #c678dd;
+}
+
+.preview-pane-code .token.function,
+.preview-pane-code .token.class-name {
+  color: #61afef;
+}
+
+.preview-pane-code .token.regex,
+.preview-pane-code .token.important,
+.preview-pane-code .token.variable {
+  color: #e5c07b;
+}
+
+.preview-pane-code .token.important,
+.preview-pane-code .token.bold {
+  font-weight: 600;
+}
+
+.preview-pane-code .token.italic {
+  font-style: italic;
+}
+
+/* ── Video preview ────────────────────────────────────────────── */
+
+.preview-pane-video-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 16px;
+  background: #000;
+}
+
+.preview-pane-video {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* ── PDF preview ──────────────────────────────────────────────── */
+
+.preview-pane-pdf-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+}
+
+.preview-pane-pdf-canvas {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  background: #fff;
+  align-self: flex-start;
+}
+
+.preview-pane-pdf-nav {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 8px 14px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.preview-pane-pdf-nav button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.preview-pane-pdf-nav button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.preview-pane-pdf-nav button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ── Narrow-window fallback: below this, a split pane has no room to
+   breathe — stack instead of squeezing both columns unreadably thin. */
+@media (max-width: 640px) {
+  .preview-pane {
+    display: none;
+  }
+}

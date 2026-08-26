@@ -47,11 +47,21 @@ class ErrorBoundary extends React.Component {
     }
 }
 
+// Same detection CoolDeskContainer uses for the embedded spotlight — this
+// standalone overlay window is a second Tauri window of the same app, so
+// window.__TAURI__ is present here too. GlobalSpotlight defaults
+// isDesktopApp to false when the prop is omitted, which silently disabled
+// every desktop-only feature (app search, /a and /u browsing, the agent,
+// dock layout controls, …) in this window specifically — the embedded
+// spotlight passed the prop correctly and never showed the gap.
+const isDesktopApp = typeof window !== 'undefined' &&
+    !!(window.__TAURI__ || window.__TAURI_INTERNALS__ || window.electronAPI);
+
 function SpotlightApp() {
     return (
         <ErrorBoundary>
             <Suspense fallback={<div style={{ color: '#fff', padding: '20px' }}>Loading Spotlight...</div>}>
-                <GlobalSpotlight />
+                <GlobalSpotlight isDesktopApp={isDesktopApp} />
             </Suspense>
         </ErrorBoundary>
     );

@@ -16,6 +16,7 @@ mod webapp_embed;
 mod dock;
 mod ai_cli;
 mod folder_index;
+mod preview;
 
 use system::RunningApp;
 
@@ -2869,7 +2870,9 @@ pub fn run() {
         folder_index::folder_index_remove,
         folder_index::folder_index_set_options,
         folder_index::folder_index_reindex,
-        folder_index::folder_index_reindex_all
+        folder_index::folder_index_reindex_all,
+        preview::preview_text_file,
+        preview::preview_image_file
     ])
     .setup(|app| {
       // No instance was running, so `--quit` reached us as the primary. Exit
@@ -3351,11 +3354,31 @@ pub fn run() {
 
       let handle = app.handle().clone();
       use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
-      app.global_shortcut().on_shortcut(startup_shortcut.as_str(), move |_app, _shortcut, event| {
-          if event.state == ShortcutState::Pressed {
-              toggle_spotlight(handle.clone());
+      // A saved shortcut string the plugin can't parse (a stale/corrupt value,
+      // or a bad one that slipped past the recorder's validation — see
+      // set_spotlight_shortcut) must never crash the whole app at launch: the
+      // ? this used to end in propagated out of .setup(), and a setup-hook
+      // Err becomes an unwind across tao's ObjC delegate, which aborts the
+      // process outright (Rust panics can't cross that FFI boundary). Fall
+      // back to Alt+K and keep starting instead.
+      let register_result = app.global_shortcut().on_shortcut(startup_shortcut.as_str(), {
+          let handle = handle.clone();
+          move |_app, _shortcut, event| {
+              if event.state == ShortcutState::Pressed {
+                  toggle_spotlight(handle.clone());
+              }
           }
-      }).map_err(|e| format!("Failed to register shortcut '{}': {}", startup_shortcut, e))?;
+      });
+      if let Err(e) = register_result {
+          log::error!("[Shortcut] Saved shortcut '{}' failed to register: {}. Falling back to Alt+K.", startup_shortcut, e);
+          if startup_shortcut != "Alt+K" {
+              app.global_shortcut().on_shortcut("Alt+K", move |_app, _shortcut, event| {
+                  if event.state == ShortcutState::Pressed {
+                      toggle_spotlight(handle.clone());
+                  }
+              }).map_err(|e| format!("Failed to register fallback shortcut 'Alt+K': {}", e))?;
+          }
+      }
 
       // Grant the spotlight window permission to render over other apps'
       // fullscreen Spaces exactly once, here, instead of inside

@@ -685,7 +685,7 @@ export function TabManagement() {
       if (window.electronAPI?.focusApp && app.pid) {
         console.log('[TabManagement] Focusing app:', app.name, app.pid, 'HWND:', app.hwnd);
         try {
-          await window.electronAPI.focusApp(app.pid, app.name, app.hwnd);
+          await window.electronAPI.focusApp(app.pid, app.name, app.hwnd, app.path);
         } catch (focusError) {
           // focusApp goes through OS-level window scripting, which can fail
           // silently from the user's POV (missing Automation permission, or a

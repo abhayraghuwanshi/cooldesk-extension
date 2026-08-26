@@ -339,29 +339,61 @@ const electronAPI = {
         // Handle History commands (Activity Log)
         if (msg?.type === 'SEARCH_HISTORY') {
             const q = (msg.query || '').toLowerCase();
-            // Fetch activity from sidecar
+            // Fetch activity from sidecar — oldest-first, up to the last 1000 raw
+            // events (see append_activity in sync.rs). Rows are flat
+            // { id, url, title, timestamp, ... } — NOT nested under a `data`
+            // field. Reading `a.data?.url` here silently matched nothing on
+            // every single row, so history search returned zero results
+            // regardless of query, ranking, or the maxResults cap.
             const activity = await (await fetch(`${SIDECAR_URL}/activity`)).json();
 
-            // Filter for unique URLs that match query
-            const seenUrls = new Set();
-            const results = activity
-                .filter(a => {
-                    if (!a.data?.url) return false;
-                    if (seenUrls.has(a.data.url)) return false;
-                    const matches = (a.data.title || '').toLowerCase().includes(q) ||
-                        (a.data.url || '').toLowerCase().includes(q);
-                    if (matches) seenUrls.add(a.data.url);
-                    return matches;
-                })
-                .map(a => ({
-                    id: `hist-${a.id}`,
-                    title: a.data.title,
-                    url: a.data.url,
-                    type: 'history',
-                    description: 'Recent History',
-                    favicon: a.data.favicon,
-                    lastVisitTime: a.timestamp
-                }))
+            // One `id` is a single browsing session and gets re-posted
+            // repeatedly as its dwell time grows (see the focus sampler), so a
+            // page left open all day appears as many rows sharing one id, not
+            // many separate visits. Collapse to one row per id (its latest
+            // snapshot) before counting visits per URL.
+            const byId = new Map();
+            for (const a of activity) {
+                if (!a.url) continue;
+                const existing = byId.get(a.id);
+                if (!existing || (a.timestamp || 0) > existing.timestamp) {
+                    byId.set(a.id, a);
+                }
+            }
+
+            // Aggregate per URL (most recent visit + visit count) before capping
+            // to maxResults, so a site visited constantly today survives the
+            // cap and ranks by recency rather than by whenever it first
+            // appeared in the log.
+            const byUrl = new Map();
+            for (const a of byId.values()) {
+                const url = a.url;
+                const ts = a.timestamp || 0;
+                const existing = byUrl.get(url);
+                if (existing) {
+                    existing.visitCount += 1;
+                    if (ts > existing.lastVisitTime) {
+                        existing.lastVisitTime = ts;
+                        existing.title = a.title;
+                        existing.id = `hist-${a.id}`;
+                    }
+                } else {
+                    byUrl.set(url, {
+                        id: `hist-${a.id}`,
+                        title: a.title,
+                        url,
+                        type: 'history',
+                        description: 'Recent History',
+                        lastVisitTime: ts,
+                        visitCount: 1,
+                    });
+                }
+            }
+
+            const results = Array.from(byUrl.values())
+                .filter(h => (h.title || '').toLowerCase().includes(q) ||
+                    (h.url || '').toLowerCase().includes(q))
+                .sort((a, b) => b.lastVisitTime - a.lastVisitTime)
                 .slice(0, msg.maxResults || 200);
 
             return { results };
@@ -377,8 +409,11 @@ const electronAPI = {
 
             const results = [];
 
-            // Add Pins
-            (pins.spotlight_pins || []).forEach(p => {
+            // Add Pins — `/pins` returns a bare array (`Json<Vec<Pin>>` in
+            // handlers.rs), never `{ spotlight_pins: [...] }`, so this always
+            // read undefined and silently dropped every pin. Same bug shape as
+            // the history handler above.
+            (Array.isArray(pins) ? pins : (pins.spotlight_pins || [])).forEach(p => {
                 if ((p.title || p.name || '').toLowerCase().includes(q) || (p.url || '').toLowerCase().includes(q)) {
                     results.push({
                         ...p,
@@ -434,10 +469,10 @@ const electronAPI = {
         }
     },
 
-    focusApp: async (pid, name, hwnd) => {
-        console.log('[TauriShim] focusApp called - pid:', pid, 'name:', name, 'hwnd:', hwnd);
+    focusApp: async (pid, name, hwnd, path) => {
+        console.log('[TauriShim] focusApp called - pid:', pid, 'name:', name, 'hwnd:', hwnd, 'path:', path);
         try {
-            const result = await invoke('focus_window', { pid, name, hwnd: hwnd || null });
+            const result = await invoke('focus_window', { pid, name, hwnd: hwnd || null, path: path || null });
             console.log('[TauriShim] focusApp result:', result);
             return result;
         } catch (e) {

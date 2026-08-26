@@ -225,16 +225,28 @@ export function SettingsModal({
     }
   };
 
-  const normalizeShortcutKey = (key) => {
-    if (key === ' ' || key === 'Spacebar') return 'Space';
-    if (key === 'ArrowUp') return 'Up';
-    if (key === 'ArrowDown') return 'Down';
-    if (key === 'ArrowLeft') return 'Left';
-    if (key === 'ArrowRight') return 'Right';
-    if (key === 'Esc') return 'Escape';
-    if (key === '+') return 'Plus';
-    if (key.length === 1) return key.toUpperCase();
-    return key;
+  // event.code names (KeyA, Digit1, ArrowUp, …) → the token names the Rust-side
+  // shortcut parser (global-hotkey) accepts. Physical-key based, not
+  // event.key — see handleShortcutKeyDown for why that distinction matters.
+  const codeToShortcutKey = (code) => {
+    if (code.startsWith('Key')) return code.slice(3); // KeyK -> K
+    if (code.startsWith('Digit')) return code.slice(5); // Digit1 -> 1
+    if (/^F([1-9]|1[0-9]|2[0-4])$/.test(code)) return code; // F1..F24
+    const named = {
+      Space: 'Space',
+      ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right',
+      Escape: 'Escape',
+      Minus: '-', Equal: '=',
+      BracketLeft: '[', BracketRight: ']', Backslash: '\\',
+      Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/',
+      Backquote: '`',
+      Tab: 'Tab', Backspace: 'Backspace', Delete: 'Delete', Enter: 'Enter',
+      Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown',
+    };
+    if (named[code]) return named[code];
+    // Last resort: strip a common prefix rather than hand the parser
+    // whatever raw event.code string macOS produced.
+    return code.replace(/^(Numpad|Intl)/, '') || code;
   };
 
   const handleShortcutKeyDown = (e) => {
@@ -246,9 +258,22 @@ export function SettingsModal({
     if (e.ctrlKey) parts.push('Ctrl');
     if (e.shiftKey) parts.push('Shift');
     if (e.altKey) parts.push('Alt');
-    if (e.metaKey) parts.push('Meta');
-    const key = normalizeShortcutKey(e.key);
-    if (!['Shift', 'Control', 'Alt', 'Meta'].includes(key)) parts.push(key);
+    // 'Meta' (the DOM/KeyboardEvent name for Cmd) isn't a token the Rust-side
+    // shortcut parser (global-hotkey, backing tauri-plugin-global-shortcut)
+    // recognizes — only "Cmd"/"Command"/"Super" are. A saved 'Meta+…' string
+    // isn't just silently ignored: on startup it fails shortcut registration
+    // and previously crashed the whole app (see set_spotlight_shortcut /
+    // the startup registration in lib.rs).
+    if (e.metaKey) parts.push('Cmd');
+    // event.code, not event.key: on macOS, Option (Alt) remaps what a key
+    // actually types — Option+K can produce "˚", not "k" — and event.key
+    // reflects that remapped character while event.code is the physical key,
+    // unaffected by any modifier. Recording via event.key meant any
+    // Option-combo (and Cmd+Option combos in particular) saved a shortcut
+    // string like "Alt+Cmd+˚" that the parser couldn't recognize as a key at
+    // all — "not working" with no clear reason why.
+    const key = codeToShortcutKey(e.code);
+    parts.push(key);
     void updateSpotlightShortcut(parts.join('+') || 'Alt+K');
     setIsRecordingShortcut(false);
   };

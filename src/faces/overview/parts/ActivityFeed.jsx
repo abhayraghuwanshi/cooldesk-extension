@@ -2211,7 +2211,7 @@ export function ActivityFeed() {
                                             onClick={async () => {
                                                 if (window.electronAPI?.focusApp && item.pid) {
                                                     try {
-                                                        await window.electronAPI.focusApp(item.pid, item.name);
+                                                        await window.electronAPI.focusApp(item.pid, item.name, item.hwnd, item.path);
                                                     } catch (e) {
                                                         // focusApp needs OS-level scripting permission and a
                                                         // window to raise; launchApp needs neither and reliably

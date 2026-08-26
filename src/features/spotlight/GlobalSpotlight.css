@@ -523,6 +523,94 @@ body.spotlight-window {
 /* ============================================
    RESULTS LIST
    ============================================ */
+
+/* Row wrapper for the list + PreviewPane split. Plain .spotlight-results
+   (no wrapper) when nothing is being previewed — this class only changes
+   layout in the .has-preview state, so the ordinary search experience is
+   pixel-identical to before the preview pane existed. */
+.spotlight-results-row {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+
+.spotlight-results-row.has-preview .spotlight-results {
+  flex: 0 0 280px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Narrowed-list mode: everything below is scoped to .has-preview only, so
+   the normal full-width list is untouched. At 280px, depth indentation
+   (15px/level) plus a badge, an "Open ↵" hint and a pin button that all
+   still reserve their own width even when invisible left almost nothing for
+   the filename by 2-3 levels deep — a "staircase" that ate the one thing
+   the row exists to show. Tightened spacing, a shallower indent step, and
+   dropping the now-redundant badge/hint/pin (the preview pane already shows
+   what they'd say) fixes that instead of just widening the column and
+   deferring the same problem to depth 4. */
+.spotlight-results-row.has-preview .result-item {
+  padding: 7px 10px;
+  gap: 8px;
+}
+
+.spotlight-results-row.has-preview .tree-indent {
+  width: 10px;
+}
+
+.spotlight-results-row.has-preview .tree-chevron,
+.spotlight-results-row.has-preview .tree-chevron-spacer {
+  width: 12px;
+}
+
+.spotlight-results-row.has-preview .result-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.spotlight-results-row.has-preview .result-icon img {
+  width: 15px;
+  height: 15px;
+}
+
+.spotlight-results-row.has-preview .result-desc,
+.spotlight-results-row.has-preview .result-badge,
+.spotlight-results-row.has-preview .result-hint,
+.spotlight-results-row.has-preview .pin-btn {
+  display: none;
+}
+
+.spotlight-results-row.has-preview .result-content {
+  gap: 0;
+}
+
+/* The container caps at 700px normally, leaving some of the window's actual
+   width unused (toggle_spotlight in lib.rs keeps the window itself wider,
+   ~800px, so the panel has headroom to grow into rather than fighting the
+   list and preview for the same cramped 700px). */
+.spotlight-container:has(.spotlight-results-row.has-preview) {
+  max-width: 960px;
+}
+
+/* Base box for the preview pane — kept here (always loaded) rather than in
+   PreviewPane.css (lazy-loaded with Prism, see the lazy() import in
+   GlobalSpotlight.jsx) so the Suspense fallback shown while that chunk
+   fetches is already correctly laid out, not an unstyled flash. */
+.preview-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.015);
+  animation: previewFadeIn 0.15s ease-out;
+}
+
+@keyframes previewFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .spotlight-results {
   flex: 1 1 auto;
   min-height: 0; /* allow the list to shrink & scroll inside the flex column */

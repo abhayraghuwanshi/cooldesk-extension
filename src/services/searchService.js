@@ -354,6 +354,119 @@ async function searchAppsFromBackend(query, maxResults = 20) {
 }
 
 /**
+ * Full app catalog from the local cache (installed + running, matcher-deduped),
+ * for browsing when a scoped "/a" search comes up empty instead of just
+ * showing nothing. Running apps first, then everything else — alphabetical
+ * within each group.
+ *
+ * `electronDataCache.installedApps` is populated by its own IPC round trip
+ * (getInstalledApps → Tauri's get_installed_apps), separate from — and
+ * slower than — the app-matcher cache the sidecar's /search already keeps
+ * warm for every other app lookup. If spotlight opens and "/a" gets typed
+ * before that round trip lands, this cache is still empty; rather than show
+ * nothing, fall back to the sidecar's own empty-query /search (proven to
+ * already work — it backs every other app search) — narrower (running apps
+ * only, per search_apps in handlers.rs) but real.
+ */
+export async function browseApps(maxResults = 30) {
+  if (electronDataCache.installedApps.length === 0) {
+    return searchAppsFromBackend('', maxResults);
+  }
+
+  const apps = [...electronDataCache.installedApps]
+    .sort((a, b) => {
+      if (!!a.isRunning !== !!b.isRunning) return a.isRunning ? -1 : 1;
+      return (a.title || a.name || '').localeCompare(b.title || b.name || '');
+    })
+    .slice(0, maxResults);
+
+  return apps.map((app, idx) => {
+    const windowTitles = Array.isArray(app.titles) && app.titles.length > 0 ? app.titles : null;
+    const description = app.isRunning
+      ? (windowTitles ? windowTitles.join(' · ') : 'Running')
+      : 'Application';
+    return {
+      id: app.id || (app.pid ? `app-pid-${app.pid}` : `app-${app.name}`),
+      title: app.title || app.name,
+      name: app.name,
+      path: app.path,
+      pid: app.pid || undefined,
+      hwnd: app.hwnd || undefined,
+      tabIndex: app.tabIndex,
+      description,
+      type: 'app',
+      isRunning: !!app.isRunning,
+      isVisible: app.isVisible,
+      cloaked: app.cloaked,
+      icon: app.icon,
+      // Descending so a later sort-by-score preserves this running-first,
+      // alphabetical-within-group order rather than scrambling it.
+      score: maxResults - idx,
+      titles: app.titles || [],
+    };
+  });
+}
+
+/**
+ * Default browsable list for a bare "/u" (no query yet) — active tabs first,
+ * then recent history, then bookmarks, deduped by URL. Same cache sources as
+ * searchElectronCache, just without requiring a query to filter by.
+ */
+export function browseUrls(maxResults = 30) {
+  const seen = new Set();
+  const results = [];
+
+  const pushUnique = (item) => {
+    if (!item.url) return;
+    const key = item.url.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    results.push(item);
+  };
+
+  for (const tab of electronDataCache.tabs) {
+    pushUnique({
+      id: tab.id || tab.tabId,
+      title: tab.title,
+      url: tab.url,
+      description: 'Active Tab',
+      type: 'tab',
+      favicon: tab.favIconUrl || tab.favicon,
+      tabId: tab.id || tab.tabId,
+      _deviceId: tab._deviceId,
+      browser: tab.browser,
+      windowId: tab.windowId,
+    });
+  }
+
+  const recentHistory = [...electronDataCache.history]
+    .sort((a, b) => (b.lastVisitTime || 0) - (a.lastVisitTime || 0));
+  for (const h of recentHistory) {
+    pushUnique({
+      id: h.id || `hist-${h.url}`,
+      title: h.title,
+      url: h.url,
+      description: 'History',
+      type: 'history',
+      favicon: h.favicon,
+    });
+  }
+
+  for (const b of electronDataCache.bookmarks) {
+    pushUnique({
+      id: b.id || `bm-${b.url}`,
+      title: b.title,
+      url: b.url,
+      description: 'Bookmark',
+      type: 'bookmark',
+      favicon: b.favicon,
+    });
+  }
+
+  return results.slice(0, maxResults);
+}
+
+/**
  * Fetch learned ranking boosts for URL results from the feedback store.
  * Returns { [normalizedUrl]: boost } — combines the user's global click
  * history with clicks previously recorded for this exact query (so a link
@@ -457,11 +570,14 @@ function searchElectronCache(query) {
     }
   }
 
-  // Search cached history (if available)
+  // Search cached history (if available). A frequently-visited page should
+  // outrank a one-off visit with the same text match — without this, a site
+  // visited constantly ranks identically to something opened once by accident.
   for (const h of electronDataCache.history) {
     const titleMatch = (h.title || '').toLowerCase().includes(q);
     const urlMatch = (h.url || '').toLowerCase().includes(q);
     if (titleMatch || urlMatch) {
+      const visitBoost = Math.min(20, (h.visitCount || 1) * 2);
       results.push({
         id: h.id || `hist-${h.url}`,
         title: h.title,
@@ -469,7 +585,7 @@ function searchElectronCache(query) {
         description: 'History',
         type: 'history',
         favicon: h.favicon,
-        score: titleMatch ? 55 : 40
+        score: (titleMatch ? 55 : 40) + visitBoost
       });
     }
   }

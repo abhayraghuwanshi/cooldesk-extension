@@ -8,7 +8,7 @@ import {
     SiRuby, SiRust, SiSass, SiScala, SiSharp, SiSqlite, SiSvelte, SiSwift, SiTailwindcss,
     SiToml, SiTypescript, SiVuedotjs, SiYaml,
 } from 'react-icons/si';
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { storageGet, storageSet } from '../../services/extensionApi';
 import { syncWebSocket } from '../../services/syncWebSocket';
 import { isHostSyncEnabled } from '../../services/syncConfig';
@@ -16,7 +16,7 @@ import { recordSearchSelection } from '../../services/feedbackService';
 import { recordSpotlightOpen } from '../../services/analytics';
 import * as LocalAI from '../../services/localAIService';
 import { runningAppsService } from '../../services/runningAppsService';
-import { isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../../services/searchService';
+import { browseApps, browseUrls, isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../../services/searchService';
 import { searchWindowsSettings } from '../../data/windowsSettings';
 import { searchWindowsTools } from '../../data/windowsTools';
 import { enrichRunningAppsWithIcons, getFaviconUrl, getGroupDomainFromUrl } from '../../utils/helpers';
@@ -26,6 +26,11 @@ import { useVoiceCommands } from './useVoiceCommands';
 import { useAiCli } from './useAiCli';
 import { AgentMarkdown } from './AgentMarkdown';
 import { CopyButton } from './CopyButton';
+// Lazy: Prism + its ~20 language grammars are real weight (see PreviewPane.jsx's
+// import list). Loading them eagerly would tax every spotlight open, even the
+// vast majority that never touch a file preview — split into their own chunk
+// and fetch it only the first time a previewable file is actually selected.
+const PreviewPane = lazy(() => import('./PreviewPane'));
 import { describeAction } from '../../services/workspaceActions';
 import { VOICE_SEARCH_ENABLED } from '../../config/features';
 import './GlobalSpotlight.css';
@@ -145,10 +150,80 @@ const WS_EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 
 // scope's types. The regex requires whitespace (or end) after the letter so
 // "/ai" and "/model" command detection is never shadowed.
 const SEARCH_SCOPES = {
-    u: { label: 'URLs', types: ['tab', 'history', 'bookmark'] },
+    // 'workspace-url' is a link saved inside a workspace — shown in results as
+    // "Link" (see getBadgeLabel below). Without it, "/u" missed exactly the
+    // saved links a user is most likely searching for, only covering open
+    // tabs, browsing history, and bookmarks/pins. 'url' is the synthetic
+    // direct-navigation guess built from the typed text itself (see
+    // looksLikeUrl below) — without it, typing a bare domain under "/u"
+    // wouldn't surface that guess even though it's exactly a URL result.
+    u: { label: 'URLs', types: ['tab', 'history', 'bookmark', 'workspace-url', 'url'] },
     a: { label: 'Apps', types: ['app'] },
     f: { label: 'Files', types: ['file', 'folder'] },
 };
+
+// Recognizes typed text that already looks like a domain/URL — "gmail.com",
+// "sub.example.co.uk/path" — so it can be offered as a direct destination.
+// Without this, a query like "gmail.com" that doesn't happen to match any
+// open tab/history/bookmark/app falls all the way through to a Google-search
+// fallback instead of just... going to gmail.com.
+function looksLikeUrl(text) {
+    const t = (text || '').trim();
+    if (!t || /\s/.test(t)) return false;
+    if (/^https?:\/\//i.test(t)) return true;
+    return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:\d{1,5})?(\/\S*)?$/i.test(t);
+}
+
+// Normalize a query that looksLikeUrl() accepted into a fetchable URL —
+// adds https:// when the user didn't type a scheme.
+function toNavigableUrl(text) {
+    const t = text.trim();
+    return /^https?:\/\//i.test(t) ? t : `https://${t}`;
+}
+
+// Extensions the preview pane can actually render. Images go straight to an
+// <img>; everything in PREVIEW_CODE_LANGUAGES maps to the Prism grammar name
+// PreviewPane has imported for it — anything else falls through to no
+// preview rather than a wall of "unsupported language" boxes.
+const PREVIEW_IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'ico', 'svg']);
+const PREVIEW_CODE_LANGUAGES = {
+    ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', mjs: 'javascript', cjs: 'javascript',
+    json: 'json', css: 'css', scss: 'css', html: 'markup', htm: 'markup', xml: 'markup',
+    md: 'markdown', markdown: 'markdown',
+    py: 'python', rs: 'rust', go: 'go', java: 'java', kt: 'kotlin', swift: 'swift',
+    c: 'c', h: 'c', cpp: 'cpp', cc: 'cpp', hpp: 'cpp',
+    rb: 'ruby', php: 'php', sql: 'sql', graphql: 'graphql', gql: 'graphql',
+    yaml: 'yaml', yml: 'yaml', toml: 'toml',
+    sh: 'bash', bash: 'bash', zsh: 'bash',
+    txt: 'markup', log: 'markup', env: 'bash', gitignore: 'bash',
+};
+const PREVIEW_VIDEO_EXTS = new Set(['mp4', 'webm', 'mov', 'mkv', 'avi', 'm4v', 'ogv']);
+const PREVIEW_PDF_EXTS = new Set(['pdf']);
+
+// Default browsable list for a bare "/f" (no query yet). search_files itself
+// refuses an empty query outright — scanning the whole home folder with
+// nothing to filter by would be slow and mostly noise — so this uses
+// get_frequent_folders instead: folders from the OS's own "recently used"
+// tracking (Recent Items on macOS, Quick Access on Windows), the same source
+// TabManagement's "Popular Folders" section already relies on.
+async function browseFrequentFolders(maxResults = 20) {
+    try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const folders = await invoke('get_frequent_folders');
+        if (!Array.isArray(folders)) return [];
+        return folders.slice(0, maxResults).map(f => ({
+            id: `folder:${f.path}`,
+            type: 'folder',
+            title: f.name,
+            description: f.path,
+            path: f.path,
+            icon: 'folder',
+            isDir: true,
+        }));
+    } catch {
+        return [];
+    }
+}
 // Fixed id, not a generated one: this is a singleton workspace, so re-running
 // this on every /agent call must find the same record instead of piling up
 // duplicates.
@@ -542,13 +617,26 @@ export function GlobalSpotlight({
         const handleFocus = () => {
             if (isEmbedded) return; // embedded: never steal focus / count opens
             recordSpotlightOpen();
-            if (inputRef.current) {
-                // Determine if we need to select all text
+            if (!inputRef.current) return;
+
+            // A single fixed-delay focus() is a race on macOS: the window's
+            // shown via a private AppKit Space-joining call (see
+            // show_over_fullscreen_spaces in dock.rs), not the normal
+            // window.show()/set_focus() Tauri path, so there's no guarantee
+            // the OS has actually handed the webview keyboard focus by the
+            // time any one fixed delay fires — hence "opened but the cursor
+            // isn't in the box". Retry across a few delays instead of betting
+            // on one; each attempt is skipped once the input is already
+            // focused, so this can't fight the user for focus if they've
+            // already started typing by the time a later attempt runs.
+            [0, 16, 60, 150, 300].forEach((delay) => {
                 setTimeout(() => {
-                    inputRef.current?.focus();
-                    inputRef.current?.select();
-                }, 10);
-            }
+                    const el = inputRef.current;
+                    if (!el || document.activeElement === el) return;
+                    el.focus();
+                    el.select();
+                }, delay);
+            });
         };
         window.addEventListener('focus', handleFocus);
 
@@ -1226,11 +1314,52 @@ export function GlobalSpotlight({
         // Scoped search (/u /a /f): strip the prefix, search with the bare term
         const { scope, term: scopedTerm } = parseScopedQuery(trimmedQuery);
         if (scope && !scopedTerm) {
-            // Prefix typed but no term yet — wait for input instead of searching ''
-            setResults([]);
-            setSelectedIndex(-1);
+            // Prefix typed but no term yet — wait for input instead of searching
+            // '', except "/a", "/u" and "/f": with nothing to filter by,
+            // browsing the app catalog / active tabs+history+bookmarks /
+            // frequently-used folders straight away is exactly what typing the
+            // bare prefix is asking for — an empty list there just looks broken.
             searchIdRef.current++;
-            setLoading(false);
+            const currentSearchId = searchIdRef.current;
+            const canBrowse = isDesktopApp && (scope === SEARCH_SCOPES.a || scope === SEARCH_SCOPES.u || scope === SEARCH_SCOPES.f);
+            const runBrowse = scope === SEARCH_SCOPES.a ? browseApps
+                : scope === SEARCH_SCOPES.u ? browseUrls
+                    : scope === SEARCH_SCOPES.f ? browseFrequentFolders
+                        : null;
+            // /f has no cache to retry against — search_files itself refuses an
+            // empty query outright (see search_files in lib.rs), and frequent
+            // folders come straight from the OS, not a warm-up cache — so an
+            // empty result there is a real "none yet", not a timing gap.
+            const canRetry = scope === SEARCH_SCOPES.a || scope === SEARCH_SCOPES.u;
+
+            if (!canBrowse || !runBrowse) {
+                setResults([]);
+                setSelectedIndex(-1);
+                setLoading(false);
+                return;
+            }
+
+            setLoading(true);
+            (async () => {
+                let browseResults = await runBrowse(30);
+                if (searchIdRef.current !== currentSearchId) return; // superseded by a newer query
+
+                if (browseResults.length === 0 && canRetry) {
+                    // browseApps/browseUrls read caches populated asynchronously
+                    // on mount (refreshElectronCache's pre-warm) — if spotlight
+                    // was opened and "/a"/"/u" typed before that landed, the
+                    // cache is still empty. Force a refresh and retry once
+                    // instead of silently showing nothing.
+                    await refreshElectronCache(true).catch(() => { });
+                    if (searchIdRef.current !== currentSearchId) return;
+                    browseResults = await runBrowse(30);
+                    if (searchIdRef.current !== currentSearchId) return;
+                }
+
+                setResults(browseResults);
+                setSelectedIndex(browseResults.length > 0 ? 0 : -1);
+                setLoading(false);
+            })();
             return;
         }
         const searchTerm = scope ? scopedTerm : trimmedQuery;
@@ -1276,9 +1405,17 @@ export function GlobalSpotlight({
                 const isAgent = commandMode === 'agent';
                 const isNaturalLanguage = !isAgent && isNaturalLanguageQuery(searchTerm);
 
+                // quickSearch ranks and caps across ALL types (apps, workspaces,
+                // tabs, history, bookmarks) before the scope filter below ever
+                // runs — apps/workspaces routinely outscore history/bookmark
+                // hits, so a top-15-overall cut can leave a scoped search like
+                // "/u <query>" with nothing, even when matches exist further
+                // down. Pull a wider pool when scoped so the filter has enough
+                // candidates to work with; unscoped searches keep the tight cap.
+                const fetchLimit = scope ? 60 : 15;
                 const searchPromise = isNaturalLanguage
-                    ? naturalLanguageSearch(searchTerm, 15)
-                    : quickSearch(searchTerm, 15);
+                    ? naturalLanguageSearch(searchTerm, fetchLimit)
+                    : quickSearch(searchTerm, fetchLimit);
 
                 // File search only matters for unscoped or /f searches. Skipped
                 // in agent mode: an OS-wide scan per sentence is the slowest
@@ -1316,12 +1453,66 @@ export function GlobalSpotlight({
                     ? searchWindowsTools(searchTerm, 5)
                     : [];
 
-                searchResults = [...(searchResults || []), ...mappedFiles, ...settingsResults, ...toolsResults]
+                // Typed text that already looks like a domain ("gmail.com") gets
+                // offered as a direct destination — ranked in with everything
+                // else rather than bolted on separately, so an actual open tab
+                // for the same site (scored higher) still wins the top slot.
+                const urlGuessResults = (!isAgent && looksLikeUrl(searchTerm) && (!scope || scope === SEARCH_SCOPES.u))
+                    ? [{
+                        id: `url-guess-${searchTerm}`,
+                        title: toNavigableUrl(searchTerm),
+                        url: toNavigableUrl(searchTerm),
+                        description: 'Open URL',
+                        type: 'url',
+                        score: 92,
+                    }]
+                    : [];
+
+                searchResults = [...(searchResults || []), ...mappedFiles, ...settingsResults, ...toolsResults, ...urlGuessResults]
                     .sort((a, b) => (b.score || 0) - (a.score || 0));
 
                 // Scoped search keeps only the scope's result types
                 if (scope) {
                     searchResults = searchResults.filter(r => scope.types.includes(r.type));
+                }
+
+                // "/a <query>" with nothing matching: browse the full app
+                // catalog instead of leaving an empty list — running apps
+                // first, then everything else installed (see browseApps).
+                if (scope === SEARCH_SCOPES.a && isDesktopApp && searchResults.length === 0) {
+                    searchResults = browseApps(30);
+                }
+
+                // "/u" mixes tabs (currently open — "active") with history,
+                // bookmarks and saved workspace links, which each score
+                // independently and don't naturally sort tabs to the top.
+                // Force active tabs first regardless of score, then keep
+                // everything else in score order.
+                if (scope === SEARCH_SCOPES.u) {
+                    searchResults = [...searchResults].sort((a, b) => {
+                        const aTab = a.type === 'tab' ? 1 : 0;
+                        const bTab = b.type === 'tab' ? 1 : 0;
+                        if (aTab !== bTab) return bTab - aTab;
+                        return (b.score || 0) - (a.score || 0);
+                    });
+                }
+
+                // Nothing found, or nothing worth trusting: offer the agent as a
+                // way forward instead of leaving the user staring at weak
+                // fuzzy matches (or nothing). Scoped searches (/u /a /f) are a
+                // narrow, deliberate ask — this fallback only applies to a
+                // plain, broad search. Pinned to the top rather than sorted by
+                // score, so it's never buried under a page of mediocre matches.
+                const bestScore = searchResults.reduce((max, r) => Math.max(max, r.score || 0), 0);
+                if (!isAgent && isDesktopApp && !addTarget && !scope && searchTerm.trim() &&
+                    (searchResults.length === 0 || bestScore < 50)) {
+                    searchResults.unshift({
+                        id: `agent-suggest-${searchTerm}`,
+                        title: `Ask the agent: "${searchTerm}"`,
+                        description: 'No strong matches — let the AI agent take it',
+                        type: 'agent-suggest',
+                        query: searchTerm,
+                    });
                 }
 
                 // Check if still relevant (user may have typed more)
@@ -1365,7 +1556,7 @@ export function GlobalSpotlight({
         }, debounceMs);
 
         return () => clearTimeout(timeoutId);
-    }, [query, deepSearch, commandMode, slash]);
+    }, [query, deepSearch, commandMode, slash, addTarget, isDesktopApp]);
 
     // --- Folder tree helpers ---
     // Base rows = search results capped to the visible window; folders among
@@ -1393,6 +1584,30 @@ export function GlobalSpotlight({
         walk(baseRows, 0);
         return out;
     }, [baseRows, expandedPaths, treeChildren]);
+
+    // Quick-Look-style preview for the currently-highlighted result. Only
+    // 'file' rows with a previewable extension qualify — folders, apps, tabs
+    // etc. have nothing PreviewPane knows how to render, so they just don't
+    // get a pane rather than an empty/broken one.
+    const previewItem = useMemo(() => {
+        if (!isDesktopApp) return null;
+        const selected = flatRows[selectedIndex]?.item;
+        if (!selected || selected.type !== 'file' || !selected.path) return null;
+        const ext = (selected.path.split('.').pop() || '').toLowerCase();
+        if (PREVIEW_IMAGE_EXTS.has(ext)) {
+            return { path: selected.path, previewKind: 'image' };
+        }
+        if (PREVIEW_CODE_LANGUAGES[ext]) {
+            return { path: selected.path, previewKind: 'code', language: PREVIEW_CODE_LANGUAGES[ext] };
+        }
+        if (PREVIEW_VIDEO_EXTS.has(ext)) {
+            return { path: selected.path, previewKind: 'video' };
+        }
+        if (PREVIEW_PDF_EXTS.has(ext)) {
+            return { path: selected.path, previewKind: 'pdf' };
+        }
+        return null;
+    }, [flatRows, selectedIndex, isDesktopApp]);
 
     const collapsePath = (path) => {
         setExpandedPaths(prev => {
@@ -1836,6 +2051,17 @@ export function GlobalSpotlight({
             return;
         }
 
+        // The "no strong matches, ask the agent" fallback row: switch straight
+        // into agent mode and send the original query as the request — no
+        // panel close (agent mode's transcript view takes over instead, same
+        // as typing "/agent <query>" and hitting Enter).
+        if (item.type === 'agent-suggest') {
+            setCommandMode('agent');
+            setQuery('');
+            runAgent(item.query);
+            return;
+        }
+
         // Close immediately for snappy feel
         handleClose();
 
@@ -1976,7 +2202,7 @@ export function GlobalSpotlight({
                     // App is running - focus specific window by HWND if available, else by PID
                     console.log('[Spotlight] Focusing running app:', item.name, 'PID:', item.pid, 'HWND:', item.hwnd);
                     if (window.electronAPI.focusApp) {
-                        await window.electronAPI.focusApp(item.pid, item.name, item.hwnd);
+                        await window.electronAPI.focusApp(item.pid, item.name, item.hwnd, item.path);
                     } else {
                         console.warn('[Spotlight] focusApp not available');
                     }
@@ -1996,7 +2222,7 @@ export function GlobalSpotlight({
                             // App is running - focus it
                             console.log('[Spotlight] Found running instance via lookup:', runningInstance.name, 'PID:', runningInstance.pid);
                             if (window.electronAPI.focusApp) {
-                                await window.electronAPI.focusApp(runningInstance.pid, runningInstance.name);
+                                await window.electronAPI.focusApp(runningInstance.pid, runningInstance.name, runningInstance.hwnd, runningInstance.path);
                             }
                             return;
                         }
@@ -2230,6 +2456,7 @@ export function GlobalSpotlight({
         if (item.type === 'setting') return 'Setting';
         if (item.type === 'tool') return 'Tool';
         if (item.type === 'command') return item.category || 'Command';
+        if (item.type === 'agent-suggest') return 'Agent';
         return item.category || 'Link';
     };
 
@@ -3008,29 +3235,36 @@ export function GlobalSpotlight({
                     doesn't cost you the ordinary search: Enter goes to the
                     agent, clicking a row opens it as usual. */}
                 {flatRows.length > 0 && (!commandMode || commandMode === 'agent') && (
-                    <div className="spotlight-results">
-                        {flatRows.map((row, index) => (
-                            <ResultItem
-                                key={row.item.id || index}
-                                item={row.item}
-                                index={index}
-                                depth={row.depth}
-                                isFolderRow={row.isFolder}
-                                isExpanded={row.isExpanded}
-                                onToggleExpand={toggleExpand}
-                                isSelected={index === selectedIndex}
-                                onSelect={handleSelect}
-                                onHover={setSelectedIndex}
-                                onTogglePin={togglePin}
-                                formatUrl={formatUrl}
-                                getBadgeLabel={getBadgeLabel}
-                                getAppIcon={getAppIcon}
-                            />
-                        ))}
-                        {!showAllResults && results.length > 10 && (
-                            <div style={{ padding: '8px 14px', color: 'rgba(255,255,255,0.4)', fontSize: '12px', textAlign: 'center', cursor: 'pointer' }} onClick={() => setShowAllResults(true)}>
-                                +{results.length - 10} more results (refine your search)
-                            </div>
+                    <div className={`spotlight-results-row${previewItem ? ' has-preview' : ''}`}>
+                        <div className="spotlight-results">
+                            {flatRows.map((row, index) => (
+                                <ResultItem
+                                    key={row.item.id || index}
+                                    item={row.item}
+                                    index={index}
+                                    depth={row.depth}
+                                    isFolderRow={row.isFolder}
+                                    isExpanded={row.isExpanded}
+                                    onToggleExpand={toggleExpand}
+                                    isSelected={index === selectedIndex}
+                                    onSelect={handleSelect}
+                                    onHover={setSelectedIndex}
+                                    onTogglePin={togglePin}
+                                    formatUrl={formatUrl}
+                                    getBadgeLabel={getBadgeLabel}
+                                    getAppIcon={getAppIcon}
+                                />
+                            ))}
+                            {!showAllResults && results.length > 10 && (
+                                <div style={{ padding: '8px 14px', color: 'rgba(255,255,255,0.4)', fontSize: '12px', textAlign: 'center', cursor: 'pointer' }} onClick={() => setShowAllResults(true)}>
+                                    +{results.length - 10} more results (refine your search)
+                                </div>
+                            )}
+                        </div>
+                        {previewItem && (
+                            <Suspense fallback={<div className="preview-pane" />}>
+                                <PreviewPane item={previewItem} />
+                            </Suspense>
                         )}
                     </div>
                 )}
@@ -3281,6 +3515,7 @@ function getIcon(type, name) {
         case 'setting': return faCog;
         case 'tool': return faTools;
         case 'command': return faTerminal;
+        case 'agent-suggest': return faRobot;
         default: return faLink;
     }
 }
