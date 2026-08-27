@@ -658,18 +658,24 @@ export function CoolDeskContainer({
 
         <div className="header-center">
           {/* Same spotlight as Alt+K, embedded as the header search; voice and
-              slash commands are activated for this surface via props. */}
-          <GlobalSpotlight
-            variant="embedded"
-            onWorkspaceNavigate={handleWorkspaceNavigate}
-            onNavigate={handleNavigate}
-            isDesktopApp={isDesktopApp}
-            enableVoice
-            enableSlashCommands
-            addTarget={addTarget}
-            onAddItem={handleAddFromSearch}
-            onExitAddMode={handleExitAddMode}
-          />
+              slash commands are activated for this surface via props.
+              CSS drops the whole header at sidebar widths, but a display:none
+              parent doesn't stop this component's effects (data fetching,
+              polling, event subscriptions) from running — so gate the mount
+              itself instead of relying on the header being hidden. */}
+          {!isSidebarWidth && (
+            <GlobalSpotlight
+              variant="embedded"
+              onWorkspaceNavigate={handleWorkspaceNavigate}
+              onNavigate={handleNavigate}
+              isDesktopApp={isDesktopApp}
+              enableVoice
+              enableSlashCommands
+              addTarget={addTarget}
+              onAddItem={handleAddFromSearch}
+              onExitAddMode={handleExitAddMode}
+            />
+          )}
         </div>
 
         <div className="header-right">

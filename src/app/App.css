@@ -297,6 +297,28 @@ html body.wallpaper-enabled.bg-ai-quantum {
     padding-left: 8px;
     padding-right: 8px;
     min-width: 320px;
+    /* At sidebar/dock widths .popup-wrap (or a nested overflow-y:auto panel,
+       e.g. the Tabs face's own scroller in TabManagement.jsx) is a vertical
+       scroll owner. theme.css's global ::-webkit-scrollbar customization
+       switches WebKit's scrollbar from overlay to classic/reserved-space
+       mode, and that reserved track only eats into the right side, leaving
+       content ~6-8px narrower on the right than the left — visible as
+       uneven left/right spacing in the narrow dock panel. This isn't just
+       .popup-wrap: it hits every scrollable panel in the dock, so hide
+       scrollbars for all of them here rather than patching each one as it's
+       found. Scroll still works via wheel/trackpad; other sidebar-width
+       scroll surfaces (e.g. .compact-icons-scroll) already hide their
+       scrollbar the same way. */
+    scrollbar-width: none;
+  }
+
+  .popup-wrap * {
+    scrollbar-width: none;
+  }
+
+  .popup-wrap::-webkit-scrollbar,
+  .popup-wrap *::-webkit-scrollbar {
+    display: none;
   }
 
   .header {

@@ -2764,9 +2764,12 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 }
 
 @media (max-width: 500px) {
-  /* Tighter leading padding once the title stacks above the row */
+  /* Tighter leading padding once the title stacks above the row. Matched to
+     padding-right (8px, set by the base .compact-icons-container rule and
+     untouched here) — this used to only override padding-left to 2px,
+     leaving the row 6px off-center in the narrow/sidebar layout. */
   .cooldesk-workspace-card.compact:not(.panel-open) .compact-icons-container {
-    padding-left: 2px;
+    padding-left: 8px;
   }
 
   /* Stack the title above the icon row instead of beside it — side-by-side it
@@ -3846,8 +3849,13 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 @media (max-width: 500px) {
   .cooldesk-container {
     padding: 8px;
-    width: 100vw;
-    /* Full width */
+    /* Was `width: 100vw` — .cooldesk-container is nested inside .popup-wrap,
+       which has its own padding and isn't full viewport width. Forcing
+       100vw made this container wider than its actual parent, so it
+       overflowed past the right edge only (normal flow bleeds rightward);
+       the left edge still sat at the correct 8px padding. That's the
+       uneven left/right spacing in the sidebar/dock panel. The base rule's
+       `width: 100%` (relative to the parent) is what was actually wanted. */
   }
 
   /* Sidebar has its own navigation — drop the whole top bar. */
@@ -3968,17 +3976,6 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   .cooldesk-list-view .cooldesk-workspace-card.compact .workspace-delete-btn {
     display: none !important;
   }
-}
-
-/* Narrow screens (600px and below) - transition to sidebar-friendly layout */
-@media (max-width: 600px) {
-  .cooldesk-container {
-    padding: 12px;
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-  /* Overview grid layout (stacking, gaps, section heights) is owned by the
-     @container queries above — kept out of viewport media queries on purpose. */
 }
 
 /* ============================================
