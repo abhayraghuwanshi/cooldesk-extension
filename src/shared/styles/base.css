@@ -34,6 +34,16 @@ body.transparent-body #root {
   background-image: none !important;
 }
 
+/* NOTE: the docked sidebar panel (`body.sidebar-docked`, toggled in
+   CoolDeskContainer.jsx) used to get rounded corners here via a transparent
+   main window + `clip-path`. Dropped: a transparent NSWindow makes WebKit
+   render `backdrop-filter: blur()` unreliably (this app uses it in ~170
+   places), so it showed up as random blur glitches app-wide. The window is
+   opaque again (see `ensure_main_window` in src-tauri/src/lib.rs) — the
+   sidebar just has square corners now, matching the window's own edges. The
+   inset gap around it (top/bottom/left/right) still comes from the Rust side
+   sizing the window itself smaller than the monitor, which needs no CSS. */
+
 /* Spotlight root container - always transparent */
 .spotlight-root {
   background: transparent !important;

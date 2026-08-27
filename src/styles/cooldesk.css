@@ -5335,7 +5335,10 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   gap: 10px;
   padding: 8px 10px;
   border-radius: 10px;
-  background: var(--glass-bg, rgba(30, 41, 59, 0.7));
+  /* Own background, not `--glass-bg` — that token is ~5% opacity (meant for
+     large translucent panels over a blurred wallpaper), which left this
+     small chip nearly invisible against the page background. */
+  background: rgba(30, 41, 59, 0.7);
   border: 1px solid rgba(148, 163, 184, 0.15);
   cursor: pointer;
   transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;

@@ -397,11 +397,14 @@ fn ensure_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
         .resizable(true)
         .fullscreen(false)
         .visible(false)
-        // Needed so the inset gap around the docked vertical sidebar (see
-        // `SIDEBAR_MARGIN`) shows real desktop rather than an opaque window
-        // background. A no-op for the normal 1400x900 window, whose body CSS
-        // stays fully opaque.
-        .transparent(true)
+        // Deliberately NOT `.transparent(true)`: it was added to let the
+        // docked sidebar's rounded corners reveal real desktop, but WebKit
+        // renders `backdrop-filter: blur()` unreliably inside a transparent
+        // NSWindow (undefined content behind the blur) — and this app uses
+        // blur in ~170 places (header, modals, dropdowns...), so it showed up
+        // as random blur glitches across the whole app, not just the
+        // sidebar. Traded the sidebar's rounded corners for square ones
+        // instead of shipping that regression app-wide.
         .build();
 
     match built {
