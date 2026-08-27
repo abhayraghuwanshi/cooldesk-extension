@@ -1,15 +1,20 @@
 import {
-  faArrowLeft, faArrowRight, faArrowUp, faCheck, faChevronRight, faClockRotateLeft, faCopy,
+  faArrowLeft, faArrowRight, faArrowUp, faBars, faCheck, faChevronRight, faClockRotateLeft, faCopy,
   faExternalLinkAlt, faFile, faFileAudio, faFileCode, faFileExcel, faFileImage, faFilePdf,
   faEye, faEyeSlash, faFileVideo, faFileZipper, faFolder, faHardDrive, faHouse, faList, faSearch,
   faTableCellsLarge, faThumbtack, faTimes, faPlay, faDiagramProject, faCheckDouble, faLink,
   faLinkSlash, faPlus, faSpinner, faPowerOff, faSync
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchCooldesk, linkCooldeskProject } from '../../services/cooldeskService.js';
+import { getPreviewItem } from '../../utils/filePreviewKind.js';
 import '../../styles/fileManager.css';
+
+// Lazy for the same reason GlobalSpotlight defers it — Prism + its ~20
+// language grammars are real weight, not worth taxing every folder open for.
+const PreviewPane = lazy(() => import('../spotlight/PreviewPane'));
 
 /** List a directory — Electron shim if present, otherwise the Tauri command. */
 async function listDirRaw(path) {
@@ -124,6 +129,10 @@ const PIN_KEY = 'cooldesk.fm.pinned';
 const VIEW_KEY = 'cooldesk.fm.view';
 const HIDDEN_KEY = 'cooldesk.fm.showHidden';
 const PROJECTS_KEY = 'cooldesk.fm.projects';
+const PREVIEW_WIDTH_KEY = 'cooldesk.fm.previewWidth';
+const PREVIEW_WIDTH_DEFAULT = 320;
+const PREVIEW_WIDTH_MIN = 240;
+const PREVIEW_WIDTH_MAX = 640;
 // The command run to scaffold a `.cooldesk/` workspace in the folder you're
 // browsing. It drives the plugin's own `/cd-init` rather than writing the
 // folder here, so the manifest is authored by the thing that owns the format.
@@ -231,6 +240,11 @@ export function FileManager({ isOpen, initialPath, places = [], onClose }) {
   const [editingPath, setEditingPath] = useState(null); // string while the address bar is in edit mode
   const [crumbMenu, setCrumbMenu] = useState(null);     // { path, items, x } sibling picker
   const [showRecent, setShowRecent] = useState(false);
+  // The Places/linked-projects sidebar (`.fm-sidebar`) is CSS-hidden below
+  // 720px — no room for a fixed side panel at sidebar-dock widths. This
+  // toggles it open as a temporary overlay instead, via the `fm-places-toggle`
+  // button that CSS only shows at that same breakpoint (see fileManager.css).
+  const [placesOpen, setPlacesOpen] = useState(false);
   // Screen coords for whichever popup is open. The bars that host the triggers
   // scroll horizontally (`overflow-x: auto`), which clips any absolutely
   // positioned child — so menus are rendered fixed, anchored to the trigger.
@@ -423,6 +437,7 @@ export function FileManager({ isOpen, initialPath, places = [], onClose }) {
     setCursor(0);
     setCrumbMenu(null);
     setShowRecent(false);
+    setPlacesOpen(false);
     setEditingPath(null);
     setInitRan(false);
   }, [histIndex]);
@@ -470,6 +485,52 @@ export function FileManager({ isOpen, initialPath, places = [], onClose }) {
   // Keep the cursor inside the (filterable) list at all times.
   const safeCursor = Math.min(cursor, Math.max(0, visible.length - 1));
   const current = visible[safeCursor];
+
+  // Quick-Look-style preview for whatever's currently keyboard/hover-
+  // highlighted (`cursor` already tracks that for both — see the row's
+  // onMouseEnter below). Deliberately driven off the highlight, not click:
+  // unlike GlobalSpotlight, a click here already opens the entry (folders
+  // navigate, files launch externally), so there's no separate "select"
+  // state to hang a preview off without changing that click behavior.
+  const previewItem = useMemo(() => {
+    if (!current || current.is_dir) return null;
+    return getPreviewItem(current.path);
+  }, [current]);
+
+  // Drag-resizable preview column width. Dragging the handle on its left
+  // edge shrinks/grows `.fm-main` in exchange — the handle itself sits
+  // outside React's render loop for the drag (window-level mousemove/mouseup,
+  // not state-driven) so it stays smooth at 60fps; only the final width on
+  // mouseup gets persisted, not every intermediate tick.
+  const [previewWidth, setPreviewWidth] = useState(() => {
+    const stored = Number(localStorage.getItem(PREVIEW_WIDTH_KEY));
+    return stored >= PREVIEW_WIDTH_MIN && stored <= PREVIEW_WIDTH_MAX ? stored : PREVIEW_WIDTH_DEFAULT;
+  });
+  const previewWidthRef = useRef(previewWidth);
+  useEffect(() => { previewWidthRef.current = previewWidth; }, [previewWidth]);
+
+  const startPreviewResize = useCallback((e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = previewWidthRef.current;
+    const prevCursor = document.body.style.cursor;
+    document.body.style.cursor = 'col-resize';
+
+    const onMove = (moveEvent) => {
+      // Preview sits right of the handle — dragging left (mouse X decreasing)
+      // widens it.
+      const delta = startX - moveEvent.clientX;
+      setPreviewWidth(Math.min(PREVIEW_WIDTH_MAX, Math.max(PREVIEW_WIDTH_MIN, startWidth + delta)));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = prevCursor;
+      localStorage.setItem(PREVIEW_WIDTH_KEY, String(previewWidthRef.current));
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, []);
 
   const openEntry = useCallback((entry) => {
     if (!entry) return;
@@ -784,10 +845,20 @@ export function FileManager({ isOpen, initialPath, places = [], onClose }) {
 
   return createPortal(
     <div className="fm-backdrop" onClick={onClose}>
-      <div className="fm-window" onClick={(e) => { e.stopPropagation(); setCrumbMenu(null); setShowRecent(false); }}>
+      <div className="fm-window" onClick={(e) => { e.stopPropagation(); setCrumbMenu(null); setShowRecent(false); setPlacesOpen(false); }}>
         {/* Toolbar: history + address bar + filter */}
         <div className="fm-toolbar">
           <div className="fm-nav">
+            {/* Only visible below the 720px breakpoint (see fileManager.css) —
+                `.fm-sidebar` (Places/linked projects) is CSS-hidden there for
+                lack of room, so this is the only way left to reach it. */}
+            <button
+              className={`fm-icon-btn fm-places-toggle ${placesOpen ? 'active' : ''}`}
+              onClick={(e) => { e.stopPropagation(); setPlacesOpen(v => !v); setCrumbMenu(null); setShowRecent(false); }}
+              title="Places"
+            >
+              <FontAwesomeIcon icon={faBars} />
+            </button>
             <button className="fm-icon-btn" onClick={goBack} disabled={histIndex <= 0} title="Back (Alt+←)">
               <FontAwesomeIcon icon={faArrowLeft} />
             </button>
@@ -1160,7 +1231,7 @@ ${c.path}`}
 
         <div className="fm-body">
           {sidebar.length > 0 && (
-            <div className="fm-sidebar">
+            <div className={`fm-sidebar ${placesOpen ? 'fm-sidebar--open' : ''}`} onClick={(e) => e.stopPropagation()}>
               {sidebar.map(section => (
                 <div key={section.title} className={`fm-side-section ${section.kind === 'linked' ? 'fm-side-linked' : ''}`}>
                   <div className="fm-side-title">
@@ -1291,6 +1362,20 @@ ${c.path}`}
               </span>
             </div>
           </div>
+
+          {/* Quick Look-style preview, wide widths only (see fileManager.css
+              — there's no room for a third column once the sidebar has
+              already been dropped for space). */}
+          {previewItem && (
+            <>
+              <div className="fm-preview-resize" onMouseDown={startPreviewResize} title="Drag to resize" />
+              <div className="fm-preview" style={{ width: previewWidth }}>
+                <Suspense fallback={<div className="preview-pane" />}>
+                  <PreviewPane item={previewItem} />
+                </Suspense>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>,

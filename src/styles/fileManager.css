@@ -57,6 +57,16 @@
   gap: 2px;
 }
 
+/* Only relevant once `.fm-sidebar` is CSS-hidden below 720px (see that media
+   query) — no point offering a toggle for a panel that's already visible.
+   Qualified with `.fm-toolbar` (not just `.fm-places-toggle` alone) so this
+   has higher specificity than `.fm-icon-btn`'s `display: inline-flex` below
+   — same specificity plus later-in-file would otherwise let that win the
+   cascade tie and show the button unconditionally, at every width. */
+.fm-toolbar .fm-places-toggle {
+  display: none;
+}
+
 .fm-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -782,6 +792,55 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  /* The name/date/size columns (below) used to drop via viewport `@media`
+     breakpoints, but the draggable preview column (`.fm-preview-resize`) can
+     now shrink `.fm-main` far below those thresholds while the window itself
+     stays wide — the media queries never fired, so the fixed-width date/size
+     columns just overflowed. Container queries measure `.fm-main`'s own
+     width instead, which drag-resizing actually changes. */
+  container-type: inline-size;
+  container-name: fm-main;
+}
+
+/* Quick Look-style preview for whatever's keyboard/hover-highlighted (see
+   `previewItem` in FileManager.jsx) — a third `.fm-body` column alongside
+   `.fm-sidebar` and `.fm-main`. `.preview-pane` itself (PreviewPane.jsx,
+   shared with GlobalSpotlight) already sets `flex: 1` expecting a flex
+   column ancestor, which this wrapper provides; width/border/background stay
+   here since PreviewPane.css doesn't own its own box, same split as
+   GlobalSpotlight.css's `.preview-pane` rule. */
+.fm-preview {
+  /* Width is inline (`previewWidth` state in FileManager.jsx) — draggable
+     via `.fm-preview-resize` below. */
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-2, #1a1a24);
+}
+
+/* Drag handle for `.fm-preview`'s width — a thin strip just left of it, not
+   a visible border, so it doesn't read as a second divider alongside
+   `.fm-preview`'s own left edge. */
+.fm-preview-resize {
+  width: 5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  position: relative;
+  background: var(--border-secondary, rgba(255, 255, 255, 0.06));
+}
+
+.fm-preview-resize:hover,
+.fm-preview-resize:active {
+  background: var(--accent-purple, #8b5cf6);
+}
+
+/* Widens the actual hit area well past the visible 5px line — a bare 5px
+   target is fiddly to grab reliably. */
+.fm-preview-resize::before {
+  content: '';
+  position: absolute;
+  inset: 0 -4px;
 }
 
 /* Column widths are shared by the header row and every list row. */
@@ -1043,12 +1102,34 @@
 @media (max-width: 720px) {
   .fm-backdrop { padding: 12px; }
   .fm-sidebar { display: none; }
+  /* Same reasoning: a 320px preview column has nowhere left to go once
+     `.fm-main` alone is already this tight. Places gets a toggle-drawer
+     back (`.fm-places-toggle`, below); preview doesn't — a cramped preview
+     isn't worth much, so it just steps aside for the file list here. */
+  .fm-preview,
+  .fm-preview-resize { display: none; }
   .fm-search { width: 120px; }
-  .fm-col-heads,
-  .fm-row { grid-template-columns: 1fr 78px 26px; }
-  .fm-col-date { display: none; }
   .fm-status-hint { display: none; }
-  .fm-list.fm-grid { grid-template-columns: repeat(3, 1fr); }
+
+  /* Places/linked-projects sidebar is gone at this width — offer it back as
+     a toggleable overlay instead of losing it outright (see the `fm-places-
+     toggle` button and `placesOpen` state in FileManager.jsx). */
+  .fm-toolbar .fm-places-toggle { display: inline-flex; }
+  /* Anchors the overlay to the file-list area (below the toolbar/project
+     bar), not the whole `.fm-window`. */
+  .fm-body { position: relative; }
+  .fm-sidebar.fm-sidebar--open {
+    display: flex;
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 20;
+    width: 220px;
+    max-width: 80%;
+    box-shadow: 6px 0 20px rgba(0, 0, 0, 0.45);
+    animation: fm-rise 0.14s ease;
+  }
 }
 
 /* Docked sidebar width. The 720px rules above still assume a window — at 500px
@@ -1068,15 +1149,51 @@
     border-right: none;
   }
 
-  /* The toolbar is a nowrap flex row; let it wrap rather than overflow, and let
-     search take the width left over instead of a fixed 120px. */
+  /* The toolbar is a nowrap flex row; let it wrap rather than overflow. Nav
+     (back/forward/up) + the breadcrumb land on row 1 — the breadcrumb has its
+     own min-width: 0 and overflow-x: auto, so it always fits by shrinking,
+     never by wrapping. Search and the action icons (pin/hidden/view/copy/
+     open/close) share row 2: search used to be forced to `flex: 1 1 100%`,
+     which claimed the *entire* row 2 for itself and pushed every action icon
+     onto its own row 3 — a cramped three-row toolbar. Letting search flex
+     alongside the actions instead keeps it to two rows. */
   .fm-toolbar { flex-wrap: wrap; }
-  .fm-search { width: auto; flex: 1 1 100%; min-width: 0; }
+  .fm-search { width: auto; flex: 1 1 60px; min-width: 60px; }
 
-  /* Name + the row action only. Size joins date in being dropped. */
+  /* The project bar (setup prompt, command/resource chips) is a nowrap row
+     that scrolls horizontally — with its scrollbar deliberately hidden
+     (`scrollbar-width: none` above), so at this width there was no visual
+     cue that content like the "Set up with /cd-init" button existed
+     off-screen; it just read as cut off. Let the setup prompt specifically
+     wrap onto multiple lines instead, since it's short and static; the
+     general chip row (variable-length, can have many chips) keeps scrolling
+     but gets its scrollbar back so overflow is at least discoverable. */
+  .fm-project-bar--setup {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+  .fm-setup-text { white-space: normal; flex: 1 1 100%; }
+  .fm-project-bar { scrollbar-width: thin; }
+  .fm-project-bar::-webkit-scrollbar { display: block; height: 4px; }
+}
+
+/* Name/date/size column widths and the grid-view tile count, keyed off
+   `.fm-main`'s own width (see `container-type` on it above) rather than the
+   window's — `.fm-main` narrows independently of the window now that the
+   preview column is drag-resizable. Thresholds picked from the columns' own
+   fixed widths (date 132px + size 78px + action 26px + gaps), not carried
+   over from the old viewport breakpoints, since what's being measured is
+   different now. */
+@container fm-main (max-width: 460px) {
+  .fm-col-heads,
+  .fm-row { grid-template-columns: 1fr 78px 26px; }
+  .fm-col-date { display: none; }
+  .fm-list.fm-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@container fm-main (max-width: 300px) {
   .fm-col-heads,
   .fm-row { grid-template-columns: 1fr 26px; }
   .fm-col-size { display: none; }
-
   .fm-list.fm-grid { grid-template-columns: repeat(2, 1fr); }
 }

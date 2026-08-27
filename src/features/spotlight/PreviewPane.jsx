@@ -226,14 +226,30 @@ function PdfPreview({ item }) {
                 const { default: workerUrl } = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
                 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
-                const url = convertFileSrc(item.path);
-                const loaded = await pdfjsLib.getDocument(url).promise;
+                // Bytes via Rust `invoke`, not `convertFileSrc` + a URL fetch —
+                // same reasoning as ImagePreview above: pdf.js's default loader
+                // does HTTP range-request probing against whatever URL it's
+                // given, and Tauri's asset:// protocol handler doesn't behave
+                // like a real range-capable server for that, so it was failing
+                // silently. Handing pdf.js the bytes directly sidesteps it.
+                const { invoke } = await import('@tauri-apps/api/core');
+                const { data_b64 } = await invoke('preview_pdf_file', { path: item.path });
+                const binary = atob(data_b64);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+                const loaded = await pdfjsLib.getDocument({ data: bytes }).promise;
                 if (requestIdRef.current !== requestId) return;
                 setDoc(loaded);
                 setNumPages(loaded.numPages);
                 setStatus('ready');
-            } catch {
+            } catch (e) {
                 if (requestIdRef.current !== requestId) return;
+                // Was a silent catch — the error state gave no way to tell a CSP
+                // violation (worker/fetch blocked) apart from a genuinely corrupt
+                // PDF. Logging it is the only way to diagnose which, since this
+                // fires inside an async IIFE with nothing else surfacing it.
+                console.error('[PreviewPane] PDF load failed:', e);
                 setStatus('error');
             }
         })();

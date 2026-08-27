@@ -20,6 +20,7 @@ import { browseApps, browseUrls, isNaturalLanguageQuery, naturalLanguageSearch, 
 import { searchWindowsSettings } from '../../data/windowsSettings';
 import { searchWindowsTools } from '../../data/windowsTools';
 import { enrichRunningAppsWithIcons, getFaviconUrl, getGroupDomainFromUrl } from '../../utils/helpers';
+import { getPreviewItem } from '../../utils/filePreviewKind';
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth';
 import { useSlashCommands } from './useSlashCommands';
 import { useVoiceCommands } from './useVoiceCommands';
@@ -180,25 +181,6 @@ function toNavigableUrl(text) {
     const t = text.trim();
     return /^https?:\/\//i.test(t) ? t : `https://${t}`;
 }
-
-// Extensions the preview pane can actually render. Images go straight to an
-// <img>; everything in PREVIEW_CODE_LANGUAGES maps to the Prism grammar name
-// PreviewPane has imported for it — anything else falls through to no
-// preview rather than a wall of "unsupported language" boxes.
-const PREVIEW_IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'ico', 'svg']);
-const PREVIEW_CODE_LANGUAGES = {
-    ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', mjs: 'javascript', cjs: 'javascript',
-    json: 'json', css: 'css', scss: 'css', html: 'markup', htm: 'markup', xml: 'markup',
-    md: 'markdown', markdown: 'markdown',
-    py: 'python', rs: 'rust', go: 'go', java: 'java', kt: 'kotlin', swift: 'swift',
-    c: 'c', h: 'c', cpp: 'cpp', cc: 'cpp', hpp: 'cpp',
-    rb: 'ruby', php: 'php', sql: 'sql', graphql: 'graphql', gql: 'graphql',
-    yaml: 'yaml', yml: 'yaml', toml: 'toml',
-    sh: 'bash', bash: 'bash', zsh: 'bash',
-    txt: 'markup', log: 'markup', env: 'bash', gitignore: 'bash',
-};
-const PREVIEW_VIDEO_EXTS = new Set(['mp4', 'webm', 'mov', 'mkv', 'avi', 'm4v', 'ogv']);
-const PREVIEW_PDF_EXTS = new Set(['pdf']);
 
 // Default browsable list for a bare "/f" (no query yet). search_files itself
 // refuses an empty query outright — scanning the whole home folder with
@@ -1593,20 +1575,7 @@ export function GlobalSpotlight({
         if (!isDesktopApp) return null;
         const selected = flatRows[selectedIndex]?.item;
         if (!selected || selected.type !== 'file' || !selected.path) return null;
-        const ext = (selected.path.split('.').pop() || '').toLowerCase();
-        if (PREVIEW_IMAGE_EXTS.has(ext)) {
-            return { path: selected.path, previewKind: 'image' };
-        }
-        if (PREVIEW_CODE_LANGUAGES[ext]) {
-            return { path: selected.path, previewKind: 'code', language: PREVIEW_CODE_LANGUAGES[ext] };
-        }
-        if (PREVIEW_VIDEO_EXTS.has(ext)) {
-            return { path: selected.path, previewKind: 'video' };
-        }
-        if (PREVIEW_PDF_EXTS.has(ext)) {
-            return { path: selected.path, previewKind: 'pdf' };
-        }
-        return null;
+        return getPreviewItem(selected.path);
     }, [flatRows, selectedIndex, isDesktopApp]);
 
     const collapsePath = (path) => {

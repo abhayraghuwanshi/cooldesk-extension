@@ -2911,7 +2911,8 @@ pub fn run() {
         folder_index::folder_index_reindex,
         folder_index::folder_index_reindex_all,
         preview::preview_text_file,
-        preview::preview_image_file
+        preview::preview_image_file,
+        preview::preview_pdf_file
     ])
     .setup(|app| {
       // No instance was running, so `--quit` reached us as the primary. Exit

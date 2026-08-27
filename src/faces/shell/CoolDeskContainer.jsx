@@ -19,6 +19,7 @@ import { useDockState } from '../../features/dock/useDockState';
 import { useLayoutSwitch } from '../../features/dock/useLayoutSwitch';
 import { LayoutSwitchButton } from '../../features/dock/LayoutSwitchButton';
 import { useCooldeskAutoWorkspace, useCooldeskDiscovery } from '../../shared/hooks/useCooldeskProjects.js';
+import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
 // Lazy load WorkspaceList (Face 2)
 const WorkspaceList = lazy(() => import('../workspace/WorkspaceList').then(m => ({ default: m.WorkspaceList })));
 
@@ -146,6 +147,12 @@ export function CoolDeskContainer({
   const handleExitAddMode = useCallback(() => setAddTarget(null), []);
 
   const [graphOpen, setGraphOpen] = useState(false);
+
+  // SettingsModal is a fixed two-column dialog that doesn't adapt to sidebar
+  // widths (same reasoning that already keeps it out of `sidebar-control-bar`
+  // below) — gate WorkspaceShell's own settings nav dot on the same check so
+  // it isn't reachable from a width where it can't actually open correctly.
+  const isSidebarWidth = useIsSidebarWidth();
 
   // Backend dock state — drives the horizontal-bar render mode below.
   const dockState = useDockState();
@@ -651,7 +658,7 @@ export function CoolDeskContainer({
       {/* Spatial Workspace Shell - Takes remaining height */}
       {/* In extension mode: Only show OverviewDashboard */}
       {/* In desktop app (Tauri/Electron): Show all faces with navigation */}
-      <WorkspaceShell activeFace={activeFace} onFaceChange={handleFaceChange} onOpenSettings={isDesktopApp ? onOpenSettings : undefined} isDesktopApp={isDesktopApp}>
+      <WorkspaceShell activeFace={activeFace} onFaceChange={handleFaceChange} onOpenSettings={isDesktopApp && !isSidebarWidth ? onOpenSettings : undefined} isDesktopApp={isDesktopApp}>
         {/* Face 1: Workspace Details + ChatContext (Left) - Desktop App Only */}
         {isDesktopApp && (
           <Face index="workspace">

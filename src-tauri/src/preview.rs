@@ -100,3 +100,43 @@ pub async fn preview_image_file(path: String) -> Result<ImagePreview, String> {
 
     Ok(ImagePreview { data_url, size })
 }
+
+/// Cap on PDF size — same reasoning as `MAX_IMAGE_BYTES`, just a bit more
+/// generous since PDFs commonly run larger than a typical preview-worthy image.
+const MAX_PDF_BYTES: u64 = 40 * 1024 * 1024;
+
+#[derive(Serialize)]
+pub struct PdfPreview {
+    /// Base64 of the raw PDF bytes — decoded back to a Uint8Array on the JS
+    /// side and handed to pdf.js as `{ data }`, not a URL. pdf.js's default
+    /// loader does HTTP range-request probing against whatever URL it's
+    /// given, and Tauri's `asset://` custom-protocol handler doesn't behave
+    /// like a real range-capable HTTP server for that — it was failing
+    /// silently (empty catch block, now logged) before this existed. Same
+    /// fix `preview_image_file` already applies for images, for the same
+    /// reason (see the module doc comment).
+    data_b64: String,
+    size: u64,
+}
+
+/// Read a PDF file and return its raw bytes (base64) for pdf.js to parse
+/// in-memory, bypassing the asset protocol entirely.
+#[tauri::command]
+pub async fn preview_pdf_file(path: String) -> Result<PdfPreview, String> {
+    let p = Path::new(&path);
+    let metadata = std::fs::metadata(p).map_err(|e| e.to_string())?;
+    if !metadata.is_file() {
+        return Err("Not a file".to_string());
+    }
+    let size = metadata.len();
+    if size > MAX_PDF_BYTES {
+        return Err(format!("PDF too large to preview ({} MB)", size / (1024 * 1024)));
+    }
+
+    let bytes = std::fs::read(p).map_err(|e| e.to_string())?;
+
+    use base64::Engine;
+    let data_b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+
+    Ok(PdfPreview { data_b64, size })
+}
