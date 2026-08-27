@@ -63,6 +63,59 @@ export function CoolDeskContainer({
     return unsubscribe;
   }, []);
 
+  // The docked drawer's webview is hidden rather than unmounted between
+  // opens (see dock_expand/expand_drawer in lib.rs), so every face's scroll
+  // position otherwise survives untouched from whenever it was last closed —
+  // scroll down once, close the drawer, and it reopens still scrolled to the
+  // bottom every time after. `dock-expanded` fires on every drawer open
+  // (first time and every reopen); reset whatever's actually scrolled inside
+  // the currently visible face there, the same way a re-opened Spotlight
+  // resets on `spotlight-shown`. Centralized here (rather than in each face
+  // component individually) so it covers every face — Tabs, Workspace list,
+  // any future one — without each having to wire this up itself.
+  useEffect(() => {
+    let unsubscribe = null;
+    let cancelled = false;
+    // `window.electronAPI` is attached by electron-shim.js's own
+    // `initElectronAPI`, which documents (and retries for) exactly this
+    // startup race on macOS — if this effect's first run lands before that
+    // retry lands, `subscribe` would silently never get registered for the
+    // rest of the session, since this effect has no dependency that would
+    // make it run again on its own.
+    const trySubscribe = () => {
+      if (cancelled || unsubscribe) return;
+      if (!window.electronAPI?.subscribe) {
+        console.log('[CoolDesk] dock-expanded: electronAPI not ready yet, will retry');
+        return;
+      }
+      // Scoping to `.workspace-face.active *` found nothing — the actual
+      // scrolled container isn't reachable through that assumption, so cast
+      // the net over the whole document instead of guessing again. Also
+      // reset again a couple of times shortly after, in case something else
+      // (async content settling into the list, a layout pass) scrolls it
+      // back down right after this first pass.
+      const resetScroll = () => {
+        const scrolled = [...document.querySelectorAll('*')].filter(el => el.scrollTop > 0);
+        console.log('[CoolDesk] dock-expanded: resetting', scrolled.length, 'scrolled element(s)',
+          scrolled.map(el => el.className || el.tagName));
+        scrolled.forEach(el => { el.scrollTop = 0; });
+      };
+      unsubscribe = window.electronAPI.subscribe('dock-expanded', () => {
+        resetScroll();
+        requestAnimationFrame(resetScroll);
+        setTimeout(resetScroll, 300);
+      });
+      console.log('[CoolDesk] dock-expanded: subscribed');
+    };
+    trySubscribe();
+    const timers = [50, 200, 500, 1500].map(ms => setTimeout(trySubscribe, ms));
+    return () => {
+      cancelled = true;
+      timers.forEach(clearTimeout);
+      unsubscribe?.();
+    };
+  }, []);
+
   // A `/cd-init` in a repo CoolDesk has never seen becomes a workspace here,
   // instead of staying invisible until someone creates one by hand.
   useCooldeskAutoWorkspace(savedWorkspaces);

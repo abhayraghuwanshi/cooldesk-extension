@@ -298,6 +298,15 @@
         0 2px 0 rgba(255, 255, 255, 0.05) inset,
         0 -1px 0 rgba(0, 0, 0, 0.3) inset;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    /* WKWebView (Safari engine) sometimes leaves a backdrop-filter element's
+       composited layer stale — showing a frozen, blurred snapshot (and
+       occasionally dead hit-testing) once a card is added/updated by React
+       after its siblings already have their own layer — until a full reload
+       forces a recomposite. will-change pre-allocates a dedicated layer for
+       this element so it always gets freshly composited. It only hints a
+       layer; it never applies an actual transform, so it can't fight the
+       `transform: none` this class sets on hover below. */
+    will-change: transform;
 }
 
 /* Compact/List view cards - lighter shadows for tighter spacing */
@@ -401,6 +410,11 @@
     box-shadow:
         0 12px 48px rgba(0, 0, 0, 0.3),
         0 2px 0 rgba(255, 255, 255, 0.05) inset;
+    /* See the comment on .cooldesk-workspace-card above — same stale
+       backdrop-filter compositing bug, same fix. Tab/app cards are the ones
+       most exposed to it since they're populated by async data (running
+       apps, tabs) that lands after the card has already mounted. */
+    will-change: transform;
 }
 
 .wallpaper-enabled .tab-card:hover,
@@ -451,6 +465,11 @@
         0 8px 32px rgba(0, 0, 0, 0.3),
         0 2px 0 rgba(255, 255, 255, 0.05) inset !important;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Same stale backdrop-filter compositing issue as the cards above — this
+       is the catch-all for every plain button (e.g. TabManagement's "Auto
+       Group" toggle and layout-switch button), which are exactly the ones
+       whose enabled/label state changes right after mount. */
+    will-change: transform;
 }
 
 .wallpaper-enabled .cooldesk-settings-btn:hover,

@@ -3876,6 +3876,16 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
   }
 
+  /* This bar only ever holds <UpdateButton compact />, which renders nothing
+     when there's no pending update — leaving an empty div that still paints
+     its own padding/background/border-radius as a small dark dot fixed in
+     the sidebar's top-right corner. Hide the bar itself once it has no
+     content to show; it reappears the moment UpdateButton has something to
+     render. */
+  .sidebar-control-bar:empty {
+    display: none;
+  }
+
   .cooldesk-logo-icon {
     width: 28px;
     height: 28px;

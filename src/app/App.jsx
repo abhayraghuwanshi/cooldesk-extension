@@ -712,6 +712,54 @@ export default function App() {
     } catch { }
   }, [wallpaperEnabled]);
 
+  // Wallpaper mode's glass cards (workspace cards, tab/app cards — see
+  // wallpaper-enhancements.css) use `backdrop-filter`. On macOS's WKWebView
+  // this occasionally leaves a card's compositing layer stuck showing a
+  // stale, frozen (blurred-looking) snapshot from the instant it was
+  // inserted — reproduces unevenly (some cards, not others; some opens, not
+  // others) depending on exact paint timing, and previously needed a full
+  // reload to clear. Rather than guess *when* that race might land (window
+  // show/hide, async data arriving, a face switch — all of which trigger it
+  // in different components), react to the actual cause: watch for these
+  // cards being added to the DOM anywhere in the app, and the frame after
+  // each one lands, drop and immediately restore its `will-change` — that
+  // forces the browser to tear down whatever compositing layer it just
+  // (mis)allocated and build a fresh one from the card's current content.
+  useEffect(() => {
+    if (!wallpaperEnabled) return;
+    const SELECTOR = '.cooldesk-workspace-card, .cooldesk-tab-card, .cooldesk-tab-group-card';
+    const pending = new Set();
+    let raf = null;
+    const flush = () => {
+      raf = null;
+      for (const el of pending) {
+        if (!el.isConnected) continue;
+        el.style.willChange = 'auto';
+        void el.offsetWidth; // force a layout pass, dropping the promoted layer
+        el.style.willChange = '';
+      }
+      pending.clear();
+    };
+    const schedule = (el) => {
+      pending.add(el);
+      if (raf == null) raf = requestAnimationFrame(flush);
+    };
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        for (const node of m.addedNodes) {
+          if (node.nodeType !== 1) continue;
+          if (node.matches?.(SELECTOR)) schedule(node);
+          node.querySelectorAll?.(SELECTOR).forEach(schedule);
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      observer.disconnect();
+      if (raf != null) cancelAnimationFrame(raf);
+    };
+  }, [wallpaperEnabled]);
+
   useEffect(() => {
     try {
       localStorage.setItem('wallpaperUrl', wallpaperUrl);

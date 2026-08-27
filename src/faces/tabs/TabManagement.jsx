@@ -120,6 +120,7 @@ export function TabManagement() {
   // show this one where that header is hidden (sidebar widths).
   const isSidebarWidth = useIsSidebarWidth();
 
+
   // Load auto-group, smart sort, and task view state on mount
   useEffect(() => {
     chrome.storage.local.get(['autoGroupEnabled', 'smartSortEnabled', 'taskViewEnabled'], (result) => {
@@ -1046,13 +1047,14 @@ export function TabManagement() {
         </div>
       )}
 
-      <div style={{
-        flex: 1,
-        overflowY: 'auto',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px'
-      }}>
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px'
+        }}>
         {/* Reserved widget area — same store as the overview board, its own layout. */}
         <WidgetBoard storageArea="tabs" compact defaultBoard={TABS_WIDGET_DEFAULT} />
 

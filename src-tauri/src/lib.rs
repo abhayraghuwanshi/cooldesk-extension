@@ -738,9 +738,11 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
                 // one — flush against the physical screen edge looked cramped in
                 // practice (butts right up against neighboring windows). Top/bottom
                 // use a separate, larger margin — see `SIDEBAR_MARGIN_VERTICAL`.
-                // (On macOS this y/height is only a starting point: `apply_sidebar_margin`
-                // below re-derives both from the screen's menu-bar-excluded
-                // `visibleFrame`, which this cross-platform calc can't see.)
+                // (On macOS this y/height is only a starting point: the real,
+                // menu-bar-aware position is set once via
+                // `dock::position_sidebar_panel` below, which this
+                // cross-platform calc can't see. `x`/`w` here are still what
+                // gets used, on every platform.)
                 let margin = logical_to_physical(SIDEBAR_MARGIN, scale);
                 let margin_v = logical_to_physical(SIDEBAR_MARGIN_VERTICAL, scale);
                 let w = (logical_to_physical(st.width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH) as i32, scale) - margin * 2).max(1);
@@ -756,8 +758,20 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
             if !horizontal {
                 let _ = main.set_shadow(false);
             }
-            let _ = main.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w as u32, height: h as u32 }));
-            let _ = main.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
+            // The vertical panel on macOS is positioned once, atomically, via
+            // `dock::position_sidebar_panel` in the main-thread block below —
+            // using this approximate (x, y, w, h) here first and then
+            // correcting it a moment later used to mean two separate resizes
+            // on every single drawer open, which is exactly the kind of
+            // back-to-back repaint that could leave this backdrop-filter-heavy
+            // webview showing part of its previous frame as a stale, blurred
+            // smear until a full reload. Every other platform/orientation
+            // still needs this call as their only positioning step.
+            let skip_generic_resize = !horizontal && cfg!(target_os = "macos");
+            if !skip_generic_resize {
+                let _ = main.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w as u32, height: h as u32 }));
+                let _ = main.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
+            }
             // Same reasoning as the handle: a dock/taskbar panel that vanishes
             // when you switch Spaces (or when some other app goes fullscreen)
             // isn't a dock. Undone in `disable_dock` once the window goes back
@@ -782,7 +796,14 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
                     if horizontal {
                         dock::clamp_to_visible_frame(&main_for_appkit, &side_for_appkit);
                     } else {
-                        dock::apply_sidebar_margin(&main_for_appkit, SIDEBAR_MARGIN_VERTICAL as f64);
+                        // NSWindow/NSScreen work in points, not the physical
+                        // pixels `x`/`w` are in here — convert back.
+                        dock::position_sidebar_panel(
+                            &main_for_appkit,
+                            x as f64 / scale,
+                            w as f64 / scale,
+                            SIDEBAR_MARGIN_VERTICAL as f64,
+                        );
                     }
                     // Snapshot the final on-screen frame (post-clamp) for the
                     // leave-intent watcher to poll against.
@@ -794,6 +815,12 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
             }
             let _ = main.show();
             let _ = main.set_focus();
+            // The drawer's webview is never recreated — hiding it just calls
+            // `.hide()`, so its DOM (and scroll positions) survive from the
+            // last time it was open. The frontend uses this to reset the tab
+            // list back to the top on every expand, the same way a re-opened
+            // Spotlight resets via `spotlight-shown`.
+            let _ = app.emit("dock-expanded", ());
             log::info!("[Dock] Panel expanded on {}: x={x} y={y} w={w} h={h}", st.side);
         }
     }

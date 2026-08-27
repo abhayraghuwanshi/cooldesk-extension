@@ -30,6 +30,25 @@ async function openWithSystem(path) {
   return invoke('open_folder', { path });
 }
 
+// Last real mouse position. Opening/closing the Quick Look preview resizes
+// `.fm-main` (see the container query in fileManager.css), which can cross a
+// grid-column breakpoint and reflow every tile to a new cell — or, in list
+// view, just shift column widths. Either way, if a stationary cursor ends up
+// over a different row after that reflow, Chromium re-fires `mouseenter` on
+// it even though the pointer never moved. Without this guard that synthetic
+// event calls setCursor() and silently overrides the arrow-key selection that
+// caused the resize in the first place. A real hover always carries
+// coordinates that differ from the last recorded mouse position; a
+// reflow-triggered one repeats the same coordinates because the pointer
+// device never moved.
+const lastPointerPos = { x: -1, y: -1 };
+function isRealHover(e) {
+  const moved = e.clientX !== lastPointerPos.x || e.clientY !== lastPointerPos.y;
+  lastPointerPos.x = e.clientX;
+  lastPointerPos.y = e.clientY;
+  return moved;
+}
+
 // Directory cache shared across mounts: navigating back to a folder you've
 // already seen is instant, and hovering a folder warms it before you click.
 const dirCache = new Map();   // path -> entries[]
@@ -1314,7 +1333,7 @@ ${c.path}`}
                 const common = {
                   className: `fm-item ${view === 'grid' ? 'fm-tile' : 'fm-row'} ${active ? 'active' : ''} ${entry.hidden ? 'hidden-entry' : ''}`,
                   onClick: () => { setCursor(i); openEntry(entry); },
-                  onMouseEnter: () => { setCursor(i); prefetch(entry); },
+                  onMouseEnter: (e) => { if (isRealHover(e)) { setCursor(i); prefetch(entry); } },
                   title: entry.path,
                 };
                 if (view === 'grid') {

@@ -69,6 +69,11 @@ class LRUCache {
 // Global cache persists across re-renders
 const searchCache = new LRUCache(100);
 
+// Last real mouse position, shared across every ResultItem instance — see the
+// mouseenter guard in ResultItem for why this needs to live outside React
+// state (it must survive remounts of individual rows as the list reflows).
+const lastPointerPos = { x: -1, y: -1 };
+
 // Windows Settings (ms-settings: pages) are only launchable on the Windows
 // desktop build — the `open_url` backend uses ShellExecute, and the URI scheme
 // is Windows-only. Gate the catalog on both so we never surface unopenable rows.
@@ -1767,7 +1772,11 @@ export function GlobalSpotlight({
         // so the section stays reachable and ←/→ can switch workspaces from it.
         const wsSelectorOnly = !isSearching && wsNavItems.length === 0 && workspaces.length > 0;
         const totalWs = isSearching ? 0 : (wsSelectorOnly ? 1 : wsNavItems.length);
-        const totalResults = flatRows.length; // results section is the (expandable) folder tree
+        // "+N more results" is a real navigable row (mirrors the expand-apps/
+        // expand-tabs chips above) — without it, arrow-key nav dead-ends at
+        // row 10 and the rest of the results are only reachable by clicking.
+        const hasMoreResultsRow = !showAllResults && results.length > 10;
+        const totalResults = flatRows.length + (hasMoreResultsRow ? 1 : 0); // results section is the (expandable) folder tree [+ show-more row]
         const totalItems = totalContext + totalPins + totalWs + totalResults;
 
         // selectedPinIndex encodes idle-mode selection:
@@ -1918,7 +1927,14 @@ export function GlobalSpotlight({
                         handleWorkspaceItemSelect(wsNavItems[currentIndex - totalContext - totalPins]);
                     }
                 } else {
-                    handleSelect(flatRows[currentIndex - totalContext - totalPins - totalWs]?.item);
+                    const resultIndex = currentIndex - totalContext - totalPins - totalWs;
+                    // The show-more row sits one slot past the last real row —
+                    // Enter on it reveals the rest, same as clicking it.
+                    if (hasMoreResultsRow && resultIndex === flatRows.length) {
+                        setShowAllResults(true);
+                    } else {
+                        handleSelect(flatRows[resultIndex]?.item);
+                    }
                 }
             } else if (query.startsWith('http')) {
                 handleSelect({ url: query, type: 'url' });
@@ -3225,9 +3241,12 @@ export function GlobalSpotlight({
                                 />
                             ))}
                             {!showAllResults && results.length > 10 && (
-                                <div style={{ padding: '8px 14px', color: 'rgba(255,255,255,0.4)', fontSize: '12px', textAlign: 'center', cursor: 'pointer' }} onClick={() => setShowAllResults(true)}>
-                                    +{results.length - 10} more results (refine your search)
-                                </div>
+                                <MoreResultsRow
+                                    isSelected={selectedIndex === flatRows.length}
+                                    count={results.length - 10}
+                                    onSelect={() => setShowAllResults(true)}
+                                    onHover={() => setSelectedIndex(flatRows.length)}
+                                />
                             )}
                         </div>
                         {previewItem && (
@@ -3596,7 +3615,23 @@ const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect,
     // auto-scrolling to each one fights the user's scroll direction and makes
     // the end of a long result list hard to reach.
     const hoverSelectedRef = useRef(false);
-    const handleMouseEnter = useCallback(() => {
+    const handleMouseEnter = useCallback((e) => {
+        // Chromium re-fires mouseenter on whatever row ends up under a
+        // *stationary* cursor whenever the layout shifts beneath it — e.g. the
+        // results column narrowing to 280px the moment arrow-key navigation
+        // lands on a file with a Quick Look preview (see .has-preview in
+        // GlobalSpotlight.css). Without this guard that synthetic enter calls
+        // onHover() and silently overwrites the selection the keyboard just
+        // set, so navigating with arrow keys while the mouse merely rests
+        // over the list list feels random. A real hover always carries
+        // coordinates that differ from the last recorded mouse position; a
+        // reflow-triggered one repeats the same coordinates because the
+        // pointer device never moved.
+        const last = lastPointerPos;
+        const moved = e.clientX !== last.x || e.clientY !== last.y;
+        last.x = e.clientX;
+        last.y = e.clientY;
+        if (!moved) return;
         hoverSelectedRef.current = true;
         onHover(index);
     }, [index, onHover]);
@@ -3697,6 +3732,42 @@ const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect,
             >
                 <FontAwesomeIcon icon={faThumbtack} />
             </span>
+        </div>
+    );
+});
+
+// The "+N more results" row — a real navigable row (see hasMoreResultsRow in
+// handleKeyDown) so it's reachable the same way as any other result, not just
+// by clicking. Shares ResultItem's pointer-move guard and keyboard-driven
+// scrollIntoView so it behaves identically under mouse/keyboard nav.
+const MoreResultsRow = memo(function MoreResultsRow({ isSelected, count, onSelect, onHover }) {
+    const rowRef = useRef(null);
+    const hoverSelectedRef = useRef(false);
+    const handleMouseEnter = useCallback((e) => {
+        const last = lastPointerPos;
+        const moved = e.clientX !== last.x || e.clientY !== last.y;
+        last.x = e.clientX;
+        last.y = e.clientY;
+        if (!moved) return;
+        hoverSelectedRef.current = true;
+        onHover();
+    }, [onHover]);
+
+    useEffect(() => {
+        if (isSelected && rowRef.current && !hoverSelectedRef.current) {
+            rowRef.current.scrollIntoView({ block: 'nearest' });
+        }
+        hoverSelectedRef.current = false;
+    }, [isSelected]);
+
+    return (
+        <div
+            ref={rowRef}
+            className={`spotlight-more-results${isSelected ? ' selected' : ''}`}
+            onClick={onSelect}
+            onMouseEnter={handleMouseEnter}
+        >
+            +{count} more results (refine your search)
         </div>
     );
 });

@@ -74,9 +74,10 @@ async function bridgeTauriEvents() {
     try {
         const { listen } = await import('@tauri-apps/api/event');
         // Events emitted from Rust that the frontend subscribes to
-        const tauriEvents = ['spotlight-shown', 'spotlight-hidden', 'tabs-updated', 'native-focus'];
+        const tauriEvents = ['spotlight-shown', 'spotlight-hidden', 'tabs-updated', 'native-focus', 'dock-expanded'];
         for (const eventName of tauriEvents) {
             await listen(eventName, (event) => {
+                console.log('[TauriShim] native event received:', eventName, 'listeners:', listeners.get(eventName)?.size || 0);
                 if (listeners.has(eventName)) {
                     listeners.get(eventName).forEach(cb => cb(event.payload));
                 }

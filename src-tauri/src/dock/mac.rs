@@ -61,56 +61,89 @@ pub fn clamp_to_visible_frame(window: &tauri::WebviewWindow, side: &str) {
     ns_window.setFrameOrigin(origin);
 }
 
-/// Corrects the vertical sidebar panel's vertical placement after
-/// `expand_drawer` sets it via Tauri's cross-platform position API. Two
-/// separate problems, both fixed here:
+/// Positions the vertical sidebar panel directly via AppKit, in one call,
+/// instead of `expand_drawer` setting it approximately through Tauri's
+/// cross-platform position API first and correcting it a moment later.
+/// That two-step version (resize approximately, then immediately resize
+/// again to the corrected frame) used to be two separate `setFrame` passes
+/// on every single drawer open, including re-opening in the exact same
+/// spot — and two back-to-back resizes on this backdrop-filter-heavy
+/// WKWebView is exactly the kind of repaint that can leave part of the
+/// window showing stale pixels (some wallpaper-mode glass cards render as a
+/// frozen, blurred smear over only part of the panel until a full reload).
+/// Computing the correct frame up front and applying it once, only when it
+/// actually differs from the window's current frame, avoids that condition
+/// entirely rather than papering over its symptom.
 ///
-/// 1. That position API (tao's `set_outer_position` → `window_position()`)
-///    flips tao's top-down Y into AppKit's bottom-up Y using only
-///    `CGDisplay::main().pixels_high()` — the *primary* display's height —
-///    regardless of which screen the window is actually on. On a secondary
-///    monitor this produces a wrong Y (observed: the panel pinned flush to
-///    y=0 instead of respecting `SIDEBAR_MARGIN`).
-/// 2. `expand_drawer` sizes the vertical panel against the monitor's *full*
-///    physical rect (deliberately, for the flush-edge historical behavior —
-///    see `drawer_geom`'s doc comment), not its menu-bar/Dock-excluded
-///    `visibleFrame`. Each display gets its own menu bar in a multi-monitor
-///    setup, so a small `SIDEBAR_MARGIN` from the raw physical top edge
-///    still lands the panel's top underneath that display's menu bar
-///    (observed: no visible gap at all, top or bottom).
+/// Takes over from two separate problems the old two-step version worked
+/// around after the fact:
 ///
-/// Re-derives both `y` and `height` from `visibleFrame` instead of patching
-/// just the origin. `x` and `width` are unaffected by either problem (no Y
-/// flip involved, and the sidebar was always narrower than the monitor) so
-/// they're left as tao already set them.
+/// 1. Tauri's cross-platform position API (tao's `set_outer_position` →
+///    `window_position()`) flips tao's top-down Y into AppKit's bottom-up Y
+///    using only `CGDisplay::main().pixels_high()` — the *primary*
+///    display's height — regardless of which screen the window is actually
+///    on. On a secondary monitor this produces a wrong Y (observed: the
+///    panel pinned flush to y=0 instead of respecting `SIDEBAR_MARGIN`).
+/// 2. `expand_drawer`'s own geometry calc sizes the vertical panel against
+///    the monitor's *full* physical rect (deliberately, for the flush-edge
+///    historical behavior — see `drawer_geom`'s doc comment), not its
+///    menu-bar/Dock-excluded `visibleFrame`. Each display gets its own menu
+///    bar in a multi-monitor setup, so a small `SIDEBAR_MARGIN` from the raw
+///    physical top edge still lands the panel's top underneath that
+///    display's menu bar (observed: no visible gap at all, top or bottom).
 ///
-/// Must run on the main thread, after size/position have been applied — same
-/// constraints as `clamp_to_visible_frame`.
-pub fn apply_sidebar_margin(window: &tauri::WebviewWindow, margin_logical: f64) {
-    let Ok(ptr) = window.ns_window() else { return };
+/// `target_x`/`target_w` (in points) come from `expand_drawer`'s own calc —
+/// neither problem above touches them (no Y flip involved, and the sidebar
+/// was always narrower than the monitor), so they're taken as correct and
+/// only `y`/`height` are re-derived here from `visibleFrame`.
+///
+/// Must run on the main thread — same constraints as `clamp_to_visible_frame`.
+/// Returns the frame actually in place afterward (applied or already
+/// current), for the leave-intent watcher snapshot.
+pub fn position_sidebar_panel(
+    window: &tauri::WebviewWindow,
+    target_x: f64,
+    target_w: f64,
+    margin_logical: f64,
+) -> Option<(f64, f64, f64, f64)> {
+    let Ok(ptr) = window.ns_window() else { return None };
     let ns_window: &NSWindow = unsafe { &*(ptr as *mut NSWindow) };
-    let mut frame = ns_window.frame();
 
-    // `ns_window.screen()` picks whichever NSScreen the window's *current*
-    // frame overlaps most — unreliable right here since the Y half of that
-    // frame is the very value tao just miscalculated (see doc comment above)
-    // and may not land on the intended monitor at all. `x` is always correct
-    // (untouched by the flip), so find the screen by horizontal containment
-    // instead of trusting the window's already-wrong frame.
-    let Some(mtm) = objc2::MainThreadMarker::new() else { return };
+    // Find the screen by horizontal containment rather than trusting
+    // `ns_window.screen()` (which picks whichever NSScreen the window's
+    // *current* frame — possibly still at some unrelated previous
+    // position/size — overlaps most).
+    let Some(mtm) = objc2::MainThreadMarker::new() else { return None };
     let visible = NSScreen::screens(mtm)
         .iter()
         .find(|s| {
             let f = s.frame();
-            frame.origin.x >= f.origin.x && frame.origin.x < f.origin.x + f.size.width
+            target_x >= f.origin.x && target_x < f.origin.x + f.size.width
         })
         .or_else(|| ns_window.screen())
-        .map(|s| s.visibleFrame());
-    let Some(visible) = visible else { return };
+        .map(|s| s.visibleFrame())?;
 
-    frame.origin.y = visible.origin.y + margin_logical;
-    frame.size.height = (visible.size.height - margin_logical * 2.0).max(1.0);
-    ns_window.setFrame_display(frame, true);
+    let mut target = ns_window.frame(); // reuse the type; every field is overwritten below
+    target.origin.x = target_x;
+    target.origin.y = visible.origin.y + margin_logical;
+    target.size.width = target_w;
+    target.size.height = (visible.size.height - margin_logical * 2.0).max(1.0);
+
+    // `setFrame_display(_, true)` forces AppKit to redisplay the window even
+    // when nothing about the frame actually changed — skip it entirely when
+    // the target already matches the window's current frame (within a
+    // fraction of a point, to tolerate float rounding), so re-opening the
+    // drawer in the same spot doesn't touch AppKit's layout/paint pipeline
+    // at all.
+    let current = ns_window.frame();
+    let unchanged = (current.origin.x - target.origin.x).abs() < 0.5
+        && (current.origin.y - target.origin.y).abs() < 0.5
+        && (current.size.width - target.size.width).abs() < 0.5
+        && (current.size.height - target.size.height).abs() < 0.5;
+    if !unchanged {
+        ns_window.setFrame_display(target, true);
+    }
+    Some((target.origin.x, target.origin.y, target.size.width, target.size.height))
 }
 
 /// Lets a window follow the user across *ordinary* Space switches (the
