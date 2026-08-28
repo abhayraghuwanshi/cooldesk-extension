@@ -34,11 +34,21 @@ fn get_timestamp(item: &serde_json::Value) -> i64 {
 }
 
 /// Merge arrays by ID (last-write-wins based on timestamps)
+///
+/// Items with an empty/missing id are never merged with one another - doing so
+/// would silently collapse two unrelated blank-id records into one, discarding
+/// data. Each such item is instead given its own synthesized key so it is always
+/// appended rather than coalesced. This is a defensive guard: known callers
+/// (notes, url-notes, pins, scraped chats/configs, daily memory) validate a
+/// non-empty id/chatId/domain before a record is ever persisted client-side, so
+/// this path shouldn't normally be hit, but it protects against legacy records
+/// or partially-constructed objects that slip through.
 pub fn merge_array_by_id<T>(local: Vec<T>, remote: Vec<T>, id_field: &str) -> Vec<T>
 where
     T: Clone + serde::Serialize + serde::de::DeserializeOwned,
 {
     let mut merged: HashMap<String, serde_json::Value> = HashMap::new();
+    let mut unique_counter: u64 = 0;
 
     // Helper to get ID from item
     let get_id = |item: &serde_json::Value| -> Option<String> {
@@ -52,8 +62,16 @@ where
     // Add local items
     for item in &local {
         if let Ok(json) = serde_json::to_value(item) {
-            if let Some(id) = get_id(&json) {
-                merged.insert(id, json);
+            match get_id(&json) {
+                Some(id) if !id.is_empty() => {
+                    merged.insert(id, json);
+                }
+                Some(_) | None => {
+                    // Empty or missing id - keep it unique rather than dropping it
+                    // (previously: items with no id were silently discarded here).
+                    unique_counter += 1;
+                    merged.insert(format!("__no-id-{}", unique_counter), json);
+                }
             }
         }
     }
@@ -61,16 +79,22 @@ where
     // Merge remote items (last-write-wins)
     for item in &remote {
         if let Ok(json) = serde_json::to_value(item) {
-            if let Some(id) = get_id(&json) {
-                let remote_time = get_timestamp(&json);
+            match get_id(&json) {
+                Some(id) if !id.is_empty() => {
+                    let remote_time = get_timestamp(&json);
 
-                if let Some(existing) = merged.get(&id) {
-                    let local_time = get_timestamp(existing);
-                    if remote_time >= local_time {
+                    if let Some(existing) = merged.get(&id) {
+                        let local_time = get_timestamp(existing);
+                        if remote_time >= local_time {
+                            merged.insert(id, json);
+                        }
+                    } else {
                         merged.insert(id, json);
                     }
-                } else {
-                    merged.insert(id, json);
+                }
+                Some(_) | None => {
+                    unique_counter += 1;
+                    merged.insert(format!("__no-id-{}", unique_counter), json);
                 }
             }
         }

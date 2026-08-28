@@ -579,6 +579,13 @@ static HANDLE_SCREEN_FRAME: std::sync::Mutex<Option<(f64, f64, f64, f64)>> = std
 #[cfg(target_os = "macos")]
 static MAIN_SCREEN_FRAME: std::sync::Mutex<Option<(f64, f64, f64, f64)>> = std::sync::Mutex::new(None);
 
+// Whether the panel cached in `MAIN_SCREEN_FRAME` is the horizontal bar
+// (`true`) or the floating vertical sidebar (`false`) — cached alongside it
+// by `expand_drawer` so the leave-intent watcher can pick the right margin
+// without calling `load_dock_state` (a disk read) on every 50ms poll tick.
+#[cfg(target_os = "macos")]
+static MAIN_PANEL_HORIZONTAL: AtomicBool = AtomicBool::new(false);
+
 const DOCK_MIN_WIDTH: u32 = 220;
 const DOCK_MAX_WIDTH: u32 = 900;
 const BAR_MIN_HEIGHT: u32 = 40;
@@ -767,8 +774,7 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
             // webview showing part of its previous frame as a stale, blurred
             // smear until a full reload. Every other platform/orientation
             // still needs this call as their only positioning step.
-            let skip_generic_resize = !horizontal && cfg!(target_os = "macos");
-            if !skip_generic_resize {
+            if horizontal || !cfg!(target_os = "macos") {
                 let _ = main.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w as u32, height: h as u32 }));
                 let _ = main.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
             }
@@ -790,6 +796,15 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
             {
                 let main_for_appkit = main.clone();
                 let side_for_appkit = st.side.clone();
+                // `show()`/`set_focus()` are dispatched *inside* this same
+                // main-thread block, after positioning — not called
+                // separately below — so the window can't paint a frame at
+                // its previous (or default) position before this queued
+                // closure runs. `run_on_main_thread` just posts a block to
+                // the run loop; if `show()`/`set_focus()` reached the main
+                // thread through a different, unordered path, the window
+                // could flash at the wrong spot for a frame before snapping
+                // to the position set here.
                 let _ = app.run_on_main_thread(move || {
                     dock::allow_over_fullscreen_spaces(&main_for_appkit);
                     dock::join_fullscreen_space(&main_for_appkit);
@@ -810,11 +825,17 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
                     let frame = dock::window_frame(&main_for_appkit);
                     log::info!("[Dock] Cached main panel frame for leave-intent watcher: {:?}", frame);
                     *MAIN_SCREEN_FRAME.lock().unwrap() = frame;
+                    MAIN_PANEL_HORIZONTAL.store(horizontal, Ordering::Relaxed);
+                    let _ = main_for_appkit.show();
+                    let _ = main_for_appkit.set_focus();
                 });
                 MAC_DOCK_ACTIVE.store(true, Ordering::Relaxed);
             }
-            let _ = main.show();
-            let _ = main.set_focus();
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = main.show();
+                let _ = main.set_focus();
+            }
             // The drawer's webview is never recreated — hiding it just calls
             // `.hide()`, so its DOM (and scroll positions) survive from the
             // last time it was open. The frontend uses this to reset the tab
@@ -1909,6 +1930,14 @@ async fn launch_app_with_args(app: String, args: Vec<String>) -> Result<(), Stri
     Ok(())
 }
 
+/// Wrap a path in single quotes for a POSIX shell, escaping any embedded
+/// single quotes (`'` -> `'\''`) so it's passed through as one argument
+/// regardless of spaces or other shell metacharacters it contains.
+#[cfg(not(target_os = "windows"))]
+fn shell_single_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', r"'\''"))
+}
+
 /// Run a saved project command (from `.cooldesk/commands.json`) in a visible terminal
 /// window, in the given working directory, so the user can watch its output. Used by the
 /// clickable command pills in the CoolDesk workspace panel.
@@ -1945,7 +1974,15 @@ async fn run_project_command(command: String, cwd: Option<String>) -> Result<(),
         let script = if dir.is_empty() {
             command.clone()
         } else {
-            format!("cd {} && {}", dir, command)
+            // `dir` must be shell-quoted, not just interpolated: an unquoted
+            // path with a space (e.g. "~/Library/Application Support/Foo", or
+            // any project folder with a space in its name — routine on
+            // macOS) splits into extra words. `cd` in particular treats a
+            // second word as an old/new string-replacement pair rather than
+            // part of the path, silently `cd`-ing somewhere unrelated to the
+            // saved command's actual working directory instead of failing
+            // loudly.
+            format!("cd {} && {}", shell_single_quote(&dir), command)
         };
         let osa = format!(
             "tell application \"Terminal\" to do script \"{}\"",
@@ -1962,7 +1999,7 @@ async fn run_project_command(command: String, cwd: Option<String>) -> Result<(),
         let full = if dir.is_empty() {
             command.clone()
         } else {
-            format!("cd '{}' && {}", dir, command)
+            format!("cd {} && {}", shell_single_quote(&dir), command)
         };
         let spawned = std::process::Command::new("x-terminal-emulator")
             .arg("-e")
@@ -3215,9 +3252,18 @@ pub fn run() {
                   // cursor passes through that gap — technically outside `frame`
                   // — just moving to/from the panel. Without this buffer that
                   // dead zone was read as "left the panel," flapping the
-                  // collapse timer.
-                  let buffer_x = SIDEBAR_MARGIN as f64;
-                  let buffer_y = SIDEBAR_MARGIN_VERTICAL as f64;
+                  // collapse timer. The horizontal bar has no such gap — it's
+                  // clamped flush against its screen edge (`clamp_to_visible_frame`)
+                  // — so applying this buffer to it would just let the cursor
+                  // sit further outside the bar than intended and still count
+                  // as "over" it. `MAIN_PANEL_HORIZONTAL` is cached by
+                  // `expand_drawer` alongside `MAIN_SCREEN_FRAME`, so this reads
+                  // an atomic instead of re-loading dock state from disk.
+                  let (buffer_x, buffer_y) = if MAIN_PANEL_HORIZONTAL.load(Ordering::Relaxed) {
+                      (0.0, 0.0)
+                  } else {
+                      (SIDEBAR_MARGIN as f64, SIDEBAR_MARGIN_VERTICAL as f64)
+                  };
                   let over = cx >= fx - buffer_x && cx <= fx + fw + buffer_x && cy >= fy - buffer_y && cy <= fy + fh + buffer_y;
                   if over {
                       away_since = None;

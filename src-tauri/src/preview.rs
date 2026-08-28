@@ -26,34 +26,60 @@ pub struct TextPreview {
 }
 
 /// Read a file as UTF-8 text for the code/text preview pane.
+///
+/// Runs on a blocking-pool thread rather than directly in this async fn —
+/// `std::fs::read` on a large file would otherwise stall whatever tokio
+/// worker thread picked up this command, delaying every other Tauri IPC call
+/// scheduled on it.
 #[tauri::command]
 pub async fn preview_text_file(path: String) -> Result<TextPreview, String> {
-    let p = Path::new(&path);
+    tokio::task::spawn_blocking(move || {
+        let p = Path::new(&path);
+        let metadata = std::fs::metadata(p).map_err(|e| e.to_string())?;
+        if !metadata.is_file() {
+            return Err("Not a file".to_string());
+        }
+        let size = metadata.len();
+
+        let bytes = std::fs::read(p).map_err(|e| e.to_string())?;
+        let truncated = bytes.len() as u64 > MAX_TEXT_BYTES;
+        let slice = if truncated {
+            &bytes[..MAX_TEXT_BYTES as usize]
+        } else {
+            &bytes[..]
+        };
+
+        // Binary detection: a NUL byte in the sampled region is not valid in
+        // any text encoding this preview supports, and appears constantly in
+        // real binaries — cheap, reliable "don't try to render this as code"
+        // signal.
+        if slice.contains(&0u8) {
+            return Err("Binary file".to_string());
+        }
+
+        let content = String::from_utf8_lossy(slice).into_owned();
+        let lines = content.lines().count();
+
+        Ok(TextPreview { content, truncated, lines, size })
+    })
+    .await
+    .map_err(|e| format!("preview_text_file panicked: {e}"))?
+}
+
+/// Read a file's bytes, rejecting non-files and anything over `max_bytes`.
+/// Shared by every preview command that hands the whole file to the webview
+/// (as opposed to `preview_text_file`, which truncates instead of erroring).
+fn read_capped(p: &Path, max_bytes: u64, label: &str) -> Result<(Vec<u8>, u64), String> {
     let metadata = std::fs::metadata(p).map_err(|e| e.to_string())?;
     if !metadata.is_file() {
         return Err("Not a file".to_string());
     }
     let size = metadata.len();
-
-    let bytes = std::fs::read(p).map_err(|e| e.to_string())?;
-    let truncated = bytes.len() as u64 > MAX_TEXT_BYTES;
-    let slice = if truncated {
-        &bytes[..MAX_TEXT_BYTES as usize]
-    } else {
-        &bytes[..]
-    };
-
-    // Binary detection: a NUL byte in the sampled region is not valid in any
-    // text encoding this preview supports, and appears constantly in real
-    // binaries — cheap, reliable "don't try to render this as code" signal.
-    if slice.contains(&0u8) {
-        return Err("Binary file".to_string());
+    if size > max_bytes {
+        return Err(format!("{label} too large to preview ({} MB)", size / (1024 * 1024)));
     }
-
-    let content = String::from_utf8_lossy(slice).into_owned();
-    let lines = content.lines().count();
-
-    Ok(TextPreview { content, truncated, lines, size })
+    let bytes = std::fs::read(p).map_err(|e| e.to_string())?;
+    Ok((bytes, size))
 }
 
 fn mime_for_ext(ext: &str) -> &'static str {
@@ -77,28 +103,26 @@ pub struct ImagePreview {
 }
 
 /// Read an image file and return it as a data: URI.
+///
+/// See `preview_text_file`'s doc comment for why this runs via
+/// `spawn_blocking` — same reasoning, and images can be up to `MAX_IMAGE_BYTES`.
 #[tauri::command]
 pub async fn preview_image_file(path: String) -> Result<ImagePreview, String> {
-    let p = Path::new(&path);
-    let metadata = std::fs::metadata(p).map_err(|e| e.to_string())?;
-    if !metadata.is_file() {
-        return Err("Not a file".to_string());
-    }
-    let size = metadata.len();
-    if size > MAX_IMAGE_BYTES {
-        return Err(format!("Image too large to preview ({} MB)", size / (1024 * 1024)));
-    }
+    tokio::task::spawn_blocking(move || {
+        let p = Path::new(&path);
+        let (bytes, size) = read_capped(p, MAX_IMAGE_BYTES, "Image")?;
 
-    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
-    let mime = mime_for_ext(ext);
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let mime = mime_for_ext(ext);
 
-    let bytes = std::fs::read(p).map_err(|e| e.to_string())?;
+        use base64::Engine;
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        let data_url = format!("data:{};base64,{}", mime, encoded);
 
-    use base64::Engine;
-    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
-    let data_url = format!("data:{};base64,{}", mime, encoded);
-
-    Ok(ImagePreview { data_url, size })
+        Ok(ImagePreview { data_url, size })
+    })
+    .await
+    .map_err(|e| format!("preview_image_file panicked: {e}"))?
 }
 
 /// Cap on PDF size — same reasoning as `MAX_IMAGE_BYTES`, just a bit more
@@ -121,22 +145,21 @@ pub struct PdfPreview {
 
 /// Read a PDF file and return its raw bytes (base64) for pdf.js to parse
 /// in-memory, bypassing the asset protocol entirely.
+///
+/// See `preview_text_file`'s doc comment for why this runs via
+/// `spawn_blocking` — same reasoning, and PDFs can be up to `MAX_PDF_BYTES`
+/// (larger than the image cap), making the stall worse if left inline.
 #[tauri::command]
 pub async fn preview_pdf_file(path: String) -> Result<PdfPreview, String> {
-    let p = Path::new(&path);
-    let metadata = std::fs::metadata(p).map_err(|e| e.to_string())?;
-    if !metadata.is_file() {
-        return Err("Not a file".to_string());
-    }
-    let size = metadata.len();
-    if size > MAX_PDF_BYTES {
-        return Err(format!("PDF too large to preview ({} MB)", size / (1024 * 1024)));
-    }
+    tokio::task::spawn_blocking(move || {
+        let p = Path::new(&path);
+        let (bytes, size) = read_capped(p, MAX_PDF_BYTES, "PDF")?;
 
-    let bytes = std::fs::read(p).map_err(|e| e.to_string())?;
+        use base64::Engine;
+        let data_b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
 
-    use base64::Engine;
-    let data_b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-
-    Ok(PdfPreview { data_b64, size })
+        Ok(PdfPreview { data_b64, size })
+    })
+    .await
+    .map_err(|e| format!("preview_pdf_file panicked: {e}"))?
 }

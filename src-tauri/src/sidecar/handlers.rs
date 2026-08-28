@@ -265,6 +265,20 @@ pub async fn record_session_snapshot(items: Vec<String>) {
     }
 }
 
+/// Byte-slice a string for logging without risking a panic on a multi-byte
+/// UTF-8 char boundary. Untrusted input (URLs, chat messages) can put any
+/// character at any byte offset, so a plain `&s[..n]` is not safe here.
+fn truncate_for_log(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
 fn normalize_url_for_graph(url: &str) -> String {
     // Domain-only so workspace URLs ("github.com/user/repo") and snapshot URLs
     // ("github.com") resolve to the same node ID, enabling app↔url edges.
@@ -272,7 +286,7 @@ fn normalize_url_for_graph(url: &str) -> String {
         let host = parsed.host_str().unwrap_or(url);
         host.strip_prefix("www.").unwrap_or(host).to_lowercase()
     } else {
-        log::warn!("[graph] malformed URL in graph normalization: {}", &url[..url.len().min(80)]);
+        log::warn!("[graph] malformed URL in graph normalization: {}", truncate_for_log(url, 80));
         format!("raw::{}", url.to_lowercase())
     }
 }
@@ -1373,7 +1387,34 @@ pub async fn post_sync(
             data.urls = merge_urls(data.urls.clone(), urls);
         }
         if let Some(tabs) = req.tabs {
-            data.tabs = tabs;
+            // Don't overwrite `data.tabs` directly: every other tab write path
+            // (push-tabs over WS, POST /tabs, disconnect cleanup) goes through
+            // `device_tabs_map` + `recompute_aggregated_tabs()`, updating only the
+            // devices present in that write. A direct `data.tabs = tabs` here would
+            // wipe out every other connected device's tabs immediately, and would
+            // then be silently undone by the next push-tabs/cleanup recompute (which
+            // never sees what /sync wrote, since it never touched device_tabs_map).
+            //
+            // FullSyncRequest has no top-level deviceId, but each `Tab` already
+            // carries an optional per-tab `device_id` (populated whenever tabs are
+            // read back from the aggregated view, e.g. via GET /sync or /tabs) - so
+            // group incoming tabs by that field and update only those devices'
+            // entries, same as the other write paths. Tabs with no device id (e.g. a
+            // client submitting a bare tab list with no prior context) are bucketed
+            // under a stable fallback key rather than each clobbering one another or
+            // stomping every other device's data.
+            let mut incoming_by_device: HashMap<String, Vec<Tab>> = HashMap::new();
+            for tab in tabs {
+                let key = tab
+                    .device_id
+                    .clone()
+                    .unwrap_or_else(|| "sync-unknown".to_string());
+                incoming_by_device.entry(key).or_default().push(tab);
+            }
+            for (device_id, device_tabs) in incoming_by_device {
+                data.device_tabs_map.insert(device_id, device_tabs);
+            }
+            data.tabs = recompute_aggregated_tabs(&data.device_tabs_map);
         }
         if let Some(settings) = req.settings {
             data.settings = merge_settings(data.settings.clone(), settings);
@@ -1941,7 +1982,7 @@ pub async fn v3_simple_chat(
     State(state): State<Arc<AppState>>,
     Json(req): Json<V3SimpleChatRequest>,
 ) -> Json<serde_json::Value> {
-    log::info!("[v3] simple-chat: {}", &req.message[..req.message.len().min(60)]);
+    log::info!("[v3] simple-chat: {}", truncate_for_log(&req.message, 60));
     let agent = SimpleAgentV3::new(state.sync_data.clone());
     let result = agent.chat(&req.message).await;
 
@@ -1961,7 +2002,7 @@ pub async fn v3_chat(
     State(state): State<Arc<AppState>>,
     Json(req): Json<V3ChatRequest>,
 ) -> Json<serde_json::Value> {
-    log::info!("[v3] chat: {}", &req.message[..req.message.len().min(60)]);
+    log::info!("[v3] chat: {}", truncate_for_log(&req.message, 60));
     let agent = CloudAgent::new(state.sync_data.clone());
     let result = agent.chat(&req.message).await;
 
@@ -1980,7 +2021,7 @@ pub async fn v3_suggest(
     State(state): State<Arc<AppState>>,
     Json(req): Json<V3ChatRequest>,
 ) -> Json<serde_json::Value> {
-    log::info!("[v3] suggest: {}", &req.message[..req.message.len().min(60)]);
+    log::info!("[v3] suggest: {}", truncate_for_log(&req.message, 60));
     let agent = CloudAgent::new(state.sync_data.clone());
     let result = agent.suggest(&req.message).await;
 
@@ -2227,18 +2268,24 @@ pub async fn feedback_get_affinity(
 pub async fn feedback_record_url_workspace(
     Json(req): Json<RecordUrlWorkspaceRequest>,
 ) -> Json<SuccessResponse> {
+    // `record_co_occurrence` used to be called here as `(&req.url, &req.url, true)`,
+    // i.e. a URL paired with itself. That API is for tracking two DIFFERENT URLs
+    // seen together (see other call sites, e.g. feedback_record_grouping above),
+    // and `FeedbackStore::record_co_occurrence` explicitly early-returns on
+    // `normalized1 == normalized2` ("Skip self-pairs") - so that call was already a
+    // guaranteed no-op, not "recording the association" as the old comment claimed.
+    //
+    // `RecordUrlWorkspaceRequest` only carries a single URL + workspace name, not a
+    // second related URL, so record_co_occurrence isn't the right API here at all.
+    // `PatternTracker::record_url_workspace` below is the correct one for a
+    // single-URL-to-workspace association: it already updates both
+    // domain_workspaces and keyword_workspaces, which is what workspace
+    // suggestions (`feedback_suggest_workspace`) read from. A true URL-to-URL
+    // co-occurrence would need the other URLs already in the workspace, which this
+    // endpoint's request doesn't provide - that's left as a future enhancement
+    // rather than faked with a self-pair.
     let mut tracker = PATTERN_TRACKER.lock().await;
     tracker.record_url_workspace(&req.url, &req.title, &req.workspace_name);
-
-    // Also record co-occurrence for URLs in same workspace
-    let store_mutex = get_feedback_store().await;
-    let store_guard = store_mutex.lock().await;
-
-    if let Some(store) = store_guard.as_ref() {
-        // This would ideally get other URLs in the same workspace
-        // For now, just record the association
-        store.record_co_occurrence(&req.url, &req.url, true).await;
-    }
 
     Json(SuccessResponse { success: true })
 }

@@ -59,7 +59,15 @@ fn save_day(day: &SitesDay) {
     }
     match serde_json::to_string_pretty(day) {
         Ok(content) => {
-            if let Err(e) = std::fs::write(sites_file(&day.date), content) {
+            // Atomic write: write to a sibling .tmp file then rename into place, so a
+            // crash or concurrent read never observes a partially-written file.
+            let file_path = sites_file(&day.date);
+            let tmp_path = file_path.with_extension("json.tmp");
+            if let Err(e) = std::fs::write(&tmp_path, content) {
+                log::warn!("[Sites] failed to save {}: {}", day.date, e);
+                return;
+            }
+            if let Err(e) = std::fs::rename(&tmp_path, &file_path) {
                 log::warn!("[Sites] failed to save {}: {}", day.date, e);
             }
         }

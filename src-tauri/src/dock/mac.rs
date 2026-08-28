@@ -114,13 +114,21 @@ pub fn position_sidebar_panel(
     // *current* frame — possibly still at some unrelated previous
     // position/size — overlaps most).
     let Some(mtm) = objc2::MainThreadMarker::new() else { return None };
-    let visible = NSScreen::screens(mtm)
+    let screens = NSScreen::screens(mtm);
+    let visible = screens
         .iter()
         .find(|s| {
             let f = s.frame();
             target_x >= f.origin.x && target_x < f.origin.x + f.size.width
         })
         .or_else(|| ns_window.screen())
+        // Last resort: any screen at all (e.g. the very first `expand_drawer`
+        // call on a freshly built, never-shown window, where `target_x` may
+        // not land on a known screen's frame and the window has no screen of
+        // its own yet). Without this, both lookups failing left the window
+        // silently unpositioned — shown at whatever stale/default frame it
+        // already had — instead of at least landing on *a* screen.
+        .or_else(|| screens.iter().next())
         .map(|s| s.visibleFrame())?;
 
     let mut target = ns_window.frame(); // reuse the type; every field is overwritten below

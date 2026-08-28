@@ -50,6 +50,26 @@ pub fn load_data() -> SyncData {
                 }
                 Err(e) => {
                     log::warn!("[Sidecar] Failed to parse sync data: {}", e);
+                    // Preserve the unreadable file instead of leaving it to be
+                    // silently overwritten by the next save (which would start
+                    // from an empty SyncData::default() and permanently destroy
+                    // whatever is still on disk — a corrupt-read becoming a
+                    // corrupt/empty-write). Best-effort: if this file rename
+                    // fails we still proceed with an empty state, same as before.
+                    let backup_path = get_data_dir().join(format!(
+                        "sync-data.corrupt-{}.json",
+                        chrono::Utc::now().timestamp_millis()
+                    ));
+                    match fs::rename(&file_path, &backup_path) {
+                        Ok(()) => log::warn!(
+                            "[Sidecar] Backed up unreadable sync data to {:?} for manual recovery",
+                            backup_path
+                        ),
+                        Err(e) => log::warn!(
+                            "[Sidecar] Failed to back up unreadable sync data file: {}",
+                            e
+                        ),
+                    }
                     SyncData::default()
                 }
             }
@@ -61,7 +81,12 @@ pub fn load_data() -> SyncData {
     }
 }
 
-/// Save sync data to disk
+/// Save sync data to disk.
+///
+/// Writes to a temp file in the same directory and renames it into place so a
+/// crash or power loss mid-write can never leave `sync-data.json` truncated —
+/// the rename is atomic, so readers only ever see the old complete file or the
+/// new complete file, never a partial one.
 pub fn save_data(data: &SyncData) -> std::io::Result<()> {
     ensure_data_dir()?;
     let file_path = get_data_file();
@@ -69,7 +94,9 @@ pub fn save_data(data: &SyncData) -> std::io::Result<()> {
         data.notes.len(), data.workspaces.len(), file_path);
     let content = serde_json::to_string_pretty(data)?;
     let content_len = content.len();
-    fs::write(&file_path, content)?;
+    let tmp_path = file_path.with_extension("json.tmp");
+    fs::write(&tmp_path, content)?;
+    fs::rename(&tmp_path, &file_path)?;
     log::debug!("[Sidecar] Save complete: {} bytes written", content_len);
     Ok(())
 }
