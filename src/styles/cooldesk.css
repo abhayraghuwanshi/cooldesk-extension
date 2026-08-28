@@ -3846,6 +3846,16 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 }
 
 /* Sidebar mode (narrow screens below 500px) */
+/* Narrow screens (600px and below) - transition to sidebar-friendly layout.
+   Restored: this block was dropped in a previous pass, leaving 501-599px
+   fall back to the 768px breakpoint's 16px padding instead of the
+   intentional 12px step down before the ≤500px block's 8px. */
+@media (max-width: 600px) {
+  .cooldesk-container {
+    padding: 12px;
+  }
+}
+
 @media (max-width: 500px) {
   .cooldesk-container {
     padding: 8px;

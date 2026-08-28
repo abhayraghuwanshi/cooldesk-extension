@@ -10,6 +10,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { createPortal } from 'react-dom';
 import { fetchCooldesk, linkCooldeskProject } from '../../services/cooldeskService.js';
 import { getPreviewItem } from '../../utils/filePreviewKind.js';
+import { isRealPointerMove } from '../../utils/helpers.js';
 import '../../styles/fileManager.css';
 
 // Lazy for the same reason GlobalSpotlight defers it — Prism + its ~20
@@ -42,12 +43,7 @@ async function openWithSystem(path) {
 // reflow-triggered one repeats the same coordinates because the pointer
 // device never moved.
 const lastPointerPos = { x: -1, y: -1 };
-function isRealHover(e) {
-  const moved = e.clientX !== lastPointerPos.x || e.clientY !== lastPointerPos.y;
-  lastPointerPos.x = e.clientX;
-  lastPointerPos.y = e.clientY;
-  return moved;
-}
+const isRealHover = (e) => isRealPointerMove(lastPointerPos, e);
 
 // Directory cache shared across mounts: navigating back to a folder you've
 // already seen is instant, and hovering a folder warms it before you click.
@@ -534,6 +530,15 @@ export function FileManager({ isOpen, initialPath, places = [], onClose }) {
     const startWidth = previewWidthRef.current;
     const prevCursor = document.body.style.cursor;
     document.body.style.cursor = 'col-resize';
+    // Pointer capture (rather than plain window mousemove/mouseup) so the
+    // drag still ends cleanly if the button is released outside this
+    // element's bounds — e.g. the pointer crosses onto another window/monitor
+    // mid-drag before mouseup. Without it, a release outside the handle can
+    // leave the window-level listeners attached forever: the cursor stays
+    // stuck at 'col-resize' and any later mouse movement over the app keeps
+    // resizing the preview pane even with the button no longer held.
+    const target = e.currentTarget;
+    target.setPointerCapture?.(e.pointerId);
 
     const onMove = (moveEvent) => {
       // Preview sits right of the handle — dragging left (mouse X decreasing)
@@ -542,13 +547,16 @@ export function FileManager({ isOpen, initialPath, places = [], onClose }) {
       setPreviewWidth(Math.min(PREVIEW_WIDTH_MAX, Math.max(PREVIEW_WIDTH_MIN, startWidth + delta)));
     };
     const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+      target.removeEventListener('pointermove', onMove);
+      target.removeEventListener('pointerup', onUp);
+      target.removeEventListener('pointercancel', onUp);
+      target.releasePointerCapture?.(e.pointerId);
       document.body.style.cursor = prevCursor;
       localStorage.setItem(PREVIEW_WIDTH_KEY, String(previewWidthRef.current));
     };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    target.addEventListener('pointermove', onMove);
+    target.addEventListener('pointerup', onUp);
+    target.addEventListener('pointercancel', onUp);
   }, []);
 
   const openEntry = useCallback((entry) => {
@@ -1267,7 +1275,7 @@ ${c.path}`}
                       <button
                         key={`${section.title}-${item.path}`}
                         className={`fm-side-item ${active ? 'active' : ''} ${missing ? 'missing' : ''}`}
-                        onClick={() => !missing && navigate(item.path)}
+                        onClick={() => { if (!missing) { navigate(item.path); setPlacesOpen(false); } }}
                         onMouseEnter={() => !missing && prefetch({ is_dir: true, path: item.path })}
                         title={missing ? `${item.path}\n(not on this machine)` : item.path}
                       >
@@ -1387,7 +1395,7 @@ ${c.path}`}
               already been dropped for space). */}
           {previewItem && (
             <>
-              <div className="fm-preview-resize" onMouseDown={startPreviewResize} title="Drag to resize" />
+              <div className="fm-preview-resize" onPointerDown={startPreviewResize} title="Drag to resize" />
               <div className="fm-preview" style={{ width: previewWidth }}>
                 <Suspense fallback={<div className="preview-pane" />}>
                   <PreviewPane item={previewItem} />

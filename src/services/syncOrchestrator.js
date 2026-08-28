@@ -86,13 +86,44 @@ class SyncOrchestrator {
     constructor() {
         this.pendingChanges = new Map();
         this.syncInProgress = false;
-        this.isApplyingRemoteUpdate = false;
+        // Counter, not a boolean: multiple remote update handlers (IPC/WS
+        // events for different types) can be in flight concurrently. With a
+        // plain boolean, the first handler to finish clears the flag in its
+        // `finally` while a second handler is still applying its update,
+        // opening a window where handleDbChange() treats us as idle and
+        // pushes local changes mid-merge. `> 0` (checked via truthiness below)
+        // stays true as long as at least one handler is still running.
+        this.isApplyingRemoteUpdate = 0;
+        // Incoming remote pushes (IPC/WS) that arrived while fullSync() was
+        // running, keyed by event name so a later push for the same type
+        // supersedes an earlier queued one. See _queueOrRunRemoteUpdate() and
+        // the comment on fullSync() for why these must be deferred rather than
+        // applied immediately or dropped.
+        this.pendingRemoteUpdates = new Map();
         this.lastSyncTime = {};
         this.lastPushTime = {}; // Track when we last pushed each data type
         this.lastPushHash = {}; // Track hash of last pushed data to skip unchanged
         this.lastReceivedHash = {}; // Track hash of last received data to skip unchanged
         this.lastFullSyncTime = 0; // Track when we last did a full sync
-        this.lastDeltaSyncTimestamp = {}; // Track last sync timestamp per data type for delta sync
+        // Delta sync watermarks, split by direction (see getChangedItems/
+        // updateDeltaTimestamp/confirmDeltaPushed below). A single shared map here
+        // used to cause two bugs:
+        //  (a) the outbound cursor was advanced to Date.now() the instant
+        //      getChangedItems() was called, before pushChanges() even ran - so a
+        //      failed push still marked the changed item "synced" and it silently
+        //      dropped out of all future delta pushes until edited again.
+        //  (b) inbound and outbound cursors lived under the same map key, so an
+        //      unrelated *inbound* update (e.g. workspace "Social" arriving from
+        //      another device) could bump the watermark past a still-unpushed
+        //      *local* edit to a different item (e.g. workspace "Work"),
+        //      permanently excluding "Work"'s edit from delta pushes.
+        // outbound[type]: newest local item timestamp we've *confirmed* the
+        //   server received (advanced only by confirmDeltaPushed, after a push
+        //   reports success).
+        // inbound[type]: newest remote item timestamp we've applied locally
+        //   (advanced by updateDeltaTimestamp, right after a remote update merges in).
+        this.outboundDeltaTimestamp = {};
+        this.inboundDeltaTimestamp = {};
         this.listeners = new Set();
         this.initialized = false;
         this.syncInterval = null;
@@ -138,24 +169,25 @@ class SyncOrchestrator {
     }
 
     /**
-     * Filter items that changed since last sync (for delta sync)
+     * Filter items that changed since our last *confirmed* outbound push (for
+     * delta sync). Does NOT advance any watermark - this is a read-only query.
+     * Callers must call confirmDeltaPushed() themselves once pushChanges()
+     * reports the items actually reached the server; otherwise a failed push
+     * would silently drop the item from all future delta syncs.
      * @param {Array} items - All items
      * @param {string} type - Data type for timestamp tracking
-     * @returns {Array} Items that changed since last sync
+     * @returns {Array} Items that changed since last confirmed push
      */
     getChangedItems(items, type) {
         if (!this.USE_DELTA_SYNC || !Array.isArray(items)) {
             return items; // Fall back to full sync
         }
 
-        const lastSync = this.lastDeltaSyncTimestamp[type] || 0;
+        const lastSync = this.outboundDeltaTimestamp[type] || 0;
         const changed = items.filter(item => {
             const itemTime = item.updatedAt || item.createdAt || item.scrapedAt || 0;
             return itemTime > lastSync;
         });
-
-        // Update last sync timestamp to now
-        this.lastDeltaSyncTimestamp[type] = Date.now();
 
         // If nothing changed, return empty array (skip sync)
         // If more than 50% changed, send all (might as well do full sync)
@@ -171,7 +203,30 @@ class SyncOrchestrator {
     }
 
     /**
-     * Update local timestamp after receiving remote data
+     * Advance the OUTBOUND delta-sync watermark for `type` after pushChanges()
+     * has reported success for `items` (see pushChanges' comment on what "success"
+     * means for the WebSocket path vs. HTTP). Must be called with exactly the
+     * items that were actually included in that push - NOT the full local list -
+     * since anything newer than what was pushed must remain eligible for the
+     * next attempt.
+     */
+    confirmDeltaPushed(type, items) {
+        if (!Array.isArray(items) || items.length === 0) return;
+
+        let maxTime = this.outboundDeltaTimestamp[type] || 0;
+        for (const item of items) {
+            const itemTime = item.updatedAt || item.createdAt || item.scrapedAt || 0;
+            if (itemTime > maxTime) maxTime = itemTime;
+        }
+        this.outboundDeltaTimestamp[type] = maxTime;
+    }
+
+    /**
+     * Update local INBOUND timestamp after receiving remote data. This is
+     * intentionally a separate watermark from the outbound one (see
+     * inboundDeltaTimestamp/outboundDeltaTimestamp in the constructor) so that
+     * applying a remote update for one item can never mask a still-unpushed
+     * local edit to a different item.
      */
     updateDeltaTimestamp(type, items) {
         if (!Array.isArray(items) || items.length === 0) return;
@@ -185,8 +240,8 @@ class SyncOrchestrator {
 
         // Update our sync timestamp
         if (maxTime > 0) {
-            this.lastDeltaSyncTimestamp[type] = Math.max(
-                this.lastDeltaSyncTimestamp[type] || 0,
+            this.inboundDeltaTimestamp[type] = Math.max(
+                this.inboundDeltaTimestamp[type] || 0,
                 maxTime
             );
         }
@@ -221,6 +276,74 @@ class SyncOrchestrator {
 
         this.initialized = true;
         console.log('[SyncOrchestrator] Initialization complete');
+    }
+
+    /**
+     * Route an incoming remote push (IPC or WS) through either immediate
+     * application or deferral, depending on whether fullSync() currently owns
+     * the read-merge-write cycle for local storage.
+     *
+     * Why deferral is needed: fullSync() does its own read(local)+pull(remote)
+     * -merge-write(local)-push(remote) cycle per type, guarded only by
+     * `syncInProgress`. That flag is NOT checked by these incoming-push
+     * handlers, so a WS/IPC push for e.g. "workspaces" landing mid-cycle used to
+     * run a second, fully concurrent read-merge-write against the same
+     * IndexedDB store - whichever save finished last would win, silently
+     * clobbering the other.
+     *
+     * Why deferral (not just skipping) is safe: fullSync()'s own *pull* step for
+     * a type happens strictly before that type's local save completes, so a
+     * push landing after the pull started is never guaranteed to be reflected
+     * in what fullSync() already read - dropping it would lose data. Deferring
+     * and replaying it once fullSync() releases `syncInProgress` guarantees it
+     * gets applied against the post-fullSync local state instead, with no
+     * update ever silently lost. (Separately: the sidecar server itself *is*
+     * internally consistent - src-tauri/src/sidecar/handlers.rs
+     * save_and_broadcast_excluding() always completes the write to the shared
+     * Arc<RwLock<SyncData>> before broadcasting, and GET handlers read from
+     * that same lock - so any pull issued after a broadcast is received is
+     * guaranteed to reflect it. That guarantee is about server-side ordering
+     * between "broadcast" and "a later pull"; it does not by itself make it
+     * safe to just drop a push that raced fullSync's *earlier* pull, which is
+     * why we queue-and-replay rather than rely on that alone.)
+     */
+    _queueOrRunRemoteUpdate(event, handler, data) {
+        if (this.syncInProgress) {
+            console.log(`[SyncOrchestrator] Deferring ${event} update (fullSync in progress)`);
+            this.pendingRemoteUpdates.set(event, { handler, data });
+            return Promise.resolve();
+        }
+        return this._runRemoteHandler(handler, data);
+    }
+
+    async _runRemoteHandler(handler, data) {
+        this.isApplyingRemoteUpdate++;
+        try {
+            await handler(data);
+        } finally {
+            this.isApplyingRemoteUpdate--;
+        }
+    }
+
+    /**
+     * Replay remote updates that were deferred while fullSync() was running.
+     * Loops (rather than draining once) because a push can land again while an
+     * earlier deferred one is being applied - `syncInProgress` is still true
+     * for the whole duration this is called from fullSync()'s finally block, so
+     * any such push re-queues instead of running concurrently with the replay.
+     */
+    async _flushPendingRemoteUpdates() {
+        while (this.pendingRemoteUpdates.size > 0) {
+            const pending = Array.from(this.pendingRemoteUpdates.values());
+            this.pendingRemoteUpdates.clear();
+            for (const { handler, data } of pending) {
+                try {
+                    await this._runRemoteHandler(handler, data);
+                } catch (e) {
+                    console.warn('[SyncOrchestrator] Failed to apply deferred remote update:', e);
+                }
+            }
+        }
     }
 
     /**
@@ -260,12 +383,7 @@ class SyncOrchestrator {
         Object.entries(eventMap).forEach(([event, handler]) => {
             window.electronAPI.subscribe(event, async (data) => {
                 console.log(`[SyncOrchestrator] ${event} from IPC`);
-                this.isApplyingRemoteUpdate = true;
-                try {
-                    await handler(data);
-                } finally {
-                    this.isApplyingRemoteUpdate = false;
-                }
+                await this._queueOrRunRemoteUpdate(event, handler, data);
             });
         });
     }
@@ -348,12 +466,7 @@ class SyncOrchestrator {
             // Store unsubscribe functions for cleanup
             Object.entries(wsEvents).forEach(([event, handler]) => {
                 const wrappedHandler = async (data) => {
-                    this.isApplyingRemoteUpdate = true;
-                    try {
-                        await handler(data);
-                    } finally {
-                        this.isApplyingRemoteUpdate = false;
-                    }
+                    await this._queueOrRunRemoteUpdate(event, handler, data);
                 };
                 const unsubscribe = syncWebSocket.on(event, wrappedHandler);
                 if (typeof unsubscribe === 'function') {
@@ -529,7 +642,10 @@ class SyncOrchestrator {
                     const wsArray = Array.isArray(workspaces) ? workspaces : [];
                     const changedWs = this.getChangedItems(wsArray, 'workspaces');
                     if (changedWs.length > 0) {
-                        await this.pushChanges('workspaces', changedWs, { delta: true });
+                        const wsPushResult = await this.pushChanges('workspaces', changedWs, { delta: true });
+                        // Only mark these items "synced" once the push actually
+                        // succeeded - a failure must leave them eligible for retry.
+                        if (wsPushResult?.ok) this.confirmDeltaPushed('workspaces', changedWs);
                     }
                     break;
                 case 'pinsChanged':
@@ -537,7 +653,8 @@ class SyncOrchestrator {
                     const pinsArray = Array.isArray(pins) ? pins : [];
                     const changedPins = this.getChangedItems(pinsArray, 'pins');
                     if (changedPins.length > 0) {
-                        await this.pushChanges('pins', changedPins, { delta: true });
+                        const pinsPushResult = await this.pushChanges('pins', changedPins, { delta: true });
+                        if (pinsPushResult?.ok) this.confirmDeltaPushed('pins', changedPins);
                     }
                     break;
                 case 'settingsChanged':
@@ -553,7 +670,8 @@ class SyncOrchestrator {
                     const chatsArray = Array.isArray(chats) ? chats : [];
                     const changedChats = this.getChangedItems(chatsArray, 'scraped-chats');
                     if (changedChats.length > 0) {
-                        await this.pushChanges('scraped-chats', changedChats, { delta: true });
+                        const chatsPushResult = await this.pushChanges('scraped-chats', changedChats, { delta: true });
+                        if (chatsPushResult?.ok) this.confirmDeltaPushed('scraped-chats', changedChats);
                     }
                     break;
                 case 'scrapedConfigsChanged':
@@ -561,7 +679,8 @@ class SyncOrchestrator {
                     const configsArray = Array.isArray(configs) ? configs : [];
                     const changedConfigs = this.getChangedItems(configsArray, 'scraped-configs');
                     if (changedConfigs.length > 0) {
-                        await this.pushChanges('scraped-configs', changedConfigs, { delta: true });
+                        const configsPushResult = await this.pushChanges('scraped-configs', changedConfigs, { delta: true });
+                        if (configsPushResult?.ok) this.confirmDeltaPushed('scraped-configs', changedConfigs);
                     }
                     break;
                 case 'notesChanged':
@@ -570,7 +689,8 @@ class SyncOrchestrator {
                         const notesArray = Array.isArray(notes) ? notes : [];
                         const changedNotes = this.getChangedItems(notesArray, 'notes');
                         if (changedNotes.length > 0) {
-                            await this.pushChanges('notes', changedNotes, { delta: true });
+                            const notesPushResult = await this.pushChanges('notes', changedNotes, { delta: true });
+                            if (notesPushResult?.ok) this.confirmDeltaPushed('notes', changedNotes);
                         }
                     }
                     break;
@@ -580,7 +700,8 @@ class SyncOrchestrator {
                         const urlNotesArray = Array.isArray(urlNotes) ? urlNotes : [];
                         const changedUrlNotes = this.getChangedItems(urlNotesArray, 'url-notes');
                         if (changedUrlNotes.length > 0) {
-                            await this.pushChanges('url-notes', changedUrlNotes, { delta: true });
+                            const urlNotesPushResult = await this.pushChanges('url-notes', changedUrlNotes, { delta: true });
+                            if (urlNotesPushResult?.ok) this.confirmDeltaPushed('url-notes', changedUrlNotes);
                         }
                     }
                     break;
@@ -589,7 +710,8 @@ class SyncOrchestrator {
                     const memoriesArray = Array.isArray(memories) ? memories : [];
                     const changedMemories = this.getChangedItems(memoriesArray, 'daily-memory');
                     if (changedMemories.length > 0) {
-                        await this.pushChanges('daily-memory', changedMemories, { delta: true });
+                        const memoriesPushResult = await this.pushChanges('daily-memory', changedMemories, { delta: true });
+                        if (memoriesPushResult?.ok) this.confirmDeltaPushed('daily-memory', changedMemories);
                     }
                     break;
                 case 'uiStateChanged':
@@ -763,24 +885,15 @@ class SyncOrchestrator {
             // Merge - only items that are newer will be updated
             const merged = this.mergeData(localData, remoteData, type);
 
-            // Optimization: Only save items that actually changed
-            // Compare merged count with local - if same and no newer items, skip saves
-            const localIds = new Set(localData.map(item => item.id || item.chatId || item.domain));
-            const newItems = merged.filter(item => {
-                const id = item.id || item.chatId || item.domain;
-                return !localIds.has(id);
-            });
-
-            // Save only new/updated items (not all merged)
-            const itemsToSave = newItems.length > 0 ? merged : [];
-            if (itemsToSave.length > 0 && itemsToSave.length < merged.length * 0.5) {
-                // Less than half changed - only save those
-                console.log(`[SyncOrchestrator] Delta save ${type}: ${newItems.length} new items`);
-                for (const item of newItems) {
-                    await saveFn(item, { skipNotify: true });
-                }
-            } else if (itemsToSave.length > 0) {
-                // Many changes - save all
+            // Persist the merged result locally. NOTE: this used to try to save
+            // only "new" items (ids not already present locally) when at least
+            // one new item existed, and to skip saving entirely when there were
+            // zero new items. That meant a remote update touching only
+            // *existing* items (the common case - no brand-new ids) computed a
+            // correct `merged` array but never wrote it back to local storage,
+            // silently dropping the remote changes on the floor. Always persist
+            // the merge result instead.
+            if (merged.length > 0) {
                 for (const item of merged) {
                     await saveFn(item, { skipNotify: true });
                 }
@@ -961,11 +1074,39 @@ class SyncOrchestrator {
 
         if (isElectronApp() && window.electronAPI) {
             if (window.electronAPI[config.ipc]) {
+                // The Tauri desktop app's window.electronAPI (src/app/electron-shim.js)
+                // talks to the same sidecar HTTP endpoints as extensionApi.js. Its
+                // set* methods now surface the real fetch response (ok/status) the
+                // same way extensionApi.js does, so this return value is a reliable
+                // success/failure signal for confirmDeltaPushed callers - not the
+                // "always {ok:true} unless the fetch throws" shim behavior this
+                // replaced.
                 return window.electronAPI[config.ipc](payload);
             }
         } else if (isExtension() && isHostSyncEnabled()) {
             // Try WebSocket first, fall back to HTTP
             if (syncWebSocket.isConnected() && syncWebSocket[config.ws]) {
+                // IMPORTANT for delta-sync watermark correctness (see
+                // confirmDeltaPushed): the sidecar's WS "push-*" handlers
+                // (src-tauri/src/sidecar/server.rs handle_ws_message) are
+                // fire-and-forget - they merge into AppState and broadcast the
+                // result to OTHER clients, but never send any ack/response back
+                // to the sender. So `sent === true` here only means the browser
+                // accepted the bytes for the open socket (readyState OPEN, no
+                // synchronous throw) - it is NOT a confirmation the server
+                // received or processed the push.
+                //
+                // We still treat it as "ok" (safe to advance the outbound delta
+                // watermark) because: (1) WS runs over TCP, so a `send()` that
+                // doesn't throw on an OPEN socket will reach the server unless
+                // the connection drops first, in which case `onclose` fires and
+                // the item stays dirty until reconnect triggers the next push;
+                // and (2) fullSync() is a periodic (>=FULL_SYNC_DEBOUNCE_MS),
+                // watermark-independent read-merge-push of the ENTIRE list for
+                // every type, so any rare gap where a "sent" push never actually
+                // landed server-side self-heals on the next full sync instead of
+                // being lost permanently. That's a strictly better failure mode
+                // than the bug this replaces (silent, permanent exclusion).
                 const sent = syncWebSocket[config.ws](payload);
                 console.log(`[SyncOrchestrator] Pushed ${type} via WebSocket:`, sent);
                 return sent ? { ok: true } : { ok: false, error: 'WS send failed' };
@@ -1166,6 +1307,10 @@ class SyncOrchestrator {
             return { ok: false, error: 'Sync debounced' };
         }
 
+        // While this flag is set, incoming WS/IPC remote pushes are deferred
+        // (not dropped) by _queueOrRunRemoteUpdate rather than applied
+        // concurrently with the read-merge-write cycles below - see that
+        // method's doc comment for the race this closes.
         this.syncInProgress = true;
         this.lastFullSyncTime = now;
         this.notifyListeners('sync-start');
@@ -1280,7 +1425,20 @@ class SyncOrchestrator {
             this.notifyListeners('sync-error', error);
             return { ok: false, error: error.message };
         } finally {
-            this.syncInProgress = false;
+            // Apply any incoming WS/IPC pushes that arrived (and were deferred by
+            // _queueOrRunRemoteUpdate) during this fullSync's read-merge-write
+            // cycle, before clearing syncInProgress - otherwise they'd be picked
+            // up here as "no longer in progress" and left to a caller that never
+            // comes, or worse, allowed to interleave with the flush itself. See
+            // _queueOrRunRemoteUpdate's doc comment for why deferring (not
+            // dropping) these is what makes it safe to guard on syncInProgress here.
+            try {
+                await this._flushPendingRemoteUpdates();
+            } catch (e) {
+                console.error('[SyncOrchestrator] Failed to flush deferred remote updates:', e);
+            } finally {
+                this.syncInProgress = false;
+            }
         }
     }
 

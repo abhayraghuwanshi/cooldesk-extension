@@ -57,16 +57,6 @@
   gap: 2px;
 }
 
-/* Only relevant once `.fm-sidebar` is CSS-hidden below 720px (see that media
-   query) — no point offering a toggle for a panel that's already visible.
-   Qualified with `.fm-toolbar` (not just `.fm-places-toggle` alone) so this
-   has higher specificity than `.fm-icon-btn`'s `display: inline-flex` below
-   — same specificity plus later-in-file would otherwise let that win the
-   cascade tie and show the button unconditionally, at every width. */
-.fm-toolbar .fm-places-toggle {
-  display: none;
-}
-
 .fm-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -100,6 +90,14 @@
 
 .fm-icon-btn.pinned {
   color: var(--accent-purple, #8b5cf6);
+}
+
+/* Only relevant once `.fm-sidebar` is CSS-hidden below 720px (see that media
+   query) — no point offering a toggle for a panel that's already visible.
+   Placed after `.fm-icon-btn` (same specificity — one class each) so normal
+   cascade order hides it by default; the media query below re-enables it. */
+.fm-places-toggle {
+  display: none;
 }
 
 .fm-toolbar-actions {

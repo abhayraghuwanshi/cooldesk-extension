@@ -84,10 +84,7 @@ export function CoolDeskContainer({
     // make it run again on its own.
     const trySubscribe = () => {
       if (cancelled || unsubscribe) return;
-      if (!window.electronAPI?.subscribe) {
-        console.log('[CoolDesk] dock-expanded: electronAPI not ready yet, will retry');
-        return;
-      }
+      if (!window.electronAPI?.subscribe) return;
       // Scoping to `.workspace-face.active *` found nothing — the actual
       // scrolled container isn't reachable through that assumption, so cast
       // the net over the whole document instead of guessing again. Also
@@ -96,8 +93,6 @@ export function CoolDeskContainer({
       // back down right after this first pass.
       const resetScroll = () => {
         const scrolled = [...document.querySelectorAll('*')].filter(el => el.scrollTop > 0);
-        console.log('[CoolDesk] dock-expanded: resetting', scrolled.length, 'scrolled element(s)',
-          scrolled.map(el => el.className || el.tagName));
         scrolled.forEach(el => { el.scrollTop = 0; });
       };
       unsubscribe = window.electronAPI.subscribe('dock-expanded', () => {
@@ -105,7 +100,6 @@ export function CoolDeskContainer({
         requestAnimationFrame(resetScroll);
         setTimeout(resetScroll, 300);
       });
-      console.log('[CoolDesk] dock-expanded: subscribed');
     };
     trySubscribe();
     const timers = [50, 200, 500, 1500].map(ms => setTimeout(trySubscribe, ms));

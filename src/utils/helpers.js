@@ -322,3 +322,17 @@ export const createCircuitBreaker = ({ failureThreshold = 3, cooldownMs = 60_000
     get nextTryAt() { return nextTryAt; },
   };
 }
+
+// Chromium re-fires `mouseenter` on whatever row ends up under a *stationary*
+// cursor whenever the layout shifts beneath it (e.g. a results column
+// narrowing, or a grid reflowing to a new column count). A real hover always
+// carries coordinates that differ from the last recorded mouse position; a
+// reflow-triggered one repeats the same coordinates because the pointer
+// device never moved. `lastPos` is a mutable `{ x, y }` ref the caller owns
+// (module-level or a useRef) so it can persist across remounts/reflows.
+export function isRealPointerMove(lastPos, e) {
+  const moved = e.clientX !== lastPos.x || e.clientY !== lastPos.y;
+  lastPos.x = e.clientX;
+  lastPos.y = e.clientY;
+  return moved;
+}

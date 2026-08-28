@@ -732,13 +732,14 @@ export default function App() {
     let raf = null;
     const flush = () => {
       raf = null;
-      for (const el of pending) {
-        if (!el.isConnected) continue;
-        el.style.willChange = 'auto';
-        void el.offsetWidth; // force a layout pass, dropping the promoted layer
-        el.style.willChange = '';
-      }
+      const els = [...pending].filter(el => el.isConnected);
       pending.clear();
+      // Batched into three passes (all writes, then all reads, then all
+      // writes) rather than write-read-write per element — interleaving them
+      // per element forces a separate synchronous layout for each card.
+      for (const el of els) el.style.willChange = 'auto';
+      for (const el of els) void el.offsetWidth; // force a layout pass, dropping the promoted layer
+      for (const el of els) el.style.willChange = '';
     };
     const schedule = (el) => {
       pending.add(el);

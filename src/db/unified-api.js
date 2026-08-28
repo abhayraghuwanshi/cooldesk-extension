@@ -283,10 +283,29 @@ export const addUrlToWorkspace = withErrorHandling(async (url, workspaceId, meta
                 // Add workspace ID if not already present
                 const workspaceIds = new Set(existing.workspaceIds)
                 workspaceIds.add(workspaceId)
-                urlDoc = {
+                const merged = {
                     ...existing,
                     ...metadata,
                     workspaceIds: Array.from(workspaceIds)
+                }
+                try {
+                    // Route the merge path through the same validation as the
+                    // new-URL path below, instead of writing raw ...metadata
+                    // straight to the store.
+                    urlDoc = validateAndSanitize(merged, 'workspaceUrl')
+                } catch (err) {
+                    // `metadata` here has only ever been observed to carry known,
+                    // internally-constructed fields (title/favicon/addedAt/status/extra
+                    // from background/data.js, App.jsx, voiceCommandProcessor.js), so
+                    // full validation should hold for legitimate callers. If it doesn't
+                    // (e.g. an unexpected/invalid field slips in from some caller),
+                    // don't corrupt the record or abort the whole update - fall back to
+                    // the last-known-good existing doc plus the workspace link only.
+                    console.warn('[Unified API] addUrlToWorkspace: merged metadata failed validation, discarding metadata for this update:', err.message)
+                    urlDoc = {
+                        ...existing,
+                        workspaceIds: Array.from(workspaceIds)
+                    }
                 }
             } else {
                 urlDoc = urlData
@@ -476,7 +495,10 @@ export const saveScrapedChat = withErrorHandling(async (chatData, options = {}) 
     const request = store.put(chat)
 
     return new Promise((resolve, reject) => {
-        request.onsuccess = () => {
+        // Resolve on tx.oncomplete, not request.onsuccess: the individual put can
+        // succeed but the transaction can still fail to commit (e.g. quota exceeded),
+        // which would otherwise be silently reported as a successful save.
+        tx.oncomplete = () => {
             // console.log(`[Unified API] Saved scraped chat: ${chat.title} (${chat.chatId})`)
 
             // Notify listeners
@@ -490,6 +512,7 @@ export const saveScrapedChat = withErrorHandling(async (chatData, options = {}) 
 
             resolve(chat)
         }
+        tx.onerror = () => reject(tx.error)
         request.onerror = () => reject(request.error)
     })
 }, {
@@ -512,7 +535,9 @@ export const deleteScrapedChat = withErrorHandling(async (chatId) => {
     const request = store.delete(chatId)
 
     return new Promise((resolve, reject) => {
-        request.onsuccess = () => {
+        // Resolve on tx.oncomplete rather than request.onsuccess so a commit failure
+        // isn't silently reported as a successful delete.
+        tx.oncomplete = () => {
             console.log(`[Unified API] Deleted scraped chat: ${chatId}`)
 
             // Notify listeners
@@ -524,6 +549,7 @@ export const deleteScrapedChat = withErrorHandling(async (chatId) => {
 
             resolve(true)
         }
+        tx.onerror = () => reject(tx.error)
         request.onerror = () => reject(request.error)
     })
 }, {
@@ -681,21 +707,25 @@ export const saveNote = withErrorHandling(async (noteData, options = {}) => {
 
             // Now save the new note
             const putRequest = store.put(note)
-            putRequest.onsuccess = () => {
-                // Notify listeners
-                if (!options.skipNotify) {
-                    try {
-                        const bc = new BroadcastChannel('notes_db_changes')
-                        bc.postMessage({ type: 'notesChanged' })
-                        bc.close()
-                    } catch { }
-                }
-                resolve(note)
-            }
             putRequest.onerror = () => reject(putRequest.error)
         }
 
         getAllRequest.onerror = () => reject(getAllRequest.error)
+
+        // Resolve on tx.oncomplete (not putRequest.onsuccess) so a commit failure
+        // (e.g. quota exceeded) is not silently reported as a successful save.
+        tx.oncomplete = () => {
+            // Notify listeners
+            if (!options.skipNotify) {
+                try {
+                    const bc = new BroadcastChannel('notes_db_changes')
+                    bc.postMessage({ type: 'notesChanged' })
+                    bc.close()
+                } catch { }
+            }
+            resolve(note)
+        }
+        tx.onerror = () => reject(tx.error)
     })
 }, {
     operation: 'saveNote',
@@ -733,9 +763,13 @@ export const getUrlNotes = withErrorHandling(async (url) => {
  * Save a URL note
  */
 export const saveUrlNote = withErrorHandling(async (noteData, options = {}) => {
+    // Generate the fallback id into a variable first and apply it AFTER
+    // spreading noteData - spreading noteData last (as before) would silently
+    // restore an empty/falsy noteData.id over a freshly generated one.
+    const id = noteData.id || generateId()
     const note = validateAndSanitize({
-        id: noteData.id || generateId(),
-        ...noteData
+        ...noteData,
+        id
     }, 'urlNote')
 
     const db = await getUnifiedDB()
@@ -744,7 +778,9 @@ export const saveUrlNote = withErrorHandling(async (noteData, options = {}) => {
 
     const request = store.put(note)
     return new Promise((resolve, reject) => {
-        request.onsuccess = () => {
+        // Resolve on tx.oncomplete, not request.onsuccess, so a commit failure isn't
+        // silently reported as a successful save.
+        tx.oncomplete = () => {
             // Notify listeners
             if (!options.skipNotify) {
                 try {
@@ -755,6 +791,7 @@ export const saveUrlNote = withErrorHandling(async (noteData, options = {}) => {
             }
             resolve(note)
         }
+        tx.onerror = () => reject(tx.error)
         request.onerror = () => reject(request.error)
     })
 }, {
@@ -865,7 +902,9 @@ export const saveSettings = withErrorHandling(async (settingsData, options = {})
     const request = store.put(settings)
 
     return new Promise((resolve, reject) => {
-        request.onsuccess = () => {
+        // Resolve on tx.oncomplete, not request.onsuccess, so a commit failure isn't
+        // silently reported as a successful save.
+        tx.oncomplete = () => {
             // Notify settings change
             if (!options.skipNotify) {
                 try {
@@ -877,6 +916,7 @@ export const saveSettings = withErrorHandling(async (settingsData, options = {})
 
             resolve(settings)
         }
+        tx.onerror = () => reject(tx.error)
         request.onerror = () => reject(request.error)
     })
 }, {
@@ -995,7 +1035,9 @@ export const saveUIState = withErrorHandling(async (uiStateData, options = {}) =
     const request = store.put(uiState)
 
     return new Promise((resolve, reject) => {
-        request.onsuccess = () => {
+        // Resolve on tx.oncomplete, not request.onsuccess, so a commit failure isn't
+        // silently reported as a successful save.
+        tx.oncomplete = () => {
             // Notify listeners
             if (!options.skipNotify) {
                 try {
@@ -1006,6 +1048,7 @@ export const saveUIState = withErrorHandling(async (uiStateData, options = {}) =
             }
             resolve(uiState)
         }
+        tx.onerror = () => reject(tx.error)
         request.onerror = () => reject(request.error)
     })
 }, {
@@ -1020,11 +1063,24 @@ export const putActivityTimeSeriesEvent = withErrorHandling(async (eventData, op
     //     hasMetrics: !!eventData.metrics
     // })
 
+    // Compute fallback values into variables first, then apply them AFTER
+    // spreading eventData below. Previously `...eventData` was spread last, so
+    // any of these fallbacks (e.g. a generated id) were immediately overwritten
+    // by the original (possibly empty/falsy) eventData field, making the
+    // fallback a no-op.
+    const id = eventData.id || generateId()
+    // timestamp uses an explicit undefined/null check (not general falsiness)
+    // since an intentional `timestamp: 0` is a valid, if unusual, value.
+    const timestamp = (eventData.timestamp === undefined || eventData.timestamp === null)
+        ? Date.now()
+        : eventData.timestamp
+    const sessionId = eventData.sessionId || `session_${Date.now()}`
+
     const event = validateAndSanitize({
-        id: eventData.id || generateId(),
-        timestamp: eventData.timestamp || Date.now(),
-        sessionId: eventData.sessionId || `session_${Date.now()}`,
-        ...eventData
+        ...eventData,
+        id,
+        timestamp,
+        sessionId
     }, 'activitySeries')
 
     console.log('[DB Debug] Event after validation:', {
@@ -1044,7 +1100,9 @@ export const putActivityTimeSeriesEvent = withErrorHandling(async (eventData, op
 
     const request = store.put(event)
     return new Promise((resolve, reject) => {
-        request.onsuccess = () => {
+        // Resolve on tx.oncomplete, not request.onsuccess, so a commit failure isn't
+        // silently reported as a successful write.
+        tx.oncomplete = () => {
             console.log('[DB Debug] Successfully stored activity event:', event.id)
 
             // Notify listeners
@@ -1059,6 +1117,10 @@ export const putActivityTimeSeriesEvent = withErrorHandling(async (eventData, op
             }
 
             resolve(event)
+        }
+        tx.onerror = () => {
+            console.error('[DB Debug] Error storing activity event:', tx.error)
+            reject(tx.error)
         }
         request.onerror = () => {
             console.error('[DB Debug] Error storing activity event:', request.error)
@@ -1151,8 +1213,15 @@ export const cleanupOldTimeSeriesData = withErrorHandling(async (retentionDays =
 
     console.log(`[Cleanup] Aggregating and cleaning data older than ${retentionDays} days`)
 
-    // Use the new aggregation function that preserves data
-    const result = await aggregateAndCleanupActivity(retentionMs)
+    // Use the new aggregation function that preserves data. aggregateAndCleanupActivity
+    // is wrapped with withErrorHandling, so it resolves to { success, data: {...} } -
+    // unwrap it rather than reading .aggregated/.deleted off the wrapper (which are
+    // always undefined and previously caused this to silently return undefined).
+    const wrapped = await aggregateAndCleanupActivity(retentionMs)
+    if (!wrapped?.success) {
+        throw wrapped?.error || new Error('Failed to aggregate/cleanup activity data')
+    }
+    const result = wrapped.data
 
     console.log(`[Cleanup] Aggregated ${result.aggregated} records, deleted ${result.deleted} old events`)
     return result.deleted
@@ -1258,11 +1327,18 @@ export const getUrlRecord = withErrorHandling(async (url) => {
 export const upsertUrl = withErrorHandling(async (urlData) => {
     if (!urlData?.url) throw new Error('URL is required')
 
-    return await addUrlToWorkspace(urlData.url, urlData.workspaceIds?.[0] || 'default', {
+    // addUrlToWorkspace is wrapped with withErrorHandling; unwrap its result here
+    // instead of returning it directly, otherwise upsertUrl's own wrapper double-wraps
+    // it as { success, data: { success, data } } and swallows failures as "success".
+    const wrapped = await addUrlToWorkspace(urlData.url, urlData.workspaceIds?.[0] || 'default', {
         title: urlData.title,
         favicon: urlData.favicon,
         extra: urlData.extra
     })
+    if (!wrapped?.success) {
+        throw wrapped?.error || new Error('Failed to upsert URL')
+    }
+    return wrapped.data
 }, {
     operation: 'upsertUrl',
     severity: ErrorSeverity.MEDIUM
@@ -1280,7 +1356,10 @@ export const deleteUrlNote = withErrorHandling(async (noteId) => {
 
     const request = store.delete(noteId)
     return new Promise((resolve, reject) => {
-        request.onsuccess = () => resolve(true)
+        // Resolve on tx.oncomplete, not request.onsuccess, so a commit failure isn't
+        // silently reported as a successful delete.
+        tx.oncomplete = () => resolve(true)
+        tx.onerror = () => reject(tx.error)
         request.onerror = () => reject(request.error)
     })
 }, {
@@ -1300,7 +1379,10 @@ export const deleteNote = withErrorHandling(async (noteId) => {
 
     const request = store.delete(noteId)
     return new Promise((resolve, reject) => {
-        request.onsuccess = () => resolve(true)
+        // Resolve on tx.oncomplete, not request.onsuccess, so a commit failure isn't
+        // silently reported as a successful delete.
+        tx.oncomplete = () => resolve(true)
+        tx.onerror = () => reject(tx.error)
         request.onerror = () => reject(request.error)
     })
 }, {
@@ -1393,7 +1475,10 @@ export const saveWorkspaceTodo = withErrorHandling(async (todo) => {
     const record = { ...todo, updatedAt: Date.now() }
     return new Promise((resolve, reject) => {
         const req = store.put(record)
-        req.onsuccess = () => resolve(record)
+        // Resolve on tx.oncomplete, not req.onsuccess, so a commit failure isn't
+        // silently reported as a successful save.
+        tx.oncomplete = () => resolve(record)
+        tx.onerror = () => reject(tx.error)
         req.onerror = () => reject(req.error)
     })
 }, { operation: 'saveWorkspaceTodo', severity: ErrorSeverity.MEDIUM })
@@ -1408,7 +1493,10 @@ export const deleteWorkspaceTodo = withErrorHandling(async (id) => {
     const store = tx.objectStore(DB_CONFIG.STORES.WORKSPACE_TODOS)
     return new Promise((resolve, reject) => {
         const req = store.delete(id)
-        req.onsuccess = () => resolve(true)
+        // Resolve on tx.oncomplete, not req.onsuccess, so a commit failure isn't
+        // silently reported as a successful delete.
+        tx.oncomplete = () => resolve(true)
+        tx.onerror = () => reject(tx.error)
         req.onerror = () => reject(req.error)
     })
 }, { operation: 'deleteWorkspaceTodo', severity: ErrorSeverity.MEDIUM })
@@ -1459,7 +1547,9 @@ export const upsertPing = withErrorHandling(async (pingData, options = {}) => {
     return new Promise((resolve, reject) => {
         // Save the new pin directly without enforcing any limit
         const putRequest = store.put(pin)
-        putRequest.onsuccess = () => {
+        // Resolve on tx.oncomplete, not putRequest.onsuccess, so a commit failure isn't
+        // silently reported as a successful save.
+        tx.oncomplete = () => {
             // Notify listeners
             if (!options.skipNotify) {
                 try {
@@ -1470,6 +1560,7 @@ export const upsertPing = withErrorHandling(async (pingData, options = {}) => {
             }
             resolve(pin)
         }
+        tx.onerror = () => reject(tx.error)
         putRequest.onerror = () => reject(putRequest.error)
     })
 }, {
@@ -1489,7 +1580,9 @@ export const deletePing = withErrorHandling(async (pinId) => {
 
     const request = store.delete(pinId)
     return new Promise((resolve, reject) => {
-        request.onsuccess = () => {
+        // Resolve on tx.oncomplete, not request.onsuccess, so a commit failure isn't
+        // silently reported as a successful delete.
+        tx.oncomplete = () => {
             // Notify listeners
             try {
                 const bc = new BroadcastChannel('ws_db_changes')
@@ -1498,6 +1591,7 @@ export const deletePing = withErrorHandling(async (pinId) => {
             } catch { }
             resolve(true)
         }
+        tx.onerror = () => reject(tx.error)
         request.onerror = () => reject(request.error)
     })
 }, {
@@ -1516,8 +1610,12 @@ export const deleteWorkspaceById = deleteWorkspace
 export const updateWorkspaceGridType = withErrorHandling(async (workspaceId, gridType) => {
     if (!workspaceId || !gridType) throw new Error('Workspace ID and grid type are required')
 
-    // Get existing workspace
-    const workspace = await getWorkspace(workspaceId)
+    // getWorkspace is itself wrapped with withErrorHandling, so it resolves to
+    // { success, data } / { success, error } rather than the raw workspace -
+    // it must be unwrapped here or `workspace` is always a truthy wrapper object
+    // and the "not found" check below never fires.
+    const getResult = await getWorkspace(workspaceId)
+    const workspace = getResult?.success ? getResult.data : null
     if (!workspace) {
         throw new Error(`Workspace not found: ${workspaceId}`)
     }
@@ -1529,7 +1627,14 @@ export const updateWorkspaceGridType = withErrorHandling(async (workspaceId, gri
         updatedAt: Date.now()
     }
 
-    return await saveWorkspace(updatedWorkspace)
+    // saveWorkspace is also wrapped - unwrap its result and propagate failures
+    // instead of returning a nested { success, data } that the outer wrapper
+    // would then report as a top-level success.
+    const saveResult = await saveWorkspace(updatedWorkspace)
+    if (!saveResult?.success) {
+        throw saveResult?.error || new Error('Failed to save workspace')
+    }
+    return saveResult.data
 }, {
     operation: 'updateWorkspaceGridType',
     severity: ErrorSeverity.MEDIUM
@@ -1968,7 +2073,10 @@ export const saveScrapingConfig = withErrorHandling(async (configData, options =
     const request = store.put(config)
 
     return new Promise((resolve, reject) => {
-        request.onsuccess = async () => {
+        // Resolve on tx.oncomplete, not request.onsuccess, so a commit failure isn't
+        // silently reported as a successful save (and so the chrome.storage sync below
+        // only runs once the IndexedDB write is actually durable).
+        tx.oncomplete = async () => {
             console.log(`[Unified API] Saved scraping config for: ${config.domain}`)
 
             // Notify listeners
@@ -1999,6 +2107,7 @@ export const saveScrapingConfig = withErrorHandling(async (configData, options =
 
             resolve(config)
         }
+        tx.onerror = () => reject(tx.error)
         request.onerror = () => reject(request.error)
     })
 }, {
@@ -2020,7 +2129,9 @@ export const deleteScrapingConfig = withErrorHandling(async (domain, options = {
     const request = store.delete(domain)
 
     return new Promise((resolve, reject) => {
-        request.onsuccess = async () => {
+        // Resolve on tx.oncomplete, not request.onsuccess, so a commit failure isn't
+        // silently reported as a successful delete.
+        tx.oncomplete = async () => {
             console.log(`[Unified API] Deleted scraping config for: ${domain}`)
 
             // Notify listeners
@@ -2049,6 +2160,7 @@ export const deleteScrapingConfig = withErrorHandling(async (domain, options = {
 
             resolve(true)
         }
+        tx.onerror = () => reject(tx.error)
         request.onerror = () => reject(request.error)
     })
 }, {
@@ -2090,7 +2202,9 @@ export const saveDailyMemory = withErrorHandling(async (memoryData, options = {}
 
     const request = store.put(memory)
     return new Promise((resolve, reject) => {
-        request.onsuccess = () => {
+        // Resolve on tx.oncomplete, not request.onsuccess, so a commit failure isn't
+        // silently reported as a successful save.
+        tx.oncomplete = () => {
             // Notify listeners
             if (!options.skipNotify) {
                 try {
@@ -2101,6 +2215,7 @@ export const saveDailyMemory = withErrorHandling(async (memoryData, options = {}
             }
             resolve(memory)
         }
+        tx.onerror = () => reject(tx.error)
         request.onerror = () => reject(request.error)
     })
 }, {
@@ -2185,7 +2300,9 @@ export const saveDashboard = withErrorHandling(async (dashboardData, options = {
     const request = store.put(dashboard)
 
     return new Promise((resolve, reject) => {
-        request.onsuccess = () => {
+        // Resolve on tx.oncomplete, not request.onsuccess, so a commit failure isn't
+        // silently reported as a successful save.
+        tx.oncomplete = () => {
             // Notify dashboard change
             if (!options.skipNotify) {
                 try {
@@ -2196,6 +2313,7 @@ export const saveDashboard = withErrorHandling(async (dashboardData, options = {
             }
             resolve(dashboard)
         }
+        tx.onerror = () => reject(tx.error)
         request.onerror = () => reject(request.error)
     })
 }, {
@@ -2343,8 +2461,14 @@ export const aggregateAndCleanupActivity = withErrorHandling(async (olderThanMs 
         })
     }
 
-    await new Promise((resolve) => {
+    await new Promise((resolve, reject) => {
+        // Without an onerror/onabort handler, a commit failure here (e.g. quota
+        // exceeded) would leave this promise pending forever - the function would
+        // hang instead of failing, and Step 4 (deleting the raw records) would
+        // never run.
         writeTx.oncomplete = resolve
+        writeTx.onerror = () => reject(writeTx.error)
+        writeTx.onabort = () => reject(writeTx.error || new Error('DAILY_ANALYTICS write transaction aborted'))
     })
 
     console.log('[Analytics] Aggregated', aggregatedCount, 'URL-date combinations')
@@ -2360,14 +2484,18 @@ export const aggregateAndCleanupActivity = withErrorHandling(async (olderThanMs 
         const range = IDBKeyRange.upperBound(cutoffTime)
         const request = deleteIndex.openCursor(range)
 
+        // Resolve on deleteTx.oncomplete rather than when the cursor is exhausted,
+        // so a commit failure isn't silently treated as a successful cleanup.
+        deleteTx.oncomplete = () => resolve()
+        deleteTx.onerror = () => reject(deleteTx.error)
+        deleteTx.onabort = () => reject(deleteTx.error || new Error('ACTIVITY_SERIES delete transaction aborted'))
+
         request.onsuccess = (event) => {
             const cursor = event.target.result
             if (cursor) {
                 cursor.delete()
                 deletedCount++
                 cursor.continue()
-            } else {
-                resolve()
             }
         }
         request.onerror = () => reject(request.error)

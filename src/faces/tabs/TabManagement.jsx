@@ -120,7 +120,6 @@ export function TabManagement() {
   // show this one where that header is hidden (sidebar widths).
   const isSidebarWidth = useIsSidebarWidth();
 
-
   // Load auto-group, smart sort, and task view state on mount
   useEffect(() => {
     chrome.storage.local.get(['autoGroupEnabled', 'smartSortEnabled', 'taskViewEnabled'], (result) => {

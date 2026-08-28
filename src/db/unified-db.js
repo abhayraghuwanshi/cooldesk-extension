@@ -785,7 +785,12 @@ export function getIndexedDBInstance() {
  * Get the unified database instance
  */
 export async function getUnifiedDB() {
-    if (dbInstance && !dbInstance.closed) {
+    // Note: IDBDatabase has no standard synchronous `closed` property, so a
+    // `!dbInstance.closed` check here is always false (dead code) - it reads
+    // as a liveness check but never actually is one. `db.onclose` below already
+    // nulls out `dbInstance`/`dbPromise` when the connection closes, so a plain
+    // truthiness check on `dbInstance` is sufficient.
+    if (dbInstance) {
         return dbInstance
     }
 
@@ -811,6 +816,12 @@ async function openUnifiedDB() {
     return new Promise((resolve, reject) => {
         console.log(`[Unified DB] Opening database: ${DB_CONFIG.NAME} v${DB_CONFIG.VERSION}`)
 
+        // Track whether this promise has already settled (resolved or rejected).
+        // The onblocked handler below can reject after a 5s timeout; if the
+        // connection then succeeds anyway (onsuccess fires late), we must close
+        // that late-arriving `db` instead of leaking it or double-settling.
+        let settled = false
+
         const request = getIndexedDBInstance().open(DB_CONFIG.NAME, DB_CONFIG.VERSION)
 
         request.onerror = (event) => {
@@ -820,6 +831,8 @@ async function openUnifiedDB() {
                 message: error?.message,
                 code: error?.code
             })
+            if (settled) return
+            settled = true
             reject(error)
         }
 
@@ -827,14 +840,26 @@ async function openUnifiedDB() {
             console.warn('[Unified DB] Database blocked - another connection is preventing upgrade')
             // Try to resolve after a delay, but don't reject immediately
             setTimeout(() => {
-                if (!dbInstance) {
-                    reject(new Error('Database upgrade blocked by another connection'))
-                }
+                if (settled) return
+                settled = true
+                reject(new Error('Database upgrade blocked by another connection'))
             }, 5000)
         }
 
         request.onsuccess = (event) => {
             const db = event.target.result
+
+            if (settled) {
+                // The onblocked timeout above already rejected this open() call.
+                // This connection is now orphaned - nothing holds a reference to
+                // it once we return here, so close it explicitly instead of
+                // leaking an open IndexedDB connection.
+                console.warn('[Unified DB] Database opened after the blocked-timeout already rejected this call - closing the late connection to avoid a leak')
+                try { db.close() } catch { }
+                return
+            }
+            settled = true
+
             console.log('[Unified DB] Successfully opened database')
             console.log('[Unified DB] DB version:', db.version, '| Stores:', Array.from(db.objectStoreNames))
             const hasTodos = db.objectStoreNames.contains('workspace_todos')
@@ -888,7 +913,9 @@ async function openUnifiedDB() {
  * Close the unified database connection
  */
 export function closeUnifiedDB() {
-    if (dbInstance && !dbInstance.closed) {
+    // Same dead-code note as in getUnifiedDB(): IDBDatabase has no standard
+    // `closed` property, so this only ever checked `dbInstance` truthiness.
+    if (dbInstance) {
         dbInstance.close()
     }
     dbInstance = null

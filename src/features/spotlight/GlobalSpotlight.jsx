@@ -19,7 +19,7 @@ import { runningAppsService } from '../../services/runningAppsService';
 import { browseApps, browseUrls, isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../../services/searchService';
 import { searchWindowsSettings } from '../../data/windowsSettings';
 import { searchWindowsTools } from '../../data/windowsTools';
-import { enrichRunningAppsWithIcons, getFaviconUrl, getGroupDomainFromUrl } from '../../utils/helpers';
+import { enrichRunningAppsWithIcons, getFaviconUrl, getGroupDomainFromUrl, isRealPointerMove } from '../../utils/helpers';
 import { getPreviewItem } from '../../utils/filePreviewKind';
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth';
 import { useSlashCommands } from './useSlashCommands';
@@ -1966,7 +1966,11 @@ export function GlobalSpotlight({
         } else if (e.key === 'p' && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
             if (isSearching && selectedIndex >= 0) {
-                togglePin(flatRows[selectedIndex]?.item);
+                // selectedIndex can point at the "+N more results" row (see
+                // hasMoreResultsRow), which has no `flatRows` entry — nothing
+                // to pin there.
+                const item = flatRows[selectedIndex]?.item;
+                if (item) togglePin(item);
             }
         } else if ((e.key === 'Delete' || e.key === 'Backspace') && !isSearching && currentIndex >= totalContext && currentIndex < totalContext + totalPins) {
             e.preventDefault();
@@ -3627,11 +3631,7 @@ const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect,
         // coordinates that differ from the last recorded mouse position; a
         // reflow-triggered one repeats the same coordinates because the
         // pointer device never moved.
-        const last = lastPointerPos;
-        const moved = e.clientX !== last.x || e.clientY !== last.y;
-        last.x = e.clientX;
-        last.y = e.clientY;
-        if (!moved) return;
+        if (!isRealPointerMove(lastPointerPos, e)) return;
         hoverSelectedRef.current = true;
         onHover(index);
     }, [index, onHover]);
@@ -3744,11 +3744,7 @@ const MoreResultsRow = memo(function MoreResultsRow({ isSelected, count, onSelec
     const rowRef = useRef(null);
     const hoverSelectedRef = useRef(false);
     const handleMouseEnter = useCallback((e) => {
-        const last = lastPointerPos;
-        const moved = e.clientX !== last.x || e.clientY !== last.y;
-        last.x = e.clientX;
-        last.y = e.clientY;
-        if (!moved) return;
+        if (!isRealPointerMove(lastPointerPos, e)) return;
         hoverSelectedRef.current = true;
         onHover();
     }, [onHover]);

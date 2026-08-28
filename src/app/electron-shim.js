@@ -12,6 +12,25 @@ const WS_URL = SIDECAR_WS;
 let ws = null;
 const listeners = new Map(); // channel -> Set<callback>
 
+// POST `data` to a sidecar endpoint and report the *real* outcome.
+// Callers (notably syncOrchestrator's pushChanges -> confirmDeltaPushed) rely
+// on this ok/error signal to decide whether it's safe to mark a delta-synced
+// item as "pushed" - so unlike the old inline setters here, this must not
+// blindly return { ok: true } for a non-2xx response or swallow a network
+// exception into an unhandled rejection.
+async function sidecarPost(path, data) {
+    try {
+        const res = await fetch(`${SIDECAR_URL}${path}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data ?? (Array.isArray(data) ? [] : {}))
+        });
+        return res.ok ? { ok: true } : { ok: false, error: `HTTP ${res.status}` };
+    } catch (e) {
+        return { ok: false, error: String(e?.message || e) };
+    }
+}
+
 // Initialize WebSocket connection to Sidecar
 function connectWebSocket() {
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
@@ -77,7 +96,6 @@ async function bridgeTauriEvents() {
         const tauriEvents = ['spotlight-shown', 'spotlight-hidden', 'tabs-updated', 'native-focus', 'dock-expanded'];
         for (const eventName of tauriEvents) {
             await listen(eventName, (event) => {
-                console.log('[TauriShim] native event received:', eventName, 'listeners:', listeners.get(eventName)?.size || 0);
                 if (listeners.has(eventName)) {
                     listeners.get(eventName).forEach(cb => cb(event.payload));
                 }
@@ -105,60 +123,57 @@ const electronAPI = {
         return res.json();
     },
 
-    setWorkspaces: async (data) => {
-        await fetch(`${SIDECAR_URL}/workspaces`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-        return { ok: true };
-    },
+    setWorkspaces: async (data) => sidecarPost('/workspaces', data),
 
     getUrls: async () => (await fetch(`${SIDECAR_URL}/urls`)).json(),
-    setUrls: async (data) => { await fetch(`${SIDECAR_URL}/urls`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return { ok: true }; },
+    setUrls: async (data) => sidecarPost('/urls', data),
 
     getSettings: async () => (await fetch(`${SIDECAR_URL}/settings`)).json(),
-    saveSettings: async (data) => { await fetch(`${SIDECAR_URL}/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return { ok: true }; },
+    saveSettings: async (data) => sidecarPost('/settings', data),
     setSettings: async (data) => {
         // Save to sidecar storage
-        await fetch(`${SIDECAR_URL}/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        const saveResult = await sidecarPost('/settings', data);
         // If spotlight shortcut changed, re-register it in Tauri
         if (data?.spotlightShortcut) {
             try {
                 const result = await invoke('set_spotlight_shortcut', { shortcut: data.spotlightShortcut });
-                return result ?? { ok: true };
+                return result ?? saveResult;
             } catch (e) {
                 console.warn('[TauriShim] set_spotlight_shortcut failed:', e);
                 return { ok: false, error: String(e), spotlightShortcut: 'Alt+K' };
             }
         }
-        return { ok: true };
+        return saveResult;
     },
 
     // ... Map other getters/setters similarly ...
     getTabs: async () => (await fetch(`${SIDECAR_URL}/tabs`)).json(),
-    setTabs: async (data) => { await fetch(`${SIDECAR_URL}/tabs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return { ok: true }; },
+    setTabs: async (data) => sidecarPost('/tabs', data),
 
     // Missing Sync/Data Getters & Setters
     getNotes: async () => (await fetch(`${SIDECAR_URL}/notes`)).json(),
-    setNotes: async (data) => { await fetch(`${SIDECAR_URL}/notes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return { ok: true }; },
+    setNotes: async (data) => sidecarPost('/notes', data),
 
     getUrlNotes: async () => (await fetch(`${SIDECAR_URL}/url-notes`)).json(),
-    setUrlNotes: async (data) => { await fetch(`${SIDECAR_URL}/url-notes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return { ok: true }; },
+    setUrlNotes: async (data) => sidecarPost('/url-notes', data),
 
     getPins: async () => (await fetch(`${SIDECAR_URL}/pins`)).json(),
-    setPins: async (data) => { await fetch(`${SIDECAR_URL}/pins`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return { ok: true }; },
+    setPins: async (data) => sidecarPost('/pins', data),
 
     getScrapedChats: async () => (await fetch(`${SIDECAR_URL}/scraped-chats`)).json(),
-    setScrapedChats: async (data) => { await fetch(`${SIDECAR_URL}/scraped-chats`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return { ok: true }; },
+    setScrapedChats: async (data) => sidecarPost('/scraped-chats', data),
 
     getScrapedConfigs: async () => (await fetch(`${SIDECAR_URL}/scraped-configs`)).json(),
-    setScrapedConfigs: async (data) => { await fetch(`${SIDECAR_URL}/scraped-configs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return { ok: true }; },
+    setScrapedConfigs: async (data) => sidecarPost('/scraped-configs', data),
 
     getDailyMemory: async () => (await fetch(`${SIDECAR_URL}/daily-memory`)).json(),
-    setDailyMemory: async (data) => { await fetch(`${SIDECAR_URL}/daily-memory`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return { ok: true }; },
+    setDailyMemory: async (data) => sidecarPost('/daily-memory', data),
 
     getUiState: async () => (await fetch(`${SIDECAR_URL}/ui-state`)).json(),
-    setUiState: async (data) => { await fetch(`${SIDECAR_URL}/ui-state`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return { ok: true }; },
+    setUiState: async (data) => sidecarPost('/ui-state', data),
 
     getDashboard: async () => (await fetch(`${SIDECAR_URL}/dashboard`)).json(),
-    setDashboard: async (data) => { await fetch(`${SIDECAR_URL}/dashboard`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return { ok: true }; },
+    setDashboard: async (data) => sidecarPost('/dashboard', data),
 
     // Activity
     getActivity: async () => (await fetch(`${SIDECAR_URL}/activity`)).json(),

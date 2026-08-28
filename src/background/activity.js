@@ -254,16 +254,18 @@ function simpleHash(str) {
 }
 
 // Flush activity batch to database
+//
+// IMPORTANT: activityData's aggregate fields (visitCount, returnVisits, bounced,
+// sessionDurations, subUrls) are only ever persisted via the setHostActivity() push
+// below — there is no IndexedDB/storage fallback for them. So we must NOT clear a
+// URL out of activityDirty until we know its row was actually accepted by the host.
+// Clearing eagerly (the old behavior) meant a host that's offline/unavailable (a
+// common, expected case for users not running the desktop app) silently and
+// permanently lost that batch's stats.
 async function flushActivityBatch() {
     if (!activityDirty || activityDirty.size === 0) return;
     const urls = Array.from(activityDirty);
-    try {
-        if (activityDirty && typeof activityDirty.clear === 'function') {
-            activityDirty.clear();
-        }
-    } catch (e) {
-        console.warn('[Activity] Failed to clear activityDirty:', e);
-    }
+
     const batch = [];
     for (const url of urls) {
         try {
@@ -293,18 +295,48 @@ async function flushActivityBatch() {
                     .map(([u]) => u)
             });
         } catch (e) {
-            // If write fails, keep it dirty for next round
-            activityDirty.add(url);
+            // Payload construction failed for this URL - leave it in activityDirty
+            // (we haven't cleared it yet) so the next flush retries it.
         }
     }
-    // Fire-and-forget POST to Electron host (safe no-op if unavailable)
+
+    // Fire-and-forget POST to Electron host (safe no-op if unavailable).
+    // Only clear activityDirty for URLs whose row was actually included AND the
+    // push succeeded; on failure (or if a URL didn't make the top-N cut below)
+    // leave it dirty so the next flush cycle (every 5s while active, see
+    // initializeActivityTracking) retries it naturally - no extra backoff needed
+    // since the interval itself already rate-limits retries.
     if (batch.length) {
         // sort by time desc and cap to top 50
         const top = batch
             .slice()
             .sort((a, b) => (Number(b.time || 0) - Number(a.time || 0)))
             .slice(0, MAX_ACTIVITY_POST);
-        try { await setHostActivity(top); } catch { /* ignore */ }
+        try {
+            const res = await setHostActivity(top);
+            if (res && res.ok !== false) {
+                for (const row of top) activityDirty.delete(row.url);
+            }
+            // On failure (including "Host sync disabled" / offline host), leave
+            // every URL in `top` marked dirty for retry.
+        } catch {
+            // setHostActivity already catches its own errors and returns
+            // {ok:false}; this catch is just extra defense. Leave dirty.
+        }
+    }
+
+    // Known tradeoff: a user who never runs the desktop app will never succeed at
+    // setHostActivity, so activityDirty would otherwise grow forever (one flush
+    // every 5s). Cap it instead of building special backoff/retry infrastructure -
+    // once we're holding more dirty URLs than we track activityData for at all,
+    // drop the oldest-added ones rather than retrying indefinitely.
+    if (activityDirty.size > MAX_ACTIVITY_DATA_SIZE) {
+        const excess = activityDirty.size - MAX_ACTIVITY_DATA_SIZE;
+        const it = activityDirty.values();
+        for (let i = 0; i < excess; i++) {
+            const v = it.next().value;
+            if (v !== undefined) activityDirty.delete(v);
+        }
     }
 
     // ML Auto-Save DISABLED - ML modules have been removed
@@ -462,29 +494,55 @@ async function accumulateTime(url, now = Date.now(), forcedDelta = null) {
         // Start tracking new session for bounce detection
         sessionStartTimes.set(cleaned, now);
         sessionHadInteraction.set(cleaned, false);
-    }
+        enforceMapSizeLimit(sessionStartTimes);
+        enforceMapSizeLimit(sessionHadInteraction);
 
-    // Check for bounce when session ends (URL change or tab switch)
-    const previousUrl = Array.from(sessionStartTimes.keys()).find(u => u !== cleaned);
-    if (previousUrl && sessionStartTimes.has(previousUrl)) {
-        const sessionStart = sessionStartTimes.get(previousUrl);
-        const sessionDuration = now - sessionStart;
-        const hadInteraction = sessionHadInteraction.get(previousUrl);
+        // A new session starting for `cleaned` means whatever OTHER session(s) were
+        // previously open have ended (URL change or tab switch) and should be closed
+        // out for bounce/duration stats. This used to grab an arbitrary single "other"
+        // entry via Array.from(...).find(), which silently misattributed stats when
+        // more than one stale entry had accumulated (e.g. a background-audio tab
+        // alongside the foreground tab both hold entries here).
+        //
+        // sessionStartTimes can legitimately hold more than one entry at once - e.g.
+        // a background tab playing audio keeps its entry alive (its own isNewSession
+        // stays false while heartbeats keep updating its lastVisit) while the
+        // foreground tab is switched between several URLs. So: (a) process every
+        // stale "other" entry, not just one, and (b) skip entries that are still a
+        // genuinely live concurrent session (audio still playing) rather than
+        // treating "any other key" as ended.
+        for (const otherUrl of Array.from(sessionStartTimes.keys())) {
+            if (otherUrl === cleaned) continue;
 
-        // Bounce = session < 5s with no interactions
-        if (sessionDuration < 5000 && !hadInteraction) {
-            activityData[previousUrl].bounced = (activityData[previousUrl].bounced || 0) + 1;
+            const stillPlayingAudio = sessionEvents.get(otherUrl)?.hasAudio === true;
+            if (stillPlayingAudio) continue; // genuinely ongoing session - not ended
+
+            const sessionStart = sessionStartTimes.get(otherUrl);
+            // Use the URL's own last recorded activity as the session end time, not
+            // `now` (the time of this unrelated URL's session starting) - otherwise a
+            // session closed out long after it actually went idle gets an inflated,
+            // inaccurate duration.
+            const sessionEnd = activityData[otherUrl]?.lastVisit || sessionStart;
+            const sessionDuration = Math.max(0, sessionEnd - sessionStart);
+            const hadInteraction = sessionHadInteraction.get(otherUrl);
+
+            if (activityData[otherUrl]) {
+                // Bounce = session < 5s with no interactions
+                if (sessionDuration < 5000 && !hadInteraction) {
+                    activityData[otherUrl].bounced = (activityData[otherUrl].bounced || 0) + 1;
+                }
+
+                // Store session duration
+                if (!activityData[otherUrl].sessionDurations) {
+                    activityData[otherUrl].sessionDurations = [];
+                }
+                activityData[otherUrl].sessionDurations.push(sessionDuration);
+            }
+
+            // Clean up old session tracking
+            sessionStartTimes.delete(otherUrl);
+            sessionHadInteraction.delete(otherUrl);
         }
-
-        // Store session duration
-        if (!activityData[previousUrl].sessionDurations) {
-            activityData[previousUrl].sessionDurations = [];
-        }
-        activityData[previousUrl].sessionDurations.push(sessionDuration);
-
-        // Clean up old session tracking
-        sessionStartTimes.delete(previousUrl);
-        sessionHadInteraction.delete(previousUrl);
     }
 
     activityData[cleaned].lastVisit = now;
@@ -602,7 +660,15 @@ async function handleActivated(tabId) {
         flushTimeSeriesEvents().catch(() => { });
     }
     try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+        // Use tabs.get(tabId) rather than querying {active:true, currentWindow:true}:
+        // the query resolves "current window" to whichever window currently has OS
+        // focus, which is not necessarily the window that fired this onActivated
+        // event. If a tab is activated in a background window (e.g. via
+        // chrome.tabs.update on an unfocused window), the query would return the
+        // *focused* window's active tab — a different tab/URL than `tabId` — and
+        // currentActive would end up with a mismatched {tabId, url} pair,
+        // attributing tracked time to the wrong page.
+        const tab = await chrome.tabs.get(tabId)
         currentActive = { tabId, url: tab?.url || null, since: now }
 
         // Store page title and classify page type
@@ -623,7 +689,7 @@ async function handleActivated(tabId) {
     }
 }
 
-function handleFocusChanged(windowId) {
+async function handleFocusChanged(windowId) {
     const now = Date.now()
     if (windowId === chrome.windows.WINDOW_ID_NONE) {
         // Window lost focus - stop time tracking
@@ -633,7 +699,27 @@ function handleFocusChanged(windowId) {
         }
         currentActive.since = 0
     } else {
-        // Window gained focus - resume time tracking
+        // Window gained focus. `currentActive` may still point at a tab in a
+        // *different* window: if the user simply Alt-Tabs between two Chrome
+        // windows without changing either window's active tab, tabs.onActivated
+        // never fires, so currentActive is stale. Blindly resuming with
+        // `currentActive.since = now` would silently attribute the newly-focused
+        // window's viewing time to whatever tab/URL was last activated elsewhere.
+        // Look up the tab actually active in the window that just gained focus and
+        // resync to it before resuming.
+        try {
+            const [tab] = await chrome.tabs.query({ active: true, windowId })
+            if (tab && tab.id !== currentActive.tabId) {
+                if (currentActive.url) {
+                    accumulateTime(currentActive.url, now)
+                    flushTimeSeriesEvents().catch(() => { });
+                }
+                currentActive = { tabId: tab.id, url: tab.url || null, since: now }
+                return
+            }
+        } catch {
+            // Fall through to the stale-but-best-effort resume below.
+        }
         if (currentActive.tabId && currentActive.url) currentActive.since = now
     }
 }

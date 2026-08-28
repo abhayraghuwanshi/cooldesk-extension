@@ -271,6 +271,7 @@ import {
 import { requestNativeFocus } from './bridge.js';
 import { initializeData } from './data.js';
 // import { initializeProjectContext } from './projectContext.js'; // DISABLED - depends on ML modules
+import { CommandExecutor } from '../services/commandExecutor.js';
 import { CommandParser } from '../services/commandParser.js';
 import { cleanupBadUrls, listenForPromotionAlarm, runPromotion, schedulePromotion } from '../utils/promotionService.js';
 // import '../utils/realTimeCategorizor.js'; // REMOVED
@@ -333,6 +334,28 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   );
 });
 
+// ── Daily time-series cleanup alarm ───────────────────────────────────────
+// Same "register before any await" requirement as TAB_SYNC_ALARM above: this
+// used to be created/listened for inside main(), after `await
+// initializeTaskManager()`. If the 'dailyCleanup' alarm was itself what woke a
+// suspended worker, the listener wasn't registered yet when the event was
+// dispatched, so the cleanup silently never ran. Moved to top level so it's
+// always present before any waking event can be delivered.
+const DAILY_CLEANUP_ALARM = 'dailyCleanup';
+chrome.alarms.create(DAILY_CLEANUP_ALARM, { periodInMinutes: 1440 }); // 24 hours
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name !== DAILY_CLEANUP_ALARM) return;
+  try {
+    const stats = await getTimeSeriesStorageStats();
+    // Always aggregate data older than 2 days into DAILY_ANALYTICS
+    // This keeps ACTIVITY_SERIES lean while preserving historical data
+    const deleted = await cleanupOldTimeSeriesData(2); // Aggregate & cleanup after 2 days
+    console.log(`[Background] Daily cleanup: aggregated & removed ${deleted} old events, size: ${stats.estimatedSizeMB}MB`);
+  } catch (e) {
+    console.warn('[Background] Daily cleanup failed:', e);
+  }
+});
+
 // ── PROBE: can a native focus wake a suspended worker? ────────────────────
 // A dead MV3 worker cannot receive the sidecar's jump broadcast — the WebSocket
 // dies with the worker — so a jump currently waits for the 30s alarm above.
@@ -365,14 +388,36 @@ chrome.windows.onFocusChanged.addListener((windowId) => {
   });
 });
 
-// Initialize CommandExecutor for shared use
-// MOVED TO main() function to avoid top-level execution errors
-// const commandExecutor = new CommandExecutor((feedback) => {
-//   console.log('[Background:Command] Feedback:', feedback);
-//   chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
-//     if (tab) chrome.tabs.sendMessage(tab.id, { type: 'SHOW_NOTIFICATION', message: feedback.message, color: feedback.type === 'success' ? '#10b981' : '#3B82F6' });
-//   });
-// });
+// ── DEBUG: log external/automatic tab pin/unpin events ────────────────────
+// Previously registered inside chrome.runtime.onInstalled's callback, which
+// only fires on actual install/update — never again after an ordinary
+// service-worker suspend/wake cycle, so the logger silently stopped working
+// after the first suspend. Top level for the same reason as TAB_SYNC_ALARM
+// and the focus probe above: the listener must already exist before any
+// waking event arrives, or that event is dropped.
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.pinned === true) {
+    console.log('[TabDebug] 📌 Tab PINNED externally/automatically:', {
+      tabId,
+      url: tab.url,
+      title: tab.title,
+      timestamp: new Date().toISOString(),
+      changeInfo
+    });
+  } else if (changeInfo.pinned === false) {
+    console.log('[TabDebug] 📍 Tab UNPINNED:', { tabId, url: tab.url });
+  }
+});
+
+// CommandExecutor for the EXECUTE_COMMAND message handler (see below). Declared
+// here so the message-listener closure inside main() can see it, but
+// constructed inside main() itself — not at top level — matching this file's
+// pattern of doing real initialization work inside main() and reserving
+// top-level scope for listeners that must survive an MV3 wake cycle (see
+// TAB_SYNC_ALARM above). The EXECUTE_COMMAND handler is itself only reachable
+// once main() has registered the onMessage listener, so there's no wake-cycle
+// gap introduced by constructing it there too.
+let commandExecutor = null;
 
 
 
@@ -671,21 +716,6 @@ async function main() {
   }
 
   chrome.runtime.onInstalled.addListener(async () => {
-    // Log pinning events to debut auto-pinning issue
-    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-      if (changeInfo.pinned === true) {
-        console.log('[TabDebug] 📌 Tab PINNED externally/automatically:', {
-          tabId,
-          url: tab.url,
-          title: tab.title,
-          timestamp: new Date().toISOString(),
-          changeInfo
-        });
-      } else if (changeInfo.pinned === false) {
-        console.log('[TabDebug] 📍 Tab UNPINNED:', { tabId, url: tab.url });
-      }
-    });
-
     console.log('[Background] Extension installed - populating data')
     try {
       await populateAndStore()
@@ -790,6 +820,19 @@ async function main() {
       console.error('[Background] Error during onStartup:', e);
     }
   })
+
+  // Initialize CommandExecutor for the EXECUTE_COMMAND handler (see below).
+  try {
+    commandExecutor = new CommandExecutor((feedback) => {
+      console.log('[Background:Command] Feedback:', feedback);
+      chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+        if (tab) chrome.tabs.sendMessage(tab.id, { type: 'SHOW_NOTIFICATION', message: feedback.message, color: feedback.type === 'success' ? '#10b981' : '#3B82F6' });
+      });
+    });
+    console.log('[Background] CommandExecutor initialized');
+  } catch (e) {
+    console.error('[Background] CommandExecutor init failed:', e);
+  }
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     console.log('[Background Debug] ON_MESSAGE_START:', msg?.type);
@@ -1663,17 +1706,20 @@ async function main() {
                 };
                 configStore.put(configEntry);
 
-                // Sync to chrome.storage.local for immediate availability
-                try {
-                  chrome.storage.local.get('domainSelectors').then(data => {
-                    const selectors = data.domainSelectors || {};
-                    selectors[result.hostname] = {
-                      ...configEntry,
-                      savedAt: Date.now()
-                    };
-                    chrome.storage.local.set({ domainSelectors: selectors });
-                  });
-                } catch (e) { console.warn('Failed to sync selector to local storage', e); }
+                // Sync to chrome.storage.local for immediate availability.
+                // Locked on the shared 'domainSelectors' key (see withLock
+                // near createTabGroupWithTitle) so two concurrent scrapes for
+                // different hostnames can't clobber each other's addition
+                // with a stale read-then-set.
+                withLock('domainSelectors', async () => {
+                  const data = await chrome.storage.local.get('domainSelectors');
+                  const selectors = data.domainSelectors || {};
+                  selectors[result.hostname] = {
+                    ...configEntry,
+                    savedAt: Date.now()
+                  };
+                  await chrome.storage.local.set({ domainSelectors: selectors });
+                }).catch(e => console.warn('Failed to sync selector to local storage', e));
               }
 
               await new Promise((resolve, reject) => {
@@ -2623,6 +2669,11 @@ async function main() {
     if (msg?.type === 'EXECUTE_COMMAND') {
       (async () => {
         try {
+          if (!commandExecutor) {
+            console.error('[Background] EXECUTE_COMMAND received before CommandExecutor was initialized');
+            sendResponse({ success: false, error: 'Command executor not available' });
+            return;
+          }
           const parsed = CommandParser.parse(msg.commandValue);
           if (parsed) {
             const result = await commandExecutor.execute(parsed);
@@ -2879,27 +2930,13 @@ async function main() {
 
   // Consolidated keyboard shortcut handler is at the top of the file.
 
-
-  // Use chrome.alarms for periodic tasks instead of setInterval
-  // Daily cleanup alarm
-  chrome.alarms.create('dailyCleanup', { periodInMinutes: 1440 }); // 24 hours
-
-  // Listen for alarm events
-  chrome.alarms.onAlarm.addListener(async (alarm) => {
-    if (alarm.name === 'dailyCleanup') {
-      try {
-        const stats = await getTimeSeriesStorageStats();
-        // Always aggregate data older than 2 days into DAILY_ANALYTICS
-        // This keeps ACTIVITY_SERIES lean while preserving historical data
-        const deleted = await cleanupOldTimeSeriesData(2); // Aggregate & cleanup after 2 days
-        console.log(`[Background] Daily cleanup: aggregated & removed ${deleted} old events, size: ${stats.estimatedSizeMB}MB`);
-      } catch (e) {
-        console.warn('[Background] Daily cleanup failed:', e);
-      }
-    }
-  });
-
-
+  // Daily cleanup alarm is created and listened for at module top level (see
+  // DAILY_CLEANUP_ALARM above) — NOT here. Registering chrome.alarms.onAlarm
+  // this deep into main() (after `await initializeTaskManager()`) meant that if
+  // the 'dailyCleanup' alarm itself was what woke a suspended service worker,
+  // this listener wouldn't exist yet when Chrome dispatched the event, and the
+  // cleanup would be silently dropped — the exact hazard already called out in
+  // the TAB_SYNC_ALARM comment above main().
 
 }
 
@@ -3002,28 +3039,42 @@ async function isAutoManagedGroup(groupId) {
   }
 }
 
-// Serialize group operations per (windowId, domain) so concurrent tab events
-// can't each create a duplicate group for the same domain (race condition fix).
-const groupLocks = new Map();
-function withDomainLock(windowId, domain, fn) {
-  const key = `${windowId}_${domain}`;
-  const prev = groupLocks.get(key) || Promise.resolve();
+// Serialize async operations that share a key so concurrent callers can't
+// race on a read-modify-write cycle — e.g. two chrome.storage.local
+// get()-then-set() calls on the same key, or two tab-group creations for the
+// same (windowId, domain). Each key gets its own promise chain; unrelated
+// keys still run concurrently.
+const asyncLocks = new Map();
+function withLock(key, fn) {
+  const prev = asyncLocks.get(key) || Promise.resolve();
   const run = prev.then(fn, fn); // run regardless of prior success/failure
-  groupLocks.set(key, run);
+  asyncLocks.set(key, run);
   // Clean up once this is the tail of the chain to avoid unbounded growth
   run.finally(() => {
-    if (groupLocks.get(key) === run) groupLocks.delete(key);
+    if (asyncLocks.get(key) === run) asyncLocks.delete(key);
   });
   return run;
 }
 
+// Serialize group operations per (windowId, domain) so concurrent tab events
+// can't each create a duplicate group for the same domain (race condition fix).
+function withDomainLock(windowId, domain, fn) {
+  return withLock(`${windowId}_${domain}`, fn);
+}
+
 // Store group titles ourselves since Chrome API doesn't persist them reliably
 // Maps: domain -> { title, color, tabUrls[] } for re-applying after restart
+// Locked on the shared 'tabGroupTitles' storage key (not per-domain) because
+// createTabGroupWithTitle is only locked per (windowId, domain) via
+// withDomainLock above — two *different* domains grouping concurrently would
+// otherwise still race on this one shared storage key's read-modify-write.
 async function saveGroupTitleMapping(domain, title, color, tabUrls) {
-  const result = await chrome.storage.local.get(['tabGroupTitles']);
-  const titles = result.tabGroupTitles || {};
-  titles[domain] = { title, color, tabUrls, timestamp: Date.now() };
-  await chrome.storage.local.set({ tabGroupTitles: titles });
+  await withLock('tabGroupTitles', async () => {
+    const result = await chrome.storage.local.get(['tabGroupTitles']);
+    const titles = result.tabGroupTitles || {};
+    titles[domain] = { title, color, tabUrls, timestamp: Date.now() };
+    await chrome.storage.local.set({ tabGroupTitles: titles });
+  });
 }
 
 // Re-apply saved titles to groups on startup

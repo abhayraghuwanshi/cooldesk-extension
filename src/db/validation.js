@@ -939,11 +939,13 @@ export function validateAndSanitize(data, schemaName, options = {}) {
         })
     }
 
-    // Add timestamps if missing
+    // Add timestamps if missing. Use an explicit undefined/null check rather than
+    // a general falsy check - `createdAt: 0` (epoch) is an unusual but valid
+    // timestamp, and a plain `!sanitized.createdAt` would silently clobber it.
     const now = Date.now()
     if (schemaName === 'workspace' || schemaName === 'note' || schemaName === 'urlNote' || schemaName === 'pin' || schemaName === 'scrapedConfig' || schemaName === 'dailyMemory') {
-        if (!sanitized.createdAt) sanitized.createdAt = now
-        if (!sanitized.updatedAt) sanitized.updatedAt = now
+        if (sanitized.createdAt === undefined || sanitized.createdAt === null) sanitized.createdAt = now
+        if (sanitized.updatedAt === undefined || sanitized.updatedAt === null) sanitized.updatedAt = now
     }
 
     return sanitized
