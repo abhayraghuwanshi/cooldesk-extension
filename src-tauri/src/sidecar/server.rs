@@ -127,9 +127,11 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
             let mut seen_ids = std::collections::HashSet::new();
 
             for app in &visible_apps {
-                if crate::system::is_browser(&app.name) { continue; }
-
                 let name_lower = app.name.to_lowercase();
+                // CoolDesk's own window is visible near-constantly (it's the
+                // sidebar/dock the user is looking at) — left in, it would co-occur
+                // with almost everything and dominate the graph as a fake hub.
+                if crate::system::is_browser(&app.name) || name_lower.contains("cooldesk") { continue; }
 
                 // Folder: editor project title, File Explorer folder, or terminal cwd
                 let folder = crate::sidecar::handlers::extract_editor_project(&app.name, &app.title)
@@ -166,11 +168,13 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
     });
 
     // Focus sampler: per-app active/media time attribution, persisted as one
-    // JSON file per day under sync-data/activity/ (Windows signals only). Also
-    // broadcasts "activity-updated" on focus changes for the ActivityFeed —
-    // this replaced the old visible-apps tracker that appended app rows into
-    // sync-data.json.
-    #[cfg(target_os = "windows")]
+    // JSON file per day under sync-data/activity/. Idle/audio signals are
+    // Windows-only (sampler.rs stubs them to "always active/silent" elsewhere),
+    // but macOS has its own focused-window lookup (system/mac.rs) so the loop
+    // still produces real per-app active time there. Also broadcasts
+    // "activity-updated" on focus changes for the ActivityFeed — this replaced
+    // the old visible-apps tracker that appended app rows into sync-data.json.
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     tokio::spawn(crate::sidecar::sampler::run_sampler_loop(state.clone()));
 
     // Site-usage rollup: persist per-day per-domain browsing dwell from the

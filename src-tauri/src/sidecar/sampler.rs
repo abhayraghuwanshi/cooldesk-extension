@@ -493,10 +493,12 @@ async fn capture_snapshot(state: &std::sync::Arc<crate::sidecar::handlers::AppSt
     let visible = crate::system::get_visible_apps_info().await;
     let mut apps: Vec<String> = Vec::new();
     for app in &visible {
-        if crate::system::is_browser(&app.name) {
+        let name = app.name.to_lowercase();
+        // CoolDesk's own window is visible near-constantly (it's the sidebar the
+        // user is looking at) — recording it would make every snapshot "useful".
+        if crate::system::is_browser(&app.name) || name.contains("cooldesk") {
             continue;
         }
-        let name = app.name.to_lowercase();
         if !apps.contains(&name) {
             apps.push(name);
         }

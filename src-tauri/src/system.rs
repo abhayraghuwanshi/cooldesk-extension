@@ -39,7 +39,10 @@ pub async fn get_visible_apps_info() -> Vec<RunningApp> {
     #[cfg(target_os = "windows")]
     return windows::get_visible_apps_info();
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    return mac::get_visible_apps_info();
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     Vec::new()
 }
 

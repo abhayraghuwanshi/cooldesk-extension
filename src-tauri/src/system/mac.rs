@@ -70,8 +70,12 @@ fn macos_frontmost_pid() -> Option<u32> {
     s.trim().parse::<u32>().ok()
 }
 
-/// Get the topmost window title for a given PID via CGWindowListCopyWindowInfo.
-fn macos_window_title_for_pid(pid: u32) -> Option<String> {
+/// Every on-screen, normal-layer (dock/menu-bar excluded) window as (pid, title),
+/// front-to-back as CGWindowListCopyWindowInfo orders them. A window with no
+/// name (title unavailable without Screen Recording permission, or the window
+/// genuinely has none) is still reported with an empty title so its owning app
+/// isn't dropped from the list entirely.
+fn macos_visible_windows() -> Vec<(u32, String)> {
     use std::ffi::{CStr, CString};
     use std::os::raw::{c_char, c_void};
     use mac_ffi::*;
@@ -81,12 +85,12 @@ fn macos_window_title_for_pid(pid: u32) -> Option<String> {
             K_CG_WINDOW_LIST_OPTION_ON_SCREEN | K_CG_WINDOW_LIST_EXCLUDE_DESKTOP,
             K_CG_NULL_WINDOW_ID,
         );
-        if list.is_null() { return None; }
+        if list.is_null() { return Vec::new(); }
 
         let count = CFArrayGetCount(list);
-        let mut found_title: Option<String> = None;
+        let mut windows = Vec::new();
 
-        'outer: for i in 0..count {
+        for i in 0..count {
             let dict = CFArrayGetValueAtIndex(list, i) as CFDictionaryRef;
             if dict.is_null() { continue; }
 
@@ -100,7 +104,6 @@ fn macos_window_title_for_pid(pid: u32) -> Option<String> {
             if !CFNumberGetValue(pid_val as CFNumberRef, K_CF_NUMBER_SINT32_TYPE, &mut win_pid as *mut i32 as *mut c_void) {
                 continue;
             }
-            if win_pid as u32 != pid { continue; }
 
             // Read layer — skip dock/menu-bar entries
             let key_layer = CString::new("kCGWindowLayer").unwrap();
@@ -118,24 +121,33 @@ fn macos_window_title_for_pid(pid: u32) -> Option<String> {
             let cf_name_key = CFStringCreateWithCString(std::ptr::null(), key_name.as_ptr(), K_CF_STRING_ENCODING_UTF8);
             let name_val = CFDictionaryGetValue(dict, cf_name_key);
             CFRelease(cf_name_key);
-            if name_val.is_null() { break 'outer; }
 
-            let cf_name = name_val as CFStringRef;
-            let len = CFStringGetLength(cf_name);
-            let max = CFStringGetMaximumSizeForEncoding(len, K_CF_STRING_ENCODING_UTF8) + 1;
-            let mut buf: Vec<c_char> = vec![0; max as usize];
-            if CFStringGetCString(cf_name, buf.as_mut_ptr(), max, K_CF_STRING_ENCODING_UTF8) {
-                let title = CStr::from_ptr(buf.as_ptr()).to_string_lossy().into_owned();
-                if !title.is_empty() {
-                    found_title = Some(title);
+            let mut title = String::new();
+            if !name_val.is_null() {
+                let cf_name = name_val as CFStringRef;
+                let len = CFStringGetLength(cf_name);
+                let max = CFStringGetMaximumSizeForEncoding(len, K_CF_STRING_ENCODING_UTF8) + 1;
+                let mut buf: Vec<c_char> = vec![0; max as usize];
+                if CFStringGetCString(cf_name, buf.as_mut_ptr(), max, K_CF_STRING_ENCODING_UTF8) {
+                    title = CStr::from_ptr(buf.as_ptr()).to_string_lossy().into_owned();
                 }
             }
-            break 'outer;
+
+            windows.push((win_pid as u32, title));
         }
 
         CFRelease(list);
-        found_title
+        windows
     }
+}
+
+/// Get the topmost window title for a given PID via CGWindowListCopyWindowInfo.
+fn macos_window_title_for_pid(pid: u32) -> Option<String> {
+    macos_visible_windows()
+        .into_iter()
+        .find(|(p, _)| *p == pid)
+        .map(|(_, title)| title)
+        .filter(|t| !t.is_empty())
 }
 
 pub fn get_focused_app_info() -> Option<RunningApp> {
@@ -164,4 +176,56 @@ pub fn get_focused_app_info() -> Option<RunningApp> {
         });
     }
     None
+}
+
+/// System/UI-chrome processes that own on-screen windows (menu bar extras,
+/// the Dock itself, screenshot overlays, …) but are never something the user
+/// "used" — surfacing them would put junk apps in the Right Now panel and
+/// junk nodes in the knowledge graph.
+const MACOS_SYSTEM_PROCESSES: &[&str] = &[
+    "windowserver", "dock", "systemuiserver", "screencaptureui", "loginwindow",
+    "controlcenter", "notificationcenter", "spotlight", "coreservicesuiagent",
+    "textinputmenuagent", "textinputswitcher", "universalaccessd", "quicklookui",
+    "wallpaperagent", "coreautha_uiagent",
+];
+
+fn is_macos_system_process(name: &str) -> bool {
+    MACOS_SYSTEM_PROCESSES.contains(&name.to_lowercase().as_str())
+}
+
+/// One entry per app currently showing an on-screen window (Dock/menu bar
+/// excluded), first window per pid kept. Backs `/activity/visible`, the
+/// timeline snapshot ("what was open"), and the session co-occurrence loop
+/// that grows app/folder nodes in the knowledge graph — none of the three
+/// see any app node on macOS without this.
+pub fn get_visible_apps_info() -> Vec<RunningApp> {
+    let mut sys = System::new_all();
+    sys.refresh_all();
+
+    let mut apps = Vec::new();
+    let mut seen_pids = std::collections::HashSet::new();
+    for (pid, title) in macos_visible_windows() {
+        if !seen_pids.insert(pid) { continue; }
+        let Some(process) = sys.process(Pid::from_u32(pid)) else { continue };
+        let name = process.name().to_string();
+        if is_macos_system_process(&name) { continue; }
+        let path = process.exe().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+        apps.push(RunningApp {
+            id: format!("app-{}", pid),
+            name,
+            title: if title.is_empty() { process.name().to_string() } else { title },
+            path,
+            pid,
+            icon: None,
+            handle: format!("{}", pid),
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            desktop_id: None,
+            desktop_number: None,
+            is_on_current_desktop: true,
+        });
+    }
+    apps
 }
