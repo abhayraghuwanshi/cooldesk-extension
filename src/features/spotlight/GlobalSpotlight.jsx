@@ -1,5 +1,5 @@
 import { faChrome, faCss3Alt, faDiscord, faEdge, faFirefox, faGithub, faGolang, faHtml5, faJava, faJs, faMarkdown, faNodeJs, faPhp, faPython, faReact, faRust, faSlack, faSpotify, faSwift, faVuejs } from '@fortawesome/free-brands-svg-icons';
-import { faBriefcase, faCalculator, faChartLine, faCloud, faCode, faCog, faComments, faDatabase, faDesktop, faEnvelope, faFile, faFileCode, faFileCsv, faFileExcel, faFileLines, faFilePdf, faFilePowerpoint, faFileWord, faFileZipper, faFlask, faFolder, faFolderOpen, faFont, faGamepad, faGlobe, faGraduationCap, faHashtag, faHeartPulse, faHistory, faHome, faImage, faLightbulb, faLink, faMicrochip, faMicrophone, faMusic, faNewspaper, faPalette, faPlane, faPlus, faRobot, faSearch, faShoppingBag, faStar, faStickyNote, faTasks, faTerminal, faThumbtack, faTimes, faTools, faUtensils, faVial, faVideo } from '@fortawesome/free-solid-svg-icons';
+import { faBold, faBriefcase, faCalculator, faChartLine, faCloud, faCode, faCog, faComments, faDatabase, faDesktop, faEnvelope, faFile, faFileCode, faFileCsv, faFileExcel, faFileLines, faFilePdf, faFilePowerpoint, faFileWord, faFileZipper, faFlask, faFolder, faFolderOpen, faFont, faGamepad, faGlobe, faGraduationCap, faHashtag, faHeartPulse, faHistory, faHome, faImage, faItalic, faLightbulb, faLink, faListOl, faListUl, faMicrochip, faMicrophone, faMusic, faNewspaper, faPalette, faPlane, faPlus, faQuoteRight, faRobot, faSearch, faShoppingBag, faStar, faStickyNote, faStrikethrough, faTasks, faTerminal, faThumbtack, faTimes, faTools, faUtensils, faVial, faVideo } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
     SiC, SiClojure, SiCplusplus, SiCss, SiDart, SiDocker, SiElixir, SiGnubash, SiGo,
@@ -32,7 +32,14 @@ import { CopyButton } from './CopyButton';
 // vast majority that never touch a file preview — split into their own chunk
 // and fetch it only the first time a previewable file is actually selected.
 const PreviewPane = lazy(() => import('./PreviewPane'));
+// Same rich-text editor WorkspaceContextPanel.jsx uses for notes — reused
+// here rather than a second, plain-text editor, so a note edited from either
+// place round-trips through the exact same HTML shape.
+const TiptapEditor = lazy(() => import('../../faces/workspace/parts/editor/TiptapEditor'));
 import { describeAction } from '../../services/workspaceActions';
+import { useWorkspaceScaffold } from './useWorkspaceScaffold';
+import { useNewWorkspaceMode } from './useNewWorkspaceMode';
+import { useEditWorkspaceMode } from './useEditWorkspaceMode';
 import { VOICE_SEARCH_ENABLED } from '../../config/features';
 import './GlobalSpotlight.css';
 
@@ -408,6 +415,12 @@ export function GlobalSpotlight({
     const [treeChildren, setTreeChildren] = useState({}); // path -> child items[]
     const inputRef = useRef(null);
     const containerRef = useRef(null);
+    // /edit-workspace's note editor — reused across notes (one at a time is
+    // ever open) so the toolbar below can reach the live Tiptap instance via
+    // TiptapEditor's own getEditor() handle, without TiptapEditor.jsx itself
+    // needing to render a persistent toolbar (it only has floating/bubble
+    // menus — see workspaceNoteToolbarButtons below).
+    const noteEditorRef = useRef(null);
 
     const [contextItems, setContextItems] = useState([]);
     const [showAllTabs, setShowAllTabs] = useState(false);
@@ -479,6 +492,62 @@ export function GlobalSpotlight({
         if (el) el.scrollTop = el.scrollHeight;
     }, [aiCli.turns]);
 
+    // .cooldesk scaffold/link logic (used by the /agent panel's "Create
+    // workspace" button and /new-workspace's confirm step) — pulled into its
+    // own hook so this already-large file doesn't also carry that machinery.
+    const {
+        wsScaffoldPlan, setWsScaffoldPlan,
+        buildScaffoldPlan, resolveWorkspaceProjects, runCreateWorkspace,
+    } = useWorkspaceScaffold({ expandedWorkspaceId, aiCli, showFeedback });
+
+    // /new-workspace's guided create wizard — see useNewWorkspaceMode.js.
+    const newWorkspace = useNewWorkspaceMode({
+        aiCli, showFeedback, buildScaffoldPlan, setWsScaffoldPlan, runCreateWorkspace,
+        setCommandMode, setQuery, setExpandedWorkspaceId, setWorkspaces,
+    });
+
+    // Typing an existing workspace's own name (e.g. "/cool-verse") opens it
+    // here — see useEditWorkspaceMode.js.
+    const editWorkspace = useEditWorkspaceMode({ showFeedback, setCommandMode, setQuery, setWorkspaces });
+
+    // Files/folders (and other results) picked from the list while composing
+    // an /agent request — the spotlight's answer to a CLI's "@file" attach.
+    // Chips stay attached across follow-ups until removed or the chat resets.
+    const [agentContext, setAgentContext] = useState([]);
+
+    // Stage a result as context instead of opening it. Folders/apps/urls/etc.
+    // attach as a bare path/name reference (the chat run has no Read tool, so
+    // it can't fetch them itself); a real file's text is read once here and
+    // capped hard — this is context for a question, not the whole file.
+    const attachToAgentContext = useCallback(async (item) => {
+        if (!item) return;
+        const kind = item.type === 'folder' ? 'folder' : item.type === 'file' ? 'file' : 'ref';
+        const path = item.path || item.url || null;
+        const name = item.title || item.name || path || 'item';
+        if (!path) { showFeedback(`Can't attach "${name}" — no path`, 'error'); return; }
+
+        const id = `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        setAgentContext(prev => prev.some(c => c.path === path)
+            ? prev
+            : [...prev, { id, kind, name, path, content: null, status: kind === 'file' ? 'loading' : 'ready' }]);
+        setQuery('');
+        inputRef.current?.focus();
+
+        if (kind !== 'file') return;
+        const ATTACH_CAP = 20_000; // context for a question, not the whole file
+        try {
+            const { invoke } = await import('@tauri-apps/api/core');
+            const result = await invoke('preview_text_file', { path });
+            const content = result.content.length > ATTACH_CAP
+                ? `${result.content.slice(0, ATTACH_CAP)}\n…(truncated)`
+                : result.content;
+            setAgentContext(prev => prev.map(c => c.path === path ? { ...c, content, status: 'ready' } : c));
+        } catch (e) {
+            console.warn('[Spotlight] attach: could not read file', path, e);
+            setAgentContext(prev => prev.map(c => c.path === path ? { ...c, status: 'unreadable' } : c));
+        }
+    }, [showFeedback]);
+
     // Send the current /agent request. Workspaces are re-read here rather than
     // taken from the `workspaces` state above: that list is only populated when
     // the workspaces *section* is enabled, and the agent needs the real set
@@ -500,8 +569,8 @@ export function GlobalSpotlight({
         // every run). This directory is app-owned and pre-trusted in Claude
         // Code's config, so it never hits that prompt.
         const cwd = await getOrCreateAgentWorkspaceCwd();
-        aiCli.run(request, list, cwd);
-    }, [aiCli]);
+        aiCli.run(request, list, cwd, { attachments: agentContext });
+    }, [aiCli, agentContext]);
 
     // Apply one turn's proposal. The transcript stays up afterwards — the whole
     // point of history is that "now also do X" is a follow-up, not a new session.
@@ -525,10 +594,37 @@ export function GlobalSpotlight({
         }
     }, [aiCli, showFeedback]);
 
+    // "/name <title>" — a fast local shortcut inside /agent mode: renames the
+    // active workspace immediately via the same rename_workspace action
+    // /agent's own proposals use, with no Claude Code round-trip. Mirrors
+    // /model bypassing the LLM for its own selection UI.
+    const runRenameWorkspace = useCallback(async (newName) => {
+        const name = (newName || '').trim();
+        if (!name) return;
+        try {
+            const [{ listWorkspaces }, { applyActions }] = await Promise.all([
+                import('../../db/index.js'),
+                import('../../services/workspaceActions'),
+            ]);
+            const res = await listWorkspaces();
+            const list = res?.success ? res.data : (Array.isArray(res) ? res : []);
+            const ws = list.find(w => w.id === expandedWorkspaceId) || list[0] || null;
+            if (!ws) { showFeedback('No workspace selected to rename', 'error'); return; }
+            if (ws.name === name) { showFeedback(`Already named "${name}"`, 'success'); return; }
+            const { applied, errors } = await applyActions([{ type: 'rename_workspace', from: ws.name, to: name }], list);
+            showFeedback(applied ? `Renamed to "${name}"` : (errors[0] || 'Rename failed'), applied ? 'success' : 'error');
+        } catch (e) {
+            console.error('[Spotlight] /name failed:', e);
+            showFeedback('Rename failed — see console', 'error');
+        }
+    }, [expandedWorkspaceId, showFeedback]);
+
     const exitAgentMode = useCallback(() => {
         aiCli.reset();
         setCommandMode(null);
         setQuery('');
+        setWsScaffoldPlan(undefined);
+        setAgentContext([]);
     }, [aiCli]);
 
     // Entering add mode hands the user straight to the input with the panel
@@ -1102,6 +1198,10 @@ export function GlobalSpotlight({
             if (commandMode !== 'agent') {
                 setCommandMode('agent');
                 setResults([]);
+                // Resolve which of the selected workspace's folders can be
+                // scaffolded/linked, for the panel's "Create workspace" button.
+                setWsScaffoldPlan(undefined);
+                resolveWorkspaceProjects().then(setWsScaffoldPlan);
             }
             setQuery(query.replace(/^\s*\/agent\s*/i, ''));
             return;
@@ -1110,6 +1210,20 @@ export function GlobalSpotlight({
         // Once the chip is up the mode owns the input: the text is the request,
         // and only the chip's × or Esc leaves.
         if (commandMode === 'agent') return;
+
+        // Detect /new-workspace — a guided form (name → folders → confirm)
+        // instead of a bang command with syntax to remember. See
+        // useNewWorkspaceMode.js.
+        if (trimmedQuery === '/new-workspace' || trimmedQuery.startsWith('/new-workspace ') ||
+            trimmedQuery === '/new' || trimmedQuery.startsWith('/new ')) {
+            if (commandMode !== 'new-workspace') {
+                newWorkspace.enter();
+                setResults([]);
+            }
+            setQuery(query.replace(/^\s*\/(new-workspace|new)\s*/i, ''));
+            return;
+        }
+        if (commandMode === 'new-workspace') return;
 
         // Detect /model command
         if (trimmedQuery === '/model' || trimmedQuery.startsWith('/model ')) {
@@ -1121,6 +1235,30 @@ export function GlobalSpotlight({
             }
             return;
         }
+
+        // Detect an existing workspace's own name typed directly as a command
+        // (e.g. "/ent" for "entertainment") — opens it in /edit-workspace
+        // (see useEditWorkspaceMode.js). Checked last, after every fixed
+        // built-in above, so a workspace literally named "agent" or "model"
+        // can't shadow those. Prefix match, firing as soon as exactly one
+        // workspace name starts with what's typed — typing the whole name
+        // was too slow. An exact full-name match always wins outright, so
+        // "cool" still opens a workspace named exactly "cool" even if
+        // "cool-verse" also starts with it.
+        if (trimmedQuery.startsWith('/') && trimmedQuery.length > 1) {
+            const typedName = trimmedQuery.slice(1);
+            const exact = workspaces.find(w => (w.name || '').trim().toLowerCase() === typedName);
+            const candidates = exact ? [exact] : workspaces.filter(w => (w.name || '').trim().toLowerCase().startsWith(typedName));
+            if (candidates.length === 1) {
+                const match = candidates[0];
+                if (commandMode !== 'edit-workspace' || editWorkspace.workspaceId !== match.id) {
+                    editWorkspace.enter(match);
+                    setSelectedIndex(-1);
+                }
+                return;
+            }
+        }
+        if (commandMode === 'edit-workspace') return;
 
         // Clear command mode if not a command
         if (commandMode) {
@@ -1267,15 +1405,25 @@ export function GlobalSpotlight({
         setTreeChildren({});
 
         // Agent mode still searches: the box is a search bar first, and the
-        // agent is one more thing it can answer with. /ai and /model take the
-        // input over completely, so they still skip.
-        if (commandMode && commandMode !== 'agent') {
+        // agent is one more thing it can answer with. /new-workspace's
+        // folders step and /edit-workspace are item *pickers*, so they
+        // search too. /ai and /model, and /new-workspace's name/confirm
+        // steps, take the input over completely, so they still skip.
+        const isItemPickerStep = (commandMode === 'new-workspace' && newWorkspace.step === 'folders')
+            || commandMode === 'edit-workspace';
+        if (commandMode && commandMode !== 'agent' && !isItemPickerStep) {
             return;
         }
 
         if (!trimmedQuery) {
             setResults([]);
-            setSelectedIndex(-1);
+            // Item-picker modes (edit-workspace, /new-workspace's folders
+            // step) use selectedIndex for browsing their *existing* items
+            // list while the box is empty — resetting it here on every empty
+            // query (which fires on entering the mode, and after every
+            // /name, /todo, /notes command clears the box) wiped out that
+            // selection and made arrow-key navigation there feel broken.
+            if (!isItemPickerStep) setSelectedIndex(-1);
             // Bumping the id orphans any search still in flight, so its late
             // response can't repopulate an empty box; clearing loading here is
             // then required, because that orphaned run's `finally` no longer
@@ -1291,9 +1439,31 @@ export function GlobalSpotlight({
         // Slash/bang command palette (when the surface enables it): "/..." and
         // "!..." queries list matching commands instead of running a search.
         const commandItems = slash.getSuggestions(trimmedQuery);
-        if (commandItems) {
-            setResults(commandItems);
-            setSelectedIndex(commandItems.length > 0 ? 0 : -1);
+        // Existing workspaces whose name starts with what's typed — computed
+        // independently of the command palette above (which is disabled on
+        // the dedicated overlay surface, spotlight-main.jsx: enableSlashCommands
+        // isn't passed there, so commandItems is always null on that window —
+        // this must not live inside that branch or it never runs there).
+        // Surfaced here rather than silently auto-entering /edit-workspace
+        // whenever the prefix is ambiguous between two of them (e.g. "cool"
+        // matching both "cooldesk" and "cooldesk website"): picking one is a
+        // click/Enter away instead of needing to type enough to disambiguate.
+        const typedName = trimmedQuery.startsWith('/') ? trimmedQuery.slice(1).toLowerCase() : '';
+        const wsMatches = typedName
+            ? workspaces
+                .filter(w => (w.name || '').trim().toLowerCase().startsWith(typedName))
+                .map(w => ({
+                    id: `ws-edit:${w.id}`,
+                    type: 'workspace-edit',
+                    title: w.name,
+                    description: 'Edit this workspace',
+                    workspace: w,
+                }))
+            : [];
+        if (commandItems || wsMatches.length > 0) {
+            const combined = [...wsMatches, ...(commandItems || [])];
+            setResults(combined);
+            setSelectedIndex(combined.length > 0 ? 0 : -1);
             setLoading(false);
             return;
         }
@@ -1390,7 +1560,14 @@ export function GlobalSpotlight({
                 // made the spinner sit there for the whole time you were typing.
                 // Here search is a secondary convenience; the agent is the point.
                 const isAgent = commandMode === 'agent';
-                const isNaturalLanguage = !isAgent && isNaturalLanguageQuery(searchTerm);
+                // /new-workspace's folder step wants folders/files/apps only;
+                // /edit-workspace (an existing workspace) accepts anything a
+                // workspace item can be, urls included. Neither is a
+                // natural-language request — always wants file search, never
+                // the slow AI-backed search, regardless of query length.
+                const isFolderOnlyPicker = commandMode === 'new-workspace' && newWorkspace.step === 'folders';
+                const isItemPicker = isFolderOnlyPicker || commandMode === 'edit-workspace';
+                const isNaturalLanguage = !isAgent && !isItemPicker && isNaturalLanguageQuery(searchTerm);
 
                 // quickSearch ranks and caps across ALL types (apps, workspaces,
                 // tabs, history, bookmarks) before the scope filter below ever
@@ -1404,10 +1581,15 @@ export function GlobalSpotlight({
                     ? naturalLanguageSearch(searchTerm, fetchLimit)
                     : quickSearch(searchTerm, fetchLimit);
 
-                // File search only matters for unscoped or /f searches. Skipped
-                // in agent mode: an OS-wide scan per sentence is the slowest
-                // thing here and can't match a natural-language request anyway.
-                const wantFiles = !isAgent && (!scope || scope === SEARCH_SCOPES.f);
+                // File search only matters for unscoped or /f searches. In
+                // agent mode it's still worth it for a short, name-like query
+                // (picking a project folder to point the agent at is exactly
+                // what the results list under the transcript is for) — but
+                // skipped for an actual multi-word sentence, where an OS-wide
+                // scan is both the slowest thing here and can't match natural
+                // language anyway.
+                const isShortQuery = searchTerm.trim().split(/\s+/).length <= 3;
+                const wantFiles = (isItemPicker || !isAgent || isShortQuery) && (!scope || scope === SEARCH_SCOPES.f);
                 const filesPromise = wantFiles && window.electronAPI?.searchFiles
                     ? window.electronAPI.searchFiles(searchTerm)
                     : Promise.resolve([]);
@@ -1444,7 +1626,7 @@ export function GlobalSpotlight({
                 // offered as a direct destination — ranked in with everything
                 // else rather than bolted on separately, so an actual open tab
                 // for the same site (scored higher) still wins the top slot.
-                const urlGuessResults = (!isAgent && looksLikeUrl(searchTerm) && (!scope || scope === SEARCH_SCOPES.u))
+                const urlGuessResults = (!isAgent && !isFolderOnlyPicker && looksLikeUrl(searchTerm) && (!scope || scope === SEARCH_SCOPES.u))
                     ? [{
                         id: `url-guess-${searchTerm}`,
                         title: toNavigableUrl(searchTerm),
@@ -1458,9 +1640,37 @@ export function GlobalSpotlight({
                 searchResults = [...(searchResults || []), ...mappedFiles, ...settingsResults, ...toolsResults, ...urlGuessResults]
                     .sort((a, b) => (b.score || 0) - (a.score || 0));
 
+                // Independent sources can surface the *same* folder/file/app or
+                // url (the local index and a live filesystem scan both matching
+                // "src", say) — dedupe by a stable identity so a row isn't shown
+                // twice and React doesn't get two children with the same key.
+                // Sorted by score above, so the first copy kept is the
+                // highest-scoring one.
+                {
+                    const seenKeys = new Set();
+                    searchResults = searchResults.filter(r => {
+                        const key = (r.type === 'folder' || r.type === 'file' || r.type === 'app') && r.path
+                            ? `path:${r.path.toLowerCase()}`
+                            : r.url
+                                ? `url:${r.url.toLowerCase()}`
+                                : `id:${r.id}`;
+                        if (seenKeys.has(key)) return false;
+                        seenKeys.add(key);
+                        return true;
+                    });
+                }
+
                 // Scoped search keeps only the scope's result types
                 if (scope) {
                     searchResults = searchResults.filter(r => scope.types.includes(r.type));
+                }
+
+                // /new-workspace's folder step: only things that can become a
+                // workspace app are worth showing — a tab or bookmark can't.
+                // /edit-workspace allows urls/tabs/bookmarks too (an existing
+                // workspace can hold either kind of item), so it's unfiltered here.
+                if (isFolderOnlyPicker) {
+                    searchResults = searchResults.filter(r => ['folder', 'file', 'app'].includes(r.type));
                 }
 
                 // "/a <query>" with nothing matching: browse the full app
@@ -1491,7 +1701,7 @@ export function GlobalSpotlight({
                 // plain, broad search. Pinned to the top rather than sorted by
                 // score, so it's never buried under a page of mediocre matches.
                 const bestScore = searchResults.reduce((max, r) => Math.max(max, r.score || 0), 0);
-                if (!isAgent && isDesktopApp && !addTarget && !scope && searchTerm.trim() &&
+                if (!isAgent && !isItemPicker && isDesktopApp && !addTarget && !scope && searchTerm.trim() &&
                     (searchResults.length === 0 || bestScore < 50)) {
                     searchResults.unshift({
                         id: `agent-suggest-${searchTerm}`,
@@ -1543,7 +1753,7 @@ export function GlobalSpotlight({
         }, debounceMs);
 
         return () => clearTimeout(timeoutId);
-    }, [query, deepSearch, commandMode, slash, addTarget, isDesktopApp]);
+    }, [query, deepSearch, commandMode, slash, addTarget, isDesktopApp, newWorkspace.step]);
 
     // --- Folder tree helpers ---
     // Base rows = search results capped to the visible window; folders among
@@ -1674,8 +1884,219 @@ export function GlobalSpotlight({
         return [...urls, ...apps];
     }, [workspaces, expandedWorkspaceId, contextItems]);
 
+    // /edit-workspace's existing items (urls, apps, todos, then notes) — its
+    // own list rather than wsNavItems above, since editWorkspace.workspace
+    // isn't necessarily the idle-selected workspace (expandedWorkspaceId).
+    // Everything (browsing, adding, editing) goes through this one list and
+    // the single search box — no separate add-fields to tab between.
+    const editWorkspaceItems = useMemo(() => {
+        const ws = editWorkspace.workspace;
+        if (!ws) return [];
+        const urls = (ws.urls || []).map(u => ({ kind: 'url', name: u.title || u.url, url: u.url }));
+        const apps = (ws.apps || []).map(a => ({ kind: 'app', name: a.name, path: a.path, appType: a.appType }));
+        const todos = editWorkspace.todos.map(t => ({ kind: 'todo', name: t.text, id: t.id, done: t.done }));
+        const notes = editWorkspace.notes.map(n => ({
+            kind: 'note', id: n.id,
+            name: n.title || editWorkspace.stripHtml(n.text).slice(0, 40) || 'Untitled',
+        }));
+        return [...urls, ...apps, ...todos, ...notes];
+    }, [editWorkspace.workspace, editWorkspace.todos, editWorkspace.notes, editWorkspace.stripHtml]);
+
+    const openExistingWorkspaceItem = useCallback((item) => {
+        if (!item) return;
+        if (item.kind === 'url') {
+            if (window.electronAPI?.openExternal) window.electronAPI.openExternal(item.url);
+            else window.open(item.url, '_blank');
+            return;
+        }
+        const type = (item.appType || '').toLowerCase();
+        if (WS_EDITORS.includes(type) && window.electronAPI?.launchAppWithArgs) {
+            window.electronAPI.launchAppWithArgs(type === 'vscode' ? 'code' : type, [item.path]);
+        } else if (item.appType === 'folder' && window.electronAPI?.openFolder) {
+            window.electronAPI.openFolder(item.path);
+        } else if (window.electronAPI?.launchApp) {
+            window.electronAPI.launchApp(item.path);
+        }
+    }, []);
+
     // Handle Keyboard Navigation
     const handleKeyDown = (e) => {
+        if (commandMode === 'edit-workspace') {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                // Close the innermost thing first: the note editor, then the
+                // whole mode — same hierarchy Esc already follows elsewhere
+                // (workspace picker → add mode → spotlight).
+                if (editWorkspace.activeNoteId) editWorkspace.closeNote();
+                else editWorkspace.exit();
+                return;
+            }
+            // Backspace on an empty box closes it too — same grammar as
+            // /agent and /new-workspace, not just Esc.
+            if (e.key === 'Backspace' && !query) {
+                e.preventDefault();
+                editWorkspace.exit();
+                return;
+            }
+
+            // Empty box: nothing to search for, so ↑↓/Enter navigate and open
+            // the workspace's *existing* items instead (the chips above the
+            // list) — the same "browse what's already here" the idle
+            // workspace section supports, just inside this mode too.
+            if (!query.trim()) {
+                if (e.key === 'ArrowDown' && editWorkspaceItems.length > 0) {
+                    e.preventDefault();
+                    setSelectedIndex(prev => (prev + 1) % editWorkspaceItems.length);
+                    return;
+                }
+                if (e.key === 'ArrowUp' && editWorkspaceItems.length > 0) {
+                    e.preventDefault();
+                    setSelectedIndex(prev => (prev <= 0 ? editWorkspaceItems.length - 1 : prev - 1));
+                    return;
+                }
+                // Space *or* Shift+Enter toggles a todo's done state —
+                // mouse-independent, doesn't require clicking the row — and
+                // does nothing on any other row. Two keys rather than one so
+                // whichever one you reach for works.
+                if ((e.key === ' ' || (e.key === 'Enter' && e.shiftKey)) &&
+                    selectedIndex >= 0 && editWorkspaceItems[selectedIndex]?.kind === 'todo') {
+                    e.preventDefault();
+                    editWorkspace.toggleTodo(editWorkspaceItems[selectedIndex].id);
+                    return;
+                }
+                // Enter: open a url/app, edit a todo's text inline, or open a
+                // note in the Tiptap editor below (see the render block).
+                if (e.key === 'Enter' && !e.shiftKey && selectedIndex >= 0 && editWorkspaceItems[selectedIndex]) {
+                    e.preventDefault();
+                    const it = editWorkspaceItems[selectedIndex];
+                    if (it.kind === 'todo') editWorkspace.startEditTodo(it.id);
+                    else if (it.kind === 'note') editWorkspace.openNote(it.id);
+                    else openExistingWorkspaceItem(it);
+                    return;
+                }
+                return;
+            }
+
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                const trimmed = query.trim();
+                // Three in-box commands cover everything besides "search to
+                // attach a link/folder" — no separate add-fields to tab
+                // between. "/name" matches /agent's own rename shortcut.
+                const nameMatch = /^\/name\s+(.+)$/i.exec(trimmed);
+                if (nameMatch) {
+                    editWorkspace.rename(nameMatch[1]);
+                    setQuery('');
+                    return;
+                }
+                const todoMatch = /^\/todo\s+(.+)$/i.exec(trimmed);
+                if (todoMatch) {
+                    editWorkspace.addTodo(todoMatch[1]);
+                    setQuery('');
+                    return;
+                }
+                const noteMatch = /^\/notes?\s+(.+)$/i.exec(trimmed);
+                if (noteMatch) {
+                    editWorkspace.addNote(noteMatch[1]);
+                    setQuery('');
+                    return;
+                }
+                // A highlighted result attaches as an item — same interaction
+                // as /new-workspace's folder step and /agent's context chips.
+                if (selectedIndex >= 0 && flatRows[selectedIndex]) {
+                    const mapped = resultToWorkspaceItem(flatRows[selectedIndex].item);
+                    if (mapped) {
+                        editWorkspace.addItem(mapped);
+                    } else {
+                        showFeedback("That can't be added to a workspace", 'error');
+                    }
+                    setQuery('');
+                }
+                return;
+            }
+            if (e.key === 'ArrowDown' && flatRows.length > 0) {
+                e.preventDefault();
+                setSelectedIndex(prev => (prev + 1) % flatRows.length);
+                return;
+            }
+            if (e.key === 'ArrowUp' && flatRows.length > 0) {
+                e.preventDefault();
+                setSelectedIndex(prev => (prev <= 0 ? flatRows.length - 1 : prev - 1));
+                return;
+            }
+            return;
+        }
+
+        if (commandMode === 'new-workspace') {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                newWorkspace.exit();
+                return;
+            }
+            if (newWorkspace.step === 'name') {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    newWorkspace.confirmName(query);
+                    return;
+                }
+                // Nothing to step back to before the first step — Backspace
+                // on an empty box leaves the wizard, same grammar as /agent.
+                if (e.key === 'Backspace' && !query) {
+                    e.preventDefault();
+                    newWorkspace.exit();
+                    return;
+                }
+                return; // no result navigation while typing a name
+            }
+            if (newWorkspace.step === 'folders') {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    // A highlighted result attaches — same interaction as
+                    // /agent's context chips (see attachToAgentContext).
+                    if (selectedIndex >= 0 && flatRows[selectedIndex]) {
+                        const mapped = resultToWorkspaceItem(flatRows[selectedIndex].item);
+                        if (mapped?.kind === 'app') {
+                            newWorkspace.addFolder(mapped);
+                        } else {
+                            showFeedback('Pick a folder, file, or app', 'error');
+                        }
+                        return;
+                    }
+                    // Nothing highlighted — folders are optional, move on.
+                    newWorkspace.goToConfirm();
+                    return;
+                }
+                if (e.key === 'Backspace' && !query) {
+                    e.preventDefault();
+                    newWorkspace.backToName();
+                    return;
+                }
+                if (e.key === 'ArrowDown' && flatRows.length > 0) {
+                    e.preventDefault();
+                    setSelectedIndex(prev => (prev + 1) % flatRows.length);
+                    return;
+                }
+                if (e.key === 'ArrowUp' && flatRows.length > 0) {
+                    e.preventDefault();
+                    setSelectedIndex(prev => (prev <= 0 ? flatRows.length - 1 : prev - 1));
+                    return;
+                }
+                return;
+            }
+            // step === 'confirm'
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (!newWorkspace.creating) newWorkspace.confirmCreate();
+                return;
+            }
+            if (e.key === 'Backspace' && !query) {
+                e.preventDefault();
+                newWorkspace.backToFolders();
+                return;
+            }
+            return;
+        }
+
         if (commandMode === 'agent') {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -1683,8 +2104,24 @@ export function GlobalSpotlight({
                 // With a proposal on screen Enter is the confirm — the run is
                 // over and the only thing left to do is accept it.
                 if (pending) { applyProposal(pending); return; }
-                if (query.trim() && !aiCli.running) {
-                    runAgent(query.trim());
+                // A highlighted result attaches as context instead of opening
+                // — same idea as normal search's Enter, just repurposed:
+                // composing a request isn't the moment to launch something.
+                if (selectedIndex >= 0 && flatRows[selectedIndex]) {
+                    attachToAgentContext(flatRows[selectedIndex].item);
+                    return;
+                }
+                const trimmed = query.trim();
+                // "/name <title>" is a local shortcut, not a request for the
+                // CLI — renames instantly and never touches aiCli.run.
+                const nameMatch = /^\/name\s+(.+)$/i.exec(trimmed);
+                if (nameMatch) {
+                    runRenameWorkspace(nameMatch[1]);
+                    setQuery('');
+                    return;
+                }
+                if (trimmed && !aiCli.running) {
+                    runAgent(trimmed);
                     setQuery('');
                 }
                 return;
@@ -1702,7 +2139,53 @@ export function GlobalSpotlight({
                 exitAgentMode();
                 return;
             }
-            return; // no result navigation in agent mode
+            // Agent mode still renders the ordinary results list below the
+            // transcript (see the flatRows block further down — it's the one
+            // mode that keeps searching while a request is open), so ↑/↓
+            // needs to move the highlight through it same as hovering does
+            // (ResultItem's onHover already wires to setSelectedIndex).
+            // Deliberately local to flatRows rather than the shared
+            // selectVisualIndex/currentIndex machinery below: that machinery
+            // also drives the context/pins/workspace sections, none of which
+            // render in this mode.
+            if (e.key === 'ArrowDown' && flatRows.length > 0) {
+                e.preventDefault();
+                setSelectedIndex(prev => (prev + 1) % flatRows.length);
+                return;
+            }
+            if (e.key === 'ArrowUp' && flatRows.length > 0) {
+                e.preventDefault();
+                setSelectedIndex(prev => (prev <= 0 ? flatRows.length - 1 : prev - 1));
+                return;
+            }
+            // →/← mirrors the normal search's folder-tree expand/collapse
+            // (same tree used below the transcript) — same selectedIndex
+            // indexing as ↑/↓ above.
+            {
+                const treeRow = selectedIndex >= 0 ? flatRows[selectedIndex] : null;
+                if (e.key === 'ArrowRight' && treeRow?.isFolder) {
+                    e.preventDefault();
+                    if (!treeRow.isExpanded) {
+                        expandPath(treeRow.item); // collapsed → expand
+                    } else if (flatRows[selectedIndex + 1]?.depth === treeRow.depth + 1) {
+                        setSelectedIndex(selectedIndex + 1); // expanded → step into first child
+                    }
+                    return;
+                }
+                if (e.key === 'ArrowLeft' && treeRow) {
+                    e.preventDefault();
+                    if (treeRow.isFolder && treeRow.isExpanded) {
+                        collapsePath(treeRow.item.path); // expanded → collapse
+                    } else if (treeRow.depth > 0) {
+                        // step out to the parent row (nearest previous row at depth-1)
+                        for (let i = selectedIndex - 1; i >= 0; i--) {
+                            if (flatRows[i].depth === treeRow.depth - 1) { setSelectedIndex(i); break; }
+                        }
+                    }
+                    return;
+                }
+            }
+            return; // no other result navigation in agent mode
         }
 
         // Handle command modes first
@@ -2040,6 +2523,14 @@ export function GlobalSpotlight({
             return;
         }
 
+        // Picking one of several ambiguous-prefix workspace matches (see the
+        // debounce effect above) opens it in /edit-workspace directly.
+        if (item.type === 'workspace-edit') {
+            editWorkspace.enter(item.workspace);
+            setSelectedIndex(-1);
+            return;
+        }
+
         // The "no strong matches, ask the agent" fallback row: switch straight
         // into agent mode and send the original query as the request — no
         // panel close (agent mode's transcript view takes over instead, same
@@ -2048,6 +2539,35 @@ export function GlobalSpotlight({
             setCommandMode('agent');
             setQuery('');
             runAgent(item.query);
+            return;
+        }
+
+        // In /agent mode, clicking a result attaches it as context instead of
+        // opening it — same reasoning as the Enter handler above.
+        if (commandMode === 'agent') {
+            attachToAgentContext(item);
+            return;
+        }
+
+        // /new-workspace's folder step: clicking attaches too.
+        if (commandMode === 'new-workspace' && newWorkspace.step === 'folders') {
+            const mapped = resultToWorkspaceItem(item);
+            if (mapped?.kind === 'app') {
+                newWorkspace.addFolder(mapped);
+            } else {
+                showFeedback('Pick a folder, file, or app', 'error');
+            }
+            return;
+        }
+
+        // /edit-workspace: clicking a result adds it as an item too.
+        if (commandMode === 'edit-workspace') {
+            const mapped = resultToWorkspaceItem(item);
+            if (mapped) {
+                editWorkspace.addItem(mapped);
+            } else {
+                showFeedback("That can't be added to a workspace", 'error');
+            }
             return;
         }
 
@@ -2385,17 +2905,22 @@ export function GlobalSpotlight({
     // Handle Escape key to close (workspace picker first, then add mode, then
     // the spotlight). Add mode outranks closing: Escape should put the search
     // back to being a search, not dismiss it and leave the mode armed.
+    // Window-level, not the input's own onKeyDown, so this also catches Esc
+    // while focus is inside the Tiptap note editor (a separate element) —
+    // without the priority check here it would close the whole spotlight
+    // instead of just the note.
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (e.key === 'Escape') {
-                if (wsDropdownOpen) setWsDropdownOpen(false);
+                if (commandMode === 'edit-workspace' && editWorkspace.activeNoteId) editWorkspace.closeNote();
+                else if (wsDropdownOpen) setWsDropdownOpen(false);
                 else if (addTarget && onExitAddMode) onExitAddMode();
                 else if (!isEmbedded || panelOpen) handleClose();
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [handleClose, wsDropdownOpen, isEmbedded, panelOpen, addTarget, onExitAddMode]);
+    }, [handleClose, wsDropdownOpen, isEmbedded, panelOpen, addTarget, onExitAddMode, commandMode, editWorkspace]);
 
     // Embedded: '/' anywhere on the page focuses the search (like the old header search)
     useEffect(() => {
@@ -2446,6 +2971,9 @@ export function GlobalSpotlight({
         if (item.type === 'tool') return 'Tool';
         if (item.type === 'command') return item.category || 'Command';
         if (item.type === 'agent-suggest') return 'Agent';
+        if (item.type === 'workspace-edit') return 'Workspace';
+        if (item.type === 'todo') return item.done ? 'Done' : 'Todo';
+        if (item.type === 'note') return 'Note';
         return item.category || 'Link';
     };
 
@@ -2505,6 +3033,36 @@ export function GlobalSpotlight({
                             </button>
                         </span>
                     )}
+                    {commandMode === 'new-workspace' && (
+                        <span className="spotlight-add-badge spotlight-mode-badge">
+                            <FontAwesomeIcon icon={faFolder} />
+                            <span>New workspace</span>
+                            <button
+                                type="button"
+                                className="spotlight-add-badge-exit"
+                                onMouseDown={(e) => { e.preventDefault(); newWorkspace.exit(); }}
+                                title="Cancel (Esc)"
+                                aria-label="Cancel new workspace"
+                            >
+                                <FontAwesomeIcon icon={faTimes} />
+                            </button>
+                        </span>
+                    )}
+                    {commandMode === 'edit-workspace' && (
+                        <span className="spotlight-add-badge spotlight-mode-badge">
+                            <FontAwesomeIcon icon={faFolder} />
+                            <span>{editWorkspace.workspace?.name || 'Edit workspace'}</span>
+                            <button
+                                type="button"
+                                className="spotlight-add-badge-exit"
+                                onMouseDown={(e) => { e.preventDefault(); editWorkspace.exit(); }}
+                                title="Close (Esc)"
+                                aria-label="Close edit workspace"
+                            >
+                                <FontAwesomeIcon icon={faTimes} />
+                            </button>
+                        </span>
+                    )}
                     {(() => {
                         const { scope } = parseScopedQuery(query.trim());
                         return scope ? <span className="spotlight-scope-badge">{scope.label}</span> : null;
@@ -2514,9 +3072,17 @@ export function GlobalSpotlight({
                         className="spotlight-input"
                         placeholder={commandMode === 'agent'
                             ? (aiCli.turns.length ? 'Ask a follow-up…' : 'Describe how to reorganise your workspaces…')
-                            : addTarget
-                                ? `Search to add to ${addTarget.name}…`
-                                : (placeholder || (isEmbedded ? 'Search or type / for commands...' : 'Almighty Search...'))}
+                            : commandMode === 'new-workspace'
+                                ? (newWorkspace.step === 'name'
+                                    ? 'Name this workspace…'
+                                    : newWorkspace.step === 'folders'
+                                        ? 'Search for a folder to add (Enter to skip)…'
+                                        : 'Press Enter to create…')
+                                : commandMode === 'edit-workspace'
+                                    ? 'Search to add a link/folder, or /name, /todo, /notes…'
+                                    : addTarget
+                                        ? `Search to add to ${addTarget.name}…`
+                                        : (placeholder || (isEmbedded ? 'Search or type / for commands...' : 'Almighty Search...'))}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleKeyDown}
@@ -2663,6 +3229,27 @@ export function GlobalSpotlight({
 
                             <div className="spotlight-agent-header-spacer" />
 
+                            {/* Scaffolds (and, when the workspace holds several
+                                project folders, links) .cooldesk/ — replaces the
+                                separate cooldesk-plugin's /cd-init + /cd-link.
+                                Hidden entirely until a project folder is resolved,
+                                so an ordinary chat request isn't cluttered by a
+                                button that does nothing for it. */}
+                            {wsScaffoldPlan?.hub && (
+                                <button
+                                    type="button"
+                                    className="spotlight-agent-chip"
+                                    disabled={aiCli.running}
+                                    onMouseDown={(e) => { e.preventDefault(); runCreateWorkspace(query.trim()); setQuery(''); }}
+                                    title={`Scaffold .cooldesk/ for "${wsScaffoldPlan.hub.name}"${wsScaffoldPlan.members.length ? ` and link ${wsScaffoldPlan.members.length} sibling project(s)` : ''}`}
+                                >
+                                    <FontAwesomeIcon icon={faFolder} />
+                                    {wsScaffoldPlan.members.length
+                                        ? `Create + link ${wsScaffoldPlan.members.length + 1} projects`
+                                        : 'Create workspace'}
+                                </button>
+                            )}
+
                             {/* Clears the transcript without leaving the mode.
                                 Worth its own control: every prompt carries the
                                 last six turns, so asking something unrelated
@@ -2678,9 +3265,10 @@ export function GlobalSpotlight({
                                         aiCli.reset();
                                         setQuery('');
                                         setAgentHistoryOpen(false);
+                                        setAgentContext([]);
                                         inputRef.current?.focus();
                                     }}
-                                    title="New chat — the next question won't carry this conversation's context"
+                                    title="New chat — the next question won't carry this conversation's context or attachments"
                                 >
                                     New chat
                                 </button>
@@ -2768,10 +3356,43 @@ export function GlobalSpotlight({
                             )}
                         </div>
 
+                        {/* Attached context — picked from the results list below
+                            (click, or arrow to highlight + Enter) instead of
+                            opening. Sent alongside every request until removed. */}
+                        {agentContext.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '2px 4px 8px' }}>
+                                {agentContext.map(c => (
+                                    <span key={c.id} className="spotlight-agent-chip" title={c.path}>
+                                        <FontAwesomeIcon icon={c.kind === 'folder' ? faFolder : faFileLines} />
+                                        {c.name}
+                                        {c.status === 'loading' && ' …'}
+                                        {c.status === 'unreadable' && ' (unreadable)'}
+                                        <button
+                                            type="button"
+                                            className="spotlight-add-badge-exit"
+                                            onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                setAgentContext(prev => prev.filter(x => x.id !== c.id));
+                                            }}
+                                            title="Remove from context"
+                                            aria-label={`Remove ${c.name} from context`}
+                                        >
+                                            <FontAwesomeIcon icon={faTimes} />
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+
                         <div className="spotlight-ai-messages spotlight-agent-log" ref={agentLogRef}>
                             {aiCli.turns.length === 0 && (
                                 <div className="spotlight-ai-hint">
                                     Describe how to reorganise your workspaces, then press Enter.
+                                    {' '}Pick a file or folder below (click, or arrow to it and press Enter) to attach it as context.
+                                    {' '}Type <code>/name &lt;title&gt;</code> to rename this workspace instantly.
+                                    {wsScaffoldPlan?.hub && (
+                                        <> Or use the {wsScaffoldPlan.members.length ? 'Create + link' : 'Create workspace'} button above to scaffold a shared <code>.cooldesk/</code>.</>
+                                    )}
                                     {aiCli.available?.[aiCli.adapter.bin] === false && (
                                         <div className="spotlight-agent-warn">
                                             <code>{aiCli.adapter.bin}</code> isn’t on your PATH — install it or pick another above.
@@ -2896,6 +3517,316 @@ export function GlobalSpotlight({
                         </div>
                     </div>
                 )}
+
+                {/* /new-workspace — a guided form (name → folders → confirm)
+                    instead of a bang command with syntax to remember. Folder
+                    picking reuses the exact click/Enter-to-attach interaction
+                    /agent's context chips already use (see the flatRows block
+                    below, shared with every other mode). */}
+                {commandMode === 'new-workspace' && (
+                    <div className="spotlight-ai-mode spotlight-agent-mode">
+                        <div className="spotlight-ai-header">
+                            <FontAwesomeIcon icon={faFolder} style={{ color: '#4ADE80' }} />
+                            <span>
+                                {newWorkspace.step === 'name' && 'Step 1 of 3 — Name'}
+                                {newWorkspace.step === 'folders' && `Step 2 of 3 — Folders for "${newWorkspace.name}"`}
+                                {newWorkspace.step === 'confirm' && `Step 3 of 3 — Confirm "${newWorkspace.name}"`}
+                            </span>
+                        </div>
+
+                        {(newWorkspace.step === 'folders' || newWorkspace.step === 'confirm') && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '2px 4px 8px' }}>
+                                {newWorkspace.folders.length === 0 && (
+                                    <span className="spotlight-ai-hint" style={{ padding: 0 }}>No folders yet — optional.</span>
+                                )}
+                                {newWorkspace.folders.map(f => (
+                                    <span key={f.path} className="spotlight-agent-chip" title={f.path}>
+                                        <FontAwesomeIcon icon={f.appType === 'folder' ? faFolder : faFileLines} />
+                                        {f.name}
+                                        {newWorkspace.step === 'folders' && (
+                                            <button
+                                                type="button"
+                                                className="spotlight-add-badge-exit"
+                                                onMouseDown={(e) => { e.preventDefault(); newWorkspace.removeFolder(f.path); }}
+                                                title="Remove"
+                                                aria-label={`Remove ${f.name}`}
+                                            >
+                                                <FontAwesomeIcon icon={faTimes} />
+                                            </button>
+                                        )}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+
+                        <div className="spotlight-ai-messages">
+                            {newWorkspace.step === 'name' && (
+                                <div className="spotlight-ai-hint">
+                                    Type a name for the workspace, then press Enter.
+                                </div>
+                            )}
+
+                            {newWorkspace.step === 'folders' && (
+                                <div className="spotlight-ai-hint">
+                                    Search below and click (or arrow to it and press Enter) to add a folder.
+                                    Press Enter on an empty box when you're done — folders are optional.
+                                </div>
+                            )}
+
+                            {newWorkspace.step === 'confirm' && (
+                                <div className="spotlight-agent-proposal">
+                                    <div className="spotlight-agent-proposal-head">
+                                        {newWorkspace.folders.length === 0
+                                            ? 'A bare workspace, no linked folder.'
+                                            : `${newWorkspace.folders.length} folder${newWorkspace.folders.length === 1 ? '' : 's'} attached.`}
+                                    </div>
+                                    {newWorkspace.plan?.hub && (
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', cursor: 'pointer' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={newWorkspace.scaffoldChecked}
+                                                onChange={(e) => newWorkspace.setScaffoldChecked(e.target.checked)}
+                                            />
+                                            Also set up <code>.cooldesk/</code>
+                                            {newWorkspace.plan.members.length > 0 && ` and link ${newWorkspace.plan.members.length + 1} projects together`}
+                                        </label>
+                                    )}
+                                    <div className="spotlight-agent-confirm">
+                                        <button
+                                            type="button"
+                                            className="spotlight-agent-apply"
+                                            disabled={newWorkspace.creating}
+                                            onMouseDown={(e) => { e.preventDefault(); newWorkspace.confirmCreate(); }}
+                                        >
+                                            {newWorkspace.creating ? 'Creating…' : 'Create'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="spotlight-agent-discard"
+                                            onMouseDown={(e) => { e.preventDefault(); newWorkspace.backToFolders(); }}
+                                        >
+                                            ← Back
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* /edit-workspace — typing an existing workspace's own name
+                    opens it here: items as removable chips (search the main
+                    box to add more, same interaction as /new-workspace's
+                    folder step), notes and todos with their own small inputs
+                    (the main box stays dedicated to "search to add an item"). */}
+                {commandMode === 'edit-workspace' && editWorkspace.workspace && (() => {
+                    const itemsCount = (editWorkspace.workspace.urls?.length || 0) + (editWorkspace.workspace.apps?.length || 0);
+                    const todosCount = editWorkspace.todos.length;
+                    const items = editWorkspaceItems.slice(0, itemsCount);
+                    const activeNote = editWorkspace.activeNoteId
+                        ? editWorkspace.notes.find(n => n.id === editWorkspace.activeNoteId)
+                        : null;
+                    // Formatting commands run straight against the live Tiptap
+                    // instance via its own ref handle — TiptapEditor.jsx only
+                    // renders floating/bubble menus (on selection), no fixed
+                    // toolbar, so this is a small one of our own rather than
+                    // changing that shared component.
+                    const runNoteCommand = (fn) => {
+                        const editor = noteEditorRef.current?.getEditor();
+                        if (editor) fn(editor.chain().focus());
+                    };
+                    const toolbarButtons = [
+                        { icon: faBold, title: 'Bold', run: (c) => c.toggleBold().run() },
+                        { icon: faItalic, title: 'Italic', run: (c) => c.toggleItalic().run() },
+                        { icon: faStrikethrough, title: 'Strikethrough', run: (c) => c.toggleStrike().run() },
+                        { icon: faListUl, title: 'Bullet list', run: (c) => c.toggleBulletList().run() },
+                        { icon: faListOl, title: 'Numbered list', run: (c) => c.toggleOrderedList().run() },
+                        { icon: faQuoteRight, title: 'Quote', run: (c) => c.toggleBlockquote().run() },
+                        { icon: faCode, title: 'Code', run: (c) => c.toggleCode().run() },
+                    ];
+                    return (
+                    <div className="spotlight-ai-mode spotlight-agent-mode">
+                        {/* No header — the input row's chip already names the
+                            workspace; repeating it here was redundant. */}
+                        {activeNote ? (
+                            // Note editor — same Tiptap component WorkspaceContextPanel.jsx
+                            // uses, so this reads/writes the identical HTML shape.
+                            // "Command stays on top" (the search input above), the
+                            // note surfaces below it, replacing the list until closed.
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <input
+                                        placeholder="Untitled note"
+                                        value={activeNote.title || ''}
+                                        onChange={(e) => editWorkspace.updateNoteTitle(activeNote.id, e.target.value)}
+                                        style={{
+                                            flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none',
+                                            padding: '10px 4px 8px 12px', fontSize: 15, fontWeight: 600,
+                                            color: 'rgba(255, 255, 255, 0.92)', letterSpacing: '-0.01em',
+                                        }}
+                                    />
+                                    {/* Explicit close — Esc from inside the Tiptap
+                                        editor doesn't reliably reach the window-level
+                                        handler (ProseMirror stops it bubbling), so
+                                        going back can't depend on a keystroke alone. */}
+                                    <button
+                                        type="button"
+                                        className="spotlight-add-badge-exit"
+                                        style={{ marginRight: 10 }}
+                                        onMouseDown={(e) => { e.preventDefault(); editWorkspace.closeNote(); }}
+                                        title="Back to list (Esc)"
+                                        aria-label="Back to list"
+                                    >
+                                        <FontAwesomeIcon icon={faTimes} />
+                                    </button>
+                                </div>
+                                <div style={{ display: 'flex', gap: 2, padding: '0 8px 8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                                    {toolbarButtons.map(({ icon, title, run }) => (
+                                        <button
+                                            key={title}
+                                            type="button"
+                                            className="spotlight-agent-chip"
+                                            style={{ padding: '4px 8px' }}
+                                            title={title}
+                                            onMouseDown={(e) => { e.preventDefault(); runNoteCommand(run); }}
+                                        >
+                                            <FontAwesomeIcon icon={icon} />
+                                        </button>
+                                    ))}
+                                </div>
+                                {/* .spotlight-note-editor scopes a tighter override of
+                                    .ProseMirror's own padding (GlobalSpotlight.css) —
+                                    that default (1rem 2rem) is sized for the full-page
+                                    editor in WorkspaceContextPanel.jsx and, stacked on
+                                    top of this box's own padding, left a wide empty
+                                    margin around a short note here.
+                                    The click-to-focus handler matters because this
+                                    wrapper is taller than a short note's actual text —
+                                    clicking the empty space below it hit plain dead
+                                    space otherwise, and whatever had focus before (the
+                                    search input) silently kept it, which looked like
+                                    typing in the note went nowhere. */}
+                                <div
+                                    className="spotlight-note-editor"
+                                    style={{ minHeight: 90, maxHeight: 320, overflowY: 'auto', cursor: 'text' }}
+                                    onMouseDown={(e) => {
+                                        if (e.target.closest('.ProseMirror')) return; // let it place the cursor normally
+                                        e.preventDefault();
+                                        noteEditorRef.current?.focus();
+                                    }}
+                                >
+                                    <Suspense fallback={<div className="spotlight-ai-hint">Loading editor…</div>}>
+                                        <TiptapEditor
+                                            ref={noteEditorRef}
+                                            content={activeNote.text}
+                                            onChange={(html) => editWorkspace.updateNoteContent(activeNote.id, html)}
+                                            showFloatingMenu={false}
+                                            showBubbleMenu={false}
+                                        />
+                                    </Suspense>
+                                </div>
+                            </div>
+                        ) : (
+                        <div className="spotlight-ai-messages" style={{ display: 'flex', flexDirection: 'column' }}>
+                            {/* Items, todos and notes all render as ResultItem rows —
+                                the same component/styling the normal search results
+                                list uses — so this reads as one consistent list
+                                instead of a separate custom style per section.
+                                Items are always the first `itemsCount` entries of
+                                editWorkspaceItems, so index i here already is the
+                                combined ↑↓ index. */}
+                            {items.length === 0 && (
+                                <div className="spotlight-ai-hint">No links or apps yet — search above to add one.</div>
+                            )}
+                            {items.map((it, i) => {
+                                const resultItem = it.kind === 'url'
+                                    ? { id: `url:${it.url}`, type: 'bookmark', title: it.name, url: it.url }
+                                    : { id: `app:${it.path}`, type: it.appType === 'folder' ? 'folder' : (it.appType === 'file' ? 'file' : 'app'), title: it.name, path: it.path, icon: it.icon };
+                                return (
+                                    <ResultItem
+                                        key={resultItem.id}
+                                        item={resultItem}
+                                        index={i}
+                                        isSelected={!query.trim() && i === selectedIndex}
+                                        onSelect={() => openExistingWorkspaceItem(it)}
+                                        onHover={setSelectedIndex}
+                                        onRemove={() => (it.kind === 'url' ? editWorkspace.removeUrl(it.url) : editWorkspace.removeApp(it.path))}
+                                        formatUrl={formatUrl}
+                                        getBadgeLabel={getBadgeLabel}
+                                        getAppIcon={getAppIcon}
+                                    />
+                                );
+                            })}
+
+                            {/* Todos — the "Todo"/"Done" badge (see getBadgeLabel)
+                                already identifies these rows; Enter edits the text
+                                inline, Space toggles done. */}
+                            {editWorkspace.todos.map((t, tIdx) => {
+                                const combinedIdx = itemsCount + tIdx;
+                                const isEditing = editWorkspace.editingTodoId === t.id;
+                                // Same shell (icon box, padding, left accent) as
+                                // ResultItem in both states, so editing a todo
+                                // doesn't visually jump out of the list.
+                                return isEditing ? (
+                                    <div key={t.id} className="result-item result-todo" style={{ cursor: 'text' }}>
+                                        <div className="result-icon"><FontAwesomeIcon icon={faTasks} /></div>
+                                        <input
+                                            autoFocus
+                                            style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'inherit', font: 'inherit' }}
+                                            defaultValue={t.text}
+                                            onBlur={(e) => editWorkspace.updateTodoText(t.id, e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') { e.preventDefault(); editWorkspace.updateTodoText(t.id, e.target.value); }
+                                                if (e.key === 'Escape') { e.preventDefault(); editWorkspace.cancelEditTodo(); }
+                                            }}
+                                        />
+                                    </div>
+                                ) : (
+                                    <ResultItem
+                                        key={t.id}
+                                        item={{
+                                            id: `todo:${t.id}`, type: 'todo', title: t.text, done: t.done,
+                                            description: t.done ? 'Done — click to reopen' : 'Click to mark done',
+                                        }}
+                                        index={combinedIdx}
+                                        isSelected={!query.trim() && combinedIdx === selectedIndex}
+                                        onSelect={() => editWorkspace.toggleTodo(t.id)}
+                                        onHover={setSelectedIndex}
+                                        onRemove={() => editWorkspace.removeTodo(t.id)}
+                                        formatUrl={formatUrl}
+                                        getBadgeLabel={getBadgeLabel}
+                                        getAppIcon={getAppIcon}
+                                    />
+                                );
+                            })}
+
+                            {/* Notes — the "Note" badge already identifies these
+                                rows; Enter opens the Tiptap editor above. */}
+                            {editWorkspace.notes.map((n, nIdx) => {
+                                const combinedIdx = itemsCount + todosCount + nIdx;
+                                return (
+                                    <ResultItem
+                                        key={n.id}
+                                        item={{
+                                            id: `note:${n.id}`, type: 'note',
+                                            title: n.title || editWorkspace.stripHtml(n.text).slice(0, 60) || 'Untitled',
+                                        }}
+                                        index={combinedIdx}
+                                        isSelected={!query.trim() && combinedIdx === selectedIndex}
+                                        onSelect={() => editWorkspace.openNote(n.id)}
+                                        onHover={setSelectedIndex}
+                                        onRemove={() => editWorkspace.removeNote(n.id)}
+                                        formatUrl={formatUrl}
+                                        getBadgeLabel={getBadgeLabel}
+                                        getAppIcon={getAppIcon}
+                                    />
+                                );
+                            })}
+                        </div>
+                        )}
+                    </div>
+                    );
+                })()}
 
                 {/* AI Chat Mode */}
                 {commandMode === 'ai' && (
@@ -3222,8 +4153,10 @@ export function GlobalSpotlight({
                 {/* Results — expandable folder tree (Explorer-style hierarchy).
                     Rendered in agent mode too, so asking the agent something
                     doesn't cost you the ordinary search: Enter goes to the
-                    agent, clicking a row opens it as usual. */}
-                {flatRows.length > 0 && (!commandMode || commandMode === 'agent') && (
+                    agent, clicking a row opens it as usual. Same for
+                    /new-workspace's folder-picker step and /edit-workspace. */}
+                {flatRows.length > 0 && (!commandMode || commandMode === 'agent' || commandMode === 'edit-workspace' ||
+                    (commandMode === 'new-workspace' && newWorkspace.step === 'folders')) && (
                     <div className={`spotlight-results-row${previewItem ? ' has-preview' : ''}`}>
                         <div className="spotlight-results">
                             {flatRows.map((row, index) => (
@@ -3273,6 +4206,29 @@ export function GlobalSpotlight({
                         <div className="shortcut-hint">
                             <span className="shortcut-key">Esc</span> {aiCli.running ? 'Stop' : 'Close'}
                         </div>
+                    </div>
+                )}
+                {sections.footer && commandMode === 'new-workspace' && (
+                    <div className="spotlight-footer">
+                        <div className="shortcut-hint">
+                            <span className="shortcut-key">↵</span> {
+                                newWorkspace.step === 'name' ? 'Next'
+                                    : newWorkspace.step === 'folders' ? 'Add / Skip'
+                                        : 'Create'
+                            }
+                        </div>
+                        {newWorkspace.step !== 'name' && (
+                            <div className="shortcut-hint"><span className="shortcut-key">⌫</span> Back</div>
+                        )}
+                        <div className="shortcut-hint"><span className="shortcut-key">Esc</span> Cancel</div>
+                    </div>
+                )}
+                {sections.footer && commandMode === 'edit-workspace' && (
+                    <div className="spotlight-footer">
+                        <div className="shortcut-hint"><span className="shortcut-key">↑↓</span> Browse</div>
+                        <div className="shortcut-hint"><span className="shortcut-key">↵</span> Open / Add</div>
+                        <div className="shortcut-hint"><span className="shortcut-key">/name /todo /notes</span> Add</div>
+                        <div className="shortcut-hint"><span className="shortcut-key">Esc</span> Close</div>
                     </div>
                 )}
                 {sections.footer && !commandMode && (
@@ -3508,6 +4464,8 @@ function getIcon(type, name) {
         case 'tool': return faTools;
         case 'command': return faTerminal;
         case 'agent-suggest': return faRobot;
+        case 'workspace-edit': return faFolder;
+        case 'todo': return faTasks;
         default: return faLink;
     }
 }
@@ -3612,7 +4570,7 @@ const ContextItem = memo(function ContextItem({ item, index, isSelected, onSelec
 });
 
 // Memoized Result Item to prevent unnecessary re-renders
-const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect, onHover, onTogglePin, formatUrl, getBadgeLabel, getAppIcon, depth = 0, isFolderRow = false, isExpanded = false, onToggleExpand }) {
+const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect, onHover, onTogglePin, onRemove, formatUrl, getBadgeLabel, getAppIcon, depth = 0, isFolderRow = false, isExpanded = false, onToggleExpand }) {
     const handleClick = useCallback(() => onSelect(item), [item, onSelect]);
     // Mark hover-driven selection so the scroll effect can skip it: while wheel
     // scrolling, rows slide under the stationary cursor and fire mouseenter —
@@ -3636,6 +4594,7 @@ const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect,
         onHover(index);
     }, [index, onHover]);
     const handlePinClick = useCallback((e) => onTogglePin(item, e), [item, onTogglePin]);
+    const handleRemoveClick = useCallback((e) => { e.stopPropagation(); onRemove(item, e); }, [item, onRemove]);
     const handleToggle = useCallback((e) => { e.stopPropagation(); onToggleExpand?.(item); }, [item, onToggleExpand]);
 
     // Track icon load errors to show fallback
@@ -3662,7 +4621,7 @@ const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect,
     return (
         <div
             ref={rowRef}
-            className={`result-item ${isSelected ? 'selected' : ''} result-${['tab', 'bookmark', 'history', 'workspace', 'note', 'app', 'folder', 'file'].includes(item.type) ? item.type : 'link'}`}
+            className={`result-item ${isSelected ? 'selected' : ''} result-${['tab', 'bookmark', 'history', 'workspace', 'note', 'app', 'folder', 'file', 'todo'].includes(item.type) ? item.type : 'link'}`}
             title={(item.type === 'folder' || item.type === 'file') ? item.path : undefined}
             onClick={handleClick}
             onMouseEnter={handleMouseEnter}
@@ -3724,14 +4683,20 @@ const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect,
                 </span>
             )}
 
-            <span
-                className="pin-btn"
-                title="Pin this"
-                onClick={handlePinClick}
-                style={(item.url || item.type === 'app') ? undefined : { visibility: 'hidden', pointerEvents: 'none' }}
-            >
-                <FontAwesomeIcon icon={faThumbtack} />
-            </span>
+            {onRemove ? (
+                <span className="pin-btn" title="Remove" onClick={handleRemoveClick}>
+                    <FontAwesomeIcon icon={faTimes} />
+                </span>
+            ) : (
+                <span
+                    className="pin-btn"
+                    title="Pin this"
+                    onClick={handlePinClick}
+                    style={(item.url || item.type === 'app') ? undefined : { visibility: 'hidden', pointerEvents: 'none' }}
+                >
+                    <FontAwesomeIcon icon={faThumbtack} />
+                </span>
+            )}
         </div>
     );
 });

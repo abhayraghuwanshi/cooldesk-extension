@@ -801,6 +801,11 @@ body.spotlight-window {
 .result-item.result-note { border-left-color: rgba(16, 185, 129, 0.5); }
 .result-item.result-note.selected { border-left-color: #10b981; }
 
+.result-item.result-todo { border-left-color: rgba(52, 211, 153, 0.5); }
+.result-item.result-todo.selected { border-left-color: #34d399; }
+.result-item.result-todo .result-icon { color: #34d399; }
+.result-item.result-todo .result-badge { background: rgba(52, 211, 153, 0.15); color: #34d399; }
+
 .result-item.result-folder { border-left-color: rgba(250, 204, 21, 0.5); }
 .result-item.result-folder.selected { border-left-color: #facc15; }
 .result-item.result-folder .result-icon { color: #facc15; background: rgba(250, 204, 21, 0.12); }
@@ -2290,4 +2295,38 @@ body.spotlight-window {
 
 .spotlight-agent-adapters {
   display: none;
+}
+
+/* /edit-workspace's note editor (GlobalSpotlight.jsx) reuses the shared
+   TiptapEditor component, whose defaults are sized for the full-page editor
+   in WorkspaceContextPanel.jsx: wide padding, 16px/1.8 line-height text, and
+   .tiptap-editor-container/.tiptap-content each own their own height/scroll
+   (height: 100%, flex: 1, overflow-y: auto) — which only resolves against a
+   parent that itself has a real height, not the max-height this compact
+   wrapper uses. Against an auto-height parent that 100%/flex:1 collapsed to
+   the content's own size instead, so .tiptap-content's overflow never
+   actually engaged and long notes just grew past the box instead of
+   scrolling inside it. Scoped override — TiptapEditor.css itself stays
+   untouched so the main app's editor is unaffected — lets the inner
+   elements size to content naturally and makes .spotlight-note-editor
+   (maxHeight + overflowY: auto, set inline in GlobalSpotlight.jsx) the one
+   thing that actually clips/scrolls. */
+.spotlight-note-editor .tiptap-editor-container {
+  height: auto;
+  /* TiptapEditor.css hardcodes 'Inter' first; use the app's own font/size
+     variables instead (same --font-family-base convention as
+     cooldesk.css, WidgetBoard.css, etc.), so the note matches the rest of
+     the app's theme rather than a specific web font. */
+  font-family: var(--font-family-base, -apple-system, system-ui, sans-serif);
+}
+.spotlight-note-editor .tiptap-content {
+  flex: none;
+  overflow-y: visible;
+  padding: 0;
+}
+.spotlight-note-editor .ProseMirror {
+  padding: 4px 12px;
+  min-height: 60px;
+  font-size: var(--font-base, 13px);
+  line-height: 1;
 }

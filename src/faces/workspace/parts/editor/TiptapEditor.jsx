@@ -32,7 +32,7 @@ import StarterKit from '@tiptap/starter-kit';
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import './TiptapEditor.css';
 
-const TiptapEditor = forwardRef(({ content, onChange, isEditable = true }, ref) => {
+const TiptapEditor = forwardRef(({ content, onChange, isEditable = true, showFloatingMenu = true, showBubbleMenu = true }, ref) => {
     // Debounce timer ref for onChange
     const debounceRef = useRef(null);
     // Ref to access the editor instance from inside the paste handler closure
@@ -175,8 +175,11 @@ const TiptapEditor = forwardRef(({ content, onChange, isEditable = true }, ref) 
 
     return (
         <div className="tiptap-editor-container">
-            {/* Floating Menu - appears on empty lines */}
-            {isEditable && (
+            {/* Floating Menu - appears on empty lines. Opt out (spotlight's
+                compact note editor already has its own persistent toolbar,
+                and this one — tippy-positioned, so not reliably reachable by
+                a scoped CSS override — would just be a redundant second one). */}
+            {isEditable && showFloatingMenu && (
                 <FloatingMenu
                     editor={editor}
                     tippyOptions={{
@@ -256,8 +259,11 @@ const TiptapEditor = forwardRef(({ content, onChange, isEditable = true }, ref) 
                 </FloatingMenu>
             )}
 
-            {/* Bubble Menu - appears on text selection */}
-            {isEditable && (
+            {/* Bubble Menu - appears on text selection. Same opt-out as
+                showFloatingMenu — spotlight's compact editor has its own
+                persistent toolbar, so a second one popping up on selection
+                would just be redundant there. */}
+            {isEditable && showBubbleMenu && (
                 <BubbleMenu
                     editor={editor}
                     tippyOptions={{
@@ -325,7 +331,7 @@ const TiptapEditor = forwardRef(({ content, onChange, isEditable = true }, ref) 
             )}
 
             {/* Table Bubble Menu - appears when inside a table */}
-            {isEditable && (
+            {isEditable && showBubbleMenu && (
                 <BubbleMenu
                     editor={editor}
                     pluginKey="tableBubbleMenu"

@@ -125,8 +125,10 @@ export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavi
             const filter = q.slice(1).toLowerCase();
             const entries = [
                 // Spotlight-owned modes surfaced for discoverability (insert-only)
+                { command: '/new-workspace', title: 'New Workspace', description: 'Guided setup: name, pick folders, optionally scaffold .cooldesk/', category: 'Workspace', insert: '/new-workspace ' },
                 { command: '/ai', title: 'Ask AI', description: 'Chat with the local LLM', category: 'AI', insert: '/ai ' },
                 { command: '/model', title: 'Select Model', description: 'Choose the AI model to use', category: 'AI', insert: '/model' },
+                { command: '/agent', title: 'Agent', description: 'Chat with Claude Code — search/add links, scaffold a shared .cooldesk/ workspace, /name to rename', category: 'AI', insert: '/agent ' },
                 { command: '/u', title: 'Search URLs', description: 'Scope search to tabs, history, bookmarks', category: 'Scope', insert: '/u ' },
                 { command: '/a', title: 'Search Apps', description: 'Scope search to applications', category: 'Scope', insert: '/a ' },
                 { command: '/f', title: 'Search Files', description: 'Scope search to files and folders', category: 'Scope', insert: '/f ' },

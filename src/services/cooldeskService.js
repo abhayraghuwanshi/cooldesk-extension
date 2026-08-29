@@ -113,6 +113,36 @@ export async function linkCooldeskProject(hubPath, memberPath, opts = {}) {
 }
 
 /**
+ * Announce that a project's `.cooldesk/` folder was just created or changed,
+ * so a running app picks it up immediately instead of waiting for a component
+ * to remount. This is the same endpoint the plugin's hooks used to POST after
+ * every write — calling it directly from `/create-workspace` is what makes a
+ * freshly scaffolded project show up (and, if no workspace pointed at that
+ * folder yet, get one auto-created — see `useCooldeskAutoWorkspace`) without
+ * installing the plugin at all.
+ *
+ * @param {string} projectPath project root that owns the `.cooldesk/` folder
+ * @returns {Promise<{ ok: boolean, path?: string, error?: string }>}
+ */
+export async function announceCooldesk(projectPath) {
+    if (!projectPath) return { ok: false, error: 'Missing project path' };
+    try {
+        const res = await fetch(`${SIDECAR_URL}/cooldesk/announce`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: projectPath }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok || !body?.ok) {
+            return { ok: false, error: body?.error || `Request failed (${res.status})` };
+        }
+        return { ok: true, path: body.path };
+    } catch (err) {
+        return { ok: false, error: err?.message || String(err) };
+    }
+}
+
+/**
  * Scan the usual project folders for committed `.cooldesk/` workspaces.
  *
  * `fetchCooldesk` can only read a project whose path you already know, and the

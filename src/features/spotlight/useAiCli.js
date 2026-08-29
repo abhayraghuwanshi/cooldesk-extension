@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { allAdapters, buildPrompt, buildSpec, extractReply, parseActions } from './aiAdapters';
+import { buildScaffoldPrompt, buildScaffoldSpec } from './workspaceScaffold';
 import { validateActions } from '../../services/workspaceActions';
 
 const isTauri = () =>
@@ -92,15 +93,26 @@ export function useAiCli() {
     setTurns(prev => prev.map(t => (t.id === id ? { ...t, ...patch } : t)));
   }, []);
 
-  const run = useCallback(async (request, workspaces, cwd) => {
-    if (!request?.trim() || running) return;
+  // Returns a Promise resolving to `{ id, error, reply, proposal }` once the
+  // run finishes — used by the "Create workspace" orchestration to await one
+  // folder's scaffold before starting the next (they can depend on each
+  // other: a member links against the hub, which must exist on disk first).
+  // Existing fire-and-forget callers (plain /agent chat) just don't await it.
+  const run = useCallback((request, workspaces, cwd, opts = {}) => {
+    if (!request?.trim() || running) return Promise.resolve({ id: null, error: 'A run is already in progress.' });
+    // 'scaffold' is the /agent panel's "Create workspace" action: a one-shot
+    // Claude Code run with Write/Edit allowed against a real project folder,
+    // entirely separate from the sandboxed workspace-record chat below (see
+    // workspaceScaffold.js).
+    const scaffold = opts.mode === 'scaffold';
 
     const id = `run-${Date.now()}`;
     const turn = { id, request: request.trim(), lines: [], reply: '', proposal: null, error: null, running: true };
 
     if (!isTauri()) {
-      setTurns(prev => [...prev, { ...turn, running: false, error: 'The AI CLI only runs in the desktop app.' }]);
-      return;
+      const error = 'The AI CLI only runs in the desktop app.';
+      setTurns(prev => [...prev, { ...turn, running: false, error }]);
+      return Promise.resolve({ id, error });
     }
 
     // Recorded up-front, keyed by the run id, so the reply can be filled in
@@ -118,68 +130,82 @@ export function useAiCli() {
     setTurns(prev => [...prev, turn]);
     setRunning(true);
 
-    try {
-      const [{ invoke }, { listen }] = await Promise.all([
-        import('@tauri-apps/api/core'),
-        import('@tauri-apps/api/event'),
-      ]);
+    return new Promise((resolve) => {
+      (async () => {
+        try {
+          const [{ invoke }, { listen }] = await Promise.all([
+            import('@tauri-apps/api/core'),
+            import('@tauri-apps/api/event'),
+          ]);
 
-      const onOutput = await listen('ai-cli-output', (e) => {
-        const p = e.payload;
-        if (!p || p.id !== activeRef.current) return;
-        if (p.stream === 'stdout') bufferRef.current += p.line + '\n';
-        setTurns(prev => prev.map(t =>
-          t.id === p.id ? { ...t, lines: [...t.lines, { stream: p.stream, text: p.line }] } : t
-        ));
-      });
+          const onOutput = await listen('ai-cli-output', (e) => {
+            const p = e.payload;
+            if (!p || p.id !== activeRef.current) return;
+            if (p.stream === 'stdout') bufferRef.current += p.line + '\n';
+            setTurns(prev => prev.map(t =>
+              t.id === p.id ? { ...t, lines: [...t.lines, { stream: p.stream, text: p.line }] } : t
+            ));
+          });
 
-      const onDone = await listen('ai-cli-done', (e) => {
-        const p = e.payload;
-        if (!p || p.id !== activeRef.current) return;
+          const onDone = await listen('ai-cli-done', (e) => {
+            const p = e.payload;
+            if (!p || p.id !== activeRef.current) return;
 
-        setRunning(false);
-        activeRef.current = null;
-        teardown();
+            setRunning(false);
+            activeRef.current = null;
+            teardown();
 
-        if (p.error) { patchTurn(p.id, { running: false, error: p.error }); return; }
-        if (p.code !== 0 && p.code !== null) {
-          patchTurn(p.id, { running: false, error: `${adapter.label} exited with code ${p.code}` });
-          return;
+            if (p.error) {
+              patchTurn(p.id, { running: false, error: p.error });
+              resolve({ id: p.id, error: p.error });
+              return;
+            }
+            if (p.code !== 0 && p.code !== null) {
+              const error = `${adapter.label} exited with code ${p.code}`;
+              patchTurn(p.id, { running: false, error });
+              resolve({ id: p.id, error });
+              return;
+            }
+
+            // No action list is the *normal* case now — most messages are plain
+            // conversation. Only the prose is required; a proposal is a bonus.
+            const raw = bufferRef.current;
+            const parsed = parseActions(raw);
+            const reply = extractReply(raw);
+            const proposal = parsed ? { ...validateActions(parsed), raw } : null;
+            const error = (!reply && !parsed) ? 'The agent returned nothing — see the output below.' : null;
+            patchTurn(p.id, { running: false, reply, proposal, error });
+
+            // Keep the answer alongside the question. Only the prose is stored:
+            // raw stdout can be thousands of lines, and a *proposal* is
+            // deliberately not persisted because it was computed against the
+            // workspaces as they were — re-applying it later could act on state
+            // that has since changed.
+            setHistory(prev => persistHistory(
+              prev.map(h => (h.id === p.id ? { ...h, reply } : h))
+            ));
+
+            resolve({ id: p.id, error, reply, proposal });
+          });
+
+          unlistenRef.current = [onOutput, onDone];
+
+          const prompt = scaffold
+            ? buildScaffoldPrompt(request.trim(), opts.scaffoldContext)
+            : buildPrompt(workspaces, request.trim(), priorTurns, opts.attachments);
+          const spec = scaffold ? buildScaffoldSpec(prompt, cwd) : buildSpec(adapter, prompt, cwd);
+          await invoke('ai_cli_run', { id, spec });
+        } catch (e) {
+          console.error('[AiCli] run failed:', e);
+          const error = String(e?.message || e);
+          patchTurn(id, { running: false, error });
+          setRunning(false);
+          activeRef.current = null;
+          teardown();
+          resolve({ id, error });
         }
-
-        // No action list is the *normal* case now — most messages are plain
-        // conversation. Only the prose is required; a proposal is a bonus.
-        const raw = bufferRef.current;
-        const parsed = parseActions(raw);
-        const reply = extractReply(raw);
-        patchTurn(p.id, {
-          running: false,
-          reply,
-          proposal: parsed ? { ...validateActions(parsed), raw } : null,
-          error: (!reply && !parsed) ? 'The agent returned nothing — see the output below.' : null,
-        });
-
-        // Keep the answer alongside the question. Only the prose is stored:
-        // raw stdout can be thousands of lines, and a *proposal* is
-        // deliberately not persisted because it was computed against the
-        // workspaces as they were — re-applying it later could act on state
-        // that has since changed.
-        setHistory(prev => persistHistory(
-          prev.map(h => (h.id === p.id ? { ...h, reply } : h))
-        ));
-      });
-
-      unlistenRef.current = [onOutput, onDone];
-
-      const prompt = buildPrompt(workspaces, request.trim(), priorTurns);
-      await invoke('ai_cli_run', { id, spec: buildSpec(adapter, prompt, cwd) });
-    } catch (e) {
-      console.error('[AiCli] run failed:', e);
-      patchTurn(id, { running: false, error: String(e?.message || e) });
-      setRunning(false);
-      activeRef.current = null;
-      teardown();
-    }
+      })();
+    });
   }, [adapter, running, teardown, patchTurn]);
 
   const cancel = useCallback(async () => {

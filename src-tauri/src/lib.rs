@@ -292,13 +292,14 @@ fn agent_workspace_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, Str
 /// Mark a directory as trusted in Claude Code's own `~/.claude.json`, so a CLI
 /// run there doesn't stop to ask the user to accept a trust dialog.
 ///
-/// Only ever called with `agent_workspace_dir()`'s own path — a directory this
-/// app created and controls, never a user-chosen project folder — because
-/// pre-trusting arbitrary code the user didn't knowingly vouch for would defeat
-/// the point of the prompt. `serde_json`'s `preserve_order` feature is required
-/// here: without it, round-tripping through `Value` would alphabetically
-/// reorder every key in the user's global CLI config as a side effect of
-/// flipping one flag.
+/// Called with `agent_workspace_dir()`'s own path (a directory this app
+/// created and controls) and, via `trust_project_dir` below, with a project
+/// folder the user explicitly linked into one of their own workspaces — never
+/// an arbitrary path we merely discovered, since pre-trusting code the user
+/// didn't knowingly vouch for would defeat the point of the prompt.
+/// `serde_json`'s `preserve_order` feature is required here: without it,
+/// round-tripping through `Value` would alphabetically reorder every key in
+/// the user's global CLI config as a side effect of flipping one flag.
 fn trust_claude_workspace(path: &std::path::Path) -> Result<(), String> {
     let Some(home) = dirs::home_dir() else {
         return Ok(());
@@ -345,6 +346,49 @@ fn get_agent_workspace_dir(app: tauri::AppHandle) -> Result<String, String> {
         log::warn!("[AgentWorkspace] Failed to pre-trust {}: {}", dir.display(), e);
     }
     Ok(dir.to_string_lossy().to_string())
+}
+
+/// Pre-trust a project folder before the /agent panel's "Create workspace"
+/// action runs Claude Code there with `Write`/`Edit` allowed. Unlike
+/// `get_agent_workspace_dir`'s fixed, app-owned directory, this path is one
+/// the user chose themselves — it came from a folder they already added to
+/// one of their own workspaces — so trusting it on their behalf isn't
+/// vouching for code we found on disk, it's honouring a folder they already
+/// pointed the app at. Best-effort: on failure the run still proceeds and
+/// simply hits Claude Code's normal trust prompt.
+#[tauri::command]
+fn trust_project_dir(path: String) -> Result<(), String> {
+    if let Err(e) = trust_claude_workspace(std::path::Path::new(&path)) {
+        log::warn!("[Workspace] Failed to pre-trust {}: {}", path, e);
+    }
+    Ok(())
+}
+
+/// Which of a workspace's folder apps look like an actual code project, as
+/// opposed to a plain reference folder — decided *before* any Claude Code run
+/// so the caller knows how many scaffold runs to make and whether there's
+/// anything to link together (see `link_project` in sidecar/cooldesk.rs).
+/// Deliberately cheap and deterministic: existence checks only, no shelling
+/// out and no LLM judgement call.
+#[tauri::command]
+fn classify_project_folders(paths: Vec<String>) -> Vec<bool> {
+    const MARKERS: &[&str] = &[
+        ".git",
+        "package.json",
+        "Cargo.toml",
+        "pyproject.toml",
+        "go.mod",
+        "pom.xml",
+        "composer.json",
+        "Gemfile",
+    ];
+    paths
+        .iter()
+        .map(|p| {
+            let root = std::path::Path::new(p);
+            MARKERS.iter().any(|m| root.join(m).exists())
+        })
+        .collect()
 }
 
 // ── Autostart args ───────────────────────────────────────────────────────────
@@ -2346,6 +2390,22 @@ fn is_pruned_dir(name_lower: &str) -> bool {
     )
 }
 
+/// True if any path *component* (not just a substring of the full path) is a
+/// noisy build/cache directory — used to filter `mdfind`'s output, which
+/// (unlike the Windows/Linux recursive walk below) has no chance to prune
+/// before descending into `target/`, `node_modules/`, etc. A project like
+/// `cooldesk-extension` with a `src-tauri/target/debug/` full of object files
+/// named `cooldesk-*.o` will otherwise bury an unrelated sibling folder that
+/// happens to share a substring (querying "cool" for a folder named
+/// "cool-verse" returns hundreds of `cooldesk-*` build artifacts first).
+#[cfg(target_os = "macos")]
+fn path_has_pruned_component(path: &str) -> bool {
+    std::path::Path::new(path).components().any(|c| match c {
+        std::path::Component::Normal(os) => is_pruned_dir(&os.to_string_lossy().to_lowercase()),
+        _ => false,
+    })
+}
+
 /// Token-based name match: every query word must appear in the name. This makes
 /// separators interchangeable — "rejected project" matches "rejected-project",
 /// "rejected_project", "Rejected Project", etc.
@@ -2455,7 +2515,18 @@ async fn search_files(app: tauri::AppHandle, query: String) -> Result<Vec<Search
 
         let output = cmd.output().map_err(|e| e.to_string())?;
         let output_str = String::from_utf8_lossy(&output.stdout);
-        for path in output_str.lines().filter(|s| !s.is_empty()).take(15) {
+        // `mdfind`'s own ordering isn't relevance-ranked — a project folder
+        // whose name is a substring of a sibling's (e.g. "cool-verse" next to
+        // "cooldesk-extension") can easily lose to hundreds of that sibling's
+        // build-artifact filenames matching the same query. So: prune noisy
+        // directories first, keep a generous number of candidates (not the
+        // final 15) so a real match a few hundred lines down still survives,
+        // and only truncate after directories are sorted ahead of files.
+        for path in output_str
+            .lines()
+            .filter(|s| !s.is_empty() && !path_has_pruned_component(s))
+            .take(300)
+        {
             let mut date_str = String::new();
             let mut is_dir = false;
             if let Ok(metadata) = std::fs::metadata(path) {
@@ -2469,6 +2540,9 @@ async fn search_files(app: tauri::AppHandle, query: String) -> Result<Vec<Search
                 final_results.push(SearchFileResult { path: path.to_string(), date: date_str, is_dir, size: 0, hidden: false });
             }
         }
+        // Stable sort: directories first (usually what a project-name query is
+        // after), preserving mdfind's relative order within each group.
+        final_results.sort_by_key(|r| !r.is_dir);
         final_results.truncate(15);
         return Ok(final_results);
     }
@@ -2968,6 +3042,8 @@ pub fn run() {
         read_backup,
         delete_backup,
         get_agent_workspace_dir,
+        trust_project_dir,
+        classify_project_folders,
         folder_index::folder_index_list,
         folder_index::folder_index_add,
         folder_index::folder_index_remove,
