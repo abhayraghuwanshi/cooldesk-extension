@@ -1,4 +1,4 @@
-import { faClock, faCode, faDesktop, faFolderOpen, faSync, faTasks, faToggleOff, faToggleOn, faWifi } from '@fortawesome/free-solid-svg-icons';
+import { faClock, faCode, faDesktop, faFolderOpen, faSync, faTasks } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { recordFeedbackEvent } from '../../services/feedbackService.js';
@@ -12,10 +12,14 @@ import { enrichRunningAppsWithIcons, getGroupDomainFromUrl } from '../../utils/h
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
 import { AppCard, FolderCard, TabCard, TabGroupCard, TaskGroupCard } from './parts/TabCard';
 import { DevServersPanel } from './parts/DevServersPanel';
+import { SectionHeader } from './parts/SectionHeader';
+import { AutoGroupToggle } from './parts/AutoGroupToggle';
+import { EmptyTabsState } from './parts/EmptyTabsState';
 import { FileManager } from '../../features/file-manager/FileManager';
 import { WidgetBoard } from '../../features/widgets/WidgetBoard';
 import { LayoutSwitchButton } from '../../features/dock/LayoutSwitchButton';
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
+import { usePendingRemoval } from '../../shared/hooks/usePendingRemoval.js';
 
 // The Tabs page gets its own widget strip (independent of the overview board).
 const TABS_WIDGET_DEFAULT = [
@@ -200,30 +204,17 @@ export function TabManagement() {
   // a tabs-updated/tabs-synced event (or a plain refreshTabs poll) can land
   // before the browser has actually closed the tab — without this, that
   // stale external list would overwrite the optimistic removal below and put
-  // the tab right back the instant it's dismissed. Pruned automatically once
-  // the tab's key is no longer present in an incoming list.
-  const pendingClosedTabsRef = useRef(new Set());
+  // the tab right back the instant it's dismissed. See usePendingRemoval.
   const tabKey = useCallback((t) => `${t.browser || 'other'}-${t.id}`, []);
-  const filterPendingClosed = useCallback((list) => {
-    const pending = pendingClosedTabsRef.current;
-    if (!pending.size) return list;
-    const presentKeys = new Set(list.map(tabKey));
-    for (const k of [...pending]) if (!presentKeys.has(k)) pending.delete(k);
-    return list.filter(t => !pending.has(tabKey(t)));
-  }, [tabKey]);
+  const closedTabs = usePendingRemoval(tabKey);
+  const filterPendingClosed = closedTabs.filter;
 
   // Same idea for running apps killed from the Active Apps section:
   // runningAppsService.subscribe pushes a fresh full list on its own cadence,
   // which would otherwise undo handleKillApp's optimistic removal if it fires
   // before the OS has actually reaped the process.
-  const pendingKilledAppsRef = useRef(new Set());
-  const filterPendingKilledApps = useCallback((list) => {
-    const pending = pendingKilledAppsRef.current;
-    if (!pending.size) return list;
-    const presentPids = new Set(list.map(a => a.pid).filter(Boolean));
-    for (const pid of [...pending]) if (!presentPids.has(pid)) pending.delete(pid);
-    return list.filter(a => !pending.has(a.pid));
-  }, []);
+  const killedApps = usePendingRemoval(useCallback((a) => a.pid, []));
+  const filterPendingKilledApps = killedApps.filter;
 
   // Fetch browser tabs
   const refreshTabs = useCallback(async () => {
@@ -604,8 +595,8 @@ export function TabManagement() {
       };
 
       // Tombstone + optimistically drop the tab from the list for instant
-      // feedback — see pendingClosedTabsRef above.
-      pendingClosedTabsRef.current.add(tabKey(tab));
+      // feedback — see closedTabs above.
+      closedTabs.tombstone(tab);
       setTabs(prev => prev.filter(t => !(t.id === tab.id && (t.browser || 'other') === (tab.browser || 'other'))));
 
       // Desktop (Tauri/Electron): route via sidecar → owning browser extension
@@ -621,7 +612,7 @@ export function TabManagement() {
     } catch (error) {
       console.error('[TabManagement] Failed to close tab:', error);
     }
-  }, [tabKey]);
+  }, [closedTabs]);
 
   const handleTabPin = useCallback(async (tab) => {
     try {
@@ -673,13 +664,13 @@ export function TabManagement() {
       const result = await invoke('kill_process', { pid: app.pid });
       console.log('[TabManagement] kill_process:', result);
       // Tombstone + optimistically drop every window of that PID from the
-      // list — see pendingKilledAppsRef above.
-      pendingKilledAppsRef.current.add(app.pid);
+      // list — see killedApps above.
+      killedApps.tombstone(app);
       setRunningApps(prev => prev.filter(a => a.pid !== app.pid));
     } catch (error) {
       console.error('[TabManagement] Failed to kill app', app.pid, ':', error);
     }
-  }, []);
+  }, [killedApps]);
 
   // Folders open in the in-app file manager; the OS explorer stays available
   // as an explicit secondary action on the chip and inside the manager.
@@ -890,8 +881,9 @@ export function TabManagement() {
       }}>
         <div style={{ display: 'flex', gap: '8px' }}>
 
-          <button
-            onClick={() => {
+          <AutoGroupToggle
+            enabled={autoGroupEnabled}
+            onToggle={() => {
               const newState = !autoGroupEnabled;
               // Update state immediately for responsive UI
               setAutoGroupEnabled(newState);
@@ -904,57 +896,7 @@ export function TabManagement() {
                 enabled: newState
               }).catch(() => {/* ignore errors */ });
             }}
-            style={{
-              background: autoGroupEnabled
-                ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.15))'
-                : 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))',
-              border: autoGroupEnabled
-                ? '1px solid rgba(34, 197, 94, 0.4)'
-                : '1px solid rgba(100, 116, 139, 0.3)',
-              borderRadius: '8px',
-              padding: '6px 12px',
-              color: autoGroupEnabled ? '#4ADE80' : '#94A3B8',
-              cursor: 'pointer',
-              fontSize: 'var(--font-sm, 12px)',
-              fontWeight: 600,
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-            onMouseEnter={(e) => {
-              if (autoGroupEnabled) {
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(34, 197, 94, 0.3), rgba(16, 185, 129, 0.25))';
-                e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.6)';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-              } else {
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(100, 116, 139, 0.3), rgba(71, 85, 105, 0.25))';
-                e.currentTarget.style.borderColor = 'rgba(100, 116, 139, 0.5)';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (autoGroupEnabled) {
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.15))';
-                e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.4)';
-                e.currentTarget.style.transform = 'translateY(0)';
-              } else {
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))';
-                e.currentTarget.style.borderColor = 'rgba(100, 116, 139, 0.3)';
-                e.currentTarget.style.transform = 'translateY(0)';
-              }
-            }}
-            title={autoGroupEnabled
-              ? "Auto-grouping enabled - Click to disable and ungroup all tabs"
-              : "Auto-grouping disabled - Click to enable automatic grouping by domain"}
-          >
-            <FontAwesomeIcon
-              icon={autoGroupEnabled ? faToggleOn : faToggleOff}
-              size="lg"
-              style={{ pointerEvents: 'none' }}
-            />
-            <span style={{ pointerEvents: 'none' }}>Auto Group</span>
-          </button>
+          />
           {isElectronApp() && isSidebarWidth && (
             <LayoutSwitchButton
               style={{
@@ -973,74 +915,6 @@ export function TabManagement() {
               }}
             />
           )}
-          {/* <button
-            onClick={() => {
-              const newState = !taskViewEnabled;
-              setTaskViewEnabled(newState);
-              chrome.storage.local.set({ taskViewEnabled: newState });
-              // Refresh tasks when enabling
-              if (newState) {
-                chrome.runtime.sendMessage({ type: 'GET_ALL_TASKS' })
-                  .then(response => {
-                    if (response?.success) {
-                      setTasks(response.tasks || []);
-                      setActiveTaskId(response.activeTaskId);
-                    }
-                  })
-                  .catch(() => { });
-              }
-            }}
-            style={{
-              background: taskViewEnabled
-                ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.15))'
-                : 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))',
-              border: taskViewEnabled
-                ? '1px solid rgba(59, 130, 246, 0.4)'
-                : '1px solid rgba(100, 116, 139, 0.3)',
-              borderRadius: '8px',
-              padding: '6px 12px',
-              color: taskViewEnabled ? '#60A5FA' : '#94A3B8',
-              cursor: 'pointer',
-              fontSize: 'var(--font-sm, 12px)',
-              fontWeight: 600,
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-            onMouseEnter={(e) => {
-              if (taskViewEnabled) {
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(37, 99, 235, 0.25))';
-                e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.6)';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-              } else {
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(100, 116, 139, 0.3), rgba(71, 85, 105, 0.25))';
-                e.currentTarget.style.borderColor = 'rgba(100, 116, 139, 0.5)';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (taskViewEnabled) {
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.15))';
-                e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.4)';
-                e.currentTarget.style.transform = 'translateY(0)';
-              } else {
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))';
-                e.currentTarget.style.borderColor = 'rgba(100, 116, 139, 0.3)';
-                e.currentTarget.style.transform = 'translateY(0)';
-              }
-            }}
-            title={taskViewEnabled
-              ? "Task View enabled - Showing tabs grouped by task/intent"
-              : "Task View disabled - Click to group tabs by browsing tasks"}
-          >
-            <FontAwesomeIcon
-              icon={faTasks}
-              size="lg"
-              style={{ pointerEvents: 'none' }}
-            />
-            <span style={{ pointerEvents: 'none' }}>Tasks</span>
-          </button> */}
         </div>
       </div>
 
@@ -1110,20 +984,7 @@ export function TabManagement() {
             {/* 1. Active Apps Section (desktop only) */}
             {runningApps.length > 0 && (
               <div>
-                <h3 style={{
-                  fontSize: 'var(--font-2xl, 20px)',
-                  fontWeight: 600,
-                  color: 'var(--text-secondary, #94A3B8)',
-                  marginBottom: '8px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}>
-                  <FontAwesomeIcon icon={faDesktop} style={{ opacity: 0.6 }} />
-                  Active Apps ({runningApps.length})
-                </h3>
+                <SectionHeader icon={faDesktop}>Active Apps ({runningApps.length})</SectionHeader>
                 <div className="tabs-grid">
                   {runningApps.map(app => (
                     <AppCard
@@ -1140,16 +1001,7 @@ export function TabManagement() {
             {/* 2. Pinned Tabs Section */}
             {partitionedTabs.pinned.length > 0 && (
               <div>
-                <h3 style={{
-                  fontSize: 'var(--font-2xl, 20px)',
-                  fontWeight: 600,
-                  color: 'var(--text-secondary, #94A3B8)',
-                  marginBottom: '8px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
-                }}>
-                  Pinned ({partitionedTabs.pinned.length})
-                </h3>
+                <SectionHeader>Pinned ({partitionedTabs.pinned.length})</SectionHeader>
                 <div className="tabs-grid">
                   {partitionedTabs.pinned.map(tab => (
                     <TabCard
@@ -1170,20 +1022,7 @@ export function TabManagement() {
             {/* 3. Local Dev Section (localhost / loopback / LAN dev servers) */}
             {partitionedTabs.localhost.length > 0 && (
               <div>
-                <h3 style={{
-                  fontSize: 'var(--font-2xl, 20px)',
-                  fontWeight: 600,
-                  color: 'var(--text-secondary, #94A3B8)',
-                  marginBottom: '8px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}>
-                  <FontAwesomeIcon icon={faCode} style={{ opacity: 0.6 }} />
-                  Local Dev ({partitionedTabs.localhost.length})
-                </h3>
+                <SectionHeader icon={faCode}>Local Dev ({partitionedTabs.localhost.length})</SectionHeader>
                 <div className="tabs-grid">
                   {partitionedTabs.localhost.map(tab => (
                     <TabCard
@@ -1205,16 +1044,7 @@ export function TabManagement() {
             {/* 4. Chrome Native Tab Groups (Extension only) */}
             {!taskViewEnabled && partitionedTabs.hasChromeGroups && (
               <div>
-                <h3 style={{
-                  fontSize: 'var(--font-2xl, 20px)',
-                  fontWeight: 600,
-                  color: 'var(--text-secondary, #94A3B8)',
-                  marginBottom: '8px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
-                }}>
-                  Tab Groups ({partitionedTabs.chromeGroups.length})
-                </h3>
+                <SectionHeader>Tab Groups ({partitionedTabs.chromeGroups.length})</SectionHeader>
                 <div className="tabs-grid">
                   {partitionedTabs.chromeGroups.map(({ group, tabs: groupTabs }) => {
                     const color = CHROME_GROUP_COLORS[group.color] || '#9AA0A6';
@@ -1241,20 +1071,7 @@ export function TabManagement() {
             {/* 5. Grouped by Task Section (Task-First Tab Modeling) */}
             {taskViewEnabled && partitionedByTask && partitionedByTask.length > 0 && (
               <div>
-                <h3 style={{
-                  fontSize: 'var(--font-2xl, 20px)',
-                  fontWeight: 600,
-                  color: 'var(--text-secondary, #94A3B8)',
-                  marginBottom: '8px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}>
-                  <FontAwesomeIcon icon={faTasks} style={{ opacity: 0.6 }} />
-                  Grouped by Task ({partitionedByTask.length})
-                </h3>
+                <SectionHeader icon={faTasks}>Grouped by Task ({partitionedByTask.length})</SectionHeader>
                 <div className="tabs-grid">
                   {partitionedByTask.map(({ task, tabs: taskTabs }) => (
                     <TaskGroupCard
@@ -1286,16 +1103,7 @@ export function TabManagement() {
             {/* 6. Grouped by Domain Section (only when task view is disabled) */}
             {!taskViewEnabled && partitionedTabs.hasGroups && (
               <div>
-                <h3 style={{
-                  fontSize: 'var(--font-2xl, 20px)',
-                  fontWeight: 600,
-                  color: 'var(--text-secondary, #94A3B8)',
-                  marginBottom: '8px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
-                }}>
-                  Grouped by Domain
-                </h3>
+                <SectionHeader>Grouped by Domain</SectionHeader>
                 <div className="tabs-grid">
                   {Object.entries(partitionedTabs.grouped)
                     .sort(([domainA], [domainB]) => domainA.localeCompare(domainB))
@@ -1317,20 +1125,7 @@ export function TabManagement() {
             {/* 7. Recent (Ungrouped) Section - only when task view is disabled */}
             {!taskViewEnabled && partitionedTabs.recent.length > 0 && (
               <div>
-                <h3 style={{
-                  fontSize: 'var(--font-2xl, 20px)',
-                  fontWeight: 600,
-                  color: 'var(--text-secondary, #94A3B8)',
-                  marginBottom: '8px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}>
-                  <FontAwesomeIcon icon={faClock} style={{ opacity: 0.6 }} />
-                  Recent
-                </h3>
+                <SectionHeader icon={faClock}>Recent</SectionHeader>
                 <div className="tabs-grid">
                   {partitionedTabs.recent.map(tab => (
                     <TabCard
@@ -1352,16 +1147,7 @@ export function TabManagement() {
             {/* 8. Other Tabs Section - only when task view is disabled */}
             {!taskViewEnabled && partitionedTabs.others.length > 0 && (
               <div>
-                <h3 style={{
-                  fontSize: 'var(--font-2xl, 20px)',
-                  fontWeight: 600,
-                  color: 'var(--text-secondary, #94A3B8)',
-                  marginBottom: '8px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
-                }}>
-                  {`Others (${partitionedTabs.others.length})`}
-                </h3>
+                <SectionHeader>{`Others (${partitionedTabs.others.length})`}</SectionHeader>
                 <div className="tabs-grid">
                   {/* Only show 'others' if not in focus mode, or just user preference? 
                         Focus mode already slices input `filteredTabs`, so `others` will likely be empty or small.
@@ -1408,20 +1194,7 @@ export function TabManagement() {
             {/* 9. Popular Folders (ranked from Recent Items activity, Tauri only) */}
             {frequentFolders.length > 0 && (
               <div>
-                <h3 style={{
-                  fontSize: 'var(--font-2xl, 20px)',
-                  fontWeight: 600,
-                  color: 'var(--text-secondary, #94A3B8)',
-                  marginBottom: '8px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}>
-                  <FontAwesomeIcon icon={faFolderOpen} style={{ opacity: 0.6 }} />
-                  Popular Folders ({Math.min(frequentFolders.length, 8)})
-                </h3>
+                <SectionHeader icon={faFolderOpen}>Popular Folders ({Math.min(frequentFolders.length, 8)})</SectionHeader>
                 <div className="folders-chip-grid">
                   {frequentFolders.slice(0, 8).map(folder => (
                     <FolderCard
@@ -1445,118 +1218,11 @@ export function TabManagement() {
 
             {/* Empty State */}
             {filteredTabs.length === 0 && (
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '14px',
-                padding: '36px 20px',
-                color: 'var(--text-secondary, #64748B)',
-                textAlign: 'center',
-                background: 'var(--glass-bg, rgba(30, 41, 59, 0.95))',
-                borderRadius: '12px',
-                border: '1px solid rgba(59, 130, 246, 0.2)'
-              }}>
-                <div style={{ fontSize: '44px', opacity: 0.3 }}>📑</div>
-                <div>
-                  <div style={{ fontSize: 'var(--font-lg, 14px)', fontWeight: 500, marginBottom: '6px' }}>
-                    No Tabs Found
-                  </div>
-                  <div style={{ fontSize: 'var(--font-sm, 12px)' }}>
-                    {isHostSyncEnabled()
-                      ? 'No browser tabs are syncing from the extension yet'
-                      : 'Open some browser tabs to see them here'}
-                  </div>
-                </div>
-
-                {/* Host-sync mode: show connection health + troubleshooting + manual fetch */}
-                {isHostSyncEnabled() && (
-                  <>
-                    {/* Connection status pill */}
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: '8px',
-                      padding: '6px 12px', borderRadius: '99px',
-                      fontSize: 'var(--font-xs, 11px)', fontWeight: 500,
-                      background: wsConnected ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
-                      border: `1px solid ${wsConnected ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
-                      color: wsConnected ? '#4ADE80' : '#F87171'
-                    }}>
-                      <div style={{
-                        width: '6px', height: '6px', borderRadius: '50%',
-                        background: wsConnected ? '#22C55E' : '#EF4444',
-                        boxShadow: wsConnected ? '0 0 6px #22C55E' : 'none'
-                      }} />
-                      <FontAwesomeIcon icon={faWifi} style={{ fontSize: '10px' }} />
-                      <span>{wsConnected ? 'Sync connected' : 'Sync offline'}</span>
-                    </div>
-
-                    {wsConnected ? (
-                      // Sync layer is up but no tabs — extension may be down, or a sync hiccup.
-                      <>
-                        <div style={{ fontSize: 'var(--font-xs, 11px)', maxWidth: 320, lineHeight: 1.5 }}>
-                          Sync is connected but no tabs were reported. If you have tabs open, make sure
-                          the browser extension is enabled, then fetch them again from all browser instances.
-                        </div>
-                        <button
-                          onClick={requestAllTabs}
-                          disabled={requestingTabs}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: '8px',
-                            padding: '7px 16px', borderRadius: '8px',
-                            background: 'rgba(59,130,246,0.18)',
-                            border: '1px solid rgba(59,130,246,0.4)',
-                            color: '#60A5FA', fontWeight: 500,
-                            fontSize: 'var(--font-sm, 12px)',
-                            cursor: requestingTabs ? 'default' : 'pointer',
-                            opacity: requestingTabs ? 0.6 : 1
-                          }}
-                        >
-                          <FontAwesomeIcon icon={faSync} spin={requestingTabs} style={{ fontSize: '11px' }} />
-                          {requestingTabs ? 'Fetching…' : 'Fetch all tabs from all browsers'}
-                        </button>
-                      </>
-                    ) : (
-                      // Not connected — guide the user through the common causes.
-                      <div style={{
-                        textAlign: 'left', maxWidth: 340,
-                        fontSize: 'var(--font-xs, 11px)', lineHeight: 1.6,
-                        background: 'rgba(239,68,68,0.06)',
-                        border: '1px solid rgba(239,68,68,0.15)',
-                        borderRadius: '8px', padding: '10px 14px'
-                      }}>
-                        <div style={{ fontWeight: 600, marginBottom: '6px', color: 'var(--text-secondary, #94A3B8)' }}>
-                          Check these common issues:
-                        </div>
-                        <ul style={{ margin: 0, paddingLeft: '16px' }}>
-                          <li>Is the CoolDesk browser extension installed and <strong>enabled</strong>?</li>
-                          <li>Is your browser (Chrome/Edge) actually running?</li>
-                          <li>Try reloading the extension from <code>chrome://extensions</code>.</li>
-                          <li>A firewall/VPN may be blocking <code>localhost:4545</code>.</li>
-                        </ul>
-                        <button
-                          onClick={requestAllTabs}
-                          disabled={requestingTabs}
-                          style={{
-                            marginTop: '10px',
-                            display: 'flex', alignItems: 'center', gap: '6px',
-                            padding: '5px 12px', borderRadius: '6px',
-                            background: 'rgba(255,255,255,0.06)',
-                            border: '1px solid rgba(255,255,255,0.12)',
-                            color: 'var(--text-secondary, #CBD5E1)',
-                            fontSize: 'var(--font-xs, 11px)',
-                            cursor: requestingTabs ? 'default' : 'pointer',
-                            opacity: requestingTabs ? 0.6 : 1
-                          }}
-                        >
-                          <FontAwesomeIcon icon={faSync} spin={requestingTabs} style={{ fontSize: '10px' }} />
-                          Retry connection
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
+              <EmptyTabsState
+                wsConnected={wsConnected}
+                requestingTabs={requestingTabs}
+                onRequestAllTabs={requestAllTabs}
+              />
             )}
 
           </>

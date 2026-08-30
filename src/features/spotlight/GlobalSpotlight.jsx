@@ -1,14 +1,7 @@
-import { faChrome, faCss3Alt, faDiscord, faEdge, faFirefox, faGithub, faGolang, faHtml5, faJava, faJs, faMarkdown, faNodeJs, faPhp, faPython, faReact, faRust, faSlack, faSpotify, faSwift, faVuejs } from '@fortawesome/free-brands-svg-icons';
-import { faBold, faBriefcase, faCalculator, faChartLine, faCloud, faCode, faCog, faComments, faDatabase, faDesktop, faEnvelope, faFile, faFileCode, faFileCsv, faFileExcel, faFileLines, faFilePdf, faFilePowerpoint, faFileWord, faFileZipper, faFlask, faFolder, faFolderOpen, faFont, faGamepad, faGlobe, faGraduationCap, faHashtag, faHeartPulse, faHistory, faHome, faImage, faItalic, faLightbulb, faLink, faListOl, faListUl, faMicrochip, faMicrophone, faMusic, faNewspaper, faPalette, faPlane, faPlus, faQuoteRight, faRobot, faSearch, faShoppingBag, faStar, faStickyNote, faStrikethrough, faTasks, faTerminal, faThumbtack, faTimes, faTools, faUtensils, faVial, faVideo } from '@fortawesome/free-solid-svg-icons';
+import { faChrome, faDiscord, faEdge, faFirefox, faGithub, faSlack, faSpotify } from '@fortawesome/free-brands-svg-icons';
+import { faCalculator, faCode, faCog, faComments, faDesktop, faEnvelope, faFile, faFileLines, faFolder, faFolderOpen, faGamepad, faGlobe, faImage, faMicrophone, faMusic, faPlus, faTerminal, faTimes, faVideo } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import {
-    SiC, SiClojure, SiCplusplus, SiCss, SiDart, SiDocker, SiElixir, SiGnubash, SiGo,
-    SiGraphql, SiHaskell, SiHtml5, SiJavascript, SiJson, SiJupyter, SiKotlin, SiLua,
-    SiMarkdown, SiMysql, SiOpenjdk, SiPerl, SiPhp, SiPrisma, SiPython, SiR, SiReact,
-    SiRuby, SiRust, SiSass, SiScala, SiSharp, SiSqlite, SiSvelte, SiSwift, SiTailwindcss,
-    SiToml, SiTypescript, SiVuedotjs, SiYaml,
-} from 'react-icons/si';
-import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { storageGet, storageSet } from '../../services/extensionApi';
 import { syncWebSocket } from '../../services/syncWebSocket';
 import { isHostSyncEnabled } from '../../services/syncConfig';
@@ -19,9 +12,10 @@ import { runningAppsService } from '../../services/runningAppsService';
 import { browseApps, browseUrls, isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../../services/searchService';
 import { searchWindowsSettings } from '../../data/windowsSettings';
 import { searchWindowsTools } from '../../data/windowsTools';
-import { enrichRunningAppsWithIcons, getFaviconUrl, getGroupDomainFromUrl, isRealPointerMove } from '../../utils/helpers';
+import { enrichRunningAppsWithIcons, getFaviconUrl, getGroupDomainFromUrl } from '../../utils/helpers';
 import { getPreviewItem } from '../../utils/filePreviewKind';
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth';
+import { usePendingRemoval } from '../../shared/hooks/usePendingRemoval';
 import { useSlashCommands } from './useSlashCommands';
 import { useVoiceCommands } from './useVoiceCommands';
 import { useAiCli } from './useAiCli';
@@ -32,15 +26,28 @@ import { CopyButton } from './CopyButton';
 // vast majority that never touch a file preview — split into their own chunk
 // and fetch it only the first time a previewable file is actually selected.
 const PreviewPane = lazy(() => import('./PreviewPane'));
-// Same rich-text editor WorkspaceContextPanel.jsx uses for notes — reused
-// here rather than a second, plain-text editor, so a note edited from either
-// place round-trips through the exact same HTML shape.
-const TiptapEditor = lazy(() => import('../../faces/workspace/parts/editor/TiptapEditor'));
-import { describeAction } from '../../services/workspaceActions';
+import { useModelPicker } from './useModelPicker';
+import { resultToWorkspaceItem } from './resultToWorkspaceItem';
+import { handleEditWorkspaceKeydown } from './keydown/editWorkspaceKeydown';
+import { handleNewWorkspaceKeydown } from './keydown/newWorkspaceKeydown';
+import { handleAgentKeydown } from './keydown/agentKeydown';
+import { handleAiChatKeydown } from './keydown/aiChatKeydown';
+import { handleModelPickerKeydown } from './keydown/modelPickerKeydown';
 import { useWorkspaceScaffold } from './useWorkspaceScaffold';
 import { useNewWorkspaceMode } from './useNewWorkspaceMode';
 import { useEditWorkspaceMode } from './useEditWorkspaceMode';
 import { VOICE_SEARCH_ENABLED } from '../../config/features';
+import { getRunningAppContext } from './parts/appContext';
+import { getWorkspaceIcon } from './parts/fileIcons';
+import { PinItem } from './parts/PinItem';
+import { ContextItem } from './parts/ContextItem';
+import { ResultItem } from './parts/ResultItem';
+import { MoreResultsRow } from './parts/MoreResultsRow';
+import { AiChatPanel } from './parts/AiChatPanel';
+import { ModelPickerPanel } from './parts/ModelPickerPanel';
+import { AgentPanel } from './parts/AgentPanel';
+import { NewWorkspacePanel } from './parts/NewWorkspacePanel';
+import { EditWorkspacePanel } from './parts/EditWorkspacePanel';
 import './GlobalSpotlight.css';
 
 
@@ -75,11 +82,6 @@ class LRUCache {
 
 // Global cache persists across re-renders
 const searchCache = new LRUCache(100);
-
-// Last real mouse position, shared across every ResultItem instance — see the
-// mouseenter guard in ResultItem for why this needs to live outside React
-// state (it must survive remounts of individual rows as the list reflows).
-const lastPointerPos = { x: -1, y: -1 };
 
 // Windows Settings (ms-settings: pages) are only launchable on the Windows
 // desktop build — the `open_url` backend uses ShellExecute, and the URI scheme
@@ -286,37 +288,6 @@ function getAppIcon(appName) {
     return faDesktop;
 }
 
-function getRunningAppContext(app) {
-    const title = (app?.title || '').trim();
-    const appName = (app?.name || '').trim();
-    if (!title) return null;
-
-    const normalizedApp = appName.toLowerCase().replace(/\.exe$/i, '');
-    const isEditor = ['code', 'vscode', 'visual studio code', 'cursor', 'windsurf', 'zed'].some(key =>
-        normalizedApp.includes(key)
-    );
-
-    if (isEditor) {
-        const parts = title.split(/\s[-–—]\s/).map(part => part.trim()).filter(Boolean);
-        const editorSuffixes = new Set([
-            'visual studio code',
-            'code',
-            'cursor',
-            'windsurf',
-            'zed'
-        ]);
-
-        while (parts.length > 0 && editorSuffixes.has(parts[parts.length - 1].toLowerCase())) {
-            parts.pop();
-        }
-
-        if (parts.length >= 2) return parts[parts.length - 1];
-        if (parts.length === 1 && parts[0].toLowerCase() !== title.toLowerCase()) return parts[0];
-    }
-
-    return title !== appName ? title : null;
-}
-
 function isWindowsTerminalApp(app) {
     const name = (app?.name || '').toLowerCase();
     const path = (app?.path || '').toLowerCase();
@@ -343,41 +314,6 @@ function useOnClickOutside(ref, handler) {
             document.removeEventListener('touchstart', listener);
         };
     }, [ref, handler]);
-}
-
-// Map a search result onto the shape a workspace stores. Workspaces hold two
-// kinds of thing — urls[] and apps[] — so every result has to land as one or
-// the other, and anything that is neither (a Windows setting, a control-panel
-// applet, another workspace) simply isn't addable. Returning null says so;
-// the caller reports it rather than silently dropping the click.
-function resultToWorkspaceItem(item) {
-    if (!item) return null;
-    // A workspace can't be filed into a workspace. It's called out rather than
-    // left to the default branch because workspace rows can carry a `url`,
-    // which would otherwise quietly add the workspace as a link.
-    if (item.type === 'workspace') return null;
-    switch (item.type) {
-        case 'tab':
-        case 'bookmark':
-        case 'history':
-        case 'url':
-            return item.url
-                ? { kind: 'url', url: item.url, title: item.title || item.name || item.url, favicon: item.favicon || null }
-                : null;
-        case 'folder':
-            return item.path ? { kind: 'app', name: item.name || item.title, path: item.path, appType: 'folder', icon: null } : null;
-        case 'file':
-            return item.path ? { kind: 'app', name: item.name || item.title, path: item.path, appType: 'file', icon: null } : null;
-        case 'app':
-            return item.path
-                ? { kind: 'app', name: item.name || item.title, path: item.path, icon: item.icon || null }
-                : null;
-        default:
-            // A bare url with no recognised type still files as a link.
-            return item.url
-                ? { kind: 'url', url: item.url, title: item.title || item.name || item.url, favicon: item.favicon || null }
-                : null;
-    }
 }
 
 // The one search component for every surface.
@@ -426,12 +362,6 @@ export function GlobalSpotlight({
     const [treeChildren, setTreeChildren] = useState({}); // path -> child items[]
     const inputRef = useRef(null);
     const containerRef = useRef(null);
-    // /edit-workspace's note editor — reused across notes (one at a time is
-    // ever open) so the toolbar below can reach the live Tiptap instance via
-    // TiptapEditor's own getEditor() handle, without TiptapEditor.jsx itself
-    // needing to render a persistent toolbar (it only has floating/bubble
-    // menus — see workspaceNoteToolbarButtons below).
-    const noteEditorRef = useRef(null);
 
     const [contextItems, setContextItems] = useState([]);
     const [showAllTabs, setShowAllTabs] = useState(false);
@@ -460,9 +390,7 @@ export function GlobalSpotlight({
     const [commandMode, setCommandMode] = useState(null); // null, 'ai', 'model'
     const [aiMessages, setAiMessages] = useState([]);
     const [isAiLoading, setIsAiLoading] = useState(false);
-    const [isModelLoading, setIsModelLoading] = useState(false);
-    const [availableModels, setAvailableModels] = useState([]);
-    const [currentModel, setCurrentModel] = useState(null);
+    const { isModelLoading, availableModels, fetchAvailableModels, loadModel } = useModelPicker();
 
     // Track search request ID to handle race conditions
     const searchIdRef = useRef(0);
@@ -473,14 +401,12 @@ export function GlobalSpotlight({
     // Tabs the user just closed. Filtered out of context reloads until the close
     // propagates to the source tab list, so the optimistic removal doesn't flicker
     // back when a reload (timer or tabs-synced event) fires before propagation.
-    const pendingClosedTabsRef = useRef(new Set());
+    const closedTabs = usePendingRemoval(useCallback((t) => `${t._deviceId || ''}:${t.tabId ?? t.id}`, []));
     // Same tombstone idea for apps: a graceful quit (AppleScript "quit" /
     // WM_CLOSE) can take longer than one reload cycle to actually exit, so
     // without this a reload sees the pid still running and puts the pill
-    // right back — the "closes, then comes back" flicker. Keyed by pid;
-    // pruned automatically once that pid is no longer in the OS's running
-    // list (see loadContextItems), same as pendingClosedTabsRef.
-    const pendingClosedAppsRef = useRef(new Set());
+    // right back — the "closes, then comes back" flicker.
+    const closedApps = usePendingRemoval(useCallback((a) => a.pid, []));
 
     // Sidebar/docked-drawer width: the embedded search has no room — hide entirely
     const isSidebarSize = useIsSidebarWidth();
@@ -938,12 +864,8 @@ export function GlobalSpotlight({
 
             // Drop apps the user just closed (optimistic) until the quit
             // actually lands in the OS's running-apps list; prune tombstones
-            // once their pid is truly gone. Mirrors pendingClosedTabsRef above.
-            const pendingClosedApps = pendingClosedAppsRef.current;
-            if (pendingClosedApps.size) {
-                const presentPids = new Set(runningApps.map(a => a.pid).filter(Boolean));
-                for (const pid of [...pendingClosedApps]) if (!presentPids.has(pid)) pendingClosedApps.delete(pid);
-            }
+            // once their pid is truly gone. See closedApps above.
+            closedApps.prune(runningApps);
 
             // Exact process names that are pure system noise (no user value)
             const systemExactNames = new Set([
@@ -1001,7 +923,7 @@ export function GlobalSpotlight({
                     const isRunningEntry = a.isRunning === true || !!a.pid;
                     const runningWindowKey = `${name}::${title}`;
 
-                    if (a.pid && pendingClosedApps.has(a.pid)) return false;
+                    if (a.pid && closedApps.has(a)) return false;
 
                     if (isRunningEntry) {
                         if (usedRunningWindowKeys.has(runningWindowKey)) return false;
@@ -1067,16 +989,12 @@ export function GlobalSpotlight({
 
             // Drop tabs the user just closed (optimistic) until the close lands in
             // the source list; prune tombstones once their tab is actually gone.
-            const tabKey = (t) => `${t._deviceId || ''}:${t.tabId || t.id}`;
-            const pendingClosed = pendingClosedTabsRef.current;
-            if (pendingClosed.size) {
-                const presentKeys = new Set(safeTabs.map(tabKey));
-                for (const k of [...pendingClosed]) if (!presentKeys.has(k)) pendingClosed.delete(k);
-            }
+            // See closedTabs above.
+            closedTabs.prune(safeTabs);
 
             const afterUrlFilter = safeTabs
                 .filter(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('edge://') && !t.url.startsWith('about:'))
-                .filter(t => !pendingClosed.has(tabKey(t)));
+                .filter(t => !closedTabs.has(t));
             console.log('[Spotlight] After URL filter:', afterUrlFilter.length);
 
             // One row per domain, labelled with how many tabs it stands for.
@@ -1110,7 +1028,7 @@ export function GlobalSpotlight({
         } catch (e) {
             console.warn('Failed to load recommendations', e);
         }
-    }, []);
+    }, [closedApps, closedTabs]);
 
     // Load Pinned Items
     const loadPinnedItems = async () => {
@@ -1306,88 +1224,10 @@ export function GlobalSpotlight({
             setCommandMode(null);
             setAiMessages([]);
         }
-    }, [query]);
+    }, [query, fetchAvailableModels]);
 
-    // Fetch available models for /model command
-    const fetchAvailableModels = async () => {
-        try {
-            const isAvailable = await LocalAI.isAvailable();
-            if (!isAvailable) {
-                setAvailableModels([{
-                    name: 'error',
-                    title: 'Desktop App Not Running',
-                    description: 'Please start the CoolDesk desktop app to use AI',
-                    disabled: true
-                }]);
-                return;
-            }
-
-            const status = await LocalAI.getStatus();
-            setCurrentModel(status.currentModel || null);
-
-            const modelsResult = await LocalAI.getModels();
-            const modelFilenames = Object.keys(modelsResult || {}).filter(
-                name => modelsResult[name]?.downloaded
-            );
-
-            if (modelFilenames.length === 0) {
-                setAvailableModels([{
-                    name: 'error',
-                    title: 'No Models Downloaded',
-                    description: 'Go to Settings → Local AI to download models',
-                    disabled: true
-                }]);
-                return;
-            }
-
-            const models = modelFilenames.map(name => {
-                const modelInfo = modelsResult[name];
-                const isLoaded = status.currentModel === name;
-                return {
-                    name,
-                    title: modelInfo?.displayName || name,
-                    description: isLoaded ? '✓ Currently loaded' : `Click to load • ${modelInfo?.size || ''}`,
-                    isLoaded,
-                    disabled: false
-                };
-            }).sort((a, b) => {
-                if (a.isLoaded && !b.isLoaded) return -1;
-                if (!a.isLoaded && b.isLoaded) return 1;
-                return 0;
-            });
-
-            setAvailableModels(models);
-        } catch (error) {
-            console.error('[Spotlight] Failed to fetch models:', error);
-            setAvailableModels([{
-                name: 'error',
-                title: 'Error Loading Models',
-                description: error.message || 'Failed to connect to AI service',
-                disabled: true
-            }]);
-        }
-    };
-
-    // Load a model
-    const loadModel = async (modelName) => {
-        if (isModelLoading) return;
-
-        try {
-            setIsModelLoading(true);
-            await LocalAI.loadModel(modelName);
-            setCurrentModel(modelName);
-            // Refresh the list
-            await fetchAvailableModels();
-            // Show success briefly then close
-            setTimeout(() => {
-                handleClose();
-            }, 500);
-        } catch (error) {
-            console.error('[Spotlight] Failed to load model:', error);
-        } finally {
-            setIsModelLoading(false);
-        }
-    };
+    // handleModelSelect (loadModel + auto-close on success) is defined below,
+    // next to handleClose — see useModelPicker.js for the load itself.
 
     // Send AI message
     const sendAiMessage = async (prompt) => {
@@ -1963,325 +1803,38 @@ export function GlobalSpotlight({
     // Handle Keyboard Navigation
     const handleKeyDown = (e) => {
         if (commandMode === 'edit-workspace') {
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                // Close the innermost thing first: the note editor, then the
-                // whole mode — same hierarchy Esc already follows elsewhere
-                // (workspace picker → add mode → spotlight).
-                if (editWorkspace.activeNoteId) editWorkspace.closeNote();
-                else editWorkspace.exit();
-                return;
-            }
-            // Backspace on an empty box closes it too — same grammar as
-            // /agent and /new-workspace, not just Esc.
-            if (e.key === 'Backspace' && !query) {
-                e.preventDefault();
-                editWorkspace.exit();
-                return;
-            }
-
-            // Empty box: nothing to search for, so ↑↓/Enter navigate and open
-            // the workspace's *existing* items instead (the chips above the
-            // list) — the same "browse what's already here" the idle
-            // workspace section supports, just inside this mode too.
-            if (!query.trim()) {
-                if (e.key === 'ArrowDown' && editWorkspaceItems.length > 0) {
-                    e.preventDefault();
-                    setSelectedIndex(prev => (prev + 1) % editWorkspaceItems.length);
-                    return;
-                }
-                if (e.key === 'ArrowUp' && editWorkspaceItems.length > 0) {
-                    e.preventDefault();
-                    setSelectedIndex(prev => (prev <= 0 ? editWorkspaceItems.length - 1 : prev - 1));
-                    return;
-                }
-                // Space *or* Shift+Enter toggles a todo's done state —
-                // mouse-independent, doesn't require clicking the row — and
-                // does nothing on any other row. Two keys rather than one so
-                // whichever one you reach for works.
-                if ((e.key === ' ' || (e.key === 'Enter' && e.shiftKey)) &&
-                    selectedIndex >= 0 && editWorkspaceItems[selectedIndex]?.kind === 'todo') {
-                    e.preventDefault();
-                    editWorkspace.toggleTodo(editWorkspaceItems[selectedIndex].id);
-                    return;
-                }
-                // Enter: open a url/app, edit a todo's text inline, or open a
-                // note in the Tiptap editor below (see the render block).
-                if (e.key === 'Enter' && !e.shiftKey && selectedIndex >= 0 && editWorkspaceItems[selectedIndex]) {
-                    e.preventDefault();
-                    const it = editWorkspaceItems[selectedIndex];
-                    if (it.kind === 'todo') editWorkspace.startEditTodo(it.id);
-                    else if (it.kind === 'note') editWorkspace.openNote(it.id);
-                    else openExistingWorkspaceItem(it);
-                    return;
-                }
-                return;
-            }
-
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                const trimmed = query.trim();
-                // Three in-box commands cover everything besides "search to
-                // attach a link/folder" — no separate add-fields to tab
-                // between. "/name" matches /agent's own rename shortcut.
-                const nameMatch = /^\/name\s+(.+)$/i.exec(trimmed);
-                if (nameMatch) {
-                    editWorkspace.rename(nameMatch[1]);
-                    setQuery('');
-                    return;
-                }
-                const todoMatch = /^\/todo\s+(.+)$/i.exec(trimmed);
-                if (todoMatch) {
-                    editWorkspace.addTodo(todoMatch[1]);
-                    setQuery('');
-                    return;
-                }
-                const noteMatch = /^\/notes?\s+(.+)$/i.exec(trimmed);
-                if (noteMatch) {
-                    editWorkspace.addNote(noteMatch[1]);
-                    setQuery('');
-                    return;
-                }
-                // A highlighted result attaches as an item — same interaction
-                // as /new-workspace's folder step and /agent's context chips.
-                if (selectedIndex >= 0 && flatRows[selectedIndex]) {
-                    const mapped = resultToWorkspaceItem(flatRows[selectedIndex].item);
-                    if (mapped) {
-                        editWorkspace.addItem(mapped);
-                    } else {
-                        showFeedback("That can't be added to a workspace", 'error');
-                    }
-                    setQuery('');
-                }
-                return;
-            }
-            if (e.key === 'ArrowDown' && flatRows.length > 0) {
-                e.preventDefault();
-                setSelectedIndex(prev => (prev + 1) % flatRows.length);
-                return;
-            }
-            if (e.key === 'ArrowUp' && flatRows.length > 0) {
-                e.preventDefault();
-                setSelectedIndex(prev => (prev <= 0 ? flatRows.length - 1 : prev - 1));
-                return;
-            }
+            handleEditWorkspaceKeydown(e, {
+                query, editWorkspace, editWorkspaceItems, selectedIndex, setSelectedIndex,
+                openExistingWorkspaceItem, flatRows, setQuery, showFeedback,
+            });
             return;
         }
 
         if (commandMode === 'new-workspace') {
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                newWorkspace.exit();
-                return;
-            }
-            if (newWorkspace.step === 'name') {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    newWorkspace.confirmName(query);
-                    return;
-                }
-                // Nothing to step back to before the first step — Backspace
-                // on an empty box leaves the wizard, same grammar as /agent.
-                if (e.key === 'Backspace' && !query) {
-                    e.preventDefault();
-                    newWorkspace.exit();
-                    return;
-                }
-                return; // no result navigation while typing a name
-            }
-            if (newWorkspace.step === 'folders') {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    // A highlighted result attaches — same interaction as
-                    // /agent's context chips (see attachToAgentContext).
-                    if (selectedIndex >= 0 && flatRows[selectedIndex]) {
-                        const mapped = resultToWorkspaceItem(flatRows[selectedIndex].item);
-                        if (mapped?.kind === 'app') {
-                            newWorkspace.addFolder(mapped);
-                        } else {
-                            showFeedback('Pick a folder, file, or app', 'error');
-                        }
-                        return;
-                    }
-                    // Nothing highlighted — folders are optional, move on.
-                    newWorkspace.goToConfirm();
-                    return;
-                }
-                if (e.key === 'Backspace' && !query) {
-                    e.preventDefault();
-                    newWorkspace.backToName();
-                    return;
-                }
-                if (e.key === 'ArrowDown' && flatRows.length > 0) {
-                    e.preventDefault();
-                    setSelectedIndex(prev => (prev + 1) % flatRows.length);
-                    return;
-                }
-                if (e.key === 'ArrowUp' && flatRows.length > 0) {
-                    e.preventDefault();
-                    setSelectedIndex(prev => (prev <= 0 ? flatRows.length - 1 : prev - 1));
-                    return;
-                }
-                return;
-            }
-            // step === 'confirm'
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                if (!newWorkspace.creating) newWorkspace.confirmCreate();
-                return;
-            }
-            if (e.key === 'Backspace' && !query) {
-                e.preventDefault();
-                newWorkspace.backToFolders();
-                return;
-            }
+            handleNewWorkspaceKeydown(e, { query, selectedIndex, setSelectedIndex, flatRows, newWorkspace, showFeedback });
             return;
         }
 
         if (commandMode === 'agent') {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                const pending = aiCli.turns.find(t => t.proposal?.valid.length);
-                // With a proposal on screen Enter is the confirm — the run is
-                // over and the only thing left to do is accept it.
-                if (pending) { applyProposal(pending); return; }
-                // A highlighted result attaches as context instead of opening
-                // — same idea as normal search's Enter, just repurposed:
-                // composing a request isn't the moment to launch something.
-                if (selectedIndex >= 0 && flatRows[selectedIndex]) {
-                    attachToAgentContext(flatRows[selectedIndex].item);
-                    return;
-                }
-                const trimmed = query.trim();
-                // "/name <title>" is a local shortcut, not a request for the
-                // CLI — renames instantly and never touches aiCli.run.
-                const nameMatch = /^\/name\s+(.+)$/i.exec(trimmed);
-                if (nameMatch) {
-                    runRenameWorkspace(nameMatch[1]);
-                    setQuery('');
-                    return;
-                }
-                if (trimmed && !aiCli.running) {
-                    runAgent(trimmed);
-                    setQuery('');
-                }
-                return;
-            }
-            // Backspace on an empty box removes the chip, the way a tag input
-            // works — otherwise the only way out is Esc, which also closes.
-            if (e.key === 'Backspace' && !query) {
-                e.preventDefault();
-                exitAgentMode();
-                return;
-            }
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                if (aiCli.running) { aiCli.cancel(); return; }  // stop the agent before closing
-                exitAgentMode();
-                return;
-            }
-            // Agent mode still renders the ordinary results list below the
-            // transcript (see the flatRows block further down — it's the one
-            // mode that keeps searching while a request is open), so ↑/↓
-            // needs to move the highlight through it same as hovering does
-            // (ResultItem's onHover already wires to setSelectedIndex).
-            // Deliberately local to flatRows rather than the shared
-            // selectVisualIndex/currentIndex machinery below: that machinery
-            // also drives the context/pins/workspace sections, none of which
-            // render in this mode.
-            if (e.key === 'ArrowDown' && flatRows.length > 0) {
-                e.preventDefault();
-                setSelectedIndex(prev => (prev + 1) % flatRows.length);
-                return;
-            }
-            if (e.key === 'ArrowUp' && flatRows.length > 0) {
-                e.preventDefault();
-                setSelectedIndex(prev => (prev <= 0 ? flatRows.length - 1 : prev - 1));
-                return;
-            }
-            // →/← mirrors the normal search's folder-tree expand/collapse
-            // (same tree used below the transcript) — same selectedIndex
-            // indexing as ↑/↓ above.
-            {
-                const treeRow = selectedIndex >= 0 ? flatRows[selectedIndex] : null;
-                if (e.key === 'ArrowRight' && treeRow?.isFolder) {
-                    e.preventDefault();
-                    if (!treeRow.isExpanded) {
-                        expandPath(treeRow.item); // collapsed → expand
-                    } else if (flatRows[selectedIndex + 1]?.depth === treeRow.depth + 1) {
-                        setSelectedIndex(selectedIndex + 1); // expanded → step into first child
-                    }
-                    return;
-                }
-                if (e.key === 'ArrowLeft' && treeRow) {
-                    e.preventDefault();
-                    if (treeRow.isFolder && treeRow.isExpanded) {
-                        collapsePath(treeRow.item.path); // expanded → collapse
-                    } else if (treeRow.depth > 0) {
-                        // step out to the parent row (nearest previous row at depth-1)
-                        for (let i = selectedIndex - 1; i >= 0; i--) {
-                            if (flatRows[i].depth === treeRow.depth - 1) { setSelectedIndex(i); break; }
-                        }
-                    }
-                    return;
-                }
-            }
-            return; // no other result navigation in agent mode
+            handleAgentKeydown(e, {
+                aiCli, applyProposal, selectedIndex, setSelectedIndex, flatRows,
+                attachToAgentContext, query, runRenameWorkspace, setQuery, runAgent,
+                exitAgentMode, expandPath, collapsePath,
+            });
+            return;
         }
 
         // Handle command modes first
         if (commandMode === 'ai') {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                const prompt = query.replace(/^\/ai\s*/i, '').trim();
-                if (prompt) {
-                    sendAiMessage(prompt);
-                    setQuery('/ai '); // Reset to just the command
-                }
-                return;
-            }
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                setCommandMode(null);
-                setAiMessages([]);
-                setQuery('');
-                return;
-            }
-            return; // Don't process other keys in AI mode
+            handleAiChatKeydown(e, { query, sendAiMessage, setQuery, setCommandMode, setAiMessages });
+            return;
         }
 
         if (commandMode === 'model') {
-            const filterQuery = query.replace(/^\/model\s*/i, '').trim().toLowerCase();
-            const filteredModels = availableModels.filter(m =>
-                !m.disabled && m.title.toLowerCase().includes(filterQuery)
-            );
-
-            if (e.key === 'ArrowDown' && filteredModels.length > 0) {
-                e.preventDefault();
-                setSelectedIndex(prev => (prev + 1) % filteredModels.length);
-                return;
-            }
-            if (e.key === 'ArrowUp' && filteredModels.length > 0) {
-                e.preventDefault();
-                setSelectedIndex(prev => prev <= 0 ? filteredModels.length - 1 : prev - 1);
-                return;
-            }
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                const modelToLoad = selectedIndex >= 0 ? filteredModels[selectedIndex] : filteredModels[0];
-                if (modelToLoad && !modelToLoad.disabled && !modelToLoad.isLoaded) {
-                    loadModel(modelToLoad.name);
-                } else if (modelToLoad?.isLoaded) {
-                    handleClose(); // Already loaded, just close
-                }
-                return;
-            }
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                setCommandMode(null);
-                setQuery('');
-                return;
-            }
+            handleModelPickerKeydown(e, {
+                query, availableModels, selectedIndex, setSelectedIndex,
+                handleModelSelect, handleClose, setCommandMode, setQuery,
+            });
             return;
         }
 
@@ -2896,7 +2449,7 @@ export function GlobalSpotlight({
             if (item.type === 'tab') {
                 const tabId = item.tabId || item.id;
                 // Tombstone so reloads don't flicker the pill back before the close lands
-                pendingClosedTabsRef.current.add(`${item._deviceId || ''}:${tabId}`);
+                closedTabs.tombstone(item);
                 const closeMsg = {
                     type: 'CLOSE_TAB',
                     tabId,
@@ -2921,7 +2474,7 @@ export function GlobalSpotlight({
                     // finishes would otherwise see the pid still running and
                     // put the pill right back. This keeps it hidden until the
                     // pid genuinely disappears — see loadContextItems.
-                    if (item.pid) pendingClosedAppsRef.current.add(item.pid);
+                    if (item.pid) closedApps.tombstone(item);
                     await window.electronAPI.closeApp(item.pid || 0, item.hwnd);
                     trackAppUsage(item.name);
                 }
@@ -2932,7 +2485,7 @@ export function GlobalSpotlight({
 
         // Reconcile with real state once the OS/tab list has updated.
         setTimeout(() => loadContextItems(), 500);
-    }, [loadContextItems]);
+    }, [loadContextItems, closedApps, closedTabs]);
 
     const handleClose = useCallback(() => {
         setQuery('');
@@ -2949,6 +2502,15 @@ export function GlobalSpotlight({
             window.electronAPI.sendMessage({ type: 'SPOTLIGHT_HIDE' });
         }
     }, [isEmbedded]);
+
+    // Load the picked model, then close shortly after so the "✓ Currently
+    // loaded" state is visible for a beat instead of vanishing instantly.
+    // Only on success — a failed load should leave the picker open so the
+    // error/disabled state stays visible.
+    const handleModelSelect = useCallback(async (modelName) => {
+        const ok = await loadModel(modelName);
+        if (ok) setTimeout(() => handleClose(), 500);
+    }, [loadModel, handleClose]);
 
     // Handle Escape key to close (workspace picker first, then add mode, then
     // the spotlight). Add mode outranks closing: Escape should put the search
@@ -3227,343 +2789,22 @@ export function GlobalSpotlight({
                     Three states in one panel: the picker (idle), the live
                     stdout stream (running), and the proposal (done). */}
                 {commandMode === 'agent' && (
-                    <div className="spotlight-ai-mode spotlight-agent-mode">
-                        {/* No "Agent" title here — the chip in the search box
-                            already says which mode you're in, and repeating it
-                            two rows apart just took space the controls needed. */}
-                        <div className="spotlight-ai-header">
-                            <div className="spotlight-agent-menu-wrap">
-                                <button
-                                    type="button"
-                                    className={`spotlight-agent-chip is-active${agentAdapterOpen ? ' is-open' : ''}`}
-                                    onMouseDown={(e) => {
-                                        e.preventDefault();
-                                        setAgentAdapterOpen(v => !v);
-                                        setAgentHistoryOpen(false);
-                                    }}
-                                    title={`Running with ${aiCli.adapter.label}`}
-                                    aria-expanded={agentAdapterOpen}
-                                >
-                                    <FontAwesomeIcon icon={faTerminal} />
-                                    <span>{aiCli.adapter.label}</span>
-                                    <span className="spotlight-agent-caret">▾</span>
-                                </button>
-                                {agentAdapterOpen && (
-                                    <div className="spotlight-agent-menu">
-                                        {aiCli.adapters.map(a => {
-                                            const found = aiCli.available?.[a.bin];
-                                            return (
-                                                <button
-                                                    key={a.id}
-                                                    type="button"
-                                                    className={`spotlight-agent-menu-item${a.id === aiCli.adapterId ? ' is-selected' : ''}${found === false ? ' is-missing' : ''}`}
-                                                    onMouseDown={(e) => {
-                                                        e.preventDefault();
-                                                        aiCli.selectAdapter(a.id);
-                                                        setAgentAdapterOpen(false);
-                                                    }}
-                                                    title={found === false ? `${a.bin} not found on PATH` : `Run with ${a.label}`}
-                                                >
-                                                    <span>{a.label}</span>
-                                                    {/* Still selectable when missing — the label is
-                                                        the explanation, not a lockout. */}
-                                                    {found === false && <span className="spotlight-agent-menu-note">not installed</span>}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="spotlight-agent-header-spacer" />
-
-                            {/* Scaffolds (and, when the workspace holds several
-                                project folders, links) .cooldesk/ — replaces the
-                                separate cooldesk-plugin's /cd-init + /cd-link.
-                                Hidden entirely until a project folder is resolved,
-                                so an ordinary chat request isn't cluttered by a
-                                button that does nothing for it. */}
-                            {wsScaffoldPlan?.hub && (
-                                <button
-                                    type="button"
-                                    className="spotlight-agent-chip"
-                                    disabled={aiCli.running}
-                                    onMouseDown={(e) => { e.preventDefault(); runCreateWorkspace(query.trim()); setQuery(''); }}
-                                    title={`Scaffold .cooldesk/ for "${wsScaffoldPlan.hub.name}"${wsScaffoldPlan.members.length ? ` and link ${wsScaffoldPlan.members.length} sibling project(s)` : ''}`}
-                                >
-                                    <FontAwesomeIcon icon={faFolder} />
-                                    {wsScaffoldPlan.members.length
-                                        ? `Create + link ${wsScaffoldPlan.members.length + 1} projects`
-                                        : 'Create workspace'}
-                                </button>
-                            )}
-
-                            {/* Clears the transcript without leaving the mode.
-                                Worth its own control: every prompt carries the
-                                last six turns, so asking something unrelated
-                                otherwise drags irrelevant context along — and
-                                the only alternative was Esc and retyping
-                                /agent. Hidden until there's something to clear. */}
-                            {aiCli.turns.length > 0 && (
-                                <button
-                                    type="button"
-                                    className="spotlight-agent-chip"
-                                    onMouseDown={(e) => {
-                                        e.preventDefault();
-                                        aiCli.reset();
-                                        setQuery('');
-                                        setAgentHistoryOpen(false);
-                                        setAgentContext([]);
-                                        inputRef.current?.focus();
-                                    }}
-                                    title="New chat — the next question won't carry this conversation's context or attachments"
-                                >
-                                    New chat
-                                </button>
-                            )}
-
-                            {/* Past requests. The transcript is per-session by
-                                design; this is the part that persists, so a
-                                prompt worth reusing isn't lost on close. */}
-                            <div className="spotlight-agent-history-wrap">
-                                <button
-                                    type="button"
-                                    className={`spotlight-agent-chip${agentHistoryOpen ? ' is-active' : ''}`}
-                                    onMouseDown={(e) => { e.preventDefault(); setAgentHistoryOpen(v => !v); setAgentAdapterOpen(false); }}
-                                    title="Previous requests"
-                                    aria-expanded={agentHistoryOpen}
-                                >
-                                    <FontAwesomeIcon icon={faHistory} />
-                                </button>
-                                {agentHistoryOpen && (
-                                    <div className="spotlight-agent-history">
-                                        {aiCli.history.length === 0 ? (
-                                            <div className="spotlight-agent-history-empty">Nothing asked yet.</div>
-                                        ) : (
-                                            <>
-                                                {aiCli.history.map((h) => (
-                                                    <div key={`${h.at}-${h.text}`} className="spotlight-agent-history-row">
-                                                        {/* Opens the saved exchange — question and
-                                                            answer — rather than re-running it. An
-                                                            agent run costs time and tokens, and the
-                                                            answer you already paid for is right here. */}
-                                                        <button
-                                                            type="button"
-                                                            className="spotlight-agent-history-item"
-                                                            title={h.reply ? `${h.text}\n\n${h.reply}` : h.text}
-                                                            onMouseDown={(e) => {
-                                                                e.preventDefault();
-                                                                aiCli.restoreFromHistory(h);
-                                                                setAgentHistoryOpen(false);
-                                                            }}
-                                                        >
-                                                            <span className="spotlight-agent-history-q">{h.text}</span>
-                                                            {h.reply && (
-                                                                <span className="spotlight-agent-history-a">{h.reply}</span>
-                                                            )}
-                                                        </button>
-                                                        {/* Separate control, because reusing a prompt
-                                                            and rereading an answer are different jobs. */}
-                                                        <button
-                                                            type="button"
-                                                            className="spotlight-agent-history-reuse"
-                                                            title="Edit and ask again"
-                                                            aria-label="Edit and ask again"
-                                                            onMouseDown={(e) => {
-                                                                e.preventDefault();
-                                                                setQuery(h.text);
-                                                                setAgentHistoryOpen(false);
-                                                                inputRef.current?.focus();
-                                                            }}
-                                                        >
-                                                            <FontAwesomeIcon icon={faPlus} />
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                                <button
-                                                    type="button"
-                                                    className="spotlight-agent-history-clear"
-                                                    onMouseDown={(e) => { e.preventDefault(); aiCli.clearHistory(); }}
-                                                >
-                                                    Clear history
-                                                </button>
-                                            </>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-
-                            {aiCli.running && (
-                                <button
-                                    type="button"
-                                    className="spotlight-agent-cancel"
-                                    onMouseDown={(e) => { e.preventDefault(); aiCli.cancel(); }}
-                                >
-                                    Stop
-                                </button>
-                            )}
-                        </div>
-
-                        {/* Attached context — picked from the results list below
-                            (click, or arrow to highlight + Enter) instead of
-                            opening. Sent alongside every request until removed. */}
-                        {agentContext.length > 0 && (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '2px 4px 8px' }}>
-                                {agentContext.map(c => (
-                                    <span key={c.id} className="spotlight-agent-chip" title={c.path}>
-                                        <FontAwesomeIcon icon={c.kind === 'folder' ? faFolder : faFileLines} />
-                                        {c.name}
-                                        {c.status === 'loading' && ' …'}
-                                        {c.status === 'unreadable' && ' (unreadable)'}
-                                        <button
-                                            type="button"
-                                            className="spotlight-add-badge-exit"
-                                            onMouseDown={(e) => {
-                                                e.preventDefault();
-                                                setAgentContext(prev => prev.filter(x => x.id !== c.id));
-                                            }}
-                                            title="Remove from context"
-                                            aria-label={`Remove ${c.name} from context`}
-                                        >
-                                            <FontAwesomeIcon icon={faTimes} />
-                                        </button>
-                                    </span>
-                                ))}
-                            </div>
-                        )}
-
-                        <div className="spotlight-ai-messages spotlight-agent-log" ref={agentLogRef}>
-                            {aiCli.turns.length === 0 && (
-                                <div className="spotlight-ai-hint">
-                                    Describe how to reorganise your workspaces, then press Enter.
-                                    {' '}Pick a file or folder below (click, or arrow to it and press Enter) to attach it as context.
-                                    {' '}Type <code>/name &lt;title&gt;</code> to rename this workspace instantly.
-                                    {wsScaffoldPlan?.hub && (
-                                        <> Or use the {wsScaffoldPlan.members.length ? 'Create + link' : 'Create workspace'} button above to scaffold a shared <code>.cooldesk/</code>.</>
-                                    )}
-                                    {aiCli.available?.[aiCli.adapter.bin] === false && (
-                                        <div className="spotlight-agent-warn">
-                                            <code>{aiCli.adapter.bin}</code> isn’t on your PATH — install it or pick another above.
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {aiCli.turns.map(turn => (
-                                <div key={turn.id} className="spotlight-agent-turn">
-                                    <div className="spotlight-agent-request">
-                                        <span className="spotlight-agent-request-mark">›</span>
-                                        {turn.request}
-                                    </div>
-
-                                    {/* The answer. Ordinary conversation is the common
-                                        case, so this is the headline; raw stdout is
-                                        folded away below since it's mostly protocol. */}
-                                    {turn.reply && (
-                                        <div className="spotlight-agent-reply">
-                                            <div className="spotlight-agent-reply-head">
-                                                <span className="spotlight-agent-reply-who">CoolDesk</span>
-                                                <CopyButton
-                                                    getText={() => turn.reply}
-                                                    title="Copy answer (or select part of it and press Ctrl+C)"
-                                                />
-                                            </div>
-                                            <div className="spotlight-agent-reply-text">
-                                                <AgentMarkdown text={turn.reply} />
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Raw output. While the run is in flight this is the
-                                        only sign of life, so it stays open; once there's
-                                        an answer it collapses out of the way. */}
-                                    {turn.lines.length > 0 && (turn.running || (!turn.reply && !turn.proposal) ? (
-                                        <pre className="spotlight-agent-stream">
-                                            {turn.lines.map((l, i) => (
-                                                <div key={i} className={l.stream === 'stderr' ? 'is-stderr' : undefined}>{l.text}</div>
-                                            ))}
-                                        </pre>
-                                    ) : (
-                                        <details className="spotlight-agent-raw">
-                                            <summary>
-                                                Output
-                                                <CopyButton
-                                                    getText={() => turn.lines.map(l => l.text).join('\n')}
-                                                    title="Copy raw output"
-                                                />
-                                            </summary>
-                                            <pre className="spotlight-agent-stream">
-                                                {turn.lines.map((l, i) => (
-                                                    <div key={i} className={l.stream === 'stderr' ? 'is-stderr' : undefined}>{l.text}</div>
-                                                ))}
-                                            </pre>
-                                        </details>
-                                    ))}
-
-                                    {turn.running && !turn.lines.length && (
-                                        <div className="spotlight-agent-waiting">Waiting for {aiCli.adapter.label}…</div>
-                                    )}
-
-                                    {turn.error && (
-                                        <div className="spotlight-ai-message error">
-                                            <div className="message-avatar">⚠️</div>
-                                            <div className="message-content">{turn.error}</div>
-                                        </div>
-                                    )}
-
-                                    {/* An action block that survived validation empty —
-                                        only worth a line, and only when there was no
-                                        prose answer to show instead. */}
-                                    {turn.proposal && turn.proposal.valid.length === 0 && !turn.reply && (
-                                        <div className="spotlight-agent-empty">No changes proposed.</div>
-                                    )}
-
-                                    {turn.proposal && turn.proposal.valid.length > 0 && (
-                                        <div className="spotlight-agent-proposal">
-                                            <div className="spotlight-agent-proposal-head">
-                                                Proposed changes ({turn.proposal.valid.length})
-                                            </div>
-                                            <ul className="spotlight-agent-actions">
-                                                {turn.proposal.valid.map((a, i) => (
-                                                    <li key={i} className={a.type.startsWith('remove') ? 'is-remove' : 'is-add'}>
-                                                        {describeAction(a)}
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                            {/* Rejected actions are surfaced, not swallowed: applying
-                                                half a plan without saying so is worse than failing. */}
-                                            {turn.proposal.rejected.length > 0 && (
-                                                <details className="spotlight-agent-rejected">
-                                                    <summary>{turn.proposal.rejected.length} action(s) discarded as invalid</summary>
-                                                    <ul>
-                                                        {turn.proposal.rejected.map((r, i) => (
-                                                            <li key={i}>{r.reason}</li>
-                                                        ))}
-                                                    </ul>
-                                                </details>
-                                            )}
-                                            <div className="spotlight-agent-confirm">
-                                                <button
-                                                    type="button"
-                                                    className="spotlight-agent-apply"
-                                                    onMouseDown={(e) => { e.preventDefault(); applyProposal(turn); }}
-                                                >
-                                                    Apply
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className="spotlight-agent-discard"
-                                                    onMouseDown={(e) => { e.preventDefault(); aiCli.clearProposal(turn.id); }}
-                                                >
-                                                    Discard
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+                    <AgentPanel
+                        aiCli={aiCli}
+                        agentAdapterOpen={agentAdapterOpen}
+                        setAgentAdapterOpen={setAgentAdapterOpen}
+                        agentHistoryOpen={agentHistoryOpen}
+                        setAgentHistoryOpen={setAgentHistoryOpen}
+                        wsScaffoldPlan={wsScaffoldPlan}
+                        runCreateWorkspace={runCreateWorkspace}
+                        query={query}
+                        setQuery={setQuery}
+                        agentContext={agentContext}
+                        setAgentContext={setAgentContext}
+                        inputRef={inputRef}
+                        agentLogRef={agentLogRef}
+                        applyProposal={applyProposal}
+                    />
                 )}
 
                 {/* /new-workspace — a guided form (name → folders → confirm)
@@ -3572,94 +2813,7 @@ export function GlobalSpotlight({
                     /agent's context chips already use (see the flatRows block
                     below, shared with every other mode). */}
                 {commandMode === 'new-workspace' && (
-                    <div className="spotlight-ai-mode spotlight-agent-mode">
-                        <div className="spotlight-ai-header">
-                            <FontAwesomeIcon icon={faFolder} style={{ color: '#4ADE80' }} />
-                            <span>
-                                {newWorkspace.step === 'name' && 'Step 1 of 3 — Name'}
-                                {newWorkspace.step === 'folders' && `Step 2 of 3 — Folders for "${newWorkspace.name}"`}
-                                {newWorkspace.step === 'confirm' && `Step 3 of 3 — Confirm "${newWorkspace.name}"`}
-                            </span>
-                        </div>
-
-                        {(newWorkspace.step === 'folders' || newWorkspace.step === 'confirm') && (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '2px 4px 8px' }}>
-                                {newWorkspace.folders.length === 0 && (
-                                    <span className="spotlight-ai-hint" style={{ padding: 0 }}>No folders yet — optional.</span>
-                                )}
-                                {newWorkspace.folders.map(f => (
-                                    <span key={f.path} className="spotlight-agent-chip" title={f.path}>
-                                        <FontAwesomeIcon icon={f.appType === 'folder' ? faFolder : faFileLines} />
-                                        {f.name}
-                                        {newWorkspace.step === 'folders' && (
-                                            <button
-                                                type="button"
-                                                className="spotlight-add-badge-exit"
-                                                onMouseDown={(e) => { e.preventDefault(); newWorkspace.removeFolder(f.path); }}
-                                                title="Remove"
-                                                aria-label={`Remove ${f.name}`}
-                                            >
-                                                <FontAwesomeIcon icon={faTimes} />
-                                            </button>
-                                        )}
-                                    </span>
-                                ))}
-                            </div>
-                        )}
-
-                        <div className="spotlight-ai-messages">
-                            {newWorkspace.step === 'name' && (
-                                <div className="spotlight-ai-hint">
-                                    Type a name for the workspace, then press Enter.
-                                </div>
-                            )}
-
-                            {newWorkspace.step === 'folders' && (
-                                <div className="spotlight-ai-hint">
-                                    Search below and click (or arrow to it and press Enter) to add a folder.
-                                    Press Enter on an empty box when you're done — folders are optional.
-                                </div>
-                            )}
-
-                            {newWorkspace.step === 'confirm' && (
-                                <div className="spotlight-agent-proposal">
-                                    <div className="spotlight-agent-proposal-head">
-                                        {newWorkspace.folders.length === 0
-                                            ? 'A bare workspace, no linked folder.'
-                                            : `${newWorkspace.folders.length} folder${newWorkspace.folders.length === 1 ? '' : 's'} attached.`}
-                                    </div>
-                                    {newWorkspace.plan?.hub && (
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', cursor: 'pointer' }}>
-                                            <input
-                                                type="checkbox"
-                                                checked={newWorkspace.scaffoldChecked}
-                                                onChange={(e) => newWorkspace.setScaffoldChecked(e.target.checked)}
-                                            />
-                                            Also set up <code>.cooldesk/</code>
-                                            {newWorkspace.plan.members.length > 0 && ` and link ${newWorkspace.plan.members.length + 1} projects together`}
-                                        </label>
-                                    )}
-                                    <div className="spotlight-agent-confirm">
-                                        <button
-                                            type="button"
-                                            className="spotlight-agent-apply"
-                                            disabled={newWorkspace.creating}
-                                            onMouseDown={(e) => { e.preventDefault(); newWorkspace.confirmCreate(); }}
-                                        >
-                                            {newWorkspace.creating ? 'Creating…' : 'Create'}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="spotlight-agent-discard"
-                                            onMouseDown={(e) => { e.preventDefault(); newWorkspace.backToFolders(); }}
-                                        >
-                                            ← Back
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                    <NewWorkspacePanel newWorkspace={newWorkspace} />
                 )}
 
                 {/* /edit-workspace — typing an existing workspace's own name
@@ -3667,298 +2821,35 @@ export function GlobalSpotlight({
                     box to add more, same interaction as /new-workspace's
                     folder step), notes and todos with their own small inputs
                     (the main box stays dedicated to "search to add an item"). */}
-                {commandMode === 'edit-workspace' && editWorkspace.workspace && (() => {
-                    const itemsCount = (editWorkspace.workspace.urls?.length || 0) + (editWorkspace.workspace.apps?.length || 0);
-                    const todosCount = editWorkspace.todos.length;
-                    const items = editWorkspaceItems.slice(0, itemsCount);
-                    const activeNote = editWorkspace.activeNoteId
-                        ? editWorkspace.notes.find(n => n.id === editWorkspace.activeNoteId)
-                        : null;
-                    // Formatting commands run straight against the live Tiptap
-                    // instance via its own ref handle — TiptapEditor.jsx only
-                    // renders floating/bubble menus (on selection), no fixed
-                    // toolbar, so this is a small one of our own rather than
-                    // changing that shared component.
-                    const runNoteCommand = (fn) => {
-                        const editor = noteEditorRef.current?.getEditor();
-                        if (editor) fn(editor.chain().focus());
-                    };
-                    const toolbarButtons = [
-                        { icon: faBold, title: 'Bold', run: (c) => c.toggleBold().run() },
-                        { icon: faItalic, title: 'Italic', run: (c) => c.toggleItalic().run() },
-                        { icon: faStrikethrough, title: 'Strikethrough', run: (c) => c.toggleStrike().run() },
-                        { icon: faListUl, title: 'Bullet list', run: (c) => c.toggleBulletList().run() },
-                        { icon: faListOl, title: 'Numbered list', run: (c) => c.toggleOrderedList().run() },
-                        { icon: faQuoteRight, title: 'Quote', run: (c) => c.toggleBlockquote().run() },
-                        { icon: faCode, title: 'Code', run: (c) => c.toggleCode().run() },
-                    ];
-                    return (
-                    <div className="spotlight-ai-mode spotlight-agent-mode">
-                        {/* No header — the input row's chip already names the
-                            workspace; repeating it here was redundant. */}
-                        {activeNote ? (
-                            // Note editor — same Tiptap component WorkspaceContextPanel.jsx
-                            // uses, so this reads/writes the identical HTML shape.
-                            // "Command stays on top" (the search input above), the
-                            // note surfaces below it, replacing the list until closed.
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <input
-                                        placeholder="Untitled note"
-                                        value={activeNote.title || ''}
-                                        onChange={(e) => editWorkspace.updateNoteTitle(activeNote.id, e.target.value)}
-                                        style={{
-                                            flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none',
-                                            padding: '10px 4px 8px 12px', fontSize: 15, fontWeight: 600,
-                                            color: 'rgba(255, 255, 255, 0.92)', letterSpacing: '-0.01em',
-                                        }}
-                                    />
-                                    {/* Explicit close — Esc from inside the Tiptap
-                                        editor doesn't reliably reach the window-level
-                                        handler (ProseMirror stops it bubbling), so
-                                        going back can't depend on a keystroke alone. */}
-                                    <button
-                                        type="button"
-                                        className="spotlight-add-badge-exit"
-                                        style={{ marginRight: 10 }}
-                                        onMouseDown={(e) => { e.preventDefault(); editWorkspace.closeNote(); }}
-                                        title="Back to list (Esc)"
-                                        aria-label="Back to list"
-                                    >
-                                        <FontAwesomeIcon icon={faTimes} />
-                                    </button>
-                                </div>
-                                <div style={{ display: 'flex', gap: 2, padding: '0 8px 8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                                    {toolbarButtons.map(({ icon, title, run }) => (
-                                        <button
-                                            key={title}
-                                            type="button"
-                                            className="spotlight-agent-chip"
-                                            style={{ padding: '4px 8px' }}
-                                            title={title}
-                                            onMouseDown={(e) => { e.preventDefault(); runNoteCommand(run); }}
-                                        >
-                                            <FontAwesomeIcon icon={icon} />
-                                        </button>
-                                    ))}
-                                </div>
-                                {/* .spotlight-note-editor scopes a tighter override of
-                                    .ProseMirror's own padding (GlobalSpotlight.css) —
-                                    that default (1rem 2rem) is sized for the full-page
-                                    editor in WorkspaceContextPanel.jsx and, stacked on
-                                    top of this box's own padding, left a wide empty
-                                    margin around a short note here.
-                                    The click-to-focus handler matters because this
-                                    wrapper is taller than a short note's actual text —
-                                    clicking the empty space below it hit plain dead
-                                    space otherwise, and whatever had focus before (the
-                                    search input) silently kept it, which looked like
-                                    typing in the note went nowhere. */}
-                                <div
-                                    className="spotlight-note-editor"
-                                    style={{ minHeight: 90, maxHeight: 320, overflowY: 'auto', cursor: 'text' }}
-                                    onMouseDown={(e) => {
-                                        if (e.target.closest('.ProseMirror')) return; // let it place the cursor normally
-                                        e.preventDefault();
-                                        noteEditorRef.current?.focus();
-                                    }}
-                                >
-                                    <Suspense fallback={<div className="spotlight-ai-hint">Loading editor…</div>}>
-                                        <TiptapEditor
-                                            ref={noteEditorRef}
-                                            content={activeNote.text}
-                                            onChange={(html) => editWorkspace.updateNoteContent(activeNote.id, html)}
-                                            showFloatingMenu={false}
-                                            showBubbleMenu={false}
-                                        />
-                                    </Suspense>
-                                </div>
-                            </div>
-                        ) : (
-                        <div className="spotlight-ai-messages" style={{ display: 'flex', flexDirection: 'column' }}>
-                            {/* Items, todos and notes all render as ResultItem rows —
-                                the same component/styling the normal search results
-                                list uses — so this reads as one consistent list
-                                instead of a separate custom style per section.
-                                Items are always the first `itemsCount` entries of
-                                editWorkspaceItems, so index i here already is the
-                                combined ↑↓ index. */}
-                            {items.length === 0 && (
-                                <div className="spotlight-ai-hint">No links or apps yet — search above to add one.</div>
-                            )}
-                            {items.map((it, i) => {
-                                const resultItem = it.kind === 'url'
-                                    ? { id: `url:${it.url}`, type: 'bookmark', title: it.name, url: it.url }
-                                    : { id: `app:${it.path}`, type: it.appType === 'folder' ? 'folder' : (it.appType === 'file' ? 'file' : 'app'), title: it.name, path: it.path, icon: it.icon };
-                                return (
-                                    <ResultItem
-                                        key={resultItem.id}
-                                        item={resultItem}
-                                        index={i}
-                                        isSelected={!query.trim() && i === selectedIndex}
-                                        onSelect={() => openExistingWorkspaceItem(it)}
-                                        onHover={setSelectedIndex}
-                                        onRemove={() => (it.kind === 'url' ? editWorkspace.removeUrl(it.url) : editWorkspace.removeApp(it.path))}
-                                        formatUrl={formatUrl}
-                                        getBadgeLabel={getBadgeLabel}
-                                        getAppIcon={getAppIcon}
-                                    />
-                                );
-                            })}
-
-                            {/* Todos — the "Todo"/"Done" badge (see getBadgeLabel)
-                                already identifies these rows; Enter edits the text
-                                inline, Space toggles done. */}
-                            {editWorkspace.todos.map((t, tIdx) => {
-                                const combinedIdx = itemsCount + tIdx;
-                                const isEditing = editWorkspace.editingTodoId === t.id;
-                                // Same shell (icon box, padding, left accent) as
-                                // ResultItem in both states, so editing a todo
-                                // doesn't visually jump out of the list.
-                                return isEditing ? (
-                                    <div key={t.id} className="result-item result-todo" style={{ cursor: 'text' }}>
-                                        <div className="result-icon"><FontAwesomeIcon icon={faTasks} /></div>
-                                        <input
-                                            autoFocus
-                                            style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'inherit', font: 'inherit' }}
-                                            defaultValue={t.text}
-                                            onBlur={(e) => editWorkspace.updateTodoText(t.id, e.target.value)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') { e.preventDefault(); editWorkspace.updateTodoText(t.id, e.target.value); }
-                                                if (e.key === 'Escape') { e.preventDefault(); editWorkspace.cancelEditTodo(); }
-                                            }}
-                                        />
-                                    </div>
-                                ) : (
-                                    <ResultItem
-                                        key={t.id}
-                                        item={{
-                                            id: `todo:${t.id}`, type: 'todo', title: t.text, done: t.done,
-                                            description: t.done ? 'Done — click to reopen' : 'Click to mark done',
-                                        }}
-                                        index={combinedIdx}
-                                        isSelected={!query.trim() && combinedIdx === selectedIndex}
-                                        onSelect={() => editWorkspace.toggleTodo(t.id)}
-                                        onHover={setSelectedIndex}
-                                        onRemove={() => editWorkspace.removeTodo(t.id)}
-                                        formatUrl={formatUrl}
-                                        getBadgeLabel={getBadgeLabel}
-                                        getAppIcon={getAppIcon}
-                                    />
-                                );
-                            })}
-
-                            {/* Notes — the "Note" badge already identifies these
-                                rows; Enter opens the Tiptap editor above. */}
-                            {editWorkspace.notes.map((n, nIdx) => {
-                                const combinedIdx = itemsCount + todosCount + nIdx;
-                                return (
-                                    <ResultItem
-                                        key={n.id}
-                                        item={{
-                                            id: `note:${n.id}`, type: 'note',
-                                            title: n.title || editWorkspace.stripHtml(n.text).slice(0, 60) || 'Untitled',
-                                        }}
-                                        index={combinedIdx}
-                                        isSelected={!query.trim() && combinedIdx === selectedIndex}
-                                        onSelect={() => editWorkspace.openNote(n.id)}
-                                        onHover={setSelectedIndex}
-                                        onRemove={() => editWorkspace.removeNote(n.id)}
-                                        formatUrl={formatUrl}
-                                        getBadgeLabel={getBadgeLabel}
-                                        getAppIcon={getAppIcon}
-                                    />
-                                );
-                            })}
-                        </div>
-                        )}
-                    </div>
-                    );
-                })()}
+                {commandMode === 'edit-workspace' && editWorkspace.workspace && (
+                    <EditWorkspacePanel
+                        editWorkspace={editWorkspace}
+                        editWorkspaceItems={editWorkspaceItems}
+                        query={query}
+                        selectedIndex={selectedIndex}
+                        setSelectedIndex={setSelectedIndex}
+                        openExistingWorkspaceItem={openExistingWorkspaceItem}
+                        formatUrl={formatUrl}
+                        getBadgeLabel={getBadgeLabel}
+                        getAppIcon={getAppIcon}
+                    />
+                )}
 
                 {/* AI Chat Mode */}
                 {commandMode === 'ai' && (
-                    <div className="spotlight-ai-mode">
-                        <div className="spotlight-ai-header">
-                            <FontAwesomeIcon icon={faRobot} style={{ color: '#A78BFA' }} />
-                            <span>AI Chat</span>
-                            {isAiLoading && (
-                                <div style={{ width: 14, height: 14, border: '2px solid rgba(139, 92, 246, 0.3)', borderTopColor: '#A78BFA', borderRadius: '50%', animation: 'spin 1s linear infinite', marginLeft: 'auto' }} />
-                            )}
-                        </div>
-                        <div className="spotlight-ai-messages">
-                            {aiMessages.length === 0 && (
-                                <div className="spotlight-ai-hint">
-                                    Type your message and press Enter to chat with AI
-                                </div>
-                            )}
-                            {aiMessages.map((msg, idx) => (
-                                <div key={idx} className={`spotlight-ai-message ${msg.role}`}>
-                                    <div className="message-avatar">
-                                        {msg.role === 'user' ? '👤' : msg.role === 'error' ? '⚠️' : '🤖'}
-                                    </div>
-                                    <div className="message-content">{msg.content}</div>
-                                </div>
-                            ))}
-                            {isAiLoading && (
-                                <div className="spotlight-ai-message assistant loading">
-                                    <div className="message-avatar">🤖</div>
-                                    <div className="message-content">
-                                        <span className="typing-indicator">
-                                            <span></span><span></span><span></span>
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                    <AiChatPanel isAiLoading={isAiLoading} aiMessages={aiMessages} />
                 )}
 
                 {/* Model Selection Mode */}
                 {commandMode === 'model' && (
-                    <div className="spotlight-model-mode">
-                        <div className="spotlight-model-header">
-                            <FontAwesomeIcon icon={faRobot} style={{ color: '#A78BFA' }} />
-                            <span>Select AI Model</span>
-                            {isModelLoading && (
-                                <div style={{ width: 14, height: 14, border: '2px solid rgba(139, 92, 246, 0.3)', borderTopColor: '#A78BFA', borderRadius: '50%', animation: 'spin 1s linear infinite', marginLeft: 'auto' }} />
-                            )}
-                        </div>
-                        <div className="spotlight-model-list">
-                            {availableModels.length === 0 && (
-                                <div className="spotlight-model-loading">
-                                    <div style={{ width: 20, height: 20, border: '2px solid rgba(255,255,255,0.2)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                                    <span>Loading models...</span>
-                                </div>
-                            )}
-                            {availableModels
-                                .filter(m => {
-                                    const filterQuery = query.replace(/^\/model\s*/i, '').trim().toLowerCase();
-                                    return m.title.toLowerCase().includes(filterQuery);
-                                })
-                                .map((model, idx) => (
-                                    <div
-                                        key={model.name}
-                                        className={`spotlight-model-item ${idx === selectedIndex ? 'selected' : ''} ${model.isLoaded ? 'loaded' : ''} ${model.disabled ? 'disabled' : ''} ${isModelLoading ? 'loading' : ''}`}
-                                        onClick={() => !model.disabled && !model.isLoaded && !isModelLoading && loadModel(model.name)}
-                                        onMouseEnter={() => setSelectedIndex(idx)}
-                                    >
-                                        <div className="model-icon">
-                                            {isModelLoading && idx === selectedIndex ? (
-                                                <div style={{ width: 18, height: 18, border: '2px solid rgba(139, 92, 246, 0.3)', borderTopColor: '#A78BFA', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                                            ) : (
-                                                <FontAwesomeIcon icon={faRobot} />
-                                            )}
-                                        </div>
-                                        <div className="model-info">
-                                            <span className="model-title">{model.title}</span>
-                                            <span className="model-desc">{model.description}</span>
-                                        </div>
-                                        {model.isLoaded && <span className="model-badge">Active</span>}
-                                    </div>
-                                ))}
-                        </div>
-                    </div>
+                    <ModelPickerPanel
+                        isModelLoading={isModelLoading}
+                        availableModels={availableModels}
+                        query={query}
+                        selectedIndex={selectedIndex}
+                        setSelectedIndex={setSelectedIndex}
+                        loadModel={handleModelSelect}
+                    />
                 )}
 
                 {/* Recommendations Section - Shows when query is empty */}
@@ -4309,171 +3200,6 @@ export function GlobalSpotlight({
     );
 }
 
-// Map workspace names to category icons (mirrors WorkspaceCard logic)
-const WORKSPACE_CATEGORY_ICONS = {
-    finance: faChartLine,
-    health: faHeartPulse,
-    education: faGraduationCap,
-    sports: faGamepad,
-    social: faHashtag,
-    travel: faPlane,
-    entertainment: faVideo,
-    shopping: faShoppingBag,
-    food: faUtensils,
-    utilities: faTools,
-    github: faGithub,
-    git: faGithub,
-    dev: faCode,
-    development: faCode,
-    coding: faCode,
-    code: faCode,
-    terminal: faTerminal,
-    ai: faRobot,
-    gpt: faRobot,
-    openai: faRobot,
-    work: faBriefcase,
-    business: faBriefcase,
-    office: faBriefcase,
-    personal: faHome,
-    home: faHome,
-    tasks: faTasks,
-    management: faTasks,
-    project: faTasks,
-    design: faPalette,
-    creative: faPalette,
-    research: faSearch,
-    google: faSearch,
-    search: faSearch,
-    cloud: faCloud,
-    gaming: faGamepad,
-    games: faGamepad,
-    music: faMusic,
-    video: faVideo,
-    news: faNewspaper,
-    reading: faFlask,
-    ideas: faLightbulb,
-    test: faVial,
-    lab: faFlask,
-};
-
-// Get contextual icon for workspace based on its name
-function getWorkspaceIcon(name) {
-    if (!name) return faFolder;
-    const normalized = name.toLowerCase().trim();
-    for (const [key, icon] of Object.entries(WORKSPACE_CATEGORY_ICONS)) {
-        if (normalized === key || normalized.includes(key + ' ') || normalized.includes(' ' + key) || normalized.startsWith(key)) {
-            return icon;
-        }
-    }
-    return faFolder;
-}
-
-// Real brand logos (Simple Icons) for code/tech extensions, with official-ish
-// brand colors. Anything not here falls back to the FontAwesome map below.
-const SI_FILE_ICONS = {
-    // JS / TS ecosystem
-    ts: { Icon: SiTypescript, color: '#3178c6' }, mts: { Icon: SiTypescript, color: '#3178c6' }, cts: { Icon: SiTypescript, color: '#3178c6' },
-    tsx: { Icon: SiReact, color: '#61dafb' }, jsx: { Icon: SiReact, color: '#61dafb' },
-    js: { Icon: SiJavascript, color: '#f7df1e' }, mjs: { Icon: SiJavascript, color: '#f7df1e' }, cjs: { Icon: SiJavascript, color: '#f7df1e' },
-    vue: { Icon: SiVuedotjs, color: '#42b883' }, svelte: { Icon: SiSvelte, color: '#ff3e00' },
-    // Web / styling
-    html: { Icon: SiHtml5, color: '#e34f26' }, htm: { Icon: SiHtml5, color: '#e34f26' },
-    css: { Icon: SiCss, color: '#2965f1' }, scss: { Icon: SiSass, color: '#cc6699' }, sass: { Icon: SiSass, color: '#cc6699' },
-    tailwind: { Icon: SiTailwindcss, color: '#38bdf8' },
-    // Languages
-    py: { Icon: SiPython, color: '#3776ab' }, ipynb: { Icon: SiJupyter, color: '#f37726' },
-    rs: { Icon: SiRust, color: '#dea584' }, go: { Icon: SiGo, color: '#00add8' },
-    java: { Icon: SiOpenjdk, color: '#e76f00' }, class: { Icon: SiOpenjdk, color: '#e76f00' },
-    kt: { Icon: SiKotlin, color: '#7f52ff' }, kts: { Icon: SiKotlin, color: '#7f52ff' },
-    rb: { Icon: SiRuby, color: '#cc342d' }, php: { Icon: SiPhp, color: '#777bb4' }, swift: { Icon: SiSwift, color: '#f05138' },
-    c: { Icon: SiC, color: '#a8b9cc' }, h: { Icon: SiC, color: '#a8b9cc' },
-    cpp: { Icon: SiCplusplus, color: '#00599c' }, cc: { Icon: SiCplusplus, color: '#00599c' }, hpp: { Icon: SiCplusplus, color: '#00599c' },
-    cs: { Icon: SiSharp, color: '#9b4f96' }, dart: { Icon: SiDart, color: '#0175c2' },
-    lua: { Icon: SiLua, color: '#2c2d72' }, pl: { Icon: SiPerl, color: '#39457e' }, pm: { Icon: SiPerl, color: '#39457e' },
-    scala: { Icon: SiScala, color: '#dc322f' }, ex: { Icon: SiElixir, color: '#4b275f' }, exs: { Icon: SiElixir, color: '#4b275f' },
-    clj: { Icon: SiClojure, color: '#5881d8' }, hs: { Icon: SiHaskell, color: '#5e5086' }, r: { Icon: SiR, color: '#276dc3' },
-    // Data / config / tooling
-    json: { Icon: SiJson, color: '#cbcb41' },
-    yaml: { Icon: SiYaml, color: '#cb171e' }, yml: { Icon: SiYaml, color: '#cb171e' },
-    toml: { Icon: SiToml, color: '#9c4221' }, md: { Icon: SiMarkdown, color: '#cbd5e1' }, markdown: { Icon: SiMarkdown, color: '#cbd5e1' },
-    graphql: { Icon: SiGraphql, color: '#e10098' }, gql: { Icon: SiGraphql, color: '#e10098' }, prisma: { Icon: SiPrisma, color: '#2d3748' },
-    dockerfile: { Icon: SiDocker, color: '#2496ed' },
-    sql: { Icon: SiMysql, color: '#4479a1' }, sqlite: { Icon: SiSqlite, color: '#003b57' }, sqlite3: { Icon: SiSqlite, color: '#003b57' }, db: { Icon: SiSqlite, color: '#003b57' },
-    sh: { Icon: SiGnubash, color: '#4eaa25' }, bash: { Icon: SiGnubash, color: '#4eaa25' }, zsh: { Icon: SiGnubash, color: '#4eaa25' },
-};
-
-// Resolve a filename to { kind: 'si'|'fa', Icon, color } — react-icons brand
-// logo where we have one, otherwise the FontAwesome category icon.
-function getFileVisual(filename) {
-    const ext = (filename || '').split('.').pop().toLowerCase();
-    const si = SI_FILE_ICONS[ext];
-    if (si) return { kind: 'si', Icon: si.Icon, color: si.color };
-    const meta = getFileIconMeta(filename);
-    return { kind: 'fa', Icon: meta.icon, color: meta.color };
-}
-
-// Per-extension icon + brand color. Returns { icon, color } so file rows show a
-// recognizable logo (React for .tsx/.jsx, Python, Rust, ...) tinted by language.
-function getFileIconMeta(filename) {
-    const ext = (filename || '').split('.').pop().toLowerCase();
-    switch (ext) {
-        // Web / frameworks
-        case 'tsx': case 'jsx': return { icon: faReact, color: '#61dafb' };
-        case 'ts':              return { icon: faFileCode, color: '#3178c6' };
-        case 'js': case 'mjs': case 'cjs': return { icon: faJs, color: '#f7df1e' };
-        case 'vue':             return { icon: faVuejs, color: '#42b883' };
-        case 'svelte':          return { icon: faFileCode, color: '#ff3e00' };
-        case 'html': case 'htm': return { icon: faHtml5, color: '#e34f26' };
-        case 'css': case 'scss': case 'sass': case 'less': return { icon: faCss3Alt, color: '#2965f1' };
-        case 'php':             return { icon: faPhp, color: '#8993be' };
-        case 'node':            return { icon: faNodeJs, color: '#83cd29' };
-        // Languages
-        case 'py':              return { icon: faPython, color: '#4b8bbe' };
-        case 'rs':              return { icon: faRust, color: '#f74c00' };
-        case 'java': case 'class': return { icon: faJava, color: '#e76f00' };
-        case 'go':              return { icon: faGolang, color: '#00add8' };
-        case 'swift':           return { icon: faSwift, color: '#f05138' };
-        case 'rb':              return { icon: faFileCode, color: '#cc342d' };
-        case 'c': case 'h':     return { icon: faFileCode, color: '#5c6bc0' };
-        case 'cpp': case 'cc': case 'hpp': return { icon: faFileCode, color: '#00599c' };
-        case 'cs':              return { icon: faFileCode, color: '#9b4f96' };
-        case 'kt': case 'kts':  return { icon: faFileCode, color: '#a97bff' };
-        // Data / config / docs
-        case 'json':            return { icon: faFileCode, color: '#cbcb41' };
-        case 'xml': case 'yaml': case 'yml': case 'toml': return { icon: faFileCode, color: '#89cff0' };
-        case 'md': case 'markdown': return { icon: faMarkdown, color: '#cbd5e1' };
-        case 'sql': case 'db': case 'sqlite': case 'sqlite3': return { icon: faDatabase, color: '#38bdf8' };
-        case 'txt': case 'log': case 'rtf': return { icon: faFileLines, color: '#94a3b8' };
-        case 'pdf':             return { icon: faFilePdf, color: '#ef4444' };
-        case 'doc': case 'docx': return { icon: faFileWord, color: '#2b579a' };
-        case 'xls': case 'xlsx': return { icon: faFileExcel, color: '#217346' };
-        case 'ppt': case 'pptx': return { icon: faFilePowerpoint, color: '#d24726' };
-        case 'csv':             return { icon: faFileCsv, color: '#217346' };
-        // Media
-        case 'jpg': case 'jpeg': case 'png': case 'gif': case 'svg': case 'webp': case 'bmp': case 'ico': case 'tiff': case 'heic':
-            return { icon: faImage, color: '#c084fc' };
-        case 'mp4': case 'mkv': case 'avi': case 'mov': case 'wmv': case 'flv': case 'webm': case 'm4v':
-            return { icon: faVideo, color: '#f87171' };
-        case 'mp3': case 'wav': case 'flac': case 'ogg': case 'aac': case 'm4a': case 'wma':
-            return { icon: faMusic, color: '#34d399' };
-        // Archives / scripts / binaries / fonts
-        case 'zip': case 'rar': case '7z': case 'tar': case 'gz': case 'bz2': case 'xz':
-            return { icon: faFileZipper, color: '#eab308' };
-        case 'sh': case 'bash': case 'zsh': case 'bat': case 'cmd': case 'ps1':
-            return { icon: faTerminal, color: '#4ade80' };
-        case 'ttf': case 'otf': case 'woff': case 'woff2':
-            return { icon: faFont, color: '#a78bfa' };
-        case 'exe': case 'msi': case 'dmg': case 'pkg': case 'deb': case 'rpm': case 'appimage':
-            return { icon: faMicrochip, color: '#94a3b8' };
-        default:
-            return { icon: faFile, color: null };
-    }
-}
-
-function getFileIcon(filename) {
-    return getFileIconMeta(filename).icon;
-}
-
 // Map a backend file/folder entry ({ path, date, is_dir }) to a result item.
 // Shared by file search and the folder drill-down so both render identically.
 function fileToResultItem(file) {
@@ -4498,286 +3224,3 @@ function fileToResultItem(file) {
     };
 }
 
-function getIcon(type, name) {
-    switch (type) {
-        case 'tab': return faGlobe;
-        case 'history': return faHistory;
-        case 'bookmark': return faStar;
-        case 'workspace': return getWorkspaceIcon(name);
-        case 'note': return faStickyNote;
-        case 'app': return faDesktop;
-        case 'file': return getFileIcon(name);
-        case 'folder': return faFolderOpen;
-        case 'setting': return faCog;
-        case 'tool': return faTools;
-        case 'command': return faTerminal;
-        case 'agent-suggest': return faRobot;
-        case 'workspace-edit': return faFolder;
-        case 'todo': return faTasks;
-        default: return faLink;
-    }
-}
-
-// Memoized Pin Item to prevent unnecessary re-renders
-const PinItem = memo(function PinItem({ pin, index, isSelected, onSelect, onHover, onRemove, getAppIcon }) {
-    const handleClick = useCallback(() => onSelect(pin), [pin, onSelect]);
-    const handleMouseEnter = useCallback(() => onHover(index), [index, onHover]);
-    const handleRemove = useCallback((e) => onRemove(index, e), [index, onRemove]);
-    const handleIconError = useCallback((e) => {
-        e.target.style.display = 'none';
-        e.target.parentNode.innerHTML = '<span class="fa-icon-wrapper">💻</span>';
-    }, []);
-    const handleFaviconError = useCallback((e) => {
-        e.target.style.display = 'none';
-        e.target.parentNode.innerHTML = '🔗';
-    }, []);
-
-    return (
-        <div
-            className={`pin-item ${pin.type === 'app' ? 'pin-app' : ''} ${isSelected ? 'pin-selected' : ''}`}
-            onClick={handleClick}
-            onMouseEnter={handleMouseEnter}
-        >
-            <div className="pin-icon">
-                {pin.type === 'app' ? (
-                    (pin.icon && pin.icon.length > 50) ? (
-                        <img src={pin.icon} className="app-icon-img" alt="" onError={handleIconError} />
-                    ) : (
-                        <FontAwesomeIcon icon={getAppIcon(pin.name)} className="app-icon" />
-                    )
-                ) : (() => {
-                    const resolvedFavicon = pin.favicon || (pin.url ? getFaviconUrl(pin.url, 32, null, true) : null);
-                    return resolvedFavicon ? (
-                        <img src={resolvedFavicon} onError={handleFaviconError} alt="" />
-                    ) : (
-                        <FontAwesomeIcon icon={faGlobe} />
-                    );
-                })()}
-            </div>
-            <span className="pin-label">{pin.title || pin.name || 'Link'}</span>
-            <span className="pin-remove" onClick={handleRemove}>×</span>
-        </div>
-    );
-});
-
-// Memoized Context Item - compact version for grouped display
-const ContextItem = memo(function ContextItem({ item, index, isSelected, onSelect, onHover, onClose, getAppIcon }) {
-    const handleClick = useCallback(() => onSelect(item), [item, onSelect]);
-    const handleMouseEnter = useCallback(() => onHover(index), [index, onHover]);
-    const handleClose = useCallback((e) => onClose?.(item, e), [item, onClose]);
-    const handleIconError = useCallback((e) => {
-        e.target.style.display = 'none';
-    }, []);
-
-    const isApp = item.type === 'app';
-    const isRunning = isApp && item.isRunning;
-    const appContext = isApp ? getRunningAppContext(item) : null;
-    // Tabs are always closable; apps only when running (an installed app isn't "open")
-    const canClose = !isApp || isRunning;
-
-    return (
-        <div
-            className={`context-item ${isApp ? 'context-app' : 'context-tab'} ${isSelected ? 'pin-selected' : ''}`}
-            onClick={handleClick}
-            onMouseEnter={handleMouseEnter}
-            title={isApp ? [item.name || item.title, appContext].filter(Boolean).join(' • ') : (item.title || item.url)}
-        >
-            <div className="pin-icon">
-                {isApp ? (
-                    (item.icon && item.icon.length > 50) ? (
-                        <img src={item.icon} className="app-icon-img" alt="" onError={handleIconError} />
-                    ) : (
-                        <FontAwesomeIcon icon={getAppIcon(item.name)} style={{ color: '#60a5fa' }} />
-                    )
-                ) : (() => {
-                    const resolvedFavicon = item.favicon || (item.url ? getFaviconUrl(item.url, 16, null, true) : null);
-                    return resolvedFavicon ? (
-                        <img src={resolvedFavicon} onError={handleIconError} alt="" />
-                    ) : (
-                        <FontAwesomeIcon icon={faGlobe} style={{ color: '#a78bfa' }} />
-                    );
-                })()}
-            </div>
-            <span className="pin-label">
-                {isApp ? (appContext || item.name || item.title) : (item.title || 'Tab')}
-            </span>
-            {isRunning && <span className="running-dot" />}
-            {canClose && (
-                <span
-                    className="context-close"
-                    onClick={handleClose}
-                    title={isApp ? 'Close app' : 'Close tab'}
-                    role="button"
-                    aria-label={isApp ? 'Close app' : 'Close tab'}
-                >
-                    ×
-                </span>
-            )}
-        </div>
-    );
-});
-
-// Memoized Result Item to prevent unnecessary re-renders
-const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect, onHover, onTogglePin, onRemove, formatUrl, getBadgeLabel, getAppIcon, depth = 0, isFolderRow = false, isExpanded = false, onToggleExpand }) {
-    const handleClick = useCallback(() => onSelect(item), [item, onSelect]);
-    // Mark hover-driven selection so the scroll effect can skip it: while wheel
-    // scrolling, rows slide under the stationary cursor and fire mouseenter —
-    // auto-scrolling to each one fights the user's scroll direction and makes
-    // the end of a long result list hard to reach.
-    const hoverSelectedRef = useRef(false);
-    const handleMouseEnter = useCallback((e) => {
-        // Chromium re-fires mouseenter on whatever row ends up under a
-        // *stationary* cursor whenever the layout shifts beneath it — e.g. the
-        // results column narrowing to 280px the moment arrow-key navigation
-        // lands on a file with a Quick Look preview (see .has-preview in
-        // GlobalSpotlight.css). Without this guard that synthetic enter calls
-        // onHover() and silently overwrites the selection the keyboard just
-        // set, so navigating with arrow keys while the mouse merely rests
-        // over the list list feels random. A real hover always carries
-        // coordinates that differ from the last recorded mouse position; a
-        // reflow-triggered one repeats the same coordinates because the
-        // pointer device never moved.
-        if (!isRealPointerMove(lastPointerPos, e)) return;
-        hoverSelectedRef.current = true;
-        onHover(index);
-    }, [index, onHover]);
-    const handlePinClick = useCallback((e) => onTogglePin(item, e), [item, onTogglePin]);
-    const handleRemoveClick = useCallback((e) => { e.stopPropagation(); onRemove(item, e); }, [item, onRemove]);
-    const handleToggle = useCallback((e) => { e.stopPropagation(); onToggleExpand?.(item); }, [item, onToggleExpand]);
-
-    // Track icon load errors to show fallback
-    const [iconError, setIconError] = useState(false);
-    const rowRef = useRef(null);
-    // Per-extension logo + tint for file rows (e.g. React-blue for .tsx).
-    const fileMeta = item.type === 'file' ? getFileVisual(item.title || item.name) : null;
-
-    // Reset error when item changes
-    useEffect(() => {
-        setIconError(false);
-    }, [item.id, item.icon, item.favicon]);
-
-    // Keep the keyboard-selected row visible as the tree scrolls. Hover-driven
-    // selection is skipped — the row is already under the cursor, and scrolling
-    // to it would hijack an in-progress wheel scroll.
-    useEffect(() => {
-        if (isSelected && rowRef.current && !hoverSelectedRef.current) {
-            rowRef.current.scrollIntoView({ block: 'nearest' });
-        }
-        hoverSelectedRef.current = false;
-    }, [isSelected]);
-
-    return (
-        <div
-            ref={rowRef}
-            className={`result-item ${isSelected ? 'selected' : ''} result-${['tab', 'bookmark', 'history', 'workspace', 'note', 'app', 'folder', 'file', 'todo'].includes(item.type) ? item.type : 'link'}`}
-            title={(item.type === 'folder' || item.type === 'file') ? item.path : undefined}
-            onClick={handleClick}
-            onMouseDown={(e) => e.preventDefault()}
-            onMouseEnter={handleMouseEnter}
-        >
-            {/* Tree indentation guides (one vertical line per ancestor level) */}
-            {depth > 0 && Array.from({ length: depth }).map((_, d) => (
-                <span key={d} className="tree-indent" />
-            ))}
-            {/* Expand/collapse chevron for folders in the tree */}
-            {isFolderRow ? (
-                <button
-                    className={`tree-chevron ${isExpanded ? 'expanded' : ''}`}
-                    onClick={handleToggle}
-                    title={isExpanded ? 'Collapse' : 'Expand'}
-                >▸</button>
-            ) : (depth > 0 && <span className="tree-chevron-spacer" />)}
-            <div
-                className="result-icon"
-                style={fileMeta?.color ? { color: fileMeta.color, background: `${fileMeta.color}1f` } : undefined}
-            >
-                {item.type === 'app' ? (
-                    (item.icon && item.icon.length > 50 && !iconError) ? (
-                        <img src={item.icon} className="app-icon-img" alt="" onError={() => setIconError(true)} />
-                    ) : (
-                        <FontAwesomeIcon icon={getAppIcon(item.name)} className="app-icon" />
-                    )
-                ) : item.type === 'file' && fileMeta ? (
-                    fileMeta.kind === 'si'
-                        ? <fileMeta.Icon className="file-glyph" />
-                        : <FontAwesomeIcon icon={fileMeta.Icon} />
-                ) : (() => {
-                    const resolvedFavicon = item.favicon || (item.url ? getFaviconUrl(item.url, 32, null, true) : null);
-                    return resolvedFavicon && !iconError ? (
-                        <img src={resolvedFavicon} onError={() => setIconError(true)} alt="" />
-                    ) : (
-                        <div className="fa-icon-wrapper">
-                            <FontAwesomeIcon icon={getIcon(item.type, item.title || item.name)} />
-                        </div>
-                    );
-                })()}
-            </div>
-            <div className="result-content">
-                <span className="result-title">{item.title || item.name}</span>
-                <span className="result-desc">
-                    {item.type === 'app'
-                        ? (item.isRunning ? 'Running' : (item.path?.split(/[/\\]/).pop()?.replace(/\.app$/i, '') || 'Application'))
-                        : (item.description || formatUrl(item.url))}
-                </span>
-            </div>
-
-            {isSelected ? (
-                <div className="result-hint">
-                    <span>{item.type === 'app' ? (item.isRunning ? 'Focus' : 'Launch') : 'Open'}</span>
-                    <span className="shortcut-key">↵</span>
-                </div>
-            ) : (
-                <span className={`result-badge ${item.type === 'app' && item.isRunning ? 'badge-running' : ''}`}>
-                    {getBadgeLabel(item)}
-                </span>
-            )}
-
-            {onRemove ? (
-                <span className="pin-btn" title="Remove" onClick={handleRemoveClick}>
-                    <FontAwesomeIcon icon={faTimes} />
-                </span>
-            ) : (
-                <span
-                    className="pin-btn"
-                    title="Pin this"
-                    onClick={handlePinClick}
-                    style={(item.url || item.type === 'app') ? undefined : { visibility: 'hidden', pointerEvents: 'none' }}
-                >
-                    <FontAwesomeIcon icon={faThumbtack} />
-                </span>
-            )}
-        </div>
-    );
-});
-
-// The "+N more results" row — a real navigable row (see hasMoreResultsRow in
-// handleKeyDown) so it's reachable the same way as any other result, not just
-// by clicking. Shares ResultItem's pointer-move guard and keyboard-driven
-// scrollIntoView so it behaves identically under mouse/keyboard nav.
-const MoreResultsRow = memo(function MoreResultsRow({ isSelected, count, onSelect, onHover }) {
-    const rowRef = useRef(null);
-    const hoverSelectedRef = useRef(false);
-    const handleMouseEnter = useCallback((e) => {
-        if (!isRealPointerMove(lastPointerPos, e)) return;
-        hoverSelectedRef.current = true;
-        onHover();
-    }, [onHover]);
-
-    useEffect(() => {
-        if (isSelected && rowRef.current && !hoverSelectedRef.current) {
-            rowRef.current.scrollIntoView({ block: 'nearest' });
-        }
-        hoverSelectedRef.current = false;
-    }, [isSelected]);
-
-    return (
-        <div
-            ref={rowRef}
-            className={`spotlight-more-results${isSelected ? ' selected' : ''}`}
-            onClick={onSelect}
-            onMouseEnter={handleMouseEnter}
-        >
-            +{count} more results (refine your search)
-        </div>
-    );
-});
