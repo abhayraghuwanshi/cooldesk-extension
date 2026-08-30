@@ -265,6 +265,17 @@ function parseScopedQuery(q) {
     return { scope: SEARCH_SCOPES[m[1].toLowerCase()], term: (m[2] || '').trim() };
 }
 
+// Does a workspace name match what was typed after "/"? Prefix-of-whole-name
+// covers "/ent" -> "entertainment"; word-prefix covers "/website" ->
+// "cooldesk website" (typing a later word in a multi-word name), which a
+// bare startsWith on the full name would otherwise miss entirely.
+function workspaceNameMatchesTyped(name, typedLower) {
+    if (!typedLower) return false;
+    const n = (name || '').trim().toLowerCase();
+    if (n.startsWith(typedLower)) return true;
+    return n.split(/\s+/).some(word => word.startsWith(typedLower));
+}
+
 // Get icon for app by name
 function getAppIcon(appName) {
     if (!appName) return faDesktop;
@@ -463,6 +474,13 @@ export function GlobalSpotlight({
     // propagates to the source tab list, so the optimistic removal doesn't flicker
     // back when a reload (timer or tabs-synced event) fires before propagation.
     const pendingClosedTabsRef = useRef(new Set());
+    // Same tombstone idea for apps: a graceful quit (AppleScript "quit" /
+    // WM_CLOSE) can take longer than one reload cycle to actually exit, so
+    // without this a reload sees the pid still running and puts the pill
+    // right back — the "closes, then comes back" flicker. Keyed by pid;
+    // pruned automatically once that pid is no longer in the OS's running
+    // list (see loadContextItems), same as pendingClosedTabsRef.
+    const pendingClosedAppsRef = useRef(new Set());
 
     // Sidebar/docked-drawer width: the embedded search has no room — hide entirely
     const isSidebarSize = useIsSidebarWidth();
@@ -509,6 +527,18 @@ export function GlobalSpotlight({
     // Typing an existing workspace's own name (e.g. "/cool-verse") opens it
     // here — see useEditWorkspaceMode.js.
     const editWorkspace = useEditWorkspaceMode({ showFeedback, setCommandMode, setQuery, setWorkspaces });
+
+    // Closing the note editor or an inline todo edit unmounts whatever DOM
+    // node had focus (the Tiptap contenteditable, or the todo's <input>) —
+    // the browser doesn't hand focus back to anything, so ↑↓ navigation
+    // (bound to the main input's own onKeyDown) would otherwise go dead
+    // until the user clicks the search box again. Refocus it the moment
+    // we're back to plain list-browsing.
+    useEffect(() => {
+        if (commandMode === 'edit-workspace' && !editWorkspace.activeNoteId && !editWorkspace.editingTodoId) {
+            inputRef.current?.focus();
+        }
+    }, [commandMode, editWorkspace.activeNoteId, editWorkspace.editingTodoId]);
 
     // Files/folders (and other results) picked from the list while composing
     // an /agent request — the spotlight's answer to a CLI's "@file" attach.
@@ -906,6 +936,15 @@ export function GlobalSpotlight({
             );
             const enrichedAll = enrichedRunningApps;
 
+            // Drop apps the user just closed (optimistic) until the quit
+            // actually lands in the OS's running-apps list; prune tombstones
+            // once their pid is truly gone. Mirrors pendingClosedTabsRef above.
+            const pendingClosedApps = pendingClosedAppsRef.current;
+            if (pendingClosedApps.size) {
+                const presentPids = new Set(runningApps.map(a => a.pid).filter(Boolean));
+                for (const pid of [...pendingClosedApps]) if (!presentPids.has(pid)) pendingClosedApps.delete(pid);
+            }
+
             // Exact process names that are pure system noise (no user value)
             const systemExactNames = new Set([
                 // Windows system processes
@@ -961,6 +1000,8 @@ export function GlobalSpotlight({
                     const title = (a.title || '').toLowerCase();
                     const isRunningEntry = a.isRunning === true || !!a.pid;
                     const runningWindowKey = `${name}::${title}`;
+
+                    if (a.pid && pendingClosedApps.has(a.pid)) return false;
 
                     if (isRunningEntry) {
                         if (usedRunningWindowKeys.has(runningWindowKey)) return false;
@@ -1246,9 +1287,9 @@ export function GlobalSpotlight({
         // "cool" still opens a workspace named exactly "cool" even if
         // "cool-verse" also starts with it.
         if (trimmedQuery.startsWith('/') && trimmedQuery.length > 1) {
-            const typedName = trimmedQuery.slice(1);
+            const typedName = trimmedQuery.slice(1).toLowerCase();
             const exact = workspaces.find(w => (w.name || '').trim().toLowerCase() === typedName);
-            const candidates = exact ? [exact] : workspaces.filter(w => (w.name || '').trim().toLowerCase().startsWith(typedName));
+            const candidates = exact ? [exact] : workspaces.filter(w => workspaceNameMatchesTyped(w.name, typedName));
             if (candidates.length === 1) {
                 const match = candidates[0];
                 if (commandMode !== 'edit-workspace' || editWorkspace.workspaceId !== match.id) {
@@ -1451,7 +1492,7 @@ export function GlobalSpotlight({
         const typedName = trimmedQuery.startsWith('/') ? trimmedQuery.slice(1).toLowerCase() : '';
         const wsMatches = typedName
             ? workspaces
-                .filter(w => (w.name || '').trim().toLowerCase().startsWith(typedName))
+                .filter(w => workspaceNameMatchesTyped(w.name, typedName))
                 .map(w => ({
                     id: `ws-edit:${w.id}`,
                     type: 'workspace-edit',
@@ -2874,6 +2915,13 @@ export function GlobalSpotlight({
             } else if (item.type === 'app') {
                 // Only running apps can be closed; need a pid (or hwnd) to target them
                 if (item.isRunning && (item.pid || item.hwnd) && window.electronAPI?.closeApp) {
+                    // Tombstone by pid: a graceful quit (AppleScript "quit" /
+                    // WM_CLOSE) returns as soon as the request is *sent*, not
+                    // once the app has actually exited, so a reload before it
+                    // finishes would otherwise see the pid still running and
+                    // put the pill right back. This keeps it hidden until the
+                    // pid genuinely disappears — see loadContextItems.
+                    if (item.pid) pendingClosedAppsRef.current.add(item.pid);
                     await window.electronAPI.closeApp(item.pid || 0, item.hwnd);
                     trackAppUsage(item.name);
                 }
@@ -2882,7 +2930,7 @@ export function GlobalSpotlight({
             console.warn('[Spotlight] Failed to close item:', err);
         }
 
-        // Reconcile with real state once the OS/tab list has updated
+        // Reconcile with real state once the OS/tab list has updated.
         setTimeout(() => loadContextItems(), 500);
     }, [loadContextItems]);
 
@@ -4624,6 +4672,7 @@ const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect,
             className={`result-item ${isSelected ? 'selected' : ''} result-${['tab', 'bookmark', 'history', 'workspace', 'note', 'app', 'folder', 'file', 'todo'].includes(item.type) ? item.type : 'link'}`}
             title={(item.type === 'folder' || item.type === 'file') ? item.path : undefined}
             onClick={handleClick}
+            onMouseDown={(e) => e.preventDefault()}
             onMouseEnter={handleMouseEnter}
         >
             {/* Tree indentation guides (one vertical line per ancestor level) */}

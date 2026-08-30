@@ -196,6 +196,35 @@ export function TabManagement() {
   // Track if initial load completed
   const initialLoadDone = useRef(false);
 
+  // Tabs the user just closed. CLOSE_TAB is fire-and-forget over IPC/sync, so
+  // a tabs-updated/tabs-synced event (or a plain refreshTabs poll) can land
+  // before the browser has actually closed the tab — without this, that
+  // stale external list would overwrite the optimistic removal below and put
+  // the tab right back the instant it's dismissed. Pruned automatically once
+  // the tab's key is no longer present in an incoming list.
+  const pendingClosedTabsRef = useRef(new Set());
+  const tabKey = useCallback((t) => `${t.browser || 'other'}-${t.id}`, []);
+  const filterPendingClosed = useCallback((list) => {
+    const pending = pendingClosedTabsRef.current;
+    if (!pending.size) return list;
+    const presentKeys = new Set(list.map(tabKey));
+    for (const k of [...pending]) if (!presentKeys.has(k)) pending.delete(k);
+    return list.filter(t => !pending.has(tabKey(t)));
+  }, [tabKey]);
+
+  // Same idea for running apps killed from the Active Apps section:
+  // runningAppsService.subscribe pushes a fresh full list on its own cadence,
+  // which would otherwise undo handleKillApp's optimistic removal if it fires
+  // before the OS has actually reaped the process.
+  const pendingKilledAppsRef = useRef(new Set());
+  const filterPendingKilledApps = useCallback((list) => {
+    const pending = pendingKilledAppsRef.current;
+    if (!pending.size) return list;
+    const presentPids = new Set(list.map(a => a.pid).filter(Boolean));
+    for (const pid of [...pending]) if (!presentPids.has(pid)) pending.delete(pid);
+    return list.filter(a => !pending.has(a.pid));
+  }, []);
+
   // Fetch browser tabs
   const refreshTabs = useCallback(async () => {
     try {
@@ -256,18 +285,18 @@ export function TabManagement() {
       }
 
       // Show UNIQUE tabs IMMEDIATELY
-      setTabs(uniqueTabs);
+      setTabs(filterPendingClosed(uniqueTabs));
 
       // Then sort in background if smart sort enabled
       if (smartSortEnabled) {
         const sorted = await scoreAndSortTabs(uniqueTabs);
-        setTabs(sorted);
+        setTabs(filterPendingClosed(sorted));
       }
     } catch (error) {
       console.error('[TabManagement] Failed to fetch tabs:', error);
       setTabsLoading(false);
     }
-  }, [smartSortEnabled]);
+  }, [smartSortEnabled, filterPendingClosed]);
 
   // Force every connected browser instance to re-report its tabs, then refresh.
   // Use when the synced list looks wrong/stale (e.g. an extension dropped tabs).
@@ -359,7 +388,7 @@ export function TabManagement() {
             ...tab,
             browser: tab.browser || 'other'
           }));
-          setTabs(tabsWithBrowser);
+          setTabs(filterPendingClosed(tabsWithBrowser));
           setTabsLoading(false);
         }
       });
@@ -372,14 +401,14 @@ export function TabManagement() {
     if (!window.electronAPI && !chrome?.tabs?.query) {
       getHostTabs().then(res => {
         if (res.ok && res.tabs?.length) {
-          setTabs(res.tabs.map(tab => ({ ...tab, browser: tab.browser || 'other' })));
+          setTabs(filterPendingClosed(res.tabs.map(tab => ({ ...tab, browser: tab.browser || 'other' }))));
           setTabsLoading(false);
         }
       }).catch(() => {});
 
       const unsubTabs = syncOrchestrator.on('tabs-synced', (updatedTabs) => {
         if (Array.isArray(updatedTabs) && updatedTabs.length) {
-          setTabs(updatedTabs.map(tab => ({ ...tab, browser: tab.browser || 'other' })));
+          setTabs(filterPendingClosed(updatedTabs.map(tab => ({ ...tab, browser: tab.browser || 'other' }))));
           setTabsLoading(false);
         }
       });
@@ -486,12 +515,12 @@ export function TabManagement() {
         const sortedApps = [...filteredApps].sort((a, b) =>
           (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase())
         );
-        setRunningApps(sortedApps);
+        setRunningApps(filterPendingKilledApps(sortedApps));
       }
     });
 
     return unsubscribe;
-  }, []);
+  }, [filterPendingKilledApps]);
 
   // Extension Mode (real browser extension, not Electron)
   useEffect(() => {
@@ -574,7 +603,9 @@ export function TabManagement() {
         browser: tab.browser,
       };
 
-      // Optimistically drop the tab from the list for instant feedback
+      // Tombstone + optimistically drop the tab from the list for instant
+      // feedback — see pendingClosedTabsRef above.
+      pendingClosedTabsRef.current.add(tabKey(tab));
       setTabs(prev => prev.filter(t => !(t.id === tab.id && (t.browser || 'other') === (tab.browser || 'other'))));
 
       // Desktop (Tauri/Electron): route via sidecar → owning browser extension
@@ -590,7 +621,7 @@ export function TabManagement() {
     } catch (error) {
       console.error('[TabManagement] Failed to close tab:', error);
     }
-  }, []);
+  }, [tabKey]);
 
   const handleTabPin = useCallback(async (tab) => {
     try {
@@ -641,7 +672,9 @@ export function TabManagement() {
       const { invoke } = await import('@tauri-apps/api/core');
       const result = await invoke('kill_process', { pid: app.pid });
       console.log('[TabManagement] kill_process:', result);
-      // Optimistically drop every window of that PID from the list.
+      // Tombstone + optimistically drop every window of that PID from the
+      // list — see pendingKilledAppsRef above.
+      pendingKilledAppsRef.current.add(app.pid);
       setRunningApps(prev => prev.filter(a => a.pid !== app.pid));
     } catch (error) {
       console.error('[TabManagement] Failed to kill app', app.pid, ':', error);

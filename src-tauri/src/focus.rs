@@ -156,7 +156,7 @@ pub fn focus_window(
     Err(FocusError::WindowNotFound)
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
 pub fn close_window(_hwnd: Option<isize>, _pid: Option<u32>) -> FocusResult<()> {
     Err(FocusError::PlatformNotSupported)
 }

@@ -103,3 +103,41 @@ pub fn focus_window_by_pid(pid: u32, process_name: Option<&str>, path: Option<&s
         Err(e) => Err(FocusError::CommandFailed(e.to_string())),
     }
 }
+
+/// Gracefully close an app by asking it to quit via AppleScript — matches the
+/// Windows WM_CLOSE behavior (lets the app run its own save-prompt flow)
+/// rather than force-killing it. macOS windows have no `hwnd` concept in this
+/// codebase, so only `pid` is used.
+pub fn close_window(_hwnd: Option<isize>, pid: Option<u32>) -> FocusResult<()> {
+    let pid = pid.ok_or(FocusError::WindowNotFound)?;
+
+    // Resolve the running process's name from its PID, then ask *that* app
+    // (not "System Events") to quit — only the real app can show its own
+    // unsaved-changes prompt.
+    let name_script = format!(
+        r#"tell application "System Events" to name of first process whose unix id is {}"#,
+        pid
+    );
+    if let Ok(name_output) = Command::new("osascript").args(["-e", &name_script]).output() {
+        if name_output.status.success() {
+            let app_name = String::from_utf8_lossy(&name_output.stdout).trim().replace('"', "");
+            if !app_name.is_empty() {
+                let quit_script = format!(r#"tell application "{}" to quit"#, app_name);
+                if let Ok(quit_output) = Command::new("osascript").args(["-e", &quit_script]).output() {
+                    if quit_output.status.success() {
+                        return Ok(());
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: SIGTERM the process directly, best-effort when it can't be
+    // addressed by name (e.g. a headless helper System Events doesn't list).
+    let result = Command::new("kill").arg(pid.to_string()).output();
+    match result {
+        Ok(output) if output.status.success() => Ok(()),
+        Ok(output) => Err(FocusError::CommandFailed(String::from_utf8_lossy(&output.stderr).to_string())),
+        Err(e) => Err(FocusError::CommandFailed(e.to_string())),
+    }
+}
