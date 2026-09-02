@@ -8,7 +8,7 @@ import { syncWebSocket } from '../../services/syncWebSocket.js';
 import { getHostUrl, isHostSyncEnabled } from '../../services/syncConfig.js';
 import { isElectronApp } from '../../services/environmentDetector.js';
 import { runningAppsService } from '../../services/runningAppsService.js';
-import { enrichRunningAppsWithIcons, getGroupDomainFromUrl } from '../../utils/helpers.js';
+import { enrichRunningAppsWithIcons, getGroupDomainFromUrl, isLocalhostUrl } from '../../utils/helpers.js';
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
 import { AppCard, FolderCard, TabCard, TabGroupCard, TaskGroupCard } from './parts/TabCard';
 import { DevServersPanel } from './parts/DevServersPanel';
@@ -52,32 +52,6 @@ function detectBrowser() {
 
 // Get current browser (cached)
 const CURRENT_BROWSER = detectBrowser();
-
-// Detect localhost / local dev server URLs (localhost, loopback, private LAN IPs, *.local mDNS).
-// These are grouped into their own "Local Dev" section instead of by hostname.
-function isLocalhostUrl(url) {
-  if (!url) return false;
-  let hostname;
-  try {
-    hostname = new URL(url).hostname;
-  } catch {
-    return false;
-  }
-  if (!hostname) return false;
-  const h = hostname.toLowerCase();
-  if (h === 'localhost' || h.endsWith('.localhost')) return true;
-  if (h === '0.0.0.0' || h === '::1' || h === '[::1]') return true;
-  if (h.endsWith('.local')) return true; // mDNS / Bonjour
-  if (h.startsWith('127.')) return true; // loopback range
-  // Private LAN ranges (RFC 1918): 10.x, 192.168.x, 172.16–31.x
-  if (h.startsWith('10.') || h.startsWith('192.168.')) return true;
-  const m = h.match(/^172\.(\d{1,3})\./);
-  if (m) {
-    const second = parseInt(m[1], 10);
-    if (second >= 16 && second <= 31) return true;
-  }
-  return false;
-}
 
 // Debounce utility
 function debounce(func, wait) {

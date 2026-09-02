@@ -2,6 +2,7 @@ import {
     faBookmark,
     faCalendarAlt,
     faChevronDown,
+    faCode,
     faEyeSlash,
     faGlobe,
     faLink,
@@ -17,7 +18,7 @@ import { isElectronApp } from '../../../services/environmentDetector';
 import { runningAppsService } from '../../../services/runningAppsService.js';
 import { getDeviceId, getHostUrl, isSyncFeatureEnabled, loadSyncConfig } from '../../../services/syncConfig.js';
 import '../../../styles/cooldesk.css';
-import { enrichRunningAppsWithIcons, getFaviconUrl, safeGetHostname } from '../../../utils/helpers.js';
+import { enrichRunningAppsWithIcons, getFaviconUrl, getLocalUrlLabel, isLocalhostUrl, safeGetHostname } from '../../../utils/helpers.js';
 
 
 // Curated "Search" launcher: the search engines + AI tools people actually
@@ -180,6 +181,10 @@ export function ActivityFeed() {
     const bootSnapshot = useMemo(readFeedSnapshot, []);
     const [quickLinks, setQuickLinks] = useState(bootSnapshot ? bootSnapshot.links : []);
     const [feedItems, setFeedItems] = useState(bootSnapshot ? bootSnapshot.feed : []);
+    // Local dev servers (localhost/loopback/LAN, any port) — loaded separately
+    // from feedItems, which only looks 4h back and caps at 100 items total. A
+    // port you haven't touched in weeks should still show under the Local tab.
+    const [localApps, setLocalApps] = useState([]);
     const [calendarEvents, setCalendarEvents] = useState([]);
     const [activeTab, setActiveTab] = useState('all');
     // With a snapshot on screen there is nothing to spin about — the refresh
@@ -515,6 +520,65 @@ export function ActivityFeed() {
         return items.sort((a, b) => b.timestamp - a.timestamp).slice(0, 100); // CAP: Limit to 100 items
     }, [isDesktopApp]);
 
+    // Load Local dev servers (localhost/loopback/LAN, any port) — separate
+    // from loadFeed above so the Local tab isn't limited to the main feed's 4h
+    // history window / 100-item cap. Deduped by hostname:port, since that's
+    // what actually tells two dev servers apart; an open tab wins the slot
+    // over a history entry for the same port so clicking focuses it instead
+    // of opening a duplicate.
+    const loadLocalApps = useCallback(async () => {
+        const byLabel = new Map();
+
+        try {
+            if (typeof chrome !== 'undefined' && chrome.tabs?.query) {
+                const tabs = await chrome.tabs.query({});
+                tabs.forEach(tab => {
+                    if (!tab.url || !isLocalhostUrl(tab.url)) return;
+                    const label = getLocalUrlLabel(tab.url);
+                    byLabel.set(label, {
+                        id: `tab_${tab.id}`,
+                        label,
+                        title: tab.title || label,
+                        url: tab.url,
+                        timestamp: tab.lastAccessed || Date.now(),
+                        isOpen: true,
+                    });
+                });
+            }
+        } catch (e) {
+            console.error('[ActivityFeed] Failed to load local tabs', e);
+        }
+
+        try {
+            if (typeof chrome !== 'undefined' && chrome.history?.search) {
+                const since = Date.now() - 90 * 24 * 60 * 60 * 1000; // 90 days back
+                const historyItems = await chrome.history.search({ text: '', startTime: since, maxResults: 5000 });
+                for (const item of historyItems) {
+                    if (!item.url || !isLocalhostUrl(item.url)) continue;
+                    const label = getLocalUrlLabel(item.url);
+                    if (byLabel.get(label)?.isOpen) continue; // an open tab already claims this port
+                    const ts = item.lastVisitTime || 0;
+                    const existing = byLabel.get(label);
+                    if (!existing || ts > existing.timestamp) {
+                        byLabel.set(label, {
+                            id: `hist_${item.id || item.url}`,
+                            label,
+                            title: item.title || label,
+                            url: item.url,
+                            timestamp: ts,
+                            isOpen: false,
+                            visitCount: item.visitCount || 1,
+                        });
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('[ActivityFeed] Failed to load local history', e);
+        }
+
+        return [...byLabel.values()].sort((a, b) => (b.isOpen - a.isOpen) || b.timestamp - a.timestamp);
+    }, []);
+
     // Effect: Listen for activity DB changes
     useEffect(() => {
         const bc = new BroadcastChannel('activity_db_changes');
@@ -532,6 +596,15 @@ export function ActivityFeed() {
             bc.close();
         };
     }, [loadFeed]);
+
+    // Refresh Local dev servers when that tab is opened. loadLocalApps does a
+    // 90-day history.search, so it's kept out of the 2s tab-event throttle
+    // below (which would otherwise re-run it on every tab open/close) and
+    // instead just refreshes on view, in addition to the initial mount load.
+    useEffect(() => {
+        if (activeTab !== 'local') return;
+        loadLocalApps().then(setLocalApps).catch(console.error);
+    }, [activeTab, loadLocalApps]);
 
     // Effect: Listen for pins DB changes (for favorites/quick links sync)
     useEffect(() => {
@@ -593,9 +666,10 @@ export function ActivityFeed() {
 
     useEffect(() => {
         const loadAll = async () => {
-            const [links, feed] = await Promise.all([loadQuickLinks(), loadFeed()]);
+            const [links, feed, local] = await Promise.all([loadQuickLinks(), loadFeed(), loadLocalApps()]);
             setQuickLinks(links);
             setFeedItems(feed);
+            setLocalApps(local);
             writeFeedSnapshot(links, feed);
             setIsLoading(false);
         };
@@ -1108,6 +1182,108 @@ export function ActivityFeed() {
         );
     };
 
+    // "Local" tab: dev servers detected on this run, same row layout/actions as
+    // the other feed rows (renderActionSlot's × closes an open tab). Reads
+    // localApps, defined below.
+    const renderLocalApps = () => {
+        if (localApps.length === 0) {
+            return (
+                <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    padding: '40px 20px',
+                    color: '#64748B',
+                    textAlign: 'center'
+                }}>
+                    <FontAwesomeIcon icon={faCode} style={{ fontSize: '20px', opacity: 0.5 }} />
+                    <div style={{ fontSize: 'var(--font-sm)' }}>No local dev servers detected</div>
+                </div>
+            );
+        }
+
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {localApps.map(item => (
+                    <div key={item.label}
+                        className="feed-row"
+                        onClick={() => handleItemClick(item.url, item)}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            padding: '12px 16px',
+                            cursor: 'pointer',
+                            borderBottom: '1px solid rgba(148, 163, 184, 0.05)',
+                            transition: 'background 0.2s'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                        <div style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: 'rgba(16, 185, 129, 0.12)',
+                            color: '#34D399',
+                            flexShrink: 0
+                        }}>
+                            <FontAwesomeIcon icon={faCode} style={{ fontSize: '13px' }} />
+                        </div>
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{
+                                fontSize: 'var(--font-base)',
+                                color: 'var(--text-primary, #F1F5F9)',
+                                fontWeight: 500,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                            }}>
+                                {item.title || item.url}
+                            </div>
+                            <div style={{
+                                fontSize: 'var(--font-xs)',
+                                color: '#34D399',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                            }}>
+                                {item.label}
+                            </div>
+                        </div>
+
+                        {item.isOpen && (
+                            <div style={{
+                                flexShrink: 0,
+                                fontSize: 'var(--font-xs)',
+                                fontWeight: 600,
+                                color: '#34D399',
+                                background: 'rgba(16, 185, 129, 0.12)',
+                                border: '1px solid rgba(16, 185, 129, 0.3)',
+                                padding: '2px 8px',
+                                borderRadius: '999px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '5px'
+                            }}>
+                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34D399' }}></span>
+                                Open
+                            </div>
+                        )}
+
+                        {renderActionSlot(item.isOpen ? item : null)}
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
     // Group tabs by domain and chats by platform for cleaner view
     const groupedFeedItems = useMemo(() => {
         const filtered = feedItems.filter(item => {
@@ -1425,17 +1601,22 @@ export function ActivityFeed() {
                 wide two-pane = scrolls inside the fixed-height card; stacked
                 (≤600px) = grows and flows into the single page scroll. */}
             <div className="activity-feed-list" style={{ padding: '0', display: 'flex', flexDirection: 'column' }}>
-                <div style={{
-                    padding: '4px 16px 12px',
-                    position: 'sticky',
-                    top: 0,
-                    // Solid-enough backing: rows scrolling underneath must not
-                    // bleed through the segmented control.
-                    background: 'rgba(11, 11, 14, 0.85)',
-                    zIndex: 10,
-                    backdropFilter: 'blur(12px)',
-                    WebkitBackdropFilter: 'blur(12px)',
-                }}>
+                <div
+                    className="activity-feed-sticky-tabs"
+                    style={{
+                        padding: '4px 16px 12px',
+                        position: 'sticky',
+                        top: 0,
+                        // Solid-enough backing: rows scrolling underneath must not
+                        // bleed through the segmented control. Colorless card color
+                        // (.overview-activity-column.is-colorless) strips this back
+                        // out via CSS — see cooldesk.css — so the whole column reads
+                        // as fully transparent, not just its base layer.
+                        background: 'rgba(11, 11, 14, 0.85)',
+                        zIndex: 10,
+                        backdropFilter: 'blur(12px)',
+                        WebkitBackdropFilter: 'blur(12px)',
+                    }}>
                     {/* Modern Pill-Style Segmented Control */}
                     <div style={{
                         display: 'inline-flex',
@@ -1446,7 +1627,7 @@ export function ActivityFeed() {
                         gap: '4px',
                         position: 'relative'
                     }}>
-                        {(isDesktopApp ? ['all', 'chats', 'tabs', 'apps', 'search'] : ['all', 'tabs', 'search']).map(tab => {
+                        {(isDesktopApp ? ['all', 'chats', 'tabs', 'apps', 'local', 'search'] : ['all', 'tabs', 'local', 'search']).map(tab => {
                             const isActive = activeTab === tab;
                             return (
                                 <button
@@ -1503,6 +1684,8 @@ export function ActivityFeed() {
                     {/* Calendar Tab Content */}
                     {activeTab === 'search' ? (
                         renderSearchApps()
+                    ) : activeTab === 'local' ? (
+                        renderLocalApps()
                     ) : activeTab === 'calendar' ? (
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                             {/* Clock Header */}

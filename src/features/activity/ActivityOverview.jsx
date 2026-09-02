@@ -341,14 +341,19 @@ export function ActivityOverview({ embedded = false, hideWhenEmpty = false }) {
       seen.add(key);
       apps.push(prettyApp(a.name));
     });
+    // Each entry is the page title plus its "localhost:PORT" label — the port
+    // alone (what this used to show) doesn't say which of your several dev
+    // servers it is.
     const localhost = [];
     const lhSeen = new Set();
     tabs.forEach(t => {
       if (!t?.url || !isLocalhostUrl(t.url)) return;
       try {
         const u = new URL(t.url);
-        const entry = u.port ? `${u.hostname}:${u.port}` : u.hostname;
-        if (!lhSeen.has(entry)) { lhSeen.add(entry); localhost.push(entry); }
+        const label = u.port ? `${u.hostname}:${u.port}` : u.hostname;
+        if (lhSeen.has(label)) return;
+        lhSeen.add(label);
+        localhost.push({ label, title: t.title || label });
       } catch { /* ignore */ }
     });
     return { apps: apps.slice(0, 10), localhost: localhost.slice(0, 6), tabCount: tabs.length };
@@ -549,8 +554,13 @@ export function ActivityOverview({ embedded = false, hideWhenEmpty = false }) {
               {now.localhost.length > 0 && (
                 <div className="ao-now-group">
                   <div className="ao-now-label">Dev servers</div>
-                  <div className="ao-chip-row">
-                    {now.localhost.map(l => <span key={l} className="ao-chip dev">⚡ {l}</span>)}
+                  <div className="ao-dev-list">
+                    {now.localhost.map(l => (
+                      <div key={l.label} className="ao-dev-row" title={l.title}>
+                        <span className="ao-dev-title">{l.title}</span>
+                        <span className="ao-dev-port">⚡ {l.label}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

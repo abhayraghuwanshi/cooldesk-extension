@@ -1041,6 +1041,56 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   max-width: 200px;
 }
 
+/* Darkness slider shown under the swatches only when Colorless is picked —
+   readability over a busy wallpaper vs. how much of it shows through is a
+   taste + per-wallpaper call, so it's a knob instead of one fixed value
+   (see --colorless-opacity in cooldesk.css's .is-colorless rules). */
+.context-menu-opacity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 12px 8px;
+}
+
+.context-menu-opacity-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(148, 163, 184, 0.7);
+  white-space: nowrap;
+}
+
+.context-menu-opacity input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.25);
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.context-menu-opacity input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  border: none;
+  cursor: pointer;
+}
+
+.context-menu-opacity input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  border: none;
+  cursor: pointer;
+}
+
 /* Detail-panel variant sits inside a wcp-section */
 .wcp-accent-picker {
   padding: 6px 0 2px;
@@ -1112,6 +1162,27 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 }
 
 .card-swatch--reset.is-active {
+  box-shadow: 0 0 0 2px #1e293b, 0 0 0 4px rgba(148, 163, 184, 0.6);
+}
+
+/* Colorless swatch: checkerboard reads as "no fill" at a glance, same grammar
+   as transparency indicators in image editors. */
+.card-swatch--transparent {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: rgba(226, 232, 240, 0.85);
+  background-image:
+    linear-gradient(45deg, rgba(148, 163, 184, 0.35) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(148, 163, 184, 0.35) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(148, 163, 184, 0.35) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(148, 163, 184, 0.35) 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+}
+
+.card-swatch--transparent.is-active {
   box-shadow: 0 0 0 2px #1e293b, 0 0 0 4px rgba(148, 163, 184, 0.6);
 }
 
@@ -3726,6 +3797,31 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
       color-mix(in srgb, var(--card-accent) 20%, transparent),
       color-mix(in srgb, var(--card-accent) 6%, transparent)),
     rgba(11, 11, 14, 0.55);
+}
+
+/* Colorless card color: no accent hue, no fixed dark-glass look, and no blur
+   — the --colorless-opacity slider (set inline per column from the ◍ chip,
+   see ColumnColorChip in OverviewDashboard.jsx) alone carries legibility.
+   Wallpaper shows through sharp instead of smoothed; it's on the user to
+   raise the slider on a busy wallpaper since there's no blur left to help.
+   0.55 is the fallback for anyone who hasn't touched the slider. */
+.overview-left-column.is-colorless,
+.overview-activity-column.is-colorless {
+  background: rgba(11, 11, 14, var(--colorless-opacity, 0.55));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* The feed's sticky tab-switcher bar carries its own solid backing (inline,
+   see ActivityFeed.jsx) so scrolling rows don't bleed through it. Rides the
+   same --colorless-opacity knob, offset darker since rows scroll directly
+   underneath it and need it to stay legible above them; alpha channels over
+   1 are clamped to opaque by the browser, so the +0.2 offset is safe even at
+   the slider's max. No blur, matching the column rule above. */
+.overview-activity-column.is-colorless .activity-feed-sticky-tabs {
+  background: rgba(11, 11, 14, calc(var(--colorless-opacity, 0.55) + 0.2)) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 /* Floating trigger — hidden until the column is hovered, portaled popover

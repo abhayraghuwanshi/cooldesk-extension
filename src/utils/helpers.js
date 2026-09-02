@@ -336,3 +336,43 @@ export function isRealPointerMove(lastPos, e) {
   lastPos.y = e.clientY;
   return moved;
 }
+
+// Detect localhost / local dev server URLs (localhost, loopback, private LAN
+// IPs, *.local mDNS). Shared by TabManagement's "Local Dev" section and
+// ActivityFeed's "Local" section so a dev server (any port) groups the same
+// way in both places instead of scattering into per-host domain groups.
+export function isLocalhostUrl(url) {
+  if (!url) return false;
+  let hostname;
+  try {
+    hostname = new URL(url).hostname;
+  } catch {
+    return false;
+  }
+  if (!hostname) return false;
+  const h = hostname.toLowerCase();
+  if (h === 'localhost' || h.endsWith('.localhost')) return true;
+  if (h === '0.0.0.0' || h === '::1' || h === '[::1]') return true;
+  if (h.endsWith('.local')) return true; // mDNS / Bonjour
+  if (h.startsWith('127.')) return true; // loopback range
+  // Private LAN ranges (RFC 1918): 10.x, 192.168.x, 172.16–31.x
+  if (h.startsWith('10.') || h.startsWith('192.168.')) return true;
+  const m = h.match(/^172\.(\d{1,3})\./);
+  if (m) {
+    const second = parseInt(m[1], 10);
+    if (second >= 16 && second <= 31) return true;
+  }
+  return false;
+}
+
+// "localhost:3000" style label — the port is the only thing that tells two
+// local dev servers apart, since the hostname is almost always "localhost".
+export function getLocalUrlLabel(url) {
+  try {
+    const u = new URL(url);
+    const port = u.port || (u.protocol === 'https:' ? '443' : '80');
+    return `${u.hostname}:${port}`;
+  } catch {
+    return url;
+  }
+}

@@ -1,5 +1,14 @@
-import { faTimesCircle } from '@fortawesome/free-solid-svg-icons';
+import { faTimesCircle, faDroplet } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+
+// Sentinel stored/passed in place of a hex color to mean "no accent tint,
+// neutral frosted glass" (as opposed to null, which means "default dark
+// glass background"). Still a fairly dark, blurred material, not literally
+// see-through — see the .is-colorless CSS rule for why a lighter/see-through
+// background reads unreadable over a busy wallpaper. Kept as a string so it
+// survives the same localStorage round-trip as a hex value without a second
+// storage key per caller.
+export const TRANSPARENT_ACCENT = 'transparent';
 
 // Shared accent palette used by the workspace card context menu and its detail
 // panel. Vivid, high-contrast hues that tint safely over the dark glass base.
@@ -20,12 +29,18 @@ const isHex6 = (c) => /^#[0-9a-fA-F]{6}$/.test(c || '');
 /**
  * Reset + preset swatches + native custom-color picker.
  *
- * onSelect(color, source) — color is a hex string or null (reset). `source` is
- * 'reset' | 'preset' | 'custom' so callers can vary side effects (e.g. keep a
- * context menu open while the live picker is in use).
+ * onSelect(color, source) — color is a hex string, null (reset), or
+ * TRANSPARENT_ACCENT (colorless). `source` is 'reset' | 'preset' | 'custom' |
+ * 'transparent' so callers can vary side effects (e.g. keep a context menu
+ * open while the live picker is in use).
+ *
+ * `allowTransparent` adds a colorless swatch alongside the reset swatch, for
+ * callers whose base surface has its own background/blur that the user might
+ * want to strip entirely (see OverviewDashboard's column chips) rather than
+ * just skip an accent tint on.
  */
-export function AccentColorPicker({ value, onSelect, swatches = ACCENT_SWATCHES, className = '' }) {
-  const isCustom = value && !swatches.includes(value);
+export function AccentColorPicker({ value, onSelect, swatches = ACCENT_SWATCHES, className = '', allowTransparent = false }) {
+  const isCustom = value && value !== TRANSPARENT_ACCENT && !swatches.includes(value);
   return (
     <div className={`accent-picker ${className}`.trim()}>
       <button
@@ -37,6 +52,17 @@ export function AccentColorPicker({ value, onSelect, swatches = ACCENT_SWATCHES,
       >
         <FontAwesomeIcon icon={faTimesCircle} />
       </button>
+      {allowTransparent && (
+        <button
+          type="button"
+          className={`card-swatch card-swatch--transparent ${value === TRANSPARENT_ACCENT ? 'is-active' : ''}`}
+          onClick={() => onSelect(TRANSPARENT_ACCENT, 'transparent')}
+          title="Colorless (frosted, no tint)"
+          aria-label="Remove accent tint"
+        >
+          <FontAwesomeIcon icon={faDroplet} style={{ opacity: 0.35 }} />
+        </button>
+      )}
       {swatches.map((c) => (
         <button
           type="button"

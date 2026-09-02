@@ -399,6 +399,39 @@
   color: #8fcfa9;
 }
 
+/* Dev servers: title above, "localhost:PORT" below — a flat chip only had
+   room for the port, which doesn't say which of several running servers it
+   is. */
+.ao-dev-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ao-dev-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: rgba(111, 191, 143, 0.09);
+}
+
+.ao-dev-title {
+  font-size: var(--font-sm, 12px);
+  color: var(--text-primary, #ccd2db);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ao-dev-port {
+  font-size: 11px;
+  color: #8fcfa9;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
 /* ── Top sites (rail) ── */
 .ao-site-list { display: flex; flex-direction: column; }
 
