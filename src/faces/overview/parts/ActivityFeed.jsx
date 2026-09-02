@@ -5,6 +5,7 @@ import {
     faCode,
     faEyeSlash,
     faGlobe,
+    faLayerGroup,
     faLink,
     faPlus,
     faRotateLeft,
@@ -18,7 +19,15 @@ import { isElectronApp } from '../../../services/environmentDetector';
 import { runningAppsService } from '../../../services/runningAppsService.js';
 import { getDeviceId, getHostUrl, isSyncFeatureEnabled, loadSyncConfig } from '../../../services/syncConfig.js';
 import '../../../styles/cooldesk.css';
-import { enrichRunningAppsWithIcons, getFaviconUrl, getLocalUrlLabel, isLocalhostUrl, safeGetHostname } from '../../../utils/helpers.js';
+import {
+    enrichRunningAppsWithIcons,
+    getBaseDomainFromUrl,
+    getFaviconUrl,
+    getGroupDomainFromUrl,
+    getLocalUrlLabel,
+    isLocalhostUrl,
+    safeGetHostname
+} from '../../../utils/helpers.js';
 
 
 // Curated "Search" launcher: the search engines + AI tools people actually
@@ -155,6 +164,21 @@ const getPlatformInfo = (chat) => {
 // URLs, platform info is data) so a round-trip through storage is lossless.
 const FEED_SNAPSHOT_KEY = 'cooldesk-feed-snapshot';
 
+// Persists which segmented-control tab (All Activity/Browsing/Local/Suites/
+// Apps/Chats/Search) was active, so a refresh doesn't silently dump you back
+// on "All Activity" after you'd picked Local or Suites.
+const ACTIVE_TAB_KEY = 'cooldesk-feed-active-tab';
+const VALID_TABS = new Set(['all', 'chats', 'tabs', 'apps', 'local', 'suites', 'search']);
+
+function loadActiveTab() {
+    try {
+        const v = localStorage.getItem(ACTIVE_TAB_KEY);
+        return VALID_TABS.has(v) ? v : 'all';
+    } catch {
+        return 'all';
+    }
+}
+
 function readFeedSnapshot() {
     try {
         const s = JSON.parse(localStorage.getItem(FEED_SNAPSHOT_KEY) || 'null');
@@ -174,6 +198,11 @@ function writeFeedSnapshot(links, feed) {
     } catch { /* storage full or unavailable */ }
 }
 
+// "Suites" tab (multi-service accounts, e.g. Google/Microsoft/Apple, but
+// fully automatic — see orgSuites in ActivityFeed below).
+const SUITE_SKIP_DOMAINS = new Set(['System', 'Local Files', 'Local', 'Other', 'Unknown', 'localhost']);
+const SUITE_MIN_SERVICES = 3;
+
 export function ActivityFeed() {
     // Detect if running in Tauri/Electron app
     const isDesktopApp = isElectronApp();
@@ -181,12 +210,18 @@ export function ActivityFeed() {
     const bootSnapshot = useMemo(readFeedSnapshot, []);
     const [quickLinks, setQuickLinks] = useState(bootSnapshot ? bootSnapshot.links : []);
     const [feedItems, setFeedItems] = useState(bootSnapshot ? bootSnapshot.feed : []);
-    // Local dev servers (localhost/loopback/LAN, any port) — loaded separately
-    // from feedItems, which only looks 4h back and caps at 100 items total. A
-    // port you haven't touched in weeks should still show under the Local tab.
-    const [localApps, setLocalApps] = useState([]);
+    // Raw live-tabs + 90-day-history snapshot backing both the Local and
+    // Suites tabs — see loadDeepActivity below. localApps/orgSuites derive
+    // from this via useMemo instead of feedItems, which only looks 4h back
+    // and caps at 100 items: a port or a Google product you haven't touched
+    // in weeks should still show up.
+    const [deepActivity, setDeepActivity] = useState({ tabs: [], history: [] });
     const [calendarEvents, setCalendarEvents] = useState([]);
-    const [activeTab, setActiveTab] = useState('all');
+    const [activeTab, setActiveTabState] = useState(loadActiveTab);
+    const setActiveTab = useCallback((next) => {
+        setActiveTabState(next);
+        try { localStorage.setItem(ACTIVE_TAB_KEY, next); } catch { /* storage unavailable — won't persist */ }
+    }, []);
     // With a snapshot on screen there is nothing to spin about — the refresh
     // swaps in silently when it lands.
     const [isLoading, setIsLoading] = useState(!bootSnapshot);
@@ -520,63 +555,34 @@ export function ActivityFeed() {
         return items.sort((a, b) => b.timestamp - a.timestamp).slice(0, 100); // CAP: Limit to 100 items
     }, [isDesktopApp]);
 
-    // Load Local dev servers (localhost/loopback/LAN, any port) — separate
-    // from loadFeed above so the Local tab isn't limited to the main feed's 4h
-    // history window / 100-item cap. Deduped by hostname:port, since that's
-    // what actually tells two dev servers apart; an open tab wins the slot
-    // over a history entry for the same port so clicking focuses it instead
-    // of opening a duplicate.
-    const loadLocalApps = useCallback(async () => {
-        const byLabel = new Map();
+    // Raw material for both the Local and Suites tabs: live tabs + 90 days of
+    // history, unfiltered. One fetch instead of two — both tabs need "every
+    // URL you've touched recently", just clustered differently afterwards
+    // (by hostname:port for Local, by base domain for Suites). Kept out of
+    // loadFeed above since that only looks 4h back and caps at 100 items —
+    // fine for a recency feed, not for "have I used 3+ Google products ever".
+    const loadDeepActivity = useCallback(async () => {
+        let tabs = [];
+        let history = [];
 
         try {
             if (typeof chrome !== 'undefined' && chrome.tabs?.query) {
-                const tabs = await chrome.tabs.query({});
-                tabs.forEach(tab => {
-                    if (!tab.url || !isLocalhostUrl(tab.url)) return;
-                    const label = getLocalUrlLabel(tab.url);
-                    byLabel.set(label, {
-                        id: `tab_${tab.id}`,
-                        label,
-                        title: tab.title || label,
-                        url: tab.url,
-                        timestamp: tab.lastAccessed || Date.now(),
-                        isOpen: true,
-                    });
-                });
+                tabs = await chrome.tabs.query({});
             }
         } catch (e) {
-            console.error('[ActivityFeed] Failed to load local tabs', e);
+            console.error('[ActivityFeed] Failed to load tabs for deep activity', e);
         }
 
         try {
             if (typeof chrome !== 'undefined' && chrome.history?.search) {
                 const since = Date.now() - 90 * 24 * 60 * 60 * 1000; // 90 days back
-                const historyItems = await chrome.history.search({ text: '', startTime: since, maxResults: 5000 });
-                for (const item of historyItems) {
-                    if (!item.url || !isLocalhostUrl(item.url)) continue;
-                    const label = getLocalUrlLabel(item.url);
-                    if (byLabel.get(label)?.isOpen) continue; // an open tab already claims this port
-                    const ts = item.lastVisitTime || 0;
-                    const existing = byLabel.get(label);
-                    if (!existing || ts > existing.timestamp) {
-                        byLabel.set(label, {
-                            id: `hist_${item.id || item.url}`,
-                            label,
-                            title: item.title || label,
-                            url: item.url,
-                            timestamp: ts,
-                            isOpen: false,
-                            visitCount: item.visitCount || 1,
-                        });
-                    }
-                }
+                history = await chrome.history.search({ text: '', startTime: since, maxResults: 5000 });
             }
         } catch (e) {
-            console.error('[ActivityFeed] Failed to load local history', e);
+            console.error('[ActivityFeed] Failed to load history for deep activity', e);
         }
 
-        return [...byLabel.values()].sort((a, b) => (b.isOpen - a.isOpen) || b.timestamp - a.timestamp);
+        return { tabs, history };
     }, []);
 
     // Effect: Listen for activity DB changes
@@ -597,14 +603,15 @@ export function ActivityFeed() {
         };
     }, [loadFeed]);
 
-    // Refresh Local dev servers when that tab is opened. loadLocalApps does a
-    // 90-day history.search, so it's kept out of the 2s tab-event throttle
-    // below (which would otherwise re-run it on every tab open/close) and
-    // instead just refreshes on view, in addition to the initial mount load.
+    // Refresh the deep-activity snapshot when Local or Suites is opened.
+    // loadDeepActivity does a 90-day history.search, so it's kept out of the
+    // 2s tab-event throttle below (which would otherwise re-run it on every
+    // tab open/close) and instead just refreshes on view, in addition to the
+    // initial mount load.
     useEffect(() => {
-        if (activeTab !== 'local') return;
-        loadLocalApps().then(setLocalApps).catch(console.error);
-    }, [activeTab, loadLocalApps]);
+        if (activeTab !== 'local' && activeTab !== 'suites') return;
+        loadDeepActivity().then(setDeepActivity).catch(console.error);
+    }, [activeTab, loadDeepActivity]);
 
     // Effect: Listen for pins DB changes (for favorites/quick links sync)
     useEffect(() => {
@@ -666,10 +673,10 @@ export function ActivityFeed() {
 
     useEffect(() => {
         const loadAll = async () => {
-            const [links, feed, local] = await Promise.all([loadQuickLinks(), loadFeed(), loadLocalApps()]);
+            const [links, feed, deep] = await Promise.all([loadQuickLinks(), loadFeed(), loadDeepActivity()]);
             setQuickLinks(links);
             setFeedItems(feed);
-            setLocalApps(local);
+            setDeepActivity(deep);
             writeFeedSnapshot(links, feed);
             setIsLoading(false);
         };
@@ -1182,9 +1189,52 @@ export function ActivityFeed() {
         );
     };
 
+    // Local dev servers (localhost/loopback/LAN, any port), derived from
+    // deepActivity. Deduped by hostname:port, since that's what actually
+    // tells two dev servers apart; an open tab wins the slot over a history
+    // entry for the same port so clicking focuses it instead of opening a
+    // duplicate.
+    const localApps = useMemo(() => {
+        const byLabel = new Map();
+
+        deepActivity.tabs.forEach(tab => {
+            if (!tab.url || !isLocalhostUrl(tab.url)) return;
+            const label = getLocalUrlLabel(tab.url);
+            byLabel.set(label, {
+                id: `tab_${tab.id}`,
+                label,
+                title: tab.title || label,
+                url: tab.url,
+                timestamp: tab.lastAccessed || Date.now(),
+                isOpen: true,
+            });
+        });
+
+        deepActivity.history.forEach(item => {
+            if (!item.url || !isLocalhostUrl(item.url)) return;
+            const label = getLocalUrlLabel(item.url);
+            if (byLabel.get(label)?.isOpen) return; // an open tab already claims this port
+            const ts = item.lastVisitTime || 0;
+            const existing = byLabel.get(label);
+            if (!existing || ts > existing.timestamp) {
+                byLabel.set(label, {
+                    id: `hist_${item.id || item.url}`,
+                    label,
+                    title: item.title || label,
+                    url: item.url,
+                    timestamp: ts,
+                    isOpen: false,
+                    visitCount: item.visitCount || 1,
+                });
+            }
+        });
+
+        return [...byLabel.values()].sort((a, b) => (b.isOpen - a.isOpen) || b.timestamp - a.timestamp);
+    }, [deepActivity]);
+
     // "Local" tab: dev servers detected on this run, same row layout/actions as
     // the other feed rows (renderActionSlot's × closes an open tab). Reads
-    // localApps, defined below.
+    // localApps, defined above.
     const renderLocalApps = () => {
         if (localApps.length === 0) {
             return (
@@ -1278,6 +1328,193 @@ export function ActivityFeed() {
                         )}
 
                         {renderActionSlot(item.isOpen ? item : null)}
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
+    // Multi-service "suites" (Google, Microsoft, Apple, or anything else that
+    // happens to qualify) — fully automatic, no hardcoded org list. Cluster
+    // deepActivity (live tabs + 90-day history, not just the last 4h feed) by
+    // base domain (getBaseDomainFromUrl, eTLD+1: mail.google.com and
+    // drive.google.com are both "google.com") and count distinct services
+    // within that cluster (getGroupDomainFromUrl, which keeps the subdomain —
+    // the same "what site is this" vs. "should these sit together" split
+    // TabManagement's domain grouping already relies on). A base domain
+    // clears the bar once you've actually used SUITE_MIN_SERVICES or more
+    // distinct products from it, ever, not because of who they are.
+    //
+    // Ranked by total usage (summed history visitCount across every URL under
+    // that service), not last-visit time — an org you use constantly should
+    // outrank one you glanced at once more recently, especially once there
+    // are enough suites here to need scrolling to find the one you actually
+    // want. Each service accumulates visitCount across every distinct URL on
+    // that hostname (history returns one row per URL, not per hostname), and
+    // an open tab marks isOpen without resetting that count.
+    const orgSuites = useMemo(() => {
+        const byBase = new Map(); // base domain -> Map(service hostname -> entry)
+
+        const entryFor = (base, service) => {
+            if (!byBase.has(base)) byBase.set(base, new Map());
+            const services = byBase.get(base);
+            if (!services.has(service)) {
+                services.set(service, { service, id: null, title: null, url: null, timestamp: 0, isOpen: false, visitCount: 0 });
+            }
+            return services.get(service);
+        };
+
+        deepActivity.history.forEach(item => {
+            if (!item.url) return;
+            const base = getBaseDomainFromUrl(item.url);
+            if (SUITE_SKIP_DOMAINS.has(base)) return;
+            const entry = entryFor(base, getGroupDomainFromUrl(item.url));
+            entry.visitCount += item.visitCount || 1;
+            const ts = item.lastVisitTime || 0;
+            if (ts >= entry.timestamp) {
+                entry.timestamp = ts;
+                entry.title = item.title || entry.title;
+                entry.url = item.url;
+                entry.id = `hist_${item.id || item.url}`;
+            }
+        });
+
+        deepActivity.tabs.forEach(tab => {
+            if (!tab.url) return;
+            const base = getBaseDomainFromUrl(tab.url);
+            if (SUITE_SKIP_DOMAINS.has(base)) return;
+            const entry = entryFor(base, getGroupDomainFromUrl(tab.url));
+            entry.isOpen = true;
+            // An open tab is the clickable target (focuses it) even when a
+            // history row happens to carry a numerically later timestamp —
+            // but still let it fill in title/url if history never did.
+            if (!entry.url || (tab.lastAccessed || 0) >= entry.timestamp) {
+                entry.timestamp = tab.lastAccessed || entry.timestamp || Date.now();
+                entry.title = tab.title || entry.title;
+                entry.url = tab.url;
+                entry.id = `tab_${tab.id}`;
+            }
+        });
+
+        return [...byBase.entries()]
+            .map(([base, services]) => {
+                const list = [...services.values()].filter(s => s.url)
+                    .sort((a, b) => (b.isOpen - a.isOpen) || (b.visitCount - a.visitCount) || (b.timestamp - a.timestamp));
+                const totalVisits = list.reduce((sum, s) => sum + s.visitCount, 0);
+                const latestTimestamp = list.reduce((max, s) => Math.max(max, s.timestamp), 0);
+                return { base, services: list, totalVisits, latestTimestamp };
+            })
+            .filter(org => org.services.length >= SUITE_MIN_SERVICES)
+            .sort((a, b) => b.totalVisits - a.totalVisits || b.latestTimestamp - a.latestTimestamp);
+    }, [deepActivity]);
+
+    // "Suites" tab: one header per qualifying org, its distinct services
+    // listed underneath — same row layout/actions as the other feed rows.
+    const renderSuites = () => {
+        if (orgSuites.length === 0) {
+            return (
+                <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    padding: '40px 20px',
+                    color: '#64748B',
+                    textAlign: 'center'
+                }}>
+                    <FontAwesomeIcon icon={faLayerGroup} style={{ fontSize: '20px', opacity: 0.5 }} />
+                    <div style={{ fontSize: 'var(--font-sm)' }}>No multi-service accounts detected yet</div>
+                    <div style={{ fontSize: 'var(--font-xs)', opacity: 0.8 }}>
+                        Shows up once you've used {SUITE_MIN_SERVICES}+ products from the same domain
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {orgSuites.map(org => (
+                    <div key={org.base}>
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            padding: '10px 16px 6px',
+                        }}>
+                            <img
+                                src={getFaviconUrl(`https://${org.base}`, 32)}
+                                alt=""
+                                style={{ width: '16px', height: '16px', borderRadius: '4px', flexShrink: 0 }}
+                                onError={e => { e.target.style.visibility = 'hidden'; }}
+                            />
+                            <span style={{ fontSize: 'var(--font-sm)', fontWeight: 600, color: 'var(--text-primary, #F1F5F9)' }}>
+                                {org.base}
+                            </span>
+                            <span style={{ fontSize: 'var(--font-xs)', color: '#64748B' }}>
+                                {org.services.length} services
+                            </span>
+                        </div>
+
+                        {org.services.map(s => (
+                            <div key={s.service}
+                                className="feed-row"
+                                onClick={() => handleItemClick(s.url, s)}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '12px',
+                                    padding: '8px 16px 8px 42px',
+                                    cursor: 'pointer',
+                                    transition: 'background 0.2s'
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            >
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{
+                                        fontSize: 'var(--font-base)',
+                                        color: 'var(--text-primary, #F1F5F9)',
+                                        fontWeight: 500,
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis'
+                                    }}>
+                                        {s.title}
+                                    </div>
+                                    <div style={{
+                                        fontSize: 'var(--font-xs)',
+                                        color: '#64748B',
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis'
+                                    }}>
+                                        {s.service}
+                                    </div>
+                                </div>
+
+                                {s.isOpen && (
+                                    <div style={{
+                                        flexShrink: 0,
+                                        fontSize: 'var(--font-xs)',
+                                        fontWeight: 600,
+                                        color: '#34D399',
+                                        background: 'rgba(16, 185, 129, 0.12)',
+                                        border: '1px solid rgba(16, 185, 129, 0.3)',
+                                        padding: '2px 8px',
+                                        borderRadius: '999px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '5px'
+                                    }}>
+                                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34D399' }}></span>
+                                        Open
+                                    </div>
+                                )}
+
+                                {renderActionSlot(s.isOpen ? s : null)}
+                            </div>
+                        ))}
                     </div>
                 ))}
             </div>
@@ -1627,7 +1864,7 @@ export function ActivityFeed() {
                         gap: '4px',
                         position: 'relative'
                     }}>
-                        {(isDesktopApp ? ['all', 'chats', 'tabs', 'apps', 'local', 'search'] : ['all', 'tabs', 'local', 'search']).map(tab => {
+                        {(isDesktopApp ? ['all', 'chats', 'tabs', 'apps', 'local', 'suites', 'search'] : ['all', 'tabs', 'local', 'suites', 'search']).map(tab => {
                             const isActive = activeTab === tab;
                             return (
                                 <button
@@ -1686,6 +1923,8 @@ export function ActivityFeed() {
                         renderSearchApps()
                     ) : activeTab === 'local' ? (
                         renderLocalApps()
+                    ) : activeTab === 'suites' ? (
+                        renderSuites()
                     ) : activeTab === 'calendar' ? (
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                             {/* Clock Header */}
