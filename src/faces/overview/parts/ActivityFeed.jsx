@@ -603,13 +603,14 @@ export function ActivityFeed() {
         };
     }, [loadFeed]);
 
-    // Refresh the deep-activity snapshot when Local or Suites is opened.
-    // loadDeepActivity does a 90-day history.search, so it's kept out of the
-    // 2s tab-event throttle below (which would otherwise re-run it on every
-    // tab open/close) and instead just refreshes on view, in addition to the
-    // initial mount load.
+    // Refresh the deep-activity snapshot when Local, Suites, or Search is
+    // opened (Search needs history.search too — it shows the last visit for
+    // an app that isn't currently open in a tab). loadDeepActivity does a
+    // 90-day history.search, so it's kept out of the 2s tab-event throttle
+    // below (which would otherwise re-run it on every tab open/close) and
+    // instead just refreshes on view, in addition to the initial mount load.
     useEffect(() => {
-        if (activeTab !== 'local' && activeTab !== 'suites') return;
+        if (activeTab !== 'local' && activeTab !== 'suites' && activeTab !== 'search') return;
         loadDeepActivity().then(setDeepActivity).catch(console.error);
     }, [activeTab, loadDeepActivity]);
 
@@ -987,13 +988,11 @@ export function ActivityFeed() {
             ...customSearchApps
         ];
 
-        const openTabs = feedItems.filter(i => i.type === 'tab' && i.url);
-        const activeByApp = {}; // app.name -> open tab item
-        openTabs.forEach(tab => {
+        // Pick the app with the most specific (longest) matching domain so
+        // gemini.google.com maps to Gemini, not Google.
+        const matchApp = (url) => {
             let host = '';
-            try { host = new URL(tab.url).hostname.replace(/^www\./, '').toLowerCase(); } catch { return; }
-            // Pick the app with the most specific (longest) matching domain so
-            // gemini.google.com maps to Gemini, not Google.
+            try { host = new URL(url).hostname.replace(/^www\./, '').toLowerCase(); } catch { return null; }
             let best = null, bestLen = -1;
             for (const app of visibleApps) {
                 for (const d of app.domains) {
@@ -1002,12 +1001,41 @@ export function ActivityFeed() {
                     }
                 }
             }
-            if (best && !activeByApp[best.name]) activeByApp[best.name] = tab;
+            return best;
+        };
+
+        const openTabs = feedItems.filter(i => i.type === 'tab' && i.url);
+        const tabsByApp = {}; // app.name -> every open tab matching that app, not just one
+        openTabs.forEach(tab => {
+            const best = matchApp(tab.url);
+            if (best) (tabsByApp[best.name] ||= []).push(tab);
+        });
+
+        // Up to 3 most recent distinct history visits per app (deepActivity.history,
+        // 90 days) — shown when the app isn't currently open in a tab, so e.g. a
+        // few ChatGPT threads you closed are still one click away to continue.
+        const HISTORY_PER_APP = 3;
+        const historyByApp = {};
+        (deepActivity.history || []).forEach(item => {
+            if (!item.url) return;
+            const best = matchApp(item.url);
+            if (!best) return;
+            (historyByApp[best.name] ||= new Map());
+            const existing = historyByApp[best.name].get(item.url);
+            const ts = item.lastVisitTime || 0;
+            if (!existing || ts > existing.timestamp) {
+                historyByApp[best.name].set(item.url, { url: item.url, title: item.title, timestamp: ts });
+            }
+        });
+        Object.keys(historyByApp).forEach(name => {
+            historyByApp[name] = [...historyByApp[name].values()]
+                .sort((a, b) => b.timestamp - a.timestamp)
+                .slice(0, HISTORY_PER_APP);
         });
 
         // Show currently-open ones first, keeping curated order within each group.
         const ordered = visibleApps.map((app, i) => ({ app, i }))
-            .sort((a, b) => (activeByApp[b.app.name] ? 1 : 0) - (activeByApp[a.app.name] ? 1 : 0) || a.i - b.i)
+            .sort((a, b) => (tabsByApp[b.app.name] ? 1 : 0) - (tabsByApp[a.app.name] ? 1 : 0) || a.i - b.i)
             .map(x => x.app);
 
         const hiddenCount = hiddenSearchApps.size;
@@ -1015,19 +1043,27 @@ export function ActivityFeed() {
         return (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {ordered.map(app => {
-                    const activeTabItem = activeByApp[app.name];
+                    const appTabs = tabsByApp[app.name] || [];
+                    const activeTabItem = appTabs[0];
                     const activeUrl = activeTabItem?.url;
+                    const grouped = appTabs.length > 1;
+                    // Only relevant when nothing's open — an open tab is always more current.
+                    const appHistory = appTabs.length === 0 ? (historyByApp[app.name] || []) : [];
+                    const lastVisit = appHistory[0] || null;
+                    const historyGrouped = appHistory.length > 1;
+
                     return (
-                        <div key={app.url || app.name}
+                        <div key={app.url || app.name}>
+                        <div
                             className="feed-row"
-                            onClick={() => handleItemClick(activeUrl || app.url)}
+                            onClick={() => handleItemClick(activeUrl || lastVisit?.url || app.url)}
                             style={{
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '12px',
                                 padding: '12px 16px',
                                 cursor: 'pointer',
-                                borderBottom: '1px solid rgba(148, 163, 184, 0.05)',
+                                borderBottom: (grouped || historyGrouped) ? 'none' : '1px solid rgba(148, 163, 184, 0.05)',
                                 transition: 'background 0.2s'
                             }}
                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
@@ -1058,9 +1094,23 @@ export function ActivityFeed() {
                                 }}>
                                     {app.name}
                                 </div>
+                                {/* Last-visited fallback when this app has no open tab right now
+                                    and there's only one recent visit (multiple expand below instead). */}
+                                {lastVisit && !historyGrouped && (
+                                    <div style={{
+                                        fontSize: 'var(--font-xs)',
+                                        color: '#64748B',
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis'
+                                    }}>
+                                        Last opened {formatTime(lastVisit.timestamp)}
+                                    </div>
+                                )}
                             </div>
 
-                            {/* Active "Open" badge */}
+                            {/* "Open" badge — single tab shows "Open", multiple show a count
+                                and expand into per-tab rows below (same pattern as Suites). */}
                             {activeUrl && (
                                 <div style={{
                                     flexShrink: 0,
@@ -1076,15 +1126,90 @@ export function ActivityFeed() {
                                     gap: '5px'
                                 }}>
                                     <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34D399' }}></span>
-                                    Open
+                                    {grouped ? `${appTabs.length} open` : 'Open'}
                                 </div>
                             )}
 
-                            {/* Hover actions: remove-from-list (always) + close-tab (when open). Fixed width keeps right edges aligned. */}
+                            {/* Hover actions: remove-from-list (always) + close-tab (when a single tab is open). Fixed width keeps right edges aligned. */}
                             <div style={{ width: '52px', flexShrink: 0, marginLeft: '4px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '2px' }}>
                                 {renderHideBtn(app)}
-                                {activeTabItem && renderTabCloseBtn(activeTabItem)}
+                                {activeTabItem && !grouped && renderTabCloseBtn(activeTabItem)}
                             </div>
+                        </div>
+
+                        {/* All open tabs for this app, listed out — mirrors how the
+                            Suites tab lists every service under its org header. */}
+                        {grouped && appTabs.map(tab => (
+                            <div key={tab.id}
+                                className="feed-row"
+                                onClick={() => handleItemClick(tab.url, tab)}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '12px',
+                                    padding: '8px 16px 8px 42px',
+                                    cursor: 'pointer',
+                                    borderBottom: tab === appTabs[appTabs.length - 1] ? '1px solid rgba(148, 163, 184, 0.05)' : 'none',
+                                    transition: 'background 0.2s'
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            >
+                                <div style={{
+                                    fontSize: 'var(--font-base)',
+                                    color: 'var(--text-primary, #F1F5F9)',
+                                    fontWeight: 500,
+                                    flex: 1,
+                                    minWidth: 0,
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis'
+                                }}>
+                                    {tab.title || tab.url}
+                                </div>
+                                {renderActionSlot(tab)}
+                            </div>
+                        ))}
+
+                        {/* A few recent visits when nothing's open — pick one up to continue it. */}
+                        {historyGrouped && appHistory.map((item, idx) => (
+                            <div key={item.url}
+                                className="feed-row"
+                                onClick={() => handleItemClick(item.url)}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '12px',
+                                    padding: '8px 16px 8px 42px',
+                                    cursor: 'pointer',
+                                    borderBottom: idx === appHistory.length - 1 ? '1px solid rgba(148, 163, 184, 0.05)' : 'none',
+                                    transition: 'background 0.2s'
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            >
+                                <div style={{
+                                    fontSize: 'var(--font-base)',
+                                    color: 'var(--text-primary, #F1F5F9)',
+                                    fontWeight: 500,
+                                    flex: 1,
+                                    minWidth: 0,
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis'
+                                }}>
+                                    {item.title || item.url}
+                                </div>
+                                <div style={{
+                                    flexShrink: 0,
+                                    fontSize: 'var(--font-xs)',
+                                    color: '#64748B',
+                                    whiteSpace: 'nowrap'
+                                }}>
+                                    {formatTime(item.timestamp)}
+                                </div>
+                            </div>
+                        ))}
                         </div>
                     );
                 })}
