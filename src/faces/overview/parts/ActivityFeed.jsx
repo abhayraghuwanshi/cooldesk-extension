@@ -8,7 +8,10 @@ import {
     faLayerGroup,
     faLink,
     faPlus,
+    faPause,
+    faPlay,
     faRotateLeft,
+    faVolumeHigh,
     faXmark
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -168,7 +171,7 @@ const FEED_SNAPSHOT_KEY = 'cooldesk-feed-snapshot';
 // Apps/Chats/Search) was active, so a refresh doesn't silently dump you back
 // on "All Activity" after you'd picked Local or Suites.
 const ACTIVE_TAB_KEY = 'cooldesk-feed-active-tab';
-const VALID_TABS = new Set(['all', 'chats', 'tabs', 'apps', 'local', 'suites', 'search']);
+const VALID_TABS = new Set(['all', 'chats', 'tabs', 'apps', 'local', 'suites', 'search', 'media']);
 
 function loadActiveTab() {
     try {
@@ -203,6 +206,9 @@ function writeFeedSnapshot(links, feed) {
 const SUITE_SKIP_DOMAINS = new Set(['System', 'Local Files', 'Local', 'Other', 'Unknown', 'localhost']);
 const SUITE_MIN_SERVICES = 3;
 
+// "Media" tab: how many recently-played entries to keep in localStorage.
+const RECENT_MEDIA_LIMIT = 20;
+
 export function ActivityFeed() {
     // Detect if running in Tauri/Electron app
     const isDesktopApp = isElectronApp();
@@ -216,6 +222,15 @@ export function ActivityFeed() {
     // and caps at 100 items: a port or a Google product you haven't touched
     // in weeks should still show up.
     const [deepActivity, setDeepActivity] = useState({ tabs: [], history: [] });
+    // Tabs currently playing audio — see the polling effect below (Media tab).
+    const [audibleTabs, setAudibleTabs] = useState([]);
+    // Persisted "recently played" media (Media tab) — a snapshot is kept
+    // whenever a tab is seen playing, so pausing/closing it (which drops it
+    // from audibleTabs) doesn't lose the last Netflix/YouTube/etc. url. Capped
+    // at RECENT_MEDIA_LIMIT, deduped by url, newest first.
+    const [recentMedia, setRecentMedia] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('cooldeskRecentMedia') || '[]'); } catch { return []; }
+    });
     const [calendarEvents, setCalendarEvents] = useState([]);
     const [activeTab, setActiveTabState] = useState(loadActiveTab);
     const setActiveTab = useCallback((next) => {
@@ -613,6 +628,68 @@ export function ActivityFeed() {
         if (activeTab !== 'local' && activeTab !== 'suites' && activeTab !== 'search') return;
         loadDeepActivity().then(setDeepActivity).catch(console.error);
     }, [activeTab, loadDeepActivity]);
+
+    // Snapshot currently-audible tabs into the persisted "recently played" list
+    // (newest first, deduped by url) so pausing/closing a tab — which drops it
+    // from the live audibleTabs list — doesn't lose the last Netflix episode or
+    // YouTube video. Only ever grows/reorders while media is actually playing.
+    const upsertRecentMedia = useCallback((tabs) => {
+        if (tabs.length === 0) return;
+        setRecentMedia(prev => {
+            const byUrl = new Map(prev.map(m => [m.url, m]));
+            tabs.forEach(t => byUrl.set(t.url, { url: t.url, title: t.title, favIconUrl: t.favIconUrl, timestamp: Date.now() }));
+            const next = [...byUrl.values()].sort((a, b) => b.timestamp - a.timestamp).slice(0, RECENT_MEDIA_LIMIT);
+            try { localStorage.setItem('cooldeskRecentMedia', JSON.stringify(next)); } catch { /* storage unavailable */ }
+            return next;
+        });
+    }, []);
+
+    // Chrome deliberately keeps a tab's `audible` flag true for a couple
+    // seconds after its audio actually stops (so brief silences — an ad gap,
+    // a podcast pause — don't flicker the speaker icon). That collided with
+    // our own pause action: pauseAudibleTab optimistically drops the tab from
+    // audibleTabs, but the poll below runs every 2s and was overwriting that
+    // with chrome.tabs.query's still-stale "audible: true", so the item
+    // popped right back into "Playing now" instead of settling into
+    // "Recently played". url -> suppress-until timestamp; pauseAudibleTab
+    // populates it, poll() below filters against it.
+    const pausedSuppressRef = useRef(new Map());
+
+    // "Media" tab: tabs currently playing audio (chrome.tabs' `audible` flag).
+    // Deliberately its own short poll rather than piggybacking on chrome.tabs.onUpdated
+    // — that listener is skipped elsewhere in this file (see the throttled tab-event
+    // setup) because it fires too often and causes memory pressure, but audible
+    // start/stop is exactly the kind of change onUpdated would report. Scoping the
+    // poll to only run while this tab is actually open avoids paying that cost always.
+    useEffect(() => {
+        if (activeTab !== 'media') return;
+        let cancelled = false;
+        const poll = async () => {
+            try {
+                const tabs = await chrome.tabs.query({ audible: true });
+                if (cancelled) return;
+                const now = Date.now();
+                const suppress = pausedSuppressRef.current;
+                for (const [url, until] of suppress) { if (until <= now) suppress.delete(url); }
+                const mapped = tabs
+                    .filter(t => !suppress.has(t.url))
+                    .map(t => ({
+                        id: `tab_${t.id}`,
+                        title: t.title || 'Untitled Tab',
+                        url: t.url,
+                        favIconUrl: t.favIconUrl,
+                        muted: !!t.mutedInfo?.muted,
+                    }));
+                setAudibleTabs(mapped);
+                upsertRecentMedia(mapped);
+            } catch (e) {
+                console.error('Failed to query audible tabs', e);
+            }
+        };
+        poll();
+        const interval = setInterval(poll, 2000);
+        return () => { cancelled = true; clearInterval(interval); };
+    }, [activeTab, upsertRecentMedia]);
 
     // Effect: Listen for pins DB changes (for favorites/quick links sync)
     useEffect(() => {
@@ -1459,6 +1536,373 @@ export function ActivityFeed() {
         );
     };
 
+    // Actually pause playback in a tab, not just mute its output — injects a
+    // content script that pauses every <video>/<audio> element on the page.
+    // (Sites using raw Web Audio API with no media element won't respond to
+    // this; muting is still the only lever for those.) Once paused the tab
+    // naturally drops off chrome.tabs' audible flag, so it's removed from
+    // this list right away rather than waiting for the next poll — and
+    // suppressed for a few seconds after, since Chrome keeps `audible: true`
+    // briefly after audio actually stops (see pausedSuppressRef above), which
+    // would otherwise make the next poll tick undo this removal.
+    const pauseAudibleTab = async (item, e) => {
+        if (e) e.stopPropagation();
+        const rawId = typeof item.id === 'string' ? item.id.replace(/^tab_/, '') : item.id;
+        const tabId = parseInt(rawId, 10);
+        if (!Number.isFinite(tabId)) return;
+        try {
+            await chrome.scripting.executeScript({
+                target: { tabId },
+                func: () => {
+                    document.querySelectorAll('video, audio').forEach(el => { if (!el.paused) el.pause(); });
+                }
+            });
+            pausedSuppressRef.current.set(item.url, Date.now() + 4000);
+            setAudibleTabs(prev => prev.filter(t => t.id !== item.id));
+        } catch (err) {
+            console.error('Failed to pause tab playback:', err);
+        }
+    };
+
+    // "Resume" a Recently Played entry — like Chrome's own media player popup,
+    // where hitting play on a paused item continues it exactly where it left
+    // off rather than starting over. Only possible because pauseAudibleTab
+    // pauses in place instead of closing the tab: if that tab is still open,
+    // this just calls .play() on its media elements and focuses it. If it was
+    // closed in the meantime (or paused from Chrome's own UI, another device,
+    // etc.) there's nothing to resume, so it falls back to opening the url fresh.
+    const resumeMediaEntry = async (item, e) => {
+        if (e) e.stopPropagation();
+        try {
+            const tabs = await chrome.tabs.query({});
+            const match = tabs.find(t => t.url === item.url);
+            if (match) {
+                await chrome.scripting.executeScript({
+                    target: { tabId: match.id },
+                    func: () => {
+                        document.querySelectorAll('video, audio').forEach(el => { if (el.paused) el.play().catch(() => {}); });
+                    }
+                });
+                // Lift any pause-suppression left over from pauseAudibleTab so the
+                // next poll can pick this tab back up as playing right away.
+                pausedSuppressRef.current.delete(item.url);
+                await chrome.tabs.update(match.id, { active: true });
+                if (match.windowId != null && chrome.windows?.update) {
+                    await chrome.windows.update(match.windowId, { focused: true });
+                }
+                return;
+            }
+        } catch (err) {
+            console.error('Failed to resume media tab, opening fresh instead:', err);
+        }
+        handleItemClick(item.url, item);
+    };
+
+    // Mute/unmute a tab from the Media list — optimistic like handleCloseTab,
+    // chrome.tabs.onActivated etc. will reconcile if it somehow fails.
+    const toggleMuteTab = async (item, e) => {
+        if (e) e.stopPropagation();
+        const rawId = typeof item.id === 'string' ? item.id.replace(/^tab_/, '') : item.id;
+        const tabId = parseInt(rawId, 10);
+        if (!Number.isFinite(tabId)) return;
+        const nextMuted = !item.muted;
+        setAudibleTabs(prev => prev.map(t => t.id === item.id ? { ...t, muted: nextMuted } : t));
+        try {
+            if (chrome?.tabs?.update) await chrome.tabs.update(tabId, { muted: nextMuted });
+        } catch (err) {
+            console.error('Failed to toggle tab mute:', err);
+        }
+    };
+
+    // "Media" tab: tabs currently playing audio, refreshed by the polling
+    // effect above (audibleTabs). Same row layout/actions as the other feed
+    // tabs, plus a mute toggle since that's the one action unique to sound.
+    // Recently played not currently playing — the persisted list minus whatever
+    // audibleTabs already covers, newest first, capped for the section's length.
+    const recentMediaEntries = recentMedia
+        .filter(m => !audibleTabs.some(a => a.url === m.url))
+        .slice(0, 8);
+
+    const removeRecentMedia = (url, e) => {
+        if (e) e.stopPropagation();
+        setRecentMedia(prev => {
+            const next = prev.filter(m => m.url !== url);
+            try { localStorage.setItem('cooldeskRecentMedia', JSON.stringify(next)); } catch { /* storage unavailable */ }
+            return next;
+        });
+    };
+
+    const renderMediaTabs = () => {
+        if (audibleTabs.length === 0 && recentMediaEntries.length === 0) {
+            return (
+                <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    padding: '40px 20px',
+                    color: '#64748B',
+                    textAlign: 'center'
+                }}>
+                    <FontAwesomeIcon icon={faVolumeHigh} style={{ fontSize: '20px', opacity: 0.5 }} />
+                    <div style={{ fontSize: 'var(--font-sm)' }}>No tabs playing audio right now</div>
+                </div>
+            );
+        }
+
+        const sectionHeader = (label) => (
+            <div style={{
+                padding: '10px 16px 6px',
+                fontSize: 'var(--font-xs)',
+                fontWeight: 600,
+                color: '#64748B',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em'
+            }}>
+                {label}
+            </div>
+        );
+
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {audibleTabs.length > 0 && recentMediaEntries.length > 0 && sectionHeader('Playing now')}
+                {audibleTabs.map(item => (
+                    <div key={item.id}
+                        className="feed-row"
+                        onClick={() => handleItemClick(item.url, item)}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            padding: '12px 16px',
+                            cursor: 'pointer',
+                            borderBottom: '1px solid rgba(148, 163, 184, 0.05)',
+                            transition: 'background 0.2s'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                        <div style={{ borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'var(--accent-blue, #60a5fa)', overflow: 'hidden' }}>
+                            <img
+                                src={item.favIconUrl || getFaviconUrl(item.url, 32)}
+                                alt=""
+                                style={{ width: 'var(--font-5xl)', height: 'var(--font-5xl)', objectFit: 'contain' }}
+                                onError={e => { e.target.style.display = 'none'; if (e.target.nextSibling) e.target.nextSibling.style.display = 'block'; }}
+                            />
+                            <div style={{ display: 'none' }}>
+                                <FontAwesomeIcon icon={faGlobe} style={{ fontSize: '16px' }} />
+                            </div>
+                        </div>
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{
+                                fontSize: 'var(--font-base)',
+                                color: 'var(--text-primary, #F1F5F9)',
+                                fontWeight: 500,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                            }}>
+                                {item.title}
+                            </div>
+                            <div style={{
+                                fontSize: 'var(--font-xs)',
+                                color: '#64748B',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                            }}>
+                                {safeGetHostname(item.url) || item.url}
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            title={item.muted ? 'Unmute tab' : 'Mute tab'}
+                            aria-label={item.muted ? 'Unmute tab' : 'Mute tab'}
+                            onClick={(e) => toggleMuteTab(item, e)}
+                            style={{
+                                flexShrink: 0,
+                                fontSize: 'var(--font-xs)',
+                                fontWeight: 600,
+                                color: item.muted ? '#94A3B8' : '#34D399',
+                                background: item.muted ? 'rgba(148, 163, 184, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                                border: item.muted ? '1px solid rgba(148, 163, 184, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)',
+                                padding: '2px 8px',
+                                borderRadius: '999px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: item.muted ? '#94A3B8' : '#34D399' }}></span>
+                            {item.muted ? 'Muted' : 'Playing'}
+                        </button>
+
+                        <button
+                            className="feed-tab-close"
+                            type="button"
+                            title="Pause playback"
+                            aria-label="Pause playback"
+                            onClick={(e) => pauseAudibleTab(item, e)}
+                            style={{
+                                flexShrink: 0,
+                                width: '24px',
+                                height: '24px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderRadius: '6px',
+                                border: 'none',
+                                background: 'transparent',
+                                color: '#94A3B8',
+                                cursor: 'pointer',
+                                fontSize: '11px',
+                                transition: 'all 0.15s ease'
+                            }}
+                            onMouseEnter={e => {
+                                e.stopPropagation();
+                                e.currentTarget.style.background = 'rgba(96, 165, 250, 0.18)';
+                                e.currentTarget.style.color = '#60A5FA';
+                            }}
+                            onMouseLeave={e => {
+                                e.currentTarget.style.background = 'transparent';
+                                e.currentTarget.style.color = '#94A3B8';
+                            }}
+                        >
+                            <FontAwesomeIcon icon={faPause} />
+                        </button>
+
+                        {renderActionSlot(item)}
+                    </div>
+                ))}
+
+                {recentMediaEntries.length > 0 && sectionHeader('Recently played')}
+                {recentMediaEntries.map(item => (
+                    <div key={item.url}
+                        className="feed-row"
+                        onClick={() => resumeMediaEntry(item)}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            padding: '12px 16px',
+                            cursor: 'pointer',
+                            borderBottom: '1px solid rgba(148, 163, 184, 0.05)',
+                            transition: 'background 0.2s'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                        <div style={{ borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'var(--accent-blue, #60a5fa)', overflow: 'hidden' }}>
+                            <img
+                                src={item.favIconUrl || getFaviconUrl(item.url, 32)}
+                                alt=""
+                                style={{ width: 'var(--font-5xl)', height: 'var(--font-5xl)', objectFit: 'contain' }}
+                                onError={e => { e.target.style.display = 'none'; if (e.target.nextSibling) e.target.nextSibling.style.display = 'block'; }}
+                            />
+                            <div style={{ display: 'none' }}>
+                                <FontAwesomeIcon icon={faGlobe} style={{ fontSize: '16px' }} />
+                            </div>
+                        </div>
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{
+                                fontSize: 'var(--font-base)',
+                                color: 'var(--text-primary, #F1F5F9)',
+                                fontWeight: 500,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                            }}>
+                                {item.title || item.url}
+                            </div>
+                            <div style={{
+                                fontSize: 'var(--font-xs)',
+                                color: '#64748B',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                            }}>
+                                {safeGetHostname(item.url) || item.url} · {formatTime(item.timestamp)}
+                            </div>
+                        </div>
+
+                        <button
+                            className="feed-tab-close"
+                            type="button"
+                            title="Resume playback"
+                            aria-label="Resume playback"
+                            onClick={(e) => resumeMediaEntry(item, e)}
+                            style={{
+                                flexShrink: 0,
+                                width: '24px',
+                                height: '24px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderRadius: '6px',
+                                border: 'none',
+                                background: 'transparent',
+                                color: '#94A3B8',
+                                cursor: 'pointer',
+                                fontSize: '11px',
+                                transition: 'all 0.15s ease'
+                            }}
+                            onMouseEnter={e => {
+                                e.stopPropagation();
+                                e.currentTarget.style.background = 'rgba(52, 211, 153, 0.18)';
+                                e.currentTarget.style.color = '#34D399';
+                            }}
+                            onMouseLeave={e => {
+                                e.currentTarget.style.background = 'transparent';
+                                e.currentTarget.style.color = '#94A3B8';
+                            }}
+                        >
+                            <FontAwesomeIcon icon={faPlay} />
+                        </button>
+
+                        <button
+                            className="feed-tab-close"
+                            type="button"
+                            title="Remove from recently played"
+                            aria-label="Remove from recently played"
+                            onClick={(e) => removeRecentMedia(item.url, e)}
+                            style={{
+                                flexShrink: 0,
+                                width: '24px',
+                                height: '24px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderRadius: '6px',
+                                border: 'none',
+                                background: 'transparent',
+                                color: '#94A3B8',
+                                cursor: 'pointer',
+                                fontSize: '12px',
+                                transition: 'all 0.15s ease'
+                            }}
+                            onMouseEnter={e => {
+                                e.stopPropagation();
+                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.18)';
+                                e.currentTarget.style.color = '#F87171';
+                            }}
+                            onMouseLeave={e => {
+                                e.currentTarget.style.background = 'transparent';
+                                e.currentTarget.style.color = '#94A3B8';
+                            }}
+                        >
+                            <FontAwesomeIcon icon={faXmark} />
+                        </button>
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
     // Multi-service "suites" (Google, Microsoft, Apple, or anything else that
     // happens to qualify) — fully automatic, no hardcoded org list. Cluster
     // deepActivity (live tabs + 90-day history, not just the last 4h feed) by
@@ -1989,7 +2433,7 @@ export function ActivityFeed() {
                         gap: '4px',
                         position: 'relative'
                     }}>
-                        {(isDesktopApp ? ['all', 'chats', 'tabs', 'apps', 'local', 'suites', 'search'] : ['all', 'tabs', 'local', 'suites', 'search']).map(tab => {
+                        {(isDesktopApp ? ['all', 'chats', 'tabs', 'apps', 'local', 'suites', 'search', 'media'] : ['all', 'tabs', 'local', 'suites', 'search', 'media']).map(tab => {
                             const isActive = activeTab === tab;
                             return (
                                 <button
@@ -2050,6 +2494,8 @@ export function ActivityFeed() {
                         renderLocalApps()
                     ) : activeTab === 'suites' ? (
                         renderSuites()
+                    ) : activeTab === 'media' ? (
+                        renderMediaTabs()
                     ) : activeTab === 'calendar' ? (
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                             {/* Clock Header */}
