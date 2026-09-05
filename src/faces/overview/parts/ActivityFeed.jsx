@@ -227,9 +227,17 @@ export function ActivityFeed() {
     // Persisted "recently played" media (Media tab) — a snapshot is kept
     // whenever a tab is seen playing, so pausing/closing it (which drops it
     // from audibleTabs) doesn't lose the last Netflix/YouTube/etc. url. Capped
-    // at RECENT_MEDIA_LIMIT, deduped by url, newest first.
+    // at RECENT_MEDIA_LIMIT, deduped by hostname, newest first. Re-deduped on
+    // load too, to collapse any per-url duplicates a previous version of this
+    // list already wrote to storage (e.g. several stale "Netflix" rows).
     const [recentMedia, setRecentMedia] = useState(() => {
-        try { return JSON.parse(localStorage.getItem('cooldeskRecentMedia') || '[]'); } catch { return []; }
+        try {
+            const stored = JSON.parse(localStorage.getItem('cooldeskRecentMedia') || '[]');
+            const hostOf = (url) => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; } };
+            const byHost = new Map();
+            [...stored].sort((a, b) => a.timestamp - b.timestamp).forEach(m => byHost.set(hostOf(m.url), m));
+            return [...byHost.values()].sort((a, b) => b.timestamp - a.timestamp);
+        } catch { return []; }
     });
     const [calendarEvents, setCalendarEvents] = useState([]);
     const [activeTab, setActiveTabState] = useState(loadActiveTab);
@@ -630,15 +638,19 @@ export function ActivityFeed() {
     }, [activeTab, loadDeepActivity]);
 
     // Snapshot currently-audible tabs into the persisted "recently played" list
-    // (newest first, deduped by url) so pausing/closing a tab — which drops it
+    // (newest first, deduped by hostname — not the exact url, since SPAs like
+    // Netflix/YouTube rewrite their url and tab title on every navigation
+    // while audio keeps playing, which used to spam this list with a fresh
+    // "Netflix" entry per browse) so pausing/closing a tab — which drops it
     // from the live audibleTabs list — doesn't lose the last Netflix episode or
     // YouTube video. Only ever grows/reorders while media is actually playing.
     const upsertRecentMedia = useCallback((tabs) => {
         if (tabs.length === 0) return;
         setRecentMedia(prev => {
-            const byUrl = new Map(prev.map(m => [m.url, m]));
-            tabs.forEach(t => byUrl.set(t.url, { url: t.url, title: t.title, favIconUrl: t.favIconUrl, timestamp: Date.now() }));
-            const next = [...byUrl.values()].sort((a, b) => b.timestamp - a.timestamp).slice(0, RECENT_MEDIA_LIMIT);
+            const hostOf = (url) => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; } };
+            const byHost = new Map(prev.map(m => [hostOf(m.url), m]));
+            tabs.forEach(t => byHost.set(hostOf(t.url), { url: t.url, title: t.title, favIconUrl: t.favIconUrl, timestamp: Date.now() }));
+            const next = [...byHost.values()].sort((a, b) => b.timestamp - a.timestamp).slice(0, RECENT_MEDIA_LIMIT);
             try { localStorage.setItem('cooldeskRecentMedia', JSON.stringify(next)); } catch { /* storage unavailable */ }
             return next;
         });
