@@ -1,6 +1,6 @@
 [package]
 name = "cooldesk"
-version = "2.0.11"
+version = "2.0.13"
 description = "AI-powered desktop workspace manager"
 authors = ["CoolDesk"]
 license = ""
