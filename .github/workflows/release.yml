@@ -335,6 +335,10 @@ jobs:
           draft: false
 
       - name: Upload installer to Cloudflare R2
+        # Best-effort mirror only — winget/homebrew read installers straight
+        # from the GitHub release, not from R2. A misconfigured bucket here
+        # must not fail this job and block those downstream jobs.
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN_CD }}
           TAG: ${{ github.ref_name }}
