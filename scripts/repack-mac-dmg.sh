@@ -25,13 +25,21 @@ VOLNAME="CoolDesk"
 echo "==> Repacking $DMG_NAME"
 
 # Mount original DMG
-hdiutil attach "$DMG_PATH" -mountpoint /Volumes/CoolDeskSrc -nobrowse -readonly -quiet
+hdiutil attach "$DMG_PATH" -mountpoint /Volumes/CoolDeskSrc -nobrowse -readonly \
+  || { echo "ERROR: hdiutil attach (source) failed with exit $?"; exit 1; }
 
 # Copy app out
-cp -r /Volumes/CoolDeskSrc/*.app "$STAGING/" 2>/dev/null || true
+cp -r /Volumes/CoolDeskSrc/*.app "$STAGING/" \
+  || { echo "ERROR: cp of .app out of source DMG failed with exit $?"; exit 1; }
 APP_NAME=$(ls "$STAGING" | grep '\.app$' | head -1)
+if [ -z "$APP_NAME" ]; then
+  echo "ERROR: no .app found in $STAGING after copy"
+  ls -la "$STAGING"
+  exit 1
+fi
 
-hdiutil detach /Volumes/CoolDeskSrc -quiet
+hdiutil detach /Volumes/CoolDeskSrc \
+  || { echo "ERROR: hdiutil detach (source) failed with exit $?"; exit 1; }
 
 # Applications symlink so drag-to-install still works
 ln -s /Applications "$STAGING/Applications"
@@ -72,7 +80,8 @@ README
 # Build a writable DMG so we can arrange the Finder window before shipping.
 RW_DMG="/tmp/${DMG_NAME%.dmg}-rw.dmg"
 rm -f "$RW_DMG"
-hdiutil create -volname "$VOLNAME" -srcfolder "$STAGING" -ov -format UDRW "$RW_DMG" > /dev/null
+hdiutil create -volname "$VOLNAME" -srcfolder "$STAGING" -ov -format UDRW "$RW_DMG" \
+  || { echo "ERROR: hdiutil create (writable DMG) failed with exit $?"; exit 1; }
 
 ARRANGED=0
 if hdiutil attach "$RW_DMG" -quiet; then
@@ -113,10 +122,12 @@ fi
 # Convert to compressed, read-only for distribution.
 NEW_DMG="/tmp/$DMG_NAME"
 rm -f "$NEW_DMG"
-hdiutil convert "$RW_DMG" -format UDZO -o "$NEW_DMG" -quiet
+hdiutil convert "$RW_DMG" -format UDZO -o "$NEW_DMG" \
+  || { echo "ERROR: hdiutil convert (compress DMG) failed with exit $?"; exit 1; }
 
 # Replace original
-cp "$NEW_DMG" "$DMG_PATH"
+cp "$NEW_DMG" "$DMG_PATH" \
+  || { echo "ERROR: cp of final DMG over $DMG_PATH failed with exit $?"; exit 1; }
 rm -rf "$STAGING" "$RW_DMG" "$NEW_DMG"
 
 echo "==> Done: $DMG_PATH now includes \"$FIX_NAME\""
