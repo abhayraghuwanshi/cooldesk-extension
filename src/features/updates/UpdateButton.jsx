@@ -9,8 +9,9 @@ import { installUpdate } from '../../services/updateService';
  * gear so the update never hides inside Settings. Renders nothing when the
  * app is current — so it can be dropped into any toolbar unconditionally.
  *
- * Clicking installs: winget upgrade on the desktop, extension reload in the
- * Chrome build. Both replace the running app, so there is no "done" state.
+ * Clicking installs: winget upgrade on Windows, the native Tauri updater on
+ * macOS/Linux, or an extension reload in the Chrome build. All replace the
+ * running app, so there is no "done" state.
  *
  * `compact` drops the label and shows just the badged arrow (sidebar widths).
  */

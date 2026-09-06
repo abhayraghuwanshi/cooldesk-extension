@@ -1356,6 +1356,34 @@ fn run_winget_upgrade() -> Result<(), String> {
     }
 }
 
+/// macOS/Linux counterpart to `run_winget_upgrade`: downloads the signed
+/// update artifact via `tauri-plugin-updater` and replaces the app in place,
+/// then relaunches. Not used on Windows — that stays on winget, which is
+/// already the OS-native package manager there.
+#[tauri::command]
+async fn install_native_update(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let _ = &app;
+        Err("use run_winget_upgrade on Windows".to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        use tauri_plugin_updater::UpdaterExt;
+        let updater = app.updater().map_err(|e| e.to_string())?;
+        let update = updater
+            .check()
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "no update available".to_string())?;
+        update
+            .download_and_install(|_chunk, _total| {}, || {})
+            .await
+            .map_err(|e| e.to_string())?;
+        app.restart();
+    }
+}
+
 #[tauri::command]
 async fn get_running_apps(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
@@ -3024,6 +3052,7 @@ pub fn run() {
         get_launch_at_login,
         check_winget_update,
         run_winget_upgrade,
+        install_native_update,
         kill_process_on_port,
         list_listening_ports,
         kill_process,

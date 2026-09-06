@@ -3,8 +3,9 @@
 // One check per session (re-run every RECHECK_MS while the app stays open),
 // broadcast to every subscriber, so the top banner and the header pill never
 // fire two version pings. Works in both builds:
-//   - Tauri desktop: `check_winget_update` (also the anonymous heartbeat),
-//     installed by handing off to `winget upgrade`.
+//   - Tauri desktop: `check_winget_update` (also the anonymous heartbeat).
+//     Installed via `winget upgrade` on Windows, or the Tauri updater
+//     plugin (`install_native_update`) on macOS/Linux.
 //   - Chrome extension: `chrome.runtime.requestUpdateCheck()`, applied by
 //     reloading the extension.
 // Everything degrades to "no update" silently — offline, rate-limited or an
@@ -111,9 +112,12 @@ export function checkForUpdate({ force = false } = {}) {
 }
 
 /**
- * Apply the pending update. Desktop hands off to winget (which replaces the
- * app and relaunches it); the extension reloads itself. Both tear down this
- * page, so the resolved value only matters when the handoff failed.
+ * Apply the pending update. On Windows this hands off to winget (which
+ * replaces the app and relaunches it); on macOS/Linux it falls back to the
+ * Tauri updater plugin, which downloads the signed artifact, replaces the
+ * app in place, and relaunches — no manual DMG download/reinstall. The
+ * extension just reloads itself. All three tear down this page, so the
+ * resolved value only matters when every handoff failed.
  */
 export async function installUpdate() {
   const info = state.info;
@@ -129,10 +133,16 @@ export async function installUpdate() {
       await invoke('run_winget_upgrade');
       return true;
     } catch {
-      // winget missing / not on PATH — send the user to the release page.
-      try { await invoke('open_url', { url: info.notesUrl }); }
-      catch { window.open(info.notesUrl, '_blank'); }
-      return false;
+      // Not on Windows (or winget missing) — use the native updater instead.
+      try {
+        await invoke('install_native_update');
+        return true;
+      } catch {
+        // No updater artifact for this build — send the user to the release page.
+        try { await invoke('open_url', { url: info.notesUrl }); }
+        catch { window.open(info.notesUrl, '_blank'); }
+        return false;
+      }
     }
   } finally {
     setState({ installing: false });
