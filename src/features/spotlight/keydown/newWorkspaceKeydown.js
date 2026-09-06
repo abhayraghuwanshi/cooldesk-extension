@@ -33,10 +33,10 @@ export function handleNewWorkspaceKeydown(e, {
             // /agent's context chips (see attachToAgentContext).
             if (selectedIndex >= 0 && flatRows[selectedIndex]) {
                 const mapped = resultToWorkspaceItem(flatRows[selectedIndex].item);
-                if (mapped?.kind === 'app') {
-                    newWorkspace.addFolder(mapped);
+                if (mapped) {
+                    newWorkspace.addItem(mapped);
                 } else {
-                    showFeedback('Pick a folder, file, or app', 'error');
+                    showFeedback("That can't be added to a workspace", 'error');
                 }
                 return;
             }

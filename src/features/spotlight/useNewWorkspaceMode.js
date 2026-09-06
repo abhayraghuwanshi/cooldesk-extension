@@ -3,11 +3,11 @@ import { useCallback, useState } from 'react';
 /**
  * State machine behind `/new-workspace` — a guided, Raycast-style form
  * instead of a bang command with positional/keyword syntax to remember:
- * name → (optional) folders, picked the same click-to-attach way /agent's
- * context chips already work → confirm, which creates the workspace and,
- * when a picked folder looks like a real project, hands off straight into
- * the existing /agent scaffold flow (`runCreateWorkspace`) so progress shows
- * in the same transcript panel.
+ * name → (optional) folders/files/apps AND urls (tabs/history/bookmarks),
+ * picked the same click-to-attach way /agent's context chips already work →
+ * confirm, which creates the workspace and, when a picked folder looks like
+ * a real project, hands off straight into the existing /agent scaffold flow
+ * (`runCreateWorkspace`) so progress shows in the same transcript panel.
  *
  * GlobalSpotlight.jsx owns `commandMode`/`query`/`expandedWorkspaceId` (the
  * setters are passed in here); this hook only owns the wizard's own step
@@ -33,6 +33,7 @@ export function useNewWorkspaceMode({
     const [step, setStep] = useState('name'); // 'name' | 'folders' | 'confirm'
     const [name, setName] = useState('');
     const [folders, setFolders] = useState([]); // [{name, path, appType, icon}]
+    const [urls, setUrls] = useState([]); // [{kind:'url', url, title, favicon}] — tabs/history/bookmarks picked the same way
     const [scaffoldChecked, setScaffoldChecked] = useState(true);
     const [plan, setPlan] = useState(null); // {hub, members, plain}, computed at the confirm step
     const [creating, setCreating] = useState(false);
@@ -41,6 +42,7 @@ export function useNewWorkspaceMode({
         setStep('name');
         setName('');
         setFolders([]);
+        setUrls([]);
         setScaffoldChecked(true);
         setPlan(null);
         setCreating(false);
@@ -80,6 +82,23 @@ export function useNewWorkspaceMode({
         setFolders(prev => prev.filter(f => f.path !== path));
     }, []);
 
+    /** A tab/history/bookmark result picked in step 2 — same attach interaction as addFolder. */
+    const addUrl = useCallback((mapped) => {
+        if (!mapped?.url) return;
+        setUrls(prev => (prev.some(u => u.url === mapped.url) ? prev : [...prev, mapped]));
+        setQuery('');
+    }, [setQuery]);
+
+    const removeUrl = useCallback((url) => {
+        setUrls(prev => prev.filter(u => u.url !== url));
+    }, []);
+
+    /** Step 2's picker dispatches here regardless of what kind of result it is. */
+    const addItem = useCallback((mapped) => {
+        if (mapped?.kind === 'url') addUrl(mapped);
+        else if (mapped?.kind === 'app') addFolder(mapped);
+    }, [addUrl, addFolder]);
+
     /** Step 2 → 3. Classifies the picked folders and defaults the checkbox. */
     const goToConfirm = useCallback(async () => {
         setQuery('');
@@ -108,7 +127,7 @@ export function useNewWorkspaceMode({
                 createdAt: Date.now(),
                 gridType: 'ItemGrid',
                 status: 'active',
-                urls: [],
+                urls: urls.map(u => ({ url: u.url, title: u.title, addedAt: Date.now() })),
                 apps: folders.map(f => ({ name: f.name, path: f.path, appType: f.appType, icon: f.icon || null })),
             };
             await saveWorkspace(workspace);
@@ -142,12 +161,13 @@ export function useNewWorkspaceMode({
             setCreating(false);
         }
     }, [
-        name, folders, scaffoldChecked, plan, aiCli, runCreateWorkspace, showFeedback,
+        name, folders, urls, scaffoldChecked, plan, aiCli, runCreateWorkspace, showFeedback,
         setCommandMode, setExpandedWorkspaceId, setQuery, setWsScaffoldPlan, setWorkspaces, reset, exit,
     ]);
 
     return {
-        step, name, folders, scaffoldChecked, setScaffoldChecked, plan, creating,
-        enter, exit, confirmName, addFolder, removeFolder, goToConfirm, backToFolders, backToName, confirmCreate,
+        step, name, folders, urls, scaffoldChecked, setScaffoldChecked, plan, creating,
+        enter, exit, confirmName, addFolder, removeFolder, addUrl, removeUrl, addItem,
+        goToConfirm, backToFolders, backToName, confirmCreate,
     };
 }

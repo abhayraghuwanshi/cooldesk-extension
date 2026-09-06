@@ -25,6 +25,27 @@ function baseName(p) {
     return String(p || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || 'Project';
 }
 
+/** Projects offered (auto-created, or found already-known) by either the live
+ *  announce listener or the disk scan below, so deleting one sticks — without
+ *  this, the CoolDesk plugin's next SessionStart/Stop hook announce for the
+ *  same path would just create it right back. */
+const SEEN_KEY = 'cooldesk.discovered.v1';
+
+function loadSeen() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(SEEN_KEY) || '[]');
+        return new Set(Array.isArray(raw) ? raw.map((p) => String(p).toLowerCase()) : []);
+    } catch {
+        return new Set();
+    }
+}
+
+function saveSeen(seen) {
+    try {
+        localStorage.setItem(SEEN_KEY, JSON.stringify([...seen]));
+    } catch { /* quota / private mode — the scan just repeats next launch */ }
+}
+
 /**
  * A counter that increments whenever the given project's `.cooldesk/` folder is
  * announced as changed. Add it to a fetch effect's dependency array to re-read.
@@ -114,6 +135,11 @@ async function ensureWorkspace(path, project, workspaces, claimed) {
  * Existing workspaces are left completely alone — a matching folder path means
  * the card already renders the project, and it re-reads via `useCooldeskVersion`.
  *
+ * A path is only ever offered once (tracked in the same SEEN_KEY list the disk
+ * scan below uses): the plugin's SessionStart/Stop hooks announce on every
+ * Claude Code session, so without this, deleting the workspace this created
+ * just meant the next announce for the same project silently recreated it.
+ *
  * @param {Array} savedWorkspaces current workspaces, used to detect "already known"
  */
 export function useCooldeskAutoWorkspace(savedWorkspaces = []) {
@@ -128,28 +154,17 @@ export function useCooldeskAutoWorkspace(savedWorkspaces = []) {
     const claimed = useRef(new Set());
 
     const handle = useCallback(async (payload) => {
-        await ensureWorkspace(payload?.path, payload?.project, workspacesRef.current, claimed.current);
+        const path = payload?.path;
+        if (!path) return;
+        const key = String(path).toLowerCase();
+        const seen = loadSeen();
+        if (seen.has(key)) return;
+        await ensureWorkspace(path, payload?.project, workspacesRef.current, claimed.current);
+        seen.add(key);
+        saveSeen(seen);
     }, []);
 
     useEffect(() => syncWebSocket.on('cooldesk', handle), [handle]);
-}
-
-/** Projects a scan has already offered, so deleting an auto-created workspace sticks. */
-const SEEN_KEY = 'cooldesk.discovered.v1';
-
-function loadSeen() {
-    try {
-        const raw = JSON.parse(localStorage.getItem(SEEN_KEY) || '[]');
-        return new Set(Array.isArray(raw) ? raw.map((p) => String(p).toLowerCase()) : []);
-    } catch {
-        return new Set();
-    }
-}
-
-function saveSeen(seen) {
-    try {
-        localStorage.setItem(SEEN_KEY, JSON.stringify([...seen]));
-    } catch { /* quota / private mode — the scan just repeats next launch */ }
 }
 
 /**

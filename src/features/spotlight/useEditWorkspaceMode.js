@@ -29,7 +29,7 @@ const wrapPlain = (text) => `<p>${(text || '').replace(/&/g, '&amp;').replace(/<
  * validated whitelist /agent's own proposals use — rather than a second
  * hand-rolled save path.
  */
-export function useEditWorkspaceMode({ showFeedback, setCommandMode, setQuery, setWorkspaces }) {
+export function useEditWorkspaceMode({ showFeedback, setCommandMode, setQuery, setWorkspaces, onExit }) {
     const [workspaceId, setWorkspaceId] = useState(null);
     const [workspace, setWorkspace] = useState(null); // the live record
     const [notes, setNotes] = useState([]);
@@ -75,7 +75,11 @@ export function useEditWorkspaceMode({ showFeedback, setCommandMode, setQuery, s
         setTodos([]);
         setActiveNoteId(null);
         setEditingTodoId(null);
-    }, [setCommandMode, setQuery]);
+        // Lets an external trigger (a workspace card's right-click "Edit" —
+        // see GlobalSpotlight.jsx's editTarget prop) know the mode closed, so
+        // it can clear its own target and the same trigger works again.
+        onExit?.();
+    }, [setCommandMode, setQuery, onExit]);
 
     /** Open a note in the Tiptap editor — replaces the list view until closed. */
     const openNote = useCallback((id) => setActiveNoteId(id), []);

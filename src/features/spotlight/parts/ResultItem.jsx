@@ -5,6 +5,14 @@ import { getFaviconUrl, isRealPointerMove } from '../../../utils/helpers';
 import { getFileVisual, getIcon } from './fileIcons';
 import { lastPointerPos } from './hoverGuard';
 
+// The recommended leader commands (/new-workspace, /agent, /u, /a, /f) all
+// share item.type === 'command', so without this they'd all render as the
+// same generic gray row — indistinguishable in a dropdown of five. Each
+// known command gets its own type-color class instead; anything else typed
+// as a command (bang commands, a directly-typed nav shortcut) still falls
+// back to the plain "link" styling.
+const COMMAND_TYPE_CLASSES = { '/new-workspace': 'command-new-workspace', '/agent': 'command-agent', '/u': 'command-u', '/a': 'command-a', '/f': 'command-f' };
+
 // Memoized Result Item to prevent unnecessary re-renders
 export const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect, onHover, onTogglePin, onRemove, formatUrl, getBadgeLabel, getAppIcon, depth = 0, isFolderRow = false, isExpanded = false, onToggleExpand }) {
     const handleClick = useCallback(() => onSelect(item), [item, onSelect]);
@@ -38,6 +46,9 @@ export const ResultItem = memo(function ResultItem({ item, index, isSelected, on
     const rowRef = useRef(null);
     // Per-extension logo + tint for file rows (e.g. React-blue for .tsx).
     const fileMeta = item.type === 'file' ? getFileVisual(item.title || item.name) : null;
+    const typeClass = item.type === 'command'
+        ? (COMMAND_TYPE_CLASSES[item.commandId] || 'link')
+        : (['tab', 'bookmark', 'history', 'workspace', 'note', 'app', 'folder', 'file', 'todo', 'agent-suggest', 'websearch-suggest'].includes(item.type) ? item.type : 'link');
 
     // Reset error when item changes
     useEffect(() => {
@@ -57,7 +68,7 @@ export const ResultItem = memo(function ResultItem({ item, index, isSelected, on
     return (
         <div
             ref={rowRef}
-            className={`result-item ${isSelected ? 'selected' : ''} result-${['tab', 'bookmark', 'history', 'workspace', 'note', 'app', 'folder', 'file', 'todo'].includes(item.type) ? item.type : 'link'}`}
+            className={`result-item ${isSelected ? 'selected' : ''} result-${typeClass}`}
             title={(item.type === 'folder' || item.type === 'file') ? item.path : undefined}
             onClick={handleClick}
             onMouseDown={(e) => e.preventDefault()}
@@ -95,7 +106,7 @@ export const ResultItem = memo(function ResultItem({ item, index, isSelected, on
                         <img src={resolvedFavicon} onError={() => setIconError(true)} alt="" />
                     ) : (
                         <div className="fa-icon-wrapper">
-                            <FontAwesomeIcon icon={getIcon(item.type, item.title || item.name)} />
+                            <FontAwesomeIcon icon={getIcon(item.type, item.title || item.name, item.commandId)} />
                         </div>
                     );
                 })()}

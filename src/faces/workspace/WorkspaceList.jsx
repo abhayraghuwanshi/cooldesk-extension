@@ -1,6 +1,7 @@
 import { faBriefcase, faChevronDown, faChevronLeft, faDesktop, faGamepad, faGraduationCap, faRobot, faRocket, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { createPortal } from 'react-dom';
 import { deleteWorkspace, getUrlAnalytics } from '../../db/index.js';
 import { clearWorkspaceSuggestions } from '../../services/appCategorizationService.js';
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
@@ -85,7 +86,7 @@ export function WorkspaceList({
     expandedWorkspaceId,
     pinnedWorkspaces = [],
     onTogglePin,
-    onAddUrl,
+    onEditWorkspace,
     appSuggestions = {},        // { [workspaceName]: [{ name, path, icon }] }
     onAddAppsToWorkspace        // (workspaceName, apps[]) => void
 }) {
@@ -106,6 +107,13 @@ export function WorkspaceList({
     const [hoveredBookmark, setHoveredBookmark] = useState(null);
     const [bookmarkLimit, setBookmarkLimit] = useState(20);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+    // Deletion confirmation — a custom modal instead of window.confirm(),
+    // which native-dialog-in-a-custom-window Tauri setups like this app's
+    // (see the CGS Spaces overlay elsewhere) can leave stuck: never
+    // dismissing, or appearing behind the app with no way to click through.
+    const [deleteTarget, setDeleteTarget] = useState(null); // workspace pending confirmation
+    const [deleteError, setDeleteError] = useState('');
+    const [isDeleting, setIsDeleting] = useState(false);
     const [activeMode, setActiveMode] = useState('all');
     const [isPending, startTransition] = useTransition();
 
@@ -406,21 +414,37 @@ export function WorkspaceList({
         }
     };
 
-    const handleDeleteWorkspace = async (workspace) => {
-        // Confirm deletion
-        const confirmed = window.confirm(`Are you sure you want to delete the workspace "${workspace.name}"? This action cannot be undone.`);
+    const handleDeleteWorkspace = (workspace) => {
+        setDeleteError('');
+        setDeleteTarget(workspace);
+    };
 
-        if (!confirmed) return;
-
+    const confirmDeleteWorkspace = async () => {
+        if (!deleteTarget || isDeleting) return;
+        setIsDeleting(true);
+        setDeleteError('');
         try {
-            await deleteWorkspace(workspace.id);
-            console.log(`[WorkspaceList] Deleted workspace: ${workspace.name}`);
+            // deleteWorkspace is wrapped in withErrorHandling (db/error-handler.js)
+            // — it never rejects, even when the underlying delete fails. It
+            // resolves to { success, data } or { success: false, error }, so
+            // that's what has to be checked here; a bare `await` + try/catch
+            // treated every failure as a success, reloaded anyway, and the
+            // workspace was still there after — "deleting" it that never
+            // actually stuck.
+            const result = await deleteWorkspace(deleteTarget.id);
+            if (!result?.success) {
+                throw result?.error || new Error('Delete failed');
+            }
+            console.log(`[WorkspaceList] Deleted workspace: ${deleteTarget.name}`);
+            setDeleteTarget(null);
 
             // Reload the page to refresh the workspace list
             window.location.reload();
         } catch (error) {
             console.error('[WorkspaceList] Failed to delete workspace:', error);
-            alert('Failed to delete workspace. Please try again.');
+            setDeleteError('Failed to delete workspace. Please try again.');
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -467,7 +491,7 @@ export function WorkspaceList({
                             isPinned={pinnedWorkspaces.includes(expandedDetailWorkspace.name)}
                             onPin={() => onTogglePin && onTogglePin(expandedDetailWorkspace.name)}
                             onDelete={handleDeleteWorkspace}
-                            onAddUrl={onAddUrl}
+                            onEditWorkspace={onEditWorkspace}
                         />
                         {/* Status / tasks / notes as their own section below the
                             items — keeps them out of the card's layout entirely. */}
@@ -736,7 +760,7 @@ export function WorkspaceList({
                                             isPinned={true}
                                             onPin={() => onTogglePin && onTogglePin(workspace.name)}
                                             onDelete={handleDeleteWorkspace}
-                                            onAddUrl={onAddUrl}
+                                            onEditWorkspace={onEditWorkspace}
                                         />
                                     ))}
                                 </div>
@@ -804,7 +828,7 @@ export function WorkspaceList({
                                             isPinned={false}
                                             onPin={() => onTogglePin && onTogglePin(workspace.name)}
                                             onDelete={handleDeleteWorkspace}
-                                            onAddUrl={onAddUrl}
+                                            onEditWorkspace={onEditWorkspace}
                                             deferAnalytics={index > 3}
                                         />
                                     ))}
@@ -851,6 +875,65 @@ export function WorkspaceList({
                 onClose={() => setIsShareModalOpen(false)}
                 contextWorkspace={savedWorkspaces.find(w => w.id === activeWorkspaceId)}
             />
+            {/* Delete-workspace confirmation — see deleteTarget above for why
+                this replaces window.confirm(). */}
+            {deleteTarget && createPortal(
+                <div
+                    style={{
+                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                        background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)',
+                        zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontFamily: "'Inter', sans-serif"
+                    }}
+                    onClick={() => { if (!isDeleting) setDeleteTarget(null); }}
+                >
+                    <div
+                        style={{
+                            width: 400, background: '#0f172a', borderRadius: 16,
+                            border: '1px solid rgba(255,255,255,0.1)', padding: 24,
+                            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div style={{ fontSize: 16, fontWeight: 600, color: '#fff', marginBottom: 8 }}>
+                            Delete "{deleteTarget.name}"?
+                        </div>
+                        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 1.5 }}>
+                            This action cannot be undone.
+                        </div>
+                        {deleteError && (
+                            <div style={{ fontSize: 12.5, color: '#f87171', marginTop: 12 }}>{deleteError}</div>
+                        )}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+                            <button
+                                type="button"
+                                disabled={isDeleting}
+                                onClick={() => setDeleteTarget(null)}
+                                style={{
+                                    padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)',
+                                    background: 'transparent', color: 'rgba(255,255,255,0.85)', fontSize: 13,
+                                    fontWeight: 500, cursor: isDeleting ? 'default' : 'pointer',
+                                }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                disabled={isDeleting}
+                                onClick={confirmDeleteWorkspace}
+                                style={{
+                                    padding: '8px 16px', borderRadius: 8, border: 'none',
+                                    background: '#ef4444', color: '#fff', fontSize: 13, fontWeight: 600,
+                                    cursor: isDeleting ? 'default' : 'pointer', opacity: isDeleting ? 0.7 : 1,
+                                }}
+                            >
+                                {isDeleting ? 'Deleting…' : 'Delete'}
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 }

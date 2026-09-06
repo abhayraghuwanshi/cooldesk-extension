@@ -818,6 +818,61 @@ body.spotlight-window {
 
 .result-item.result-link { border-left-color: rgba(148, 163, 184, 0.3); }
 
+/* Fallback suggestion rows ("Ask the agent" / "Search the web") — a soft
+   tinted wash instead of just a border, since these are offers, not plain
+   search hits, and should read that way at a glance. */
+.result-item.result-agent-suggest {
+  border-left-color: rgba(236, 72, 153, 0.5);
+  background: linear-gradient(90deg, rgba(236, 72, 153, 0.09), rgba(236, 72, 153, 0) 70%);
+}
+.result-item.result-agent-suggest.selected {
+  border-left-color: #ec4899;
+  background: linear-gradient(90deg, rgba(236, 72, 153, 0.18), rgba(236, 72, 153, 0.05) 70%);
+}
+.result-item.result-agent-suggest .result-icon { color: #f472b6; background: rgba(236, 72, 153, 0.14); }
+.result-item.result-agent-suggest .result-badge { background: rgba(236, 72, 153, 0.18); color: #f472b6; }
+
+.result-item.result-websearch-suggest {
+  border-left-color: rgba(59, 130, 246, 0.5);
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.09), rgba(59, 130, 246, 0) 70%);
+}
+.result-item.result-websearch-suggest.selected {
+  border-left-color: #3b82f6;
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.18), rgba(59, 130, 246, 0.05) 70%);
+}
+.result-item.result-websearch-suggest .result-icon { color: #60a5fa; background: rgba(59, 130, 246, 0.14); }
+.result-item.result-websearch-suggest .result-badge { background: rgba(59, 130, 246, 0.18); color: #60a5fa; }
+
+/* The "/" command palette (/new-workspace, /agent, /u, /a, /f) — every row
+   used to be plain gray "command" type, indistinguishable from each other
+   in a five-row dropdown. Each gets the same accent color its own results
+   already use elsewhere (e.g. /a's rows are indigo, same as an "app" result),
+   so the recommendation and what it leads to read as one color story. */
+.result-item.result-command-new-workspace { border-left-color: rgba(74, 222, 128, 0.5); }
+.result-item.result-command-new-workspace.selected { border-left-color: #4ade80; }
+.result-item.result-command-new-workspace .result-icon { color: #4ade80; background: rgba(74, 222, 128, 0.14); }
+.result-item.result-command-new-workspace .result-badge { background: rgba(74, 222, 128, 0.18); color: #4ade80; }
+
+.result-item.result-command-agent { border-left-color: rgba(236, 72, 153, 0.5); }
+.result-item.result-command-agent.selected { border-left-color: #ec4899; }
+.result-item.result-command-agent .result-icon { color: #f472b6; background: rgba(236, 72, 153, 0.14); }
+.result-item.result-command-agent .result-badge { background: rgba(236, 72, 153, 0.18); color: #f472b6; }
+
+.result-item.result-command-u { border-left-color: rgba(139, 92, 246, 0.5); }
+.result-item.result-command-u.selected { border-left-color: #8b5cf6; }
+.result-item.result-command-u .result-icon { color: #a78bfa; background: rgba(139, 92, 246, 0.12); }
+.result-item.result-command-u .result-badge { background: rgba(139, 92, 246, 0.15); color: #a78bfa; }
+
+.result-item.result-command-a { border-left-color: rgba(99, 102, 241, 0.5); }
+.result-item.result-command-a.selected { border-left-color: #6366f1; }
+.result-item.result-command-a .result-icon { color: #818cf8; background: rgba(99, 102, 241, 0.12); }
+.result-item.result-command-a .result-badge { background: rgba(99, 102, 241, 0.15); color: #818cf8; }
+
+.result-item.result-command-f { border-left-color: rgba(250, 204, 21, 0.5); }
+.result-item.result-command-f.selected { border-left-color: #facc15; }
+.result-item.result-command-f .result-icon { color: #facc15; background: rgba(250, 204, 21, 0.12); }
+.result-item.result-command-f .result-badge { background: rgba(250, 204, 21, 0.15); color: #facc15; }
+
 /* Folder tree (expandable Explorer-style hierarchy) — clean indentation, no guide lines */
 .tree-indent {
   flex-shrink: 0;

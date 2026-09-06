@@ -33,6 +33,10 @@ export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavi
     // Face navigation — only meaningful when the host can switch faces.
     // Keyed on *whether* a navigate handler exists (not its identity — hosts
     // recreate the callback every render; the ref above tracks the latest).
+    // No '/chat' or '/c' here: WorkspaceShell's actual face list is
+    // ['workspace', 'tabs', 'team'] (see DESKTOP_FACES) — there's no chat
+    // face to land on, so navigating there used to leave the shell on a
+    // currentFace nothing renders for.
     const hasNavigate = !!onNavigate;
     const navMaps = useMemo(() => {
         if (!isDesktopApp || !hasNavigate) return { full: {}, alias: {} };
@@ -41,14 +45,12 @@ export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavi
                 '/overview': 'overview',
                 '/workspace': 'workspace',
                 '/workspaces': 'workspace',
-                '/chat': 'chat',
                 '/tabs': 'tabs',
                 ...(TEAM_FEATURE_ENABLED ? { '/team': 'team' } : {}),
             },
             alias: {
                 '/o': 'overview',
                 '/w': 'workspace',
-                '/c': 'chat',
                 '/t': 'tabs',
                 ...(TEAM_FEATURE_ENABLED ? { '/tm': 'team' } : {}),
             },
@@ -119,28 +121,27 @@ export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavi
             category,
             command: insert ? null : command,
             insert: insert || null,
+            // Always the real command word, even for insert-only rows (whose
+            // `command` above is deliberately null so selecting them can't
+            // execute) — the icon/color lookup needs it regardless of
+            // whether the row is executable or insert-only.
+            commandId: command,
         });
 
         if (q.startsWith('/')) {
             const filter = q.slice(1).toLowerCase();
+            // Just the leader commands worth recommending: create a
+            // workspace, the agent (search/edit — /ai and /model are still
+            // typeable directly but no longer surfaced here, superseded by
+            // /agent), and the three scoped searches. Face navigation
+            // (/overview, /workspace, /chat, …) isn't recommended either —
+            // unused, kept working only for anyone who already types it.
             const entries = [
-                // Spotlight-owned modes surfaced for discoverability (insert-only)
                 { command: '/new-workspace', title: 'New Workspace', description: 'Guided setup: name, pick folders, optionally scaffold .cooldesk/', category: 'Workspace', insert: '/new-workspace ' },
-                { command: '/ai', title: 'Ask AI', description: 'Chat with the local LLM', category: 'AI', insert: '/ai ' },
-                { command: '/model', title: 'Select Model', description: 'Choose the AI model to use', category: 'AI', insert: '/model' },
                 { command: '/agent', title: 'Agent', description: 'Chat with Claude Code — search/add links, scaffold a shared .cooldesk/ workspace, /name to rename', category: 'AI', insert: '/agent ' },
                 { command: '/u', title: 'Search URLs', description: 'Scope search to tabs, history, bookmarks', category: 'Scope', insert: '/u ' },
                 { command: '/a', title: 'Search Apps', description: 'Scope search to applications', category: 'Scope', insert: '/a ' },
                 { command: '/f', title: 'Search Files', description: 'Scope search to files and folders', category: 'Scope', insert: '/f ' },
-                // Face navigation
-                ...Object.entries(navMaps.full)
-                    .filter(([cmd]) => cmd !== '/workspaces') // one row for /workspace(s)
-                    .map(([cmd, face]) => ({
-                        command: cmd,
-                        title: cmd.slice(1).replace(/^./, c => c.toUpperCase()),
-                        description: `Go to ${face}`,
-                        category: 'Navigate',
-                    })),
             ];
             const matches = entries.filter(e =>
                 !filter || `${e.command} ${e.title} ${e.description}`.toLowerCase().includes(filter)

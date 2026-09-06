@@ -5,7 +5,7 @@ import {
 import {
     faBriefcase, faChartLine, faCloud, faCode, faCog, faDatabase, faDesktop,
     faFile, faFileCode, faFileCsv, faFileExcel, faFileLines, faFilePdf, faFilePowerpoint,
-    faFileWord, faFileZipper, faFlask, faFolder, faFolderOpen, faFont, faGamepad, faGlobe,
+    faFileWord, faFileZipper, faFlask, faFolder, faFolderOpen, faFolderPlus, faFont, faGamepad, faGlobe,
     faGraduationCap, faHashtag, faHeartPulse, faHistory, faHome, faImage, faLightbulb,
     faLink, faMicrochip, faMusic, faNewspaper, faPalette, faPlane, faRobot,
     faSearch, faShoppingBag, faStar, faStickyNote, faTasks, faTerminal, faTools,
@@ -184,7 +184,20 @@ function getFileIcon(filename) {
     return getFileIconMeta(filename).icon;
 }
 
-export function getIcon(type, name) {
+// The handful of leader commands the palette recommends (see
+// useSlashCommands.js's `entries`) — each gets its own icon instead of every
+// "/..." row sharing the same terminal glyph, which made them hard to tell
+// apart at a glance. Anything else typed as a command (bang commands, a
+// directly-typed nav shortcut) still falls through to the generic case below.
+const COMMAND_ICONS = {
+    '/new-workspace': faFolderPlus,
+    '/agent': faRobot,
+    '/u': faGlobe,
+    '/a': faDesktop,
+    '/f': faFolderOpen,
+};
+
+export function getIcon(type, name, command) {
     switch (type) {
         case 'tab': return faGlobe;
         case 'history': return faHistory;
@@ -196,8 +209,9 @@ export function getIcon(type, name) {
         case 'folder': return faFolderOpen;
         case 'setting': return faCog;
         case 'tool': return faTools;
-        case 'command': return faTerminal;
+        case 'command': return COMMAND_ICONS[command] || faTerminal;
         case 'agent-suggest': return faRobot;
+        case 'websearch-suggest': return faSearch;
         case 'workspace-edit': return faFolder;
         case 'todo': return faTasks;
         default: return faLink;

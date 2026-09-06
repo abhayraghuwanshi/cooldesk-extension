@@ -26,8 +26,8 @@ import {
   faMusic,
   faNewspaper,
   faPalette,
+  faPen,
   faPlane,
-  faPlus,
   faRobot,
   faSearch,
   faShoppingBag,
@@ -156,15 +156,17 @@ const isDesktopApp = typeof window !== 'undefined' &&
   !!(window.__TAURI__ || window.__TAURI_INTERNALS__ || window.electronAPI);
 
 // Memoized WorkspaceCard to prevent unnecessary re-renders
-export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, fullView = false, isPinned = false, onPin, onDelete, onAddUrl, onUrlAction, deferAnalytics = false, ...rest }) {
+export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, fullView = false, isPinned = false, onPin, onDelete, onEditWorkspace, onUrlAction, deferAnalytics = false, ...rest }) {
   if (!workspace) return null;
 
   const [popoverState, setPopoverState] = useState({ index: null, rect: null });
   const [hoveredLink, setHoveredLink] = useState(null);
   const [showDrafts, setShowDrafts] = useState(false);
   const [contextMenu, setContextMenu] = useState(null); // { x, y }
-  // "Add item" arms the header search's add mode — hidden in the sidebar,
-  // so offering it there just opens a menu item that does nothing visible.
+  // "Edit" opens the header search's /edit-workspace mode for this workspace
+  // (same rename/add/remove/todo/note flow as typing its name there) — hidden
+  // in the sidebar, so offering it there just opens a menu item that does
+  // nothing visible.
   const isSidebarWidth = useIsSidebarWidth();
   // User-chosen accent color. Optimistic local state so the tint applies
   // instantly; persisted to the workspace record (survives reload / sync).
@@ -1429,17 +1431,19 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
             onSelect={(color, source) => applyColor(color, source === 'custom')}
           />
           <div className="context-menu-divider" />
-          {/* Arms add mode on the header search for this workspace. It lives
-              here rather than as a permanent "+" on the card: every card would
-              carry one, and an always-visible button competes with the items
-              the card exists to show. */}
-          {onAddUrl && !isSidebarWidth && (
+          {/* Opens /edit-workspace on the header search for this workspace —
+              the same rename/search-to-add/todo/note flow as typing its name
+              there, rather than a separate one-shot "add a single thing"
+              mode. Lives here rather than as a permanent "+" on the card:
+              every card would carry one, and an always-visible button
+              competes with the items the card exists to show. */}
+          {onEditWorkspace && !isSidebarWidth && (
             <button
               className="context-menu-item"
-              onClick={() => { onAddUrl(workspace); setContextMenu(null); }}
+              onClick={() => { onEditWorkspace(workspace); setContextMenu(null); }}
             >
-              <FontAwesomeIcon icon={faPlus} />
-              Add item
+              <FontAwesomeIcon icon={faPen} />
+              Edit
             </button>
           )}
           {onPin && (

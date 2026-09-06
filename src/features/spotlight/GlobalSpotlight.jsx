@@ -278,6 +278,31 @@ function workspaceNameMatchesTyped(name, typedLower) {
     return n.split(/\s+/).some(word => word.startsWith(typedLower));
 }
 
+// Search a query in the user's own browser instead of the agent/local index —
+// chrome.search.query opens it through whatever engine is set as default in
+// Chrome (Google, Bing, DuckDuckGo, …), which is the "search my browser"
+// behavior people expect and this spotlight didn't otherwise offer. Falls
+// back to a plain google.com tab/window on the desktop app (no chrome.search
+// there) or if the call itself fails.
+function searchInBrowser(query) {
+    const trimmed = (query || '').trim();
+    if (!trimmed) return;
+    if (typeof chrome !== 'undefined' && chrome?.search?.query) {
+        try {
+            chrome.search.query({ text: trimmed, disposition: 'NEW_TAB' });
+            return;
+        } catch (e) {
+            console.warn('[Spotlight] chrome.search.query failed, falling back to Google:', e);
+        }
+    }
+    const url = `https://www.google.com/search?q=${encodeURIComponent(trimmed)}`;
+    if (window.electronAPI?.openExternal) {
+        window.electronAPI.openExternal(url);
+    } else {
+        window.open(url, '_blank');
+    }
+}
+
 // Get icon for app by name
 function getAppIcon(appName) {
     if (!appName) return faDesktop;
@@ -329,6 +354,12 @@ function useOnClickOutside(ref, handler) {
 //     the target, picking a result collects it into that workspace instead of
 //     launching it. This is why workspace cards have no search box of their
 //     own: the same index that finds a tab to jump to finds the tab to file.
+//   editTarget / onExitEditMode — an external trigger for /edit-workspace
+//     (e.g. a workspace card's right-click "Edit"), so opening the full
+//     rename/add/remove/todo/note flow doesn't require the user to type the
+//     workspace's name themselves first. onExitEditMode fires whenever that
+//     mode closes (Esc, its chip's ×, switching to another workspace), so the
+//     host can clear its target and the same trigger works again next time.
 export function GlobalSpotlight({
     variant = 'overlay',
     onNavigate = null,
@@ -341,6 +372,8 @@ export function GlobalSpotlight({
     addTarget = null,
     onAddItem = null,
     onExitAddMode = null,
+    editTarget = null,
+    onExitEditMode = null,
 } = {}) {
     const isEmbedded = variant === 'embedded';
     const sections = { context: true, pins: true, workspaces: true, footer: true, ...(sectionsProp || {}) };
@@ -452,7 +485,9 @@ export function GlobalSpotlight({
 
     // Typing an existing workspace's own name (e.g. "/cool-verse") opens it
     // here — see useEditWorkspaceMode.js.
-    const editWorkspace = useEditWorkspaceMode({ showFeedback, setCommandMode, setQuery, setWorkspaces });
+    const editWorkspace = useEditWorkspaceMode({
+        showFeedback, setCommandMode, setQuery, setWorkspaces, onExit: onExitEditMode,
+    });
 
     // Closing the note editor or an inline todo edit unmounts whatever DOM
     // node had focus (the Tiptap contenteditable, or the todo's <input>) —
@@ -470,6 +505,13 @@ export function GlobalSpotlight({
     // an /agent request — the spotlight's answer to a CLI's "@file" attach.
     // Chips stay attached across follow-ups until removed or the chat resets.
     const [agentContext, setAgentContext] = useState([]);
+
+    // Set when /agent was entered *from* /edit-workspace (the browsing-
+    // snapshot "Ask the agent" row) rather than typed directly — so the mode
+    // chip can say which workspace this run is for instead of just "Agent",
+    // and so applying its proposal can drop the user back into editing that
+    // same workspace instead of stranding them in a bare agent chat.
+    const [agentOriginWorkspace, setAgentOriginWorkspace] = useState(null);
 
     // Stage a result as context instead of opening it. Folders/apps/urls/etc.
     // attach as a bare path/name reference (the chat run has no Read tool, so
@@ -508,7 +550,13 @@ export function GlobalSpotlight({
     // taken from the `workspaces` state above: that list is only populated when
     // the workspaces *section* is enabled, and the agent needs the real set
     // regardless of which sections this surface renders.
-    const runAgent = useCallback(async (request) => {
+    //
+    // `extraAttachments` exists for callers that just built an attachment and
+    // need it in *this* run — pushing it into agentContext via setAgentContext
+    // first and reading agentContext here wouldn't work, because React hasn't
+    // re-rendered (and handed this callback a fresh closure) by the time the
+    // same synchronous flow calls runAgent.
+    const runAgent = useCallback(async (request, extraAttachments = []) => {
         let list = [];
         try {
             const { listWorkspaces } = await import('../../db/index.js');
@@ -525,11 +573,70 @@ export function GlobalSpotlight({
         // every run). This directory is app-owned and pre-trusted in Claude
         // Code's config, so it never hits that prompt.
         const cwd = await getOrCreateAgentWorkspaceCwd();
-        aiCli.run(request, list, cwd, { attachments: agentContext });
+        aiCli.run(request, list, cwd, { attachments: [...agentContext, ...extraAttachments] });
     }, [aiCli, agentContext]);
+
+    // The agent has no tool that can query the user's actual browser history,
+    // tabs, bookmarks or installed apps — its only tools are WebSearch/WebFetch
+    // (see aiAdapters.js), and it correctly says so rather than fabricating
+    // urls when asked to "search my history". The fix isn't a better prompt —
+    // it's giving it real data: run the same browse used for a bare "/u"/"/a"
+    // ourselves (this code, unlike the agent, has actual access to
+    // history/tabs/bookmarks/apps) and hand the results over as an attachment,
+    // the same mechanism a picked file/folder already uses. The agent's job
+    // becomes picking from real rows instead of imagining ones that don't exist.
+    const runAgentWithBrowsingSnapshot = useCallback(async (rawQuery, originWorkspace) => {
+        setAgentOriginWorkspace(originWorkspace || null);
+        showFeedback('Gathering your tabs, history, bookmarks & apps…', 'info');
+        const SNAPSHOT_CAP = 60;
+        let urls = [];
+        let apps = [];
+        try {
+            urls = browseUrls(SNAPSHOT_CAP) || [];
+        } catch (e) {
+            console.warn('[Spotlight] agent: failed to browse urls', e);
+        }
+        try {
+            apps = isDesktopApp ? (await browseApps(SNAPSHOT_CAP)) || [] : [];
+        } catch (e) {
+            console.warn('[Spotlight] agent: failed to browse apps', e);
+        }
+
+        const lines = [];
+        if (urls.length) {
+            lines.push('Tabs, history & bookmarks:');
+            for (const u of urls) lines.push(`  [${u.type}] ${u.url}${u.title ? `  — ${u.title}` : ''}`);
+        }
+        if (apps.length) {
+            lines.push(lines.length ? '\nInstalled apps:' : 'Installed apps:');
+            for (const a of apps) lines.push(`  ${a.title || a.name}${a.path ? `  [${a.path}]` : ''}`);
+        }
+        const content = lines.join('\n') || '(nothing found)';
+
+        const attachment = {
+            id: `ctx-browsing-${Date.now()}`,
+            kind: 'data',
+            name: 'Tabs, history, bookmarks & installed apps',
+            path: null,
+            content,
+            status: 'ready',
+        };
+        // Visible as a chip too (same as an attached file/folder), so it's
+        // clear afterwards what the agent actually had to work with.
+        setAgentContext(prev => [...prev, attachment]);
+
+        const request = `${rawQuery}\n\n(Attached below: a snapshot of my actual tabs, browsing history, bookmarks and installed apps. Pick whatever is relevant to the "${originWorkspace?.name}" workspace and add it — use the urls/paths exactly as given.)`;
+        runAgent(request, [attachment]);
+    }, [runAgent, showFeedback, isDesktopApp]);
 
     // Apply one turn's proposal. The transcript stays up afterwards — the whole
     // point of history is that "now also do X" is a follow-up, not a new session.
+    //
+    // When this run started *from* /edit-workspace (agentOriginWorkspace set —
+    // see runAgentWithBrowsingSnapshot), applying drops the user straight back
+    // into editing that same workspace instead of leaving them in a bare agent
+    // chat — the whole point of asking the agent was to add to that workspace,
+    // not to start an unrelated conversation.
     const applyProposal = useCallback(async (turn) => {
         if (!turn?.proposal?.valid?.length) return;
         try {
@@ -544,11 +651,19 @@ export function GlobalSpotlight({
             );
             if (errors.length) console.warn('[Spotlight] agent apply errors:', errors);
             aiCli.clearProposal(turn.id);
+
+            if (applied > 0 && agentOriginWorkspace) {
+                const fresh = list.find(w => w.id === agentOriginWorkspace.id) || agentOriginWorkspace;
+                aiCli.reset();
+                setAgentContext([]);
+                setAgentOriginWorkspace(null);
+                editWorkspace.enter(fresh);
+            }
         } catch (e) {
             console.error('[Spotlight] agent apply failed:', e);
             showFeedback('Could not apply changes — see console', 'error');
         }
-    }, [aiCli, showFeedback]);
+    }, [aiCli, showFeedback, agentOriginWorkspace, editWorkspace]);
 
     // "/name <title>" — a fast local shortcut inside /agent mode: renames the
     // active workspace immediately via the same rename_workspace action
@@ -581,6 +696,7 @@ export function GlobalSpotlight({
         setQuery('');
         setWsScaffoldPlan(undefined);
         setAgentContext([]);
+        setAgentOriginWorkspace(null);
     }, [aiCli]);
 
     // Entering add mode hands the user straight to the input with the panel
@@ -594,6 +710,16 @@ export function GlobalSpotlight({
         setPanelOpen(true);
         inputRef.current?.focus();
     }, [addTarget]);
+
+    // External trigger for /edit-workspace (a workspace card's right-click
+    // "Edit") — same idea as addTarget above: hands the user straight into
+    // the mode instead of requiring them to type the workspace's name first.
+    useEffect(() => {
+        if (!editTarget) return;
+        editWorkspace.enter(editTarget);
+        setPanelOpen(true);
+        inputRef.current?.focus();
+    }, [editTarget]);
 
     // Opt-in capabilities (activated per surface via props)
     const slash = useSlashCommands({ enabled: enableSlashCommands, isDesktopApp, onNavigate, showFeedback });
@@ -647,6 +773,28 @@ export function GlobalSpotlight({
         if (containerRef.current) ro.observe(containerRef.current);
         return () => ro.disconnect();
     }, [wsDropdownOpen]);
+
+    // The embedded search pill carries a heavy backdrop-filter blur in
+    // wallpaper mode (see wallpaper-enhancements.css). It stays mounted for
+    // the app's whole lifetime, so it never gets the compositing-layer reset
+    // App.jsx applies to wallpaper cards on insertion (a known WKWebView bug:
+    // a backdrop-filter layer can get stuck showing a stale snapshot — there,
+    // frozen on one card; here, it can end up smeared across the whole
+    // wallpaper instead of staying confined to the pill). Re-run the same
+    // will-change toggle here instead, keyed on the actual moment that seems
+    // to trip it — the results dropdown opening — since insertion never fires
+    // for an element that's always in the DOM.
+    useEffect(() => {
+        if (!isEmbedded || !panelOpen) return;
+        const el = containerRef.current?.querySelector('.spotlight-search-box');
+        if (!el) return;
+        const raf = requestAnimationFrame(() => {
+            el.style.willChange = 'auto';
+            void el.offsetWidth; // force a layout pass, dropping the promoted layer
+            el.style.willChange = '';
+        });
+        return () => cancelAnimationFrame(raf);
+    }, [isEmbedded, panelOpen]);
 
     // Focus input on mount and load items
     useEffect(() => {
@@ -1195,28 +1343,13 @@ export function GlobalSpotlight({
             return;
         }
 
-        // Detect an existing workspace's own name typed directly as a command
-        // (e.g. "/ent" for "entertainment") — opens it in /edit-workspace
-        // (see useEditWorkspaceMode.js). Checked last, after every fixed
-        // built-in above, so a workspace literally named "agent" or "model"
-        // can't shadow those. Prefix match, firing as soon as exactly one
-        // workspace name starts with what's typed — typing the whole name
-        // was too slow. An exact full-name match always wins outright, so
-        // "cool" still opens a workspace named exactly "cool" even if
-        // "cool-verse" also starts with it.
-        if (trimmedQuery.startsWith('/') && trimmedQuery.length > 1) {
-            const typedName = trimmedQuery.slice(1).toLowerCase();
-            const exact = workspaces.find(w => (w.name || '').trim().toLowerCase() === typedName);
-            const candidates = exact ? [exact] : workspaces.filter(w => workspaceNameMatchesTyped(w.name, typedName));
-            if (candidates.length === 1) {
-                const match = candidates[0];
-                if (commandMode !== 'edit-workspace' || editWorkspace.workspaceId !== match.id) {
-                    editWorkspace.enter(match);
-                    setSelectedIndex(-1);
-                }
-                return;
-            }
-        }
+        // An existing workspace's own name typed directly as a command (e.g.
+        // "/ent" for "entertainment") is never auto-committed into
+        // /edit-workspace here, no matter how unique the prefix match —
+        // it only ever shows up as a pickable "workspace-edit" row in the
+        // suggestions list below (see wsMatches), same as any other search
+        // result. Entering edit mode is always an explicit click/Enter on
+        // that row, never a side effect of typing.
         if (commandMode === 'edit-workspace') return;
 
         // Clear command mode if not a command
@@ -1319,7 +1452,14 @@ export function GlobalSpotlight({
 
         // Slash/bang command palette (when the surface enables it): "/..." and
         // "!..." queries list matching commands instead of running a search.
-        const commandItems = slash.getSuggestions(trimmedQuery);
+        // Neither this nor the workspace-name matches below apply in add mode
+        // (addTarget set) — its handleSelect branch runs every picked result
+        // through resultToWorkspaceItem, which has no case for 'command' or
+        // 'workspace-edit' (there's nothing to add — a command executes, and
+        // editing a *different* workspace mid-add makes no sense), so either
+        // one reaching that far surfaced as "can't be added to a workspace".
+        // Add mode only ever wants addable search results.
+        const commandItems = addTarget ? null : slash.getSuggestions(trimmedQuery);
         // Existing workspaces whose name starts with what's typed — computed
         // independently of the command palette above (which is disabled on
         // the dedicated overlay surface, spotlight-main.jsx: enableSlashCommands
@@ -1329,7 +1469,7 @@ export function GlobalSpotlight({
         // whenever the prefix is ambiguous between two of them (e.g. "cool"
         // matching both "cooldesk" and "cooldesk website"): picking one is a
         // click/Enter away instead of needing to type enough to disambiguate.
-        const typedName = trimmedQuery.startsWith('/') ? trimmedQuery.slice(1).toLowerCase() : '';
+        const typedName = (!addTarget && trimmedQuery.startsWith('/')) ? trimmedQuery.slice(1).toLowerCase() : '';
         const wsMatches = typedName
             ? workspaces
                 .filter(w => workspaceNameMatchesTyped(w.name, typedName))
@@ -1441,13 +1581,14 @@ export function GlobalSpotlight({
                 // made the spinner sit there for the whole time you were typing.
                 // Here search is a secondary convenience; the agent is the point.
                 const isAgent = commandMode === 'agent';
-                // /new-workspace's folder step wants folders/files/apps only;
-                // /edit-workspace (an existing workspace) accepts anything a
-                // workspace item can be, urls included. Neither is a
+                // /new-workspace's folder step and /edit-workspace (an
+                // existing workspace) both accept anything a workspace item
+                // can be — folders/files/apps AND urls (tabs/history/
+                // bookmarks), see resultToWorkspaceItem.js. Neither is a
                 // natural-language request — always wants file search, never
                 // the slow AI-backed search, regardless of query length.
-                const isFolderOnlyPicker = commandMode === 'new-workspace' && newWorkspace.step === 'folders';
-                const isItemPicker = isFolderOnlyPicker || commandMode === 'edit-workspace';
+                const isNewWorkspaceFolderStep = commandMode === 'new-workspace' && newWorkspace.step === 'folders';
+                const isItemPicker = isNewWorkspaceFolderStep || commandMode === 'edit-workspace';
                 const isNaturalLanguage = !isAgent && !isItemPicker && isNaturalLanguageQuery(searchTerm);
 
                 // quickSearch ranks and caps across ALL types (apps, workspaces,
@@ -1507,7 +1648,7 @@ export function GlobalSpotlight({
                 // offered as a direct destination — ranked in with everything
                 // else rather than bolted on separately, so an actual open tab
                 // for the same site (scored higher) still wins the top slot.
-                const urlGuessResults = (!isAgent && !isFolderOnlyPicker && looksLikeUrl(searchTerm) && (!scope || scope === SEARCH_SCOPES.u))
+                const urlGuessResults = (!isAgent && looksLikeUrl(searchTerm) && (!scope || scope === SEARCH_SCOPES.u))
                     ? [{
                         id: `url-guess-${searchTerm}`,
                         title: toNavigableUrl(searchTerm),
@@ -1546,14 +1687,6 @@ export function GlobalSpotlight({
                     searchResults = searchResults.filter(r => scope.types.includes(r.type));
                 }
 
-                // /new-workspace's folder step: only things that can become a
-                // workspace app are worth showing — a tab or bookmark can't.
-                // /edit-workspace allows urls/tabs/bookmarks too (an existing
-                // workspace can hold either kind of item), so it's unfiltered here.
-                if (isFolderOnlyPicker) {
-                    searchResults = searchResults.filter(r => ['folder', 'file', 'app'].includes(r.type));
-                }
-
                 // "/a <query>" with nothing matching: browse the full app
                 // catalog instead of leaving an empty list — running apps
                 // first, then everything else installed (see browseApps).
@@ -1575,22 +1708,58 @@ export function GlobalSpotlight({
                     });
                 }
 
-                // Nothing found, or nothing worth trusting: offer the agent as a
-                // way forward instead of leaving the user staring at weak
-                // fuzzy matches (or nothing). Scoped searches (/u /a /f) are a
-                // narrow, deliberate ask — this fallback only applies to a
-                // plain, broad search. Pinned to the top rather than sorted by
-                // score, so it's never buried under a page of mediocre matches.
+                // Nothing found, or nothing worth trusting: offer a way forward
+                // instead of leaving the user staring at weak fuzzy matches (or
+                // nothing). Pinned to the top rather than sorted by score, so
+                // it's never buried under a page of mediocre matches.
                 const bestScore = searchResults.reduce((max, r) => Math.max(max, r.score || 0), 0);
-                if (!isAgent && !isItemPicker && isDesktopApp && !addTarget && !scope && searchTerm.trim() &&
-                    (searchResults.length === 0 || bestScore < 50)) {
+                const weakOrEmpty = !addTarget && searchTerm.trim() && (searchResults.length === 0 || bestScore < 50);
+
+                // /edit-workspace: a literal keyword search can't answer
+                // something like "find more urls related to this workspace" —
+                // that's a request, not a search term. Hand it to the agent
+                // instead, scoped to the workspace already open — but the
+                // agent has no tool of its own to search history/tabs/
+                // bookmarks/apps (see runAgentWithBrowsingSnapshot), so
+                // needsBrowsingData tells the select handler to gather that
+                // data itself first and attach it, rather than sending an
+                // instruction the agent has no way to fulfill. No web-search
+                // offer here, since a raw search isn't itself a thing that
+                // can be filed into a workspace.
+                if (weakOrEmpty && commandMode === 'edit-workspace' && isDesktopApp && editWorkspace.workspace) {
                     searchResults.unshift({
                         id: `agent-suggest-${searchTerm}`,
                         title: `Ask the agent: "${searchTerm}"`,
-                        description: 'No strong matches — let the AI agent take it',
+                        description: `Search history, tabs & apps and add matches to "${editWorkspace.workspace.name}"`,
                         type: 'agent-suggest',
                         query: searchTerm,
+                        needsBrowsingData: true,
+                        originWorkspace: { id: editWorkspace.workspace.id, name: editWorkspace.workspace.name },
                     });
+                } else if (weakOrEmpty && !isAgent && !isItemPicker && !scope) {
+                    // Plain, broad search only — the agent (desktop app only)
+                    // and/or a plain browser search (previously only reachable
+                    // by hitting Enter on an empty list, with no visible option
+                    // for it). Scoped searches (/u /a /f) are a narrow,
+                    // deliberate ask and don't get this fallback.
+                    const fallbackRows = [];
+                    if (isDesktopApp) {
+                        fallbackRows.push({
+                            id: `agent-suggest-${searchTerm}`,
+                            title: `Ask the agent: "${searchTerm}"`,
+                            description: 'No strong matches — let the AI agent take it',
+                            type: 'agent-suggest',
+                            query: searchTerm,
+                        });
+                    }
+                    fallbackRows.push({
+                        id: `websearch-suggest-${searchTerm}`,
+                        title: `Search the web for "${searchTerm}"`,
+                        description: 'Open a search with your default browser search engine',
+                        type: 'websearch-suggest',
+                        query: searchTerm,
+                    });
+                    searchResults.unshift(...fallbackRows);
                 }
 
                 // Check if still relevant (user may have typed more)
@@ -1619,9 +1788,17 @@ export function GlobalSpotlight({
                 console.log('[Spotlight] Rendering results:', searchResults);
 
                 // Update UI — pre-select the top result (Spotlight-style) so
-                // Enter always acts on the visibly highlighted row
+                // Enter always acts on the visibly highlighted row. Exception:
+                // the "Ask the agent" / "Search the web" fallback rows are
+                // offers with real side effects (a mode switch, spawning a
+                // CLI process, opening a browser tab) rather than "open the
+                // thing you searched for" — auto-highlighting one meant a
+                // reflex Enter after typing a plain sentence silently
+                // launched it instead of leaving the user in their search.
+                const topType = searchResults[0]?.type;
+                const isOfferRow = topType === 'agent-suggest' || topType === 'websearch-suggest';
                 setResults(searchResults);
-                setSelectedIndex(searchResults.length > 0 ? 0 : -1);
+                setSelectedIndex(searchResults.length > 0 && !isOfferRow ? 0 : -1);
                 resultsDisplayedAtRef.current = Date.now(); // Track for feedback response time
 
             } catch (err) {
@@ -2015,7 +2192,10 @@ export function GlobalSpotlight({
                 }
             } else if (query.startsWith('http')) {
                 handleSelect({ url: query, type: 'url' });
-            } else if (flatRows.length > 0) {
+            } else if (flatRows.length > 0 && !['agent-suggest', 'websearch-suggest'].includes(flatRows[0].item?.type)) {
+                // "Ask the agent"/"Search the web" never auto-fire off an
+                // unselected bare Enter (see setSelectedIndex above) — only a
+                // deliberate arrow-to-it-and-Enter or a click.
                 handleSelect(flatRows[0].item);
             } else if (query.trim() && !addTarget) {
                 // No results — search the web instead (without any /u /a /f prefix;
@@ -2025,11 +2205,7 @@ export function GlobalSpotlight({
                 const { scope: qScope, term: qTerm } = parseScopedQuery(query.trim());
                 const webQuery = qScope ? qTerm : query.trim();
                 if (webQuery) {
-                    if (window.electronAPI?.openExternal) {
-                        window.electronAPI.openExternal(`https://www.google.com/search?q=${encodeURIComponent(webQuery)}`);
-                    } else {
-                        window.open(`https://www.google.com/search?q=${encodeURIComponent(webQuery)}`, '_blank');
-                    }
+                    searchInBrowser(webQuery);
                     handleClose();
                 }
             }
@@ -2128,11 +2304,27 @@ export function GlobalSpotlight({
         // The "no strong matches, ask the agent" fallback row: switch straight
         // into agent mode and send the original query as the request — no
         // panel close (agent mode's transcript view takes over instead, same
-        // as typing "/agent <query>" and hitting Enter).
+        // as typing "/agent <query>" and hitting Enter). The /edit-workspace
+        // variant needs real browsing data gathered and attached first (see
+        // runAgentWithBrowsingSnapshot) — the agent has no tool of its own
+        // that can search history/tabs/bookmarks/apps.
         if (item.type === 'agent-suggest') {
             setCommandMode('agent');
             setQuery('');
-            runAgent(item.query);
+            if (item.needsBrowsingData) {
+                runAgentWithBrowsingSnapshot(item.query, item.originWorkspace);
+            } else {
+                runAgent(item.query);
+            }
+            return;
+        }
+
+        // The "search the web" fallback row: open it in the user's own
+        // browser via its default search engine, same as hitting Enter on an
+        // empty results list (see handleKeyDown) — just a visible option for it.
+        if (item.type === 'websearch-suggest') {
+            searchInBrowser(item.query);
+            handleClose();
             return;
         }
 
@@ -2143,13 +2335,14 @@ export function GlobalSpotlight({
             return;
         }
 
-        // /new-workspace's folder step: clicking attaches too.
+        // /new-workspace's folder step: clicking attaches too — a folder/
+        // file/app or a url (tab/history/bookmark) alike, see resultToWorkspaceItem.js.
         if (commandMode === 'new-workspace' && newWorkspace.step === 'folders') {
             const mapped = resultToWorkspaceItem(item);
-            if (mapped?.kind === 'app') {
-                newWorkspace.addFolder(mapped);
+            if (mapped) {
+                newWorkspace.addItem(mapped);
             } else {
-                showFeedback('Pick a folder, file, or app', 'error');
+                showFeedback("That can't be added to a workspace", 'error');
             }
             return;
         }
@@ -2581,6 +2774,7 @@ export function GlobalSpotlight({
         if (item.type === 'tool') return 'Tool';
         if (item.type === 'command') return item.category || 'Command';
         if (item.type === 'agent-suggest') return 'Agent';
+        if (item.type === 'websearch-suggest') return 'Web';
         if (item.type === 'workspace-edit') return 'Workspace';
         if (item.type === 'todo') return item.done ? 'Done' : 'Todo';
         if (item.type === 'note') return 'Note';
@@ -2631,7 +2825,7 @@ export function GlobalSpotlight({
                     {commandMode === 'agent' && (
                         <span className="spotlight-add-badge spotlight-mode-badge">
                             <FontAwesomeIcon icon={faTerminal} />
-                            <span>Agent</span>
+                            <span>{agentOriginWorkspace ? `Agent · ${agentOriginWorkspace.name}` : 'Agent'}</span>
                             <button
                                 type="button"
                                 className="spotlight-add-badge-exit"
@@ -2686,7 +2880,7 @@ export function GlobalSpotlight({
                                 ? (newWorkspace.step === 'name'
                                     ? 'Name this workspace…'
                                     : newWorkspace.step === 'folders'
-                                        ? 'Search for a folder to add (Enter to skip)…'
+                                        ? 'Search for a folder, app, or link to add (Enter to skip)…'
                                         : 'Press Enter to create…')
                                 : commandMode === 'edit-workspace'
                                     ? 'Search to add a link/folder, or /name, /todo, /notes…'
@@ -2804,6 +2998,7 @@ export function GlobalSpotlight({
                         inputRef={inputRef}
                         agentLogRef={agentLogRef}
                         applyProposal={applyProposal}
+                        setAgentOriginWorkspace={setAgentOriginWorkspace}
                     />
                 )}
 

@@ -10,7 +10,7 @@ import { CopyButton } from '../CopyButton';
 export function AgentPanel({
     aiCli, agentAdapterOpen, setAgentAdapterOpen, agentHistoryOpen, setAgentHistoryOpen,
     wsScaffoldPlan, runCreateWorkspace, query, setQuery, agentContext, setAgentContext,
-    inputRef, agentLogRef, applyProposal,
+    inputRef, agentLogRef, applyProposal, setAgentOriginWorkspace,
 }) {
     return (
         <div className="spotlight-ai-mode spotlight-agent-mode">
@@ -100,6 +100,7 @@ export function AgentPanel({
                             setQuery('');
                             setAgentHistoryOpen(false);
                             setAgentContext([]);
+                            setAgentOriginWorkspace?.(null);
                             inputRef.current?.focus();
                         }}
                         title="New chat — the next question won't carry this conversation's context or attachments"
@@ -196,8 +197,8 @@ export function AgentPanel({
             {agentContext.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '2px 4px 8px' }}>
                     {agentContext.map(c => (
-                        <span key={c.id} className="spotlight-agent-chip" title={c.path}>
-                            <FontAwesomeIcon icon={c.kind === 'folder' ? faFolder : faFileLines} />
+                        <span key={c.id} className="spotlight-agent-chip" title={c.path || c.name}>
+                            <FontAwesomeIcon icon={c.kind === 'folder' ? faFolder : c.kind === 'data' ? faHistory : faFileLines} />
                             {c.name}
                             {c.status === 'loading' && ' …'}
                             {c.status === 'unreadable' && ' (unreadable)'}
@@ -260,16 +261,26 @@ export function AgentPanel({
                             </div>
                         )}
 
-                        {/* Raw output. While the run is in flight this is the
-                            only sign of life, so it stays open; once there's
-                            an answer it collapses out of the way. */}
+                        {/* Raw output — the underlying stream-json protocol
+                            lines (system init, tool calls, the final result
+                            envelope), not prose. While the run is in flight
+                            this is the only sign of life, so it stays open.
+                            Once it's done, a plain conversational reply
+                            already says everything there is to say — showing
+                            a second "Output" toggle full of protocol noise
+                            under it (see turn.reply above) was confusing, not
+                            informative. It only stays worth folding away
+                            (rather than dropping entirely) when there's a
+                            proposal to double-check the parse of, or when the
+                            run finished without either a reply or a proposal
+                            (the only sign of what happened, then). */}
                         {turn.lines.length > 0 && (turn.running || (!turn.reply && !turn.proposal) ? (
                             <pre className="spotlight-agent-stream">
                                 {turn.lines.map((l, i) => (
                                     <div key={i} className={l.stream === 'stderr' ? 'is-stderr' : undefined}>{l.text}</div>
                                 ))}
                             </pre>
-                        ) : (
+                        ) : turn.proposal ? (
                             <details className="spotlight-agent-raw">
                                 <summary>
                                     Output
@@ -284,7 +295,7 @@ export function AgentPanel({
                                     ))}
                                 </pre>
                             </details>
-                        ))}
+                        ) : null)}
 
                         {turn.running && !turn.lines.length && (
                             <div className="spotlight-agent-waiting">Waiting for {aiCli.adapter.label}…</div>

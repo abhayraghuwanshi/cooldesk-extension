@@ -175,23 +175,30 @@ export function CoolDeskContainer({
     // 'notes' face was removed (notes are now embedded in workspace cards) — migrate any
     // leftover persisted value so the app doesn't boot into an empty/broken state.
     if (stored === 'notes') return fallback;
+    // 'chat' was never a real WorkspaceShell face (see DESKTOP_FACES) — a
+    // stale persisted value from when /chat still navigated there would
+    // otherwise boot straight into that broken, nothing-renders state.
+    if (stored === 'chat') return fallback;
     if (stored === 'team' && !TEAM_FEATURE_ENABLED) return fallback;
     return stored || fallback;
   });
 
-  // ── Add mode ─────────────────────────────────────────────────────────────
-  // Adding to a workspace reuses the header search rather than a modal of its
-  // own: finding the thing to add is the same problem the spotlight already
-  // solves, and a card-local search box would be a second, worse index.
-  // `addTarget` is the workspace the next picked result lands in.
-  const [addTarget, setAddTarget] = useState(null);
+  // ── Edit mode ────────────────────────────────────────────────────────────
+  // The card's right-click "Edit" opens the same /edit-workspace mode on the
+  // header search that typing a workspace's name there does — rename,
+  // search-to-add a link/folder/app, todos, notes — rather than a second,
+  // narrower "add one thing" flow with its own rules. `editTarget` is the
+  // workspace the search box enters edit mode for; cleared once GlobalSpotlight
+  // reports the mode closed (Esc, its chip's ×, or picking another workspace),
+  // so the next right-click "Edit" — even on the same workspace — re-triggers.
+  const [editTarget, setEditTarget] = useState(null);
 
-  const handleOpenAddModal = useCallback((workspace = null) => {
+  const handleOpenEditModal = useCallback((workspace = null) => {
     if (!workspace) return;
-    setAddTarget({ id: workspace.id, name: workspace.name });
+    setEditTarget({ id: workspace.id, name: workspace.name });
   }, []);
 
-  const handleExitAddMode = useCallback(() => setAddTarget(null), []);
+  const handleExitEditMode = useCallback(() => setEditTarget(null), []);
 
   const [graphOpen, setGraphOpen] = useState(false);
 
@@ -223,34 +230,6 @@ export function CoolDeskContainer({
      Shared with the Tab Management toolbar and the workspace dock bar via
      `useLayoutSwitch` — see `src/features/dock/useLayoutSwitch.js`. */
   const { currentLayoutInfo, nextLayout, cycleLayout } = useLayoutSwitch(dockState);
-
-  // Persist one item picked from the header search into the target workspace.
-  // Links go through the URL index (`onAddUrlToWorkspace`) so analytics and
-  // the workspace↔url association stay consistent with every other add path;
-  // apps/folders/files are plain members of the workspace record.
-  const handleAddFromSearch = useCallback(async (target, item) => {
-    const workspace = savedWorkspaces.find(w => w.id === target.id);
-    if (!workspace) throw new Error(`Workspace ${target.id} no longer exists`);
-
-    if (item.kind === 'url') {
-      await onAddUrlToWorkspace?.(workspace.id, {
-        url: item.url,
-        title: item.title,
-        favicon: item.favicon,
-      });
-      return;
-    }
-
-    // Apps dedupe on path — re-adding the same folder from search is a
-    // no-op rather than a second identical chip on the card.
-    const path = (item.path || '').toLowerCase();
-    if (path && (workspace.apps || []).some(a => (a.path || '').toLowerCase() === path)) return;
-    await saveWorkspace({
-      ...workspace,
-      apps: [...(workspace.apps || []), { name: item.name, path: item.path, icon: item.icon ?? null, ...(item.appType ? { appType: item.appType } : {}) }],
-      updatedAt: Date.now(),
-    });
-  }, [savedWorkspaces, onAddUrlToWorkspace]);
 
   // Keyboard shortcuts: Graph (Ctrl+Shift+G), sidebar dock toggle (Ctrl+Shift+D).
   // `e.key` is the *shifted* character, so compare case-insensitively.
@@ -530,10 +509,11 @@ export function CoolDeskContainer({
   const handleNavigate = (destination) => {
     console.log('[CoolDesk] Navigation requested to:', destination);
 
-    // Map navigation commands to face names
+    // Map navigation commands to face names. No 'chat' — WorkspaceShell has
+    // no such face (see DESKTOP_FACES), so it used to leave the shell on a
+    // currentFace nothing renders for.
     const faceMap = {
       'workspace': 'workspace',
-      'chat': 'chat',
       'tabs': 'tabs',
       ...(TEAM_FEATURE_ENABLED ? { 'team': 'team' } : {}),
       'overview': 'overview'
@@ -555,9 +535,10 @@ export function CoolDeskContainer({
     const initial = new Set(['overview']);
     try {
       const active = localStorage.getItem('cooldesk-active-face') || 'overview';
-      // 'notes' face was removed — don't treat it as a visited face anymore.
-      // 'team' is feature-flagged off — visiting it would lazy-init P2P for nothing.
-      if (active !== 'notes' && (active !== 'team' || TEAM_FEATURE_ENABLED)) initial.add(active);
+      // 'notes' and 'chat' faces were removed — don't treat either as a
+      // visited face anymore. 'team' is feature-flagged off — visiting it
+      // would lazy-init P2P for nothing.
+      if (active !== 'notes' && active !== 'chat' && (active !== 'team' || TEAM_FEATURE_ENABLED)) initial.add(active);
     } catch { }
     return initial;
   });
@@ -665,9 +646,8 @@ export function CoolDeskContainer({
               isDesktopApp={isDesktopApp}
               enableVoice
               enableSlashCommands
-              addTarget={addTarget}
-              onAddItem={handleAddFromSearch}
-              onExitAddMode={handleExitAddMode}
+              editTarget={editTarget}
+              onExitEditMode={handleExitEditMode}
             />
           )}
         </div>
@@ -727,7 +707,7 @@ export function CoolDeskContainer({
                       expandedWorkspaceId={expandedWorkspace?.id}
                       pinnedWorkspaces={pinnedWorkspaces}
                       onTogglePin={onTogglePin}
-                      onAddUrl={handleOpenAddModal}
+                      onEditWorkspace={handleOpenEditModal}
                       appSuggestions={appSuggestions}
                       onAddAppsToWorkspace={handleAddAppsToWorkspace}
                     />
@@ -757,7 +737,7 @@ export function CoolDeskContainer({
               expandedWorkspaceId={expandedWorkspace?.id}
               onAddNote={onAddNote}
               pinnedWorkspaces={pinnedWorkspaces}
-              onAddUrl={handleOpenAddModal}
+              onEditWorkspace={handleOpenEditModal}
             />
           </Face>
         )}
