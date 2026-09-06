@@ -70,5 +70,13 @@
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",
     "vite": "^7.1.2"
+  },
+  "overrides": {
+    "node-llama-cpp": {
+      "simple-git": "3.36.0"
+    },
+    "simple-git": {
+      "simple-git": "3.36.0"
+    }
   }
 }
