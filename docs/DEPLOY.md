@@ -1,6 +1,6 @@
 # CoolDesk — Deployment Guide
 
-How to build and distribute the **Tauri desktop app** and **Chrome extension** on macOS and Windows.
+How to build and distribute the **Tauri desktop app** and **Chrome extension** on macOS, Windows, and Linux.
 
 ---
 
@@ -26,6 +26,29 @@ rustc --version
 - [Visual Studio Build Tools 2022](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with "Desktop development with C++"
 - [WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (included in Windows 11; install manually on Windows 10)
 - .NET SDK 6+ (for recompiling AppScanner.cs if needed)
+
+### Linux
+- WebKitGTK, GTK3, and related dev headers:
+
+```bash
+# Debian/Ubuntu
+sudo apt-get install -y \
+  libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+  libxdo-dev librsvg2-dev patchelf libssl-dev file
+
+# Fedora
+sudo dnf install -y webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel \
+  libxdo-devel librsvg2-devel patchelf openssl-devel
+
+# Arch
+sudo pacman -S --needed webkit2gtk-4.1 gtk3 libappindicator-gtk3 xdotool librsvg patchelf openssl
+```
+
+Note: a real Linux `.deb`/`.AppImage`/`.rpm` bundle requires running the build
+*on Linux* (native GTK/WebKit2GTK libs) — it cannot be cross-compiled from
+macOS or Windows. `xdotool` is also needed at runtime for window-focus support
+(`apt install xdotool` / `dnf install xdotool` / `pacman -S xdotool`), see
+[`CROSS_PLATFORM_FOCUS.md`](./CROSS_PLATFORM_FOCUS.md).
 
 ---
 
@@ -82,6 +105,48 @@ npm run build:tauri
 Output: `src-tauri/target/release/bundle/`
 - `msi/cooldesk_0.1.0_x64_en-US.msi` — MSI installer
 - `nsis/cooldesk_0.1.0_x64-setup.exe` — NSIS installer
+
+### Linux
+
+```bash
+# Development (hot-reload)
+npm run dev:tauri
+
+# Production build
+npm run build:tauri
+```
+
+Output: `src-tauri/target/release/bundle/`
+- `deb/cooldesk_0.1.0_amd64.deb` — Debian/Ubuntu package
+- `appimage/cooldesk_0.1.0_amd64.AppImage` — portable AppImage
+- `rpm/cooldesk-0.1.0-1.x86_64.rpm` — Fedora/RHEL package
+
+Feature parity on Linux vs. macOS/Windows:
+- **App scanner** (`src-tauri/src/scanner/linux.rs`) — implemented. Parses
+  `.desktop` files (freedesktop.org Desktop Entry Spec) across the standard
+  XDG dirs, Flatpak, and Snap. Icon resolution is best-effort (checks common
+  hicolor sizes + `/usr/share/pixmaps`, PNG only — no SVG/XPM, no full XDG
+  icon-theme cascade), so some apps will show no icon.
+- **Running-apps list** (`src-tauri/src/system/linux.rs`) — implemented via
+  X11/EWMH (`_NET_CLIENT_LIST` etc., see `linux_ewmh.rs`). **X11 only** —
+  under Wayland there is no protocol for a client to enumerate other apps'
+  windows (by design), so this returns an empty list there, same as the
+  `xdotool`-based focus module below.
+- **Workspace dock** and **webapp-embed** — still Windows/macOS-only, no-op
+  on Linux (see the `#[cfg(not(any(target_os = "windows", target_os =
+  "macos")))]` fallbacks in `src-tauri/src/dock.rs` /
+  `src-tauri/src/webapp_embed.rs`).
+
+Window focus works via `xdotool` on X11; Wayland is not supported (see
+[`CROSS_PLATFORM_FOCUS.md`](./CROSS_PLATFORM_FOCUS.md)) — install it with
+`apt install xdotool` / `dnf install xdotool` / `pacman -S xdotool`.
+
+A `.deb`/`.AppImage`/`.rpm` links against the glibc of whatever distro built
+it, so it won't run on distros older than the build machine (e.g. a build on
+Ubuntu 24.04 needs glibc ≥ 2.39 — it won't run on Ubuntu 20.04 or Debian 11).
+CI builds on the oldest still-supported Ubuntu LTS runner GitHub offers to
+keep that floor as low as practical; check `.github/workflows/release.yml`
+for the current version.
 
 **AppScanner binary (Windows only)**
 
@@ -183,6 +248,8 @@ No special configuration is needed — the sidecar server starts automatically w
 | WS connection fails | Check that app is running and port 4545 is not blocked by firewall |
 | Extension not connecting | Open `chrome://extensions`, check the extension is enabled, reload it |
 | Build fails on `llama-cpp-2` | Ensure you have a C++ compiler; on Windows use VS Build Tools 2022 |
+| `error: failed to run custom build command for webkit2gtk-sys` (Linux) | Install the WebKitGTK/GTK3 dev headers listed above |
+| AppImage won't launch: `dlopen(): error loading libfuse.so.2` | Install `fuse`/`fuse2` (`apt install libfuse2` on newer Ubuntu), or run with `--appimage-extract-and-run` |
 
 ---
 
