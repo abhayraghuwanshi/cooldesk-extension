@@ -3217,7 +3217,10 @@ pub fn run() {
       // row. Poll the foreground window and hide the handle while a fullscreen app
       // holds it, restoring it afterwards. Gated on DRAWER_COLLAPSED so the loop
       // does nothing (and touches no disk) unless the handle is actually showing.
-      #[cfg(windows)]
+      // Linux: `dock::foreground_is_fullscreen` works over X11/EWMH only — under
+      // Wayland it always reports false, so the handle just never auto-hides
+      // there (same graceful-empty-result shape as the rest of the EWMH work).
+      #[cfg(any(windows, target_os = "linux"))]
       {
           let app_handle = app.handle().clone();
           std::thread::spawn(move || {

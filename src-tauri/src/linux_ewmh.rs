@@ -46,6 +46,12 @@ pub struct EwmhSnapshot {
     pub windows: Vec<EwmhWindow>,
     pub active_window: Option<u32>,
     pub current_desktop: Option<u32>,
+    /// Whether `active_window` carries `_NET_WM_STATE_FULLSCREEN`. Checked
+    /// directly against the active window id rather than looked up in
+    /// `windows`, so it still works even if that window is missing
+    /// `_NET_WM_PID` (which would otherwise exclude it from `windows` — see
+    /// `describe_window`).
+    pub active_is_fullscreen: bool,
 }
 
 struct Atoms {
@@ -57,6 +63,7 @@ struct Atoms {
     net_current_desktop: u32,
     net_wm_state: u32,
     net_wm_state_hidden: u32,
+    net_wm_state_fullscreen: u32,
 }
 
 fn intern(conn: &RustConnection, name: &'static str) -> Option<u32> {
@@ -73,6 +80,7 @@ fn load_atoms(conn: &RustConnection) -> Option<Atoms> {
         net_current_desktop: intern(conn, "_NET_CURRENT_DESKTOP")?,
         net_wm_state: intern(conn, "_NET_WM_STATE")?,
         net_wm_state_hidden: intern(conn, "_NET_WM_STATE_HIDDEN")?,
+        net_wm_state_fullscreen: intern(conn, "_NET_WM_STATE_FULLSCREEN")?,
     })
 }
 
@@ -210,5 +218,9 @@ pub fn snapshot() -> EwmhSnapshot {
         }
     }
 
-    EwmhSnapshot { windows, active_window, current_desktop }
+    let active_is_fullscreen = active_window
+        .map(|id| get_prop_u32_list(&conn, id, atoms.net_wm_state).contains(&atoms.net_wm_state_fullscreen))
+        .unwrap_or(false);
+
+    EwmhSnapshot { windows, active_window, current_desktop, active_is_fullscreen }
 }

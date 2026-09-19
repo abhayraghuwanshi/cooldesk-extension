@@ -132,9 +132,20 @@ Feature parity on Linux vs. macOS/Windows:
   under Wayland there is no protocol for a client to enumerate other apps'
   windows (by design), so this returns an empty list there, same as the
   `xdotool`-based focus module below.
-- **Workspace dock** and **webapp-embed** — still Windows/macOS-only, no-op
-  on Linux (see the `#[cfg(not(any(target_os = "windows", target_os =
-  "macos")))]` fallbacks in `src-tauri/src/dock.rs` /
+- **Workspace dock** — partially implemented. Both halves are Windows-only
+  precedent (macOS doesn't have either, not just Linux):
+  - Fullscreen-detection for the drawer handle (`src-tauri/src/dock/linux.rs`)
+    — implemented via X11/EWMH (`_NET_WM_STATE_FULLSCREEN` on the active
+    window). Same X11-only caveat as the running-apps list above.
+  - True screen-edge reservation (the AppBar equivalent, `set_dock` /
+    `remove_dock` / `work_area` / `monitor_rect`) — **not implemented**. EWMH
+    struts (`_NET_WM_STRUT_PARTIAL`) could do this, but it needs our own
+    window's X11 id, which needs a GTK dependency (`gtk_window()` +
+    `gdkx11`) this crate doesn't pull in yet. CoolDesk's floating drawer/
+    panel mode already works on Linux without it — this only adds true OS-
+    level screen reservation on top.
+- **webapp-embed** — still Windows-only, no-op on Linux (see the
+  `#[cfg(not(target_os = "windows"))]` fallbacks in
   `src-tauri/src/webapp_embed.rs`).
 
 Window focus works via `xdotool` on X11; Wayland is not supported (see

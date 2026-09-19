@@ -27,8 +27,12 @@ pub use windows::{
     foreground_hwnd, foreground_is_fullscreen, monitor_rect, remove_dock, set_dock, work_area,
 };
 
-// Non-Windows stubs. The callers in lib.rs are all `#[cfg(windows)]`-gated, so
-// these are never invoked off Windows — they exist only so the module compiles.
+// Reserve-mode stubs (true screen-edge reservation, the AppBar equivalent).
+// Linux included: EWMH struts (`_NET_WM_STRUT_PARTIAL`) could do this, but it
+// needs our own window's X11 id, which needs a GTK dependency this crate
+// doesn't pull in yet — see docs/DEPLOY.md. The callers in lib.rs are all
+// `#[cfg(windows)]`-gated for these four, so the stubs below exist only so
+// the module compiles.
 #[cfg(not(windows))]
 pub fn set_dock(_raw_hwnd: isize, _edge: &str, _thickness: i32) -> Result<(i32, i32, i32, i32), String> {
     Err("Workspace dock is only supported on Windows".into())
@@ -47,12 +51,17 @@ pub fn monitor_rect(_raw_hwnd: isize) -> Option<(i32, i32, i32, i32)> {
     None
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+pub use linux::{foreground_hwnd, foreground_is_fullscreen};
+
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn foreground_is_fullscreen() -> bool {
     false
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn foreground_hwnd() -> isize {
     0
 }
