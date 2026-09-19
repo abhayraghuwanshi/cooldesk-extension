@@ -8,6 +8,8 @@ use tauri::menu::{Menu, MenuItem};
 mod sidecar;
 mod system;
 mod focus;
+#[cfg(target_os = "linux")]
+mod linux_ewmh;
 mod categorize;
 mod scanner;
 mod matcher;

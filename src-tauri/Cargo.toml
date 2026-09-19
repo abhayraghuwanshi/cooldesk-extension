@@ -111,3 +111,10 @@ windows = { version = "0.58", features = [
     "Win32_Media_Audio",
     "Win32_Media_Audio_Endpoints"
 ] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# EWMH/X11 window enumeration in `linux_ewmh.rs` — pure-Rust protocol client,
+# no libxcb/libX11 needed at build time (see that module's doc comment).
+# Already resolved transitively via tao/wry's own Linux backend at this
+# version, so this doesn't add a second copy to the dependency tree.
+x11rb = "0.13"

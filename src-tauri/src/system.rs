@@ -4,6 +4,8 @@ use serde::Serialize;
 mod windows;
 #[cfg(target_os = "macos")]
 mod mac;
+#[cfg(target_os = "linux")]
+mod linux;
 
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -31,7 +33,10 @@ pub async fn get_focused_app_info() -> Option<RunningApp> {
     #[cfg(target_os = "windows")]
     return windows::get_focused_app_info();
 
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    return linux::get_focused_app_info();
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     None
 }
 
@@ -42,7 +47,10 @@ pub async fn get_visible_apps_info() -> Vec<RunningApp> {
     #[cfg(target_os = "macos")]
     return mac::get_visible_apps_info();
 
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    return linux::get_visible_apps_info();
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     Vec::new()
 }
 
