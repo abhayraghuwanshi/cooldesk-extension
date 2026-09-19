@@ -671,10 +671,17 @@ export function ActivityFeed() {
     // Deliberately its own short poll rather than piggybacking on chrome.tabs.onUpdated
     // — that listener is skipped elsewhere in this file (see the throttled tab-event
     // setup) because it fires too often and causes memory pressure, but audible
-    // start/stop is exactly the kind of change onUpdated would report. Scoping the
-    // poll to only run while this tab is actually open avoids paying that cost always.
+    // start/stop is exactly the kind of change onUpdated would report.
+    // Runs for the whole time this component is mounted, not just while the
+    // Media tab is selected — this poll is also the only thing that writes to
+    // the persisted "Recently played" list (upsertRecentMedia), so scoping it
+    // to activeTab === 'media' used to mean a video played while you were
+    // looking at any other tab (Local, All Activity, ...) was never recorded,
+    // leaving Recently Played stuck showing whatever the last visit to the
+    // Media tab happened to catch — days-old entries even after fresh plays.
+    // Rendering the list is still gated to activeTab === 'media' below, so
+    // this doesn't add UI cost, just keeps the persisted data accurate.
     useEffect(() => {
-        if (activeTab !== 'media') return;
         let cancelled = false;
         const poll = async () => {
             try {
@@ -701,7 +708,7 @@ export function ActivityFeed() {
         poll();
         const interval = setInterval(poll, 2000);
         return () => { cancelled = true; clearInterval(interval); };
-    }, [activeTab, upsertRecentMedia]);
+    }, [upsertRecentMedia]);
 
     // Effect: Listen for pins DB changes (for favorites/quick links sync)
     useEffect(() => {
@@ -1443,7 +1450,44 @@ export function ActivityFeed() {
             }
         });
 
-        return [...byLabel.values()].sort((a, b) => (b.isOpen - a.isOpen) || b.timestamp - a.timestamp);
+        // A dev server restarted during debugging (port already taken, hot
+        // reload, etc.) reappears in history under a new hostname:port each
+        // time, even though it's the same app — e.g. "compute mesh" started
+        // on 10 different ports leaves 10 stale rows here. Its page title
+        // stays stable across those restarts, so history-only entries sharing
+        // a real title are candidates for collapsing down to the most recent
+        // port. But title alone isn't a safe grouping key: scaffolded dev
+        // servers commonly ship identical default titles (CRA's "React App",
+        // Vite's "Vite + React"), so two *unrelated* projects run weeks apart
+        // would otherwise wrongly merge into one row. Require the visits to
+        // also be close together in time — same debugging session, not same
+        // generic title reused later — before collapsing them. Never applies
+        // to currently-open tabs, which are genuinely live and may
+        // legitimately be running on several ports at once.
+        const SESSION_GAP_MS = 6 * 60 * 60 * 1000; // 6h — a restart-storm lands within this; a return visit weeks later doesn't.
+        const open = [];
+        const singleton = [];
+        const byTitle = new Map();
+        for (const item of byLabel.values()) {
+            if (item.isOpen) { open.push(item); continue; }
+            // No real title was ever recorded (title fell back to the label
+            // itself) — nothing to group on, so leave it as its own row.
+            const titleKey = item.title && item.title !== item.label ? item.title.trim().toLowerCase() : null;
+            if (!titleKey) { singleton.push(item); continue; }
+            if (!byTitle.has(titleKey)) byTitle.set(titleKey, []);
+            byTitle.get(titleKey).push(item);
+        }
+
+        const closed = [...singleton];
+        for (const items of byTitle.values()) {
+            items.sort((a, b) => a.timestamp - b.timestamp);
+            for (let i = 1; i <= items.length; i++) {
+                const gap = i < items.length ? items[i].timestamp - items[i - 1].timestamp : Infinity;
+                if (gap > SESSION_GAP_MS) closed.push(items[i - 1]); // most recent port in this session cluster
+            }
+        }
+
+        return [...open, ...closed].sort((a, b) => (b.isOpen - a.isOpen) || b.timestamp - a.timestamp);
     }, [deepActivity]);
 
     // "Local" tab: dev servers detected on this run, same row layout/actions as
