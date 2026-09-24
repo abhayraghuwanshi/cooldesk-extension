@@ -721,11 +721,29 @@ fn primary_geom(app: &tauri::AppHandle) -> Option<(i32, i32, i32, i32)> {
 /// `cursor_position`/`monitor_from_point` are on `AppHandle` too (tauri's
 /// `shared_app_impl!` macro), so this is callable from the background
 /// watcher threads in `setup()`, not just from a command on the main thread.
+///
+/// macOS: tao's `cursor_position()` scales the cursor's point location by the
+/// *primary* display's scale factor, but its `monitor_from_point` compares
+/// against `CGDisplayBounds` in *points* — so with a 2x Retina primary the
+/// lookup matched the wrong monitor (or none, falling back to primary) and
+/// the drawer never followed the cursor to a second screen. Feed it the raw
+/// point location from CGEvent instead (top-left origin, same space as
+/// `CGDisplayBounds`). Only the monitor's identity matters on macOS — the
+/// actual placement is done in points by `mac_drawer_frame`.
 fn cursor_geom(app: &tauri::AppHandle) -> Option<(i32, i32, i32, i32)> {
-    let monitor = app
-        .cursor_position()
-        .ok()
-        .and_then(|pos| app.monitor_from_point(pos.x, pos.y).ok().flatten());
+    #[cfg(target_os = "macos")]
+    let cursor = {
+        use core_graphics::event::CGEvent;
+        use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+        CGEventSource::new(CGEventSourceStateID::HIDSystemState)
+            .ok()
+            .and_then(|src| CGEvent::new(src).ok())
+            .map(|e| e.location())
+            .map(|loc| (loc.x, loc.y))
+    };
+    #[cfg(not(target_os = "macos"))]
+    let cursor = app.cursor_position().ok().map(|pos| (pos.x, pos.y));
+    let monitor = cursor.and_then(|(x, y)| app.monitor_from_point(x, y).ok().flatten());
     match monitor {
         Some(m) => {
             let p = m.position();
@@ -737,6 +755,48 @@ fn cursor_geom(app: &tauri::AppHandle) -> Option<(i32, i32, i32, i32)> {
 }
 
 // ── Drawer mode ────────────────────────────────────────────────────────────
+
+/// macOS placement for the drawer panel (`handle == false`) or its collapsed
+/// tab (`handle == true`) on the screen under the cursor, as an AppKit frame
+/// (points, bottom-left origin) for `dock::set_window_frame`. Mirrors the
+/// physical-pixel math in `expand_drawer`/`collapse_drawer`, but against
+/// `NSScreen` rects — see `dock::cursor_screen_rects` for why Tauri's
+/// monitor/position APIs can't be used for this on a multi-monitor Mac.
+///
+/// Edges hug `visibleFrame` rather than the full frame so nothing lands
+/// under that display's menu bar or the real Dock; a horizontal panel still
+/// spans the full screen width (see the note in `expand_drawer`).
+#[cfg(target_os = "macos")]
+fn mac_drawer_frame(st: &DockState, handle: bool) -> Option<(f64, f64, f64, f64)> {
+    let ((fx, _, fw, _), (vx, vy, vw, vh)) = dock::cursor_screen_rects()?;
+    let horizontal = dock_is_horizontal(&st.side);
+    let frame = match (handle, horizontal) {
+        (false, false) => {
+            let margin = SIDEBAR_MARGIN as f64;
+            let margin_v = SIDEBAR_MARGIN_VERTICAL as f64;
+            let w = (st.width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH) as f64 - margin * 2.0).max(1.0);
+            let x = if st.side == "left" { vx + margin } else { vx + vw - w - margin };
+            (x, vy + margin_v, w, (vh - margin_v * 2.0).max(1.0))
+        }
+        (false, true) => {
+            let h = st.bar_height.clamp(BAR_MIN_HEIGHT, BAR_MAX_HEIGHT) as f64;
+            let y = if st.side == "bottom" { vy } else { vy + vh - h };
+            (fx, y, fw, h)
+        }
+        (true, false) => {
+            let (w, h) = (HANDLE_W as f64, HANDLE_H as f64);
+            let x = if st.side == "left" { vx } else { vx + vw - w };
+            (x, vy + (vh - h) / 2.0, w, h)
+        }
+        (true, true) => {
+            // Rotated tab: the long side runs along the edge.
+            let (w, h) = (HANDLE_H as f64, HANDLE_W as f64);
+            let y = if st.side == "bottom" { vy } else { vy + vh - h };
+            (fx + (fw - w) / 2.0, y, w, h)
+        }
+    };
+    Some(frame)
+}
 
 /// Geometry the drawer lays out against. Horizontal (top/bottom) docks use the
 /// monitor *work area* so the bar sits above the Windows taskbar instead of
@@ -791,11 +851,7 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
                 // one — flush against the physical screen edge looked cramped in
                 // practice (butts right up against neighboring windows). Top/bottom
                 // use a separate, larger margin — see `SIDEBAR_MARGIN_VERTICAL`.
-                // (On macOS this y/height is only a starting point: the real,
-                // menu-bar-aware position is set once via
-                // `dock::position_sidebar_panel` below, which this
-                // cross-platform calc can't see. `x`/`w` here are still what
-                // gets used, on every platform.)
+                // (Unused on macOS — see `mac_drawer_frame`.)
                 let margin = logical_to_physical(SIDEBAR_MARGIN, scale);
                 let margin_v = logical_to_physical(SIDEBAR_MARGIN_VERTICAL, scale);
                 let w = (logical_to_physical(st.width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH) as i32, scale) - margin * 2).max(1);
@@ -811,16 +867,13 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
             if !horizontal {
                 let _ = main.set_shadow(false);
             }
-            // The vertical panel on macOS is positioned once, atomically, via
-            // `dock::position_sidebar_panel` in the main-thread block below —
-            // using this approximate (x, y, w, h) here first and then
-            // correcting it a moment later used to mean two separate resizes
-            // on every single drawer open, which is exactly the kind of
-            // back-to-back repaint that could leave this backdrop-filter-heavy
-            // webview showing part of its previous frame as a stale, blurred
-            // smear until a full reload. Every other platform/orientation
-            // still needs this call as their only positioning step.
-            if horizontal || !cfg!(target_os = "macos") {
+            // macOS positions the panel once, atomically, in AppKit points via
+            // `mac_drawer_frame` in the main-thread block below — Tauri's
+            // physical position/size APIs put it on the wrong screen (or
+            // half off one) on multi-monitor setups with mixed scale factors,
+            // and an approximate set here followed by a correction there
+            // would be two back-to-back resizes (see `dock::set_window_frame`).
+            if !cfg!(target_os = "macos") {
                 let _ = main.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w as u32, height: h as u32 }));
                 let _ = main.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
             }
@@ -830,18 +883,16 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
             // to being a normal per-Space document window. Also clamps a
             // horizontal bar back inside the visible frame so it doesn't end
             // up rendered (and unclickable) underneath the real macOS Dock or
-            // menu bar — see `clamp_to_visible_frame`'s doc comment.
+            // menu bar — see `dock::cursor_screen_rects`'s doc comment.
             //
             // `expand_drawer` can run off the main thread (`dock_expand` is an
             // async command, dispatched on a tokio worker), but this reaches
             // into the raw NSWindow via objc2 — AppKit asserts/crashes
-            // (EXC_BREAKPOINT) if that happens off the main thread. Dispatched
-            // after the size/position calls above so `clamp_to_visible_frame`
-            // reads the frame they just set.
+            // (EXC_BREAKPOINT) if that happens off the main thread.
             #[cfg(target_os = "macos")]
             {
                 let main_for_appkit = main.clone();
-                let side_for_appkit = st.side.clone();
+                let st_for_appkit = st.clone();
                 // `show()`/`set_focus()` are dispatched *inside* this same
                 // main-thread block, after positioning — not called
                 // separately below — so the window can't paint a frame at
@@ -854,19 +905,14 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
                 let _ = app.run_on_main_thread(move || {
                     dock::allow_over_fullscreen_spaces(&main_for_appkit);
                     dock::join_fullscreen_space(&main_for_appkit);
-                    if horizontal {
-                        dock::clamp_to_visible_frame(&main_for_appkit, &side_for_appkit);
-                    } else {
-                        // NSWindow/NSScreen work in points, not the physical
-                        // pixels `x`/`w` are in here — convert back.
-                        dock::position_sidebar_panel(
-                            &main_for_appkit,
-                            x as f64 / scale,
-                            w as f64 / scale,
-                            SIDEBAR_MARGIN_VERTICAL as f64,
-                        );
+                    match mac_drawer_frame(&st_for_appkit, false) {
+                        Some(frame) => {
+                            dock::set_window_frame(&main_for_appkit, frame);
+                            log::info!("[Dock] Panel placed on cursor screen (points): {frame:?}");
+                        }
+                        None => log::error!("[Dock] expand_drawer: no NSScreen to place panel on"),
                     }
-                    // Snapshot the final on-screen frame (post-clamp) for the
+                    // Snapshot the final on-screen frame for the
                     // leave-intent watcher to poll against.
                     let frame = dock::window_frame(&main_for_appkit);
                     log::info!("[Dock] Cached main panel frame for leave-intent watcher: {:?}", frame);
@@ -931,10 +977,26 @@ fn collapse_drawer(app: &tauri::AppHandle, st: &DockState) {
             // aspect-ratio safety net). Horizontal docks escape it because their
             // 132px width already clears the floor. Pin the min size to our exact
             // target first so the clamp can't override set_size below.
-            let target = tauri::Size::Physical(tauri::PhysicalSize { width: w as u32, height: h as u32 });
-            let _ = handle.set_min_size(Some(target.clone()));
-            let _ = handle.set_size(target);
-            let _ = handle.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
+            //
+            // macOS instead places the handle in AppKit points in the
+            // main-thread block below (see `mac_drawer_frame`); the min size
+            // is still pinned, in points, so a stale one can't override it.
+            #[cfg(not(target_os = "macos"))]
+            {
+                let target = tauri::Size::Physical(tauri::PhysicalSize { width: w as u32, height: h as u32 });
+                let _ = handle.set_min_size(Some(target.clone()));
+                let _ = handle.set_size(target);
+                let _ = handle.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
+            }
+            #[cfg(target_os = "macos")]
+            {
+                let _ = (x, y, w, h);
+                let (lw, lh) = if horizontal { (HANDLE_H, HANDLE_W) } else { (HANDLE_W, HANDLE_H) };
+                let _ = handle.set_min_size(Some(tauri::Size::Logical(tauri::LogicalSize {
+                    width: lw as f64,
+                    height: lh as f64,
+                })));
+            }
             // Without this, the handle stays pinned to whichever Space/virtual
             // desktop (including another app's fullscreen Space) it was last
             // shown on — switch away and it (and the panel it opens) is simply
@@ -943,27 +1005,33 @@ fn collapse_drawer(app: &tauri::AppHandle, st: &DockState) {
             // real macOS Dock or menu bar — unclickable, with no other way to
             // re-expand the drawer. macOS-only.
             //
-            // Dispatched via `run_on_main_thread`, after the size/position
-            // calls above so `clamp_to_visible_frame` reads the frame they
-            // just set: this reaches into the raw NSWindow via objc2, which
-            // AppKit requires happen on the main thread — some callers (e.g.
-            // the fullscreen watcher) invoke `collapse_drawer` off it.
+            // Dispatched via `run_on_main_thread`: this reaches into the raw
+            // NSWindow via objc2, which AppKit requires happen on the main
+            // thread — some callers (e.g. the fullscreen watcher) invoke
+            // `collapse_drawer` off it. `show()` goes inside the same block,
+            // after positioning, so the handle can't paint a frame at its
+            // previous screen first (same as `expand_drawer`).
             #[cfg(target_os = "macos")]
             {
                 let handle_for_appkit = handle.clone();
-                let side_for_appkit = st.side.clone();
+                let st_for_appkit = st.clone();
                 let _ = app.run_on_main_thread(move || {
                     dock::allow_over_fullscreen_spaces(&handle_for_appkit);
                     dock::join_fullscreen_space(&handle_for_appkit);
-                    if horizontal {
-                        dock::clamp_to_visible_frame(&handle_for_appkit, &side_for_appkit);
+                    match mac_drawer_frame(&st_for_appkit, true) {
+                        Some(frame) => {
+                            dock::set_window_frame(&handle_for_appkit, frame);
+                        }
+                        None => log::error!("[Dock] collapse_drawer: no NSScreen to place handle on"),
                     }
-                    // Snapshot the final on-screen frame (post-clamp) for the
+                    // Snapshot the final on-screen frame for the
                     // hover-intent watcher to poll against.
                     *HANDLE_SCREEN_FRAME.lock().unwrap() = dock::window_frame(&handle_for_appkit);
+                    let _ = handle_for_appkit.show();
                 });
                 MAC_DOCK_ACTIVE.store(true, Ordering::Relaxed);
             }
+            #[cfg(not(target_os = "macos"))]
             let _ = handle.show();
         }
     }
@@ -3363,7 +3431,7 @@ pub fn run() {
                   // — just moving to/from the panel. Without this buffer that
                   // dead zone was read as "left the panel," flapping the
                   // collapse timer. The horizontal bar has no such gap — it's
-                  // clamped flush against its screen edge (`clamp_to_visible_frame`)
+                  // clamped flush against its screen edge (`mac_drawer_frame`)
                   // — so applying this buffer to it would just let the cursor
                   // sit further outside the bar than intended and still count
                   // as "over" it. `MAIN_PANEL_HORIZONTAL` is cached by

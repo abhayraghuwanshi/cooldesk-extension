@@ -25,133 +25,83 @@
 
 use objc2_app_kit::{NSApplication, NSEvent, NSScreen, NSWindow, NSWindowCollectionBehavior, NSFloatingWindowLevel, NSStatusWindowLevel};
 
-/// Nudges a horizontal (top/bottom) drawer bar or its collapsed handle back
-/// inside the screen's *visible* frame after it's been positioned against
-/// the full monitor rect (`drawer_geom` in `lib.rs` deliberately spans the
-/// full monitor width, matching the Windows side-taskbar-gap behavior — see
-/// its doc comment). On macOS the real system Dock and menu bar sit at a
-/// window level above ours, so a bar/handle placed flush against the
-/// physical bottom or top edge renders (and receives clicks) underneath
-/// them whenever the Dock occupies that edge — invisible and unclickable.
-/// `NSScreen.visibleFrame` reports how much each edge is actually reserved
-/// (0 if the Dock is hidden/auto-hidden, or positioned on a different edge),
-/// so this only moves the window when there's an actual overlap to avoid.
+/// AppKit-space `(frame, visibleFrame)` — each as `(x, y, width, height)` in
+/// points, bottom-left origin — of the screen the cursor is currently on.
 ///
-/// Must run on the main thread (NSWindow/NSScreen access) — call this from
-/// inside the same `run_on_main_thread` dispatch as `allow_over_fullscreen_spaces`,
-/// after the window's Tauri-side size/position has already been applied.
-pub fn clamp_to_visible_frame(window: &tauri::WebviewWindow, side: &str) {
-    let Ok(ptr) = window.ns_window() else { return };
-    let ns_window: &NSWindow = unsafe { &*(ptr as *mut NSWindow) };
-    let Some(screen) = ns_window.screen() else { return };
-    let visible = screen.visibleFrame();
-    let frame = ns_window.frame();
-
-    // AppKit's coordinate origin is bottom-left, so the Dock (reserved at the
-    // physical bottom of the screen) raises `visibleFrame`'s origin.y above
-    // the full frame's — pin the bar's bottom edge there. A top bar instead
-    // needs its *top* edge (origin.y + height) pulled down to just below the
-    // menu bar, which shrinks `visibleFrame` from the top.
-    let mut origin = frame.origin;
-    origin.y = if side == "bottom" {
-        visible.origin.y
-    } else {
-        (visible.origin.y + visible.size.height) - frame.size.height
-    };
-    ns_window.setFrameOrigin(origin);
-}
-
-/// Positions the vertical sidebar panel directly via AppKit, in one call,
-/// instead of `expand_drawer` setting it approximately through Tauri's
-/// cross-platform position API first and correcting it a moment later.
-/// That two-step version (resize approximately, then immediately resize
-/// again to the corrected frame) used to be two separate `setFrame` passes
-/// on every single drawer open, including re-opening in the exact same
-/// spot — and two back-to-back resizes on this backdrop-filter-heavy
-/// WKWebView is exactly the kind of repaint that can leave part of the
-/// window showing stale pixels (some wallpaper-mode glass cards render as a
-/// frozen, blurred smear over only part of the panel until a full reload).
-/// Computing the correct frame up front and applying it once, only when it
-/// actually differs from the window's current frame, avoids that condition
-/// entirely rather than papering over its symptom.
+/// The drawer/handle is positioned from this instead of Tauri's monitor
+/// APIs, which are unusable for this on a multi-monitor Mac: tao's
+/// "physical" monitor rects scale each display's point bounds by *that
+/// display's own* scale factor (so rects from a 2x built-in and a 1x
+/// external aren't in one shared coordinate space), its `set_position`
+/// converts back using the *window's* current scale factor, and it flips Y
+/// using only the primary display's height. Any mix of those (moving from a
+/// Retina laptop to a 1x external, or to a display arranged above/below)
+/// landed the panel on the wrong screen or half off-screen. `NSEvent.mouseLocation`
+/// and `NSScreen.frame` share one global point space, so no conversion is
+/// needed here at all.
 ///
-/// Takes over from two separate problems the old two-step version worked
-/// around after the fact:
+/// `visibleFrame` excludes that display's menu bar and Dock — each display
+/// gets its own menu bar in a multi-monitor setup, and the real Dock/menu bar
+/// sit at a window level above ours, so anything placed flush against the
+/// full frame's edge renders (and receives clicks) underneath them.
 ///
-/// 1. Tauri's cross-platform position API (tao's `set_outer_position` →
-///    `window_position()`) flips tao's top-down Y into AppKit's bottom-up Y
-///    using only `CGDisplay::main().pixels_high()` — the *primary*
-///    display's height — regardless of which screen the window is actually
-///    on. On a secondary monitor this produces a wrong Y (observed: the
-///    panel pinned flush to y=0 instead of respecting `SIDEBAR_MARGIN`).
-/// 2. `expand_drawer`'s own geometry calc sizes the vertical panel against
-///    the monitor's *full* physical rect (deliberately, for the flush-edge
-///    historical behavior — see `drawer_geom`'s doc comment), not its
-///    menu-bar/Dock-excluded `visibleFrame`. Each display gets its own menu
-///    bar in a multi-monitor setup, so a small `SIDEBAR_MARGIN` from the raw
-///    physical top edge still lands the panel's top underneath that
-///    display's menu bar (observed: no visible gap at all, top or bottom).
-///
-/// `target_x`/`target_w` (in points) come from `expand_drawer`'s own calc —
-/// neither problem above touches them (no Y flip involved, and the sidebar
-/// was always narrower than the monitor), so they're taken as correct and
-/// only `y`/`height` are re-derived here from `visibleFrame`.
-///
-/// Must run on the main thread — same constraints as `clamp_to_visible_frame`.
-/// Returns the frame actually in place afterward (applied or already
-/// current), for the leave-intent watcher snapshot.
-pub fn position_sidebar_panel(
-    window: &tauri::WebviewWindow,
-    target_x: f64,
-    target_w: f64,
-    margin_logical: f64,
-) -> Option<(f64, f64, f64, f64)> {
-    let Ok(ptr) = window.ns_window() else { return None };
-    let ns_window: &NSWindow = unsafe { &*(ptr as *mut NSWindow) };
-
-    // Find the screen by horizontal containment rather than trusting
-    // `ns_window.screen()` (which picks whichever NSScreen the window's
-    // *current* frame — possibly still at some unrelated previous
-    // position/size — overlaps most).
-    let Some(mtm) = objc2::MainThreadMarker::new() else { return None };
+/// Must run on the main thread (NSScreen access).
+pub fn cursor_screen_rects() -> Option<((f64, f64, f64, f64), (f64, f64, f64, f64))> {
+    let mtm = objc2::MainThreadMarker::new()?;
+    let cursor = NSEvent::mouseLocation();
     let screens = NSScreen::screens(mtm);
-    let visible = screens
+    // Inclusive bounds: the cursor pinned against a screen's outermost
+    // edge reports exactly `origin + size` on that axis.
+    let screen = screens
         .iter()
         .find(|s| {
             let f = s.frame();
-            target_x >= f.origin.x && target_x < f.origin.x + f.size.width
+            cursor.x >= f.origin.x
+                && cursor.x <= f.origin.x + f.size.width
+                && cursor.y >= f.origin.y
+                && cursor.y <= f.origin.y + f.size.height
         })
-        .or_else(|| ns_window.screen())
-        // Last resort: any screen at all (e.g. the very first `expand_drawer`
-        // call on a freshly built, never-shown window, where `target_x` may
-        // not land on a known screen's frame and the window has no screen of
-        // its own yet). Without this, both lookups failing left the window
-        // silently unpositioned — shown at whatever stale/default frame it
-        // already had — instead of at least landing on *a* screen.
-        .or_else(|| screens.iter().next())
-        .map(|s| s.visibleFrame())?;
+        .or_else(|| NSScreen::mainScreen(mtm))
+        .or_else(|| screens.iter().next())?;
+    let f = screen.frame();
+    let v = screen.visibleFrame();
+    Some((
+        (f.origin.x, f.origin.y, f.size.width, f.size.height),
+        (v.origin.x, v.origin.y, v.size.width, v.size.height),
+    ))
+}
 
-    let mut target = ns_window.frame(); // reuse the type; every field is overwritten below
-    target.origin.x = target_x;
-    target.origin.y = visible.origin.y + margin_logical;
-    target.size.width = target_w;
-    target.size.height = (visible.size.height - margin_logical * 2.0).max(1.0);
-
-    // `setFrame_display(_, true)` forces AppKit to redisplay the window even
-    // when nothing about the frame actually changed — skip it entirely when
-    // the target already matches the window's current frame (within a
-    // fraction of a point, to tolerate float rounding), so re-opening the
-    // drawer in the same spot doesn't touch AppKit's layout/paint pipeline
-    // at all.
+/// Applies an AppKit-space frame (points, bottom-left origin) to the window
+/// in one `setFrame` call — skipped entirely when the window is already
+/// there. Two back-to-back resizes (approximate, then corrected) on this
+/// backdrop-filter-heavy WKWebView used to leave part of the window showing
+/// stale pixels (wallpaper-mode glass cards rendering as a frozen, blurred
+/// smear until a full reload), and `setFrame_display(_, true)` forces a
+/// redisplay even when nothing changed, so re-opening the drawer in the same
+/// spot shouldn't touch AppKit's layout/paint pipeline at all.
+///
+/// Must run on the main thread. Returns the frame in place afterward, for
+/// the hover/leave-intent watcher snapshots.
+pub fn set_window_frame(
+    window: &tauri::WebviewWindow,
+    (x, y, w, h): (f64, f64, f64, f64),
+) -> Option<(f64, f64, f64, f64)> {
+    let ptr = window.ns_window().ok()?;
+    let ns_window: &NSWindow = unsafe { &*(ptr as *mut NSWindow) };
     let current = ns_window.frame();
-    let unchanged = (current.origin.x - target.origin.x).abs() < 0.5
-        && (current.origin.y - target.origin.y).abs() < 0.5
-        && (current.size.width - target.size.width).abs() < 0.5
-        && (current.size.height - target.size.height).abs() < 0.5;
+    let unchanged = (current.origin.x - x).abs() < 0.5
+        && (current.origin.y - y).abs() < 0.5
+        && (current.size.width - w).abs() < 0.5
+        && (current.size.height - h).abs() < 0.5;
     if !unchanged {
+        let mut target = current; // reuse the type; every field is overwritten below
+        target.origin.x = x;
+        target.origin.y = y;
+        target.size.width = w;
+        target.size.height = h;
         ns_window.setFrame_display(target, true);
     }
-    Some((target.origin.x, target.origin.y, target.size.width, target.size.height))
+    Some((x, y, w, h))
 }
 
 /// Lets a window follow the user across *ordinary* Space switches (the
