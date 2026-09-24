@@ -428,6 +428,35 @@ jobs:
             echo "MSI  URL:    $MSI_URL"
           fi
 
+      # komac creates the submission branch on <owner>/winget-pkgs from the
+      # *upstream* microsoft/winget-pkgs master commit. If the fork is behind,
+      # that commit doesn't exist in it and GitHub rejects the branch with the
+      # misleading "does not have the correct permissions to execute
+      # `CreateRef`" — which is what left winget stuck at 2.0.9 while the fork
+      # sat ~58k commits behind (see russellbanks/Komac#1142). Fast-forward the
+      # fork first. Upstream commits touch .github/workflows, so this needs
+      # WINGET_TOKEN to be a classic PAT with `public_repo` AND `workflow`
+      # scopes (winget-releaser's README requires the same).
+      - name: Sync winget-pkgs fork with upstream
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          FORK: ${{ github.repository_owner }}/winget-pkgs
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::WINGET_TOKEN secret is not set."
+            exit 1
+          fi
+          if ! OUT=$(gh api -X POST "repos/$FORK/merge-upstream" -f branch=master 2>&1); then
+            echo "$OUT"
+            echo "::error::Could not sync $FORK with microsoft/winget-pkgs. WINGET_TOKEN must be a classic PAT with 'public_repo' and 'workflow' scopes — or sync the fork manually on GitHub, then re-run this job."
+            exit 1
+          fi
+          echo "$OUT"
+          # Informational: upstream lands commits every few minutes, so a
+          # small non-zero count right after a successful sync is normal.
+          BEHIND=$(gh api "repos/microsoft/winget-pkgs/compare/master...${FORK%%/*}:winget-pkgs:master" --jq '.behind_by' || echo unknown)
+          echo "Fork is $BEHIND commits behind upstream after sync"
+
       - name: Submit to winget-pkgs
         uses: vedantmgoyal9/winget-releaser@v2
         with:
