@@ -1,0 +1,110 @@
+/* Experimental "macOS Dock" look for the vertical sidebar drawer (macOS only).
+   `html.dock-see-through` is toggled by CoolDeskContainer.jsx while the drawer
+   is docked left/right; the Rust side makes the window itself non-opaque at
+   the same time (`dock::set_see_through`). Every panel/wallpaper layer goes
+   transparent so only the cards paint, floating over whatever is behind.
+
+   `backdrop-filter` is dropped entirely here: WebKit renders it unreliably
+   in a transparent window (the reason the main window is opaque everywhere
+   else — see `ensure_main_window` in src-tauri/src/lib.rs), so the cards get
+   a near-solid fill instead of glass. Doubled class for specificity: theme
+   and wallpaper rules already use `html body.<theme>` with !important. */
+
+html.dock-see-through.dock-see-through,
+html.dock-see-through.dock-see-through body[class],
+html.dock-see-through.dock-see-through #root,
+html.dock-see-through.dock-see-through .popup-wrap,
+html.dock-see-through.dock-see-through .cooldesk-container,
+html.dock-see-through.dock-see-through .tab-management {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+html.dock-see-through.dock-see-through body::before,
+html.dock-see-through.dock-see-through body::after {
+  display: none !important;
+}
+
+html.dock-see-through *,
+html.dock-see-through *::before,
+html.dock-see-through *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Cards: solid dark tiles with a drop shadow so they read as separate
+   floating objects over any app or wallpaper. Anything that reaches the
+   window edge is hard-clipped in a transparent window (a straight cut line
+   instead of a soft fade), so the shadow stays tight (≈6px reach) and the
+   panel gets matching side padding — the card grid otherwise sits 2px from
+   the window edge (tabCard.css). */
+html.dock-see-through .tab-management {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+html.dock-see-through.dock-see-through .cooldesk-tab-card,
+html.dock-see-through.dock-see-through .cooldesk-tab-group-card,
+html.dock-see-through.dock-see-through .cooldesk-workspace-card {
+  background: rgba(28, 28, 30, 0.94) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* Section headers and the toolbar sit directly on the desktop now — give
+   them a pill backing so they stay legible over light and busy content. */
+html.dock-see-through .tab-management h3,
+html.dock-see-through .tab-management__toolbar {
+  align-self: flex-start;
+  width: fit-content;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(28, 28, 30, 0.88) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+html.dock-see-through .tab-management h3 {
+  color: #e5e7eb !important;
+}
+
+/* ---- Horizontal bar (dockbar.css) ----
+   The window hugs the pill (`dock_set_bar_content_width`), so the pill must
+   size to its content rather than to the window — otherwise `max-width: 100%`
+   would pin it to whatever width the window already has and it could never
+   grow when a workspace gains items. No blur here either, so the glass pill
+   gets a denser fill to stay readable over any content. */
+html.dock-see-through .dockbar-shelf {
+  width: max-content;
+  max-width: none;
+  background: linear-gradient(180deg, rgba(40, 38, 46, 0.9), rgba(22, 21, 26, 0.94)) !important;
+  /* One clean hairline edge. dockbar.css's `0 ±1px` inset highlight/shade
+     drew a second line inside the border that tapers to nothing at the left
+     and right ends, so the edge looked doubled and broken there. Its
+     `0 20px 44px -16px` drop shadow also reached past the window's 18px side
+     padding and got clipped into hard lines — keep this one inside that room. */
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow: 0 3px 8px -2px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* The dock window takes focus when shown, and WebKit then paints base.css's
+   global `button:focus-visible` outline (2px, offset 2px) around the
+   workspace chip — a second ring outside its own border. Brighten the
+   border instead so keyboard focus is still visible. */
+html.dock-see-through .dockbar button:focus-visible {
+  outline: none;
+}
+
+/* The pill's border is the dock's only outline. The workspace chip keeps its
+   purple tint to stand out, but its own border drew a second rounded line
+   nested just inside the pill's at the left end. Focus/hover brighten the
+   fill instead of bringing a ring back. */
+html.dock-see-through .dockbar-ws-chip,
+html.dock-see-through .dockbar-ws-chip:hover {
+  border-color: transparent !important;
+}
+
+html.dock-see-through .dockbar-ws-chip:focus-visible {
+  filter: brightness(1.15);
+}

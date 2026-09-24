@@ -1,4 +1,4 @@
-import { faChevronDown, faChevronUp, faCode, faDesktop, faFileLines, faFolderOpen, faTableColumns, faUpRightAndDownLeftFromCenter } from '@fortawesome/free-solid-svg-icons';
+import { faCode, faDesktop, faFileLines, faFolderOpen, faTableColumns } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import logo from '../../../logo-2.png';
@@ -157,6 +157,30 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
 
   useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
 
+  // macOS: the bar window is see-through and sized to hug the pill (like the
+  // real Dock) instead of spanning the screen — a transparent full-width
+  // strip would still swallow clicks meant for apps behind it. Report the
+  // pill's width (+ the `.dockbar` side padding, which also leaves room for
+  // edge icons to magnify) whenever it changes; the backend refits the
+  // window in place. A no-op on other platforms.
+  const shelfRef = useRef(null);
+  useEffect(() => {
+    const shelf = shelfRef.current;
+    if (!shelf || typeof ResizeObserver === 'undefined') return;
+    let last = 0;
+    const report = () => {
+      // offsetWidth, not getBoundingClientRect: the entrance animation
+      // scales the pill, and the layout width is what the window must fit.
+      const width = shelf.offsetWidth + 36;
+      if (width === last) return;
+      last = width;
+      invokeDock('dock_set_bar_content_width', { width });
+    };
+    const ro = new ResizeObserver(report);
+    ro.observe(shelf);
+    return () => ro.disconnect();
+  }, []);
+
   // Entrance is driven by state rather than a classList mutation, so it can't
   // get resurrected by an unrelated re-render — e.g. `is-active` flipping as
   // workspaceActivityService reports an app launching/closing would otherwise
@@ -199,7 +223,7 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
 
   return (
     <div className={`dockbar dockbar--${side}`} role="toolbar" aria-label="Workspace dock">
-      <div className="dockbar-shelf">
+      <div className="dockbar-shelf" ref={shelfRef}>
         <button
           className="dockbar-ws-chip"
           onClick={cycleWorkspace}
@@ -208,8 +232,6 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
           <img src={logo} alt="" className="dockbar-ws-logo" />
           <span className="dockbar-ws-name">{workspace?.name || 'CoolDesk'}</span>
         </button>
-
-        <LayoutSwitchButton className="dockbar-ctrl" />
 
         {(urls.length > 0 || apps.length > 0) && <span className="dockbar-sep" />}
 
@@ -278,20 +300,11 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
           >
             <FontAwesomeIcon icon={faTableColumns} />
           </button>
-          <button
-            className="dockbar-ctrl"
-            onClick={() => invokeDock('dock_disable')}
-            title="Back to full app"
-          >
-            <FontAwesomeIcon icon={faUpRightAndDownLeftFromCenter} />
-          </button>
-          <button
-            className="dockbar-ctrl"
-            onClick={() => invokeDock('dock_collapse')}
-            title="Hide to edge handle"
-          >
-            <FontAwesomeIcon icon={side === 'top' ? faChevronUp : faChevronDown} />
-          </button>
+          {/* From the bar, the layout cycle's next step is the full window —
+              this is the "back to full app" control. No manual hide button:
+              the bar already auto-collapses to its edge handle when the
+              cursor leaves it. */}
+          <LayoutSwitchButton className="dockbar-ctrl" />
         </div>
       </div>
     </div>

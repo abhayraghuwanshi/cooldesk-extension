@@ -46,7 +46,10 @@ jobs:
             install_source: winget
           - os: macos-latest
             target: aarch64-apple-darwin
-            bundle_args: --bundles dmg
+            # `app` is what produces the signed .app.tar.gz the updater
+            # installs from — a .dmg alone leaves darwin-aarch64 out of
+            # latest.json, so macOS clients never see an update.
+            bundle_args: --bundles app,dmg
             install_source: dmg
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
@@ -308,7 +311,11 @@ jobs:
           NSIS=$(pick '\-setup\.exe$')
           MSI=$(pick '\.msi$')
           APP_TGZ=$(pick '\.app\.tar\.gz$')
-          APPIMAGE_TGZ=$(pick '\.AppImage\.tar\.gz$')
+          # Tauri v2 (`createUpdaterArtifacts: true`) signs the Linux bundles
+          # directly — there is no .AppImage.tar.gz like v1 produced.
+          APPIMAGE=$(pick '\.AppImage$')
+          DEB=$(pick '\.deb$')
+          RPM=$(pick '\.rpm$')
 
           PLATFORMS='{}'
           add_platform() {
@@ -331,8 +338,12 @@ jobs:
           add_platform "windows-x86_64-msi"  "$MSI"
           # macOS updates ship as .app.tar.gz — the updater cannot consume a .dmg.
           add_platform "darwin-aarch64"      "$APP_TGZ"
-          # Linux updates ship as .AppImage.tar.gz — the updater cannot consume a .deb/.rpm.
-          add_platform "linux-x86_64"        "$APPIMAGE_TGZ"
+          # Linux: the updater looks up linux-x86_64-<bundle type> first (so a
+          # .deb/.rpm install updates via dpkg/rpm), then plain linux-x86_64.
+          add_platform "linux-x86_64"          "$APPIMAGE"
+          add_platform "linux-x86_64-appimage" "$APPIMAGE"
+          add_platform "linux-x86_64-deb"      "$DEB"
+          add_platform "linux-x86_64-rpm"      "$RPM"
 
           if [ "$(echo "$PLATFORMS" | jq 'length')" -eq 0 ]; then
             echo "ERROR: no signed artifacts found — TAURI_SIGNING_PRIVATE_KEY is probably unset."

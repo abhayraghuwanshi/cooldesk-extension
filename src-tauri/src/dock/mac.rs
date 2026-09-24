@@ -104,6 +104,25 @@ pub fn set_window_frame(
     Some((x, y, w, h))
 }
 
+/// Experimental "macOS Dock" look for the vertical sidebar: makes the window
+/// itself non-opaque so only the page's own cards paint and the desktop /
+/// app behind shows through the gaps — no panel container. The clear window
+/// + webview background colors are set alongside this via Tauri's
+/// `set_background_color` in `expand_drawer`.
+///
+/// Scoped to the sidebar and switched back off in `disable_dock`: the main
+/// window is deliberately opaque otherwise (see `ensure_main_window`) because
+/// `backdrop-filter` renders unreliably in a transparent WKWebView — the
+/// frontend's `dock-see-through` CSS drops every backdrop-filter while this
+/// is on for the same reason.
+///
+/// Must run on the main thread.
+pub fn set_see_through(window: &tauri::WebviewWindow, on: bool) {
+    let Ok(ptr) = window.ns_window() else { return };
+    let ns_window: &NSWindow = unsafe { &*(ptr as *mut NSWindow) };
+    ns_window.setOpaque(!on);
+}
+
 /// Lets a window follow the user across *ordinary* Space switches (the
 /// original, pre-fullscreen-overlay behavior). Used by the sidebar/handle
 /// drawer, which just needs to not vanish when the user switches desktops —

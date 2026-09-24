@@ -632,6 +632,13 @@ static MAIN_SCREEN_FRAME: std::sync::Mutex<Option<(f64, f64, f64, f64)>> = std::
 #[cfg(target_os = "macos")]
 static MAIN_PANEL_HORIZONTAL: AtomicBool = AtomicBool::new(false);
 
+// macOS: width (points) of the horizontal bar's visible pill, reported by the
+// frontend (`dock_set_bar_content_width`). The bar window is see-through, so
+// it's sized to hug the pill instead of spanning the screen — a transparent
+// full-width strip would still swallow clicks meant for apps behind it.
+// 0 = not reported yet → full screen width.
+static BAR_CONTENT_WIDTH: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
 const DOCK_MIN_WIDTH: u32 = 220;
 const DOCK_MAX_WIDTH: u32 = 900;
 const BAR_MIN_HEIGHT: u32 = 40;
@@ -781,7 +788,10 @@ fn mac_drawer_frame(st: &DockState, handle: bool) -> Option<(f64, f64, f64, f64)
         (false, true) => {
             let h = st.bar_height.clamp(BAR_MIN_HEIGHT, BAR_MAX_HEIGHT) as f64;
             let y = if st.side == "bottom" { vy } else { vy + vh - h };
-            (fx, y, fw, h)
+            // Hug the pill, centered like the macOS Dock (see `BAR_CONTENT_WIDTH`).
+            let content = BAR_CONTENT_WIDTH.load(Ordering::Relaxed) as f64;
+            let w = if content > 0.0 { content.min(fw) } else { fw };
+            (fx + (fw - w) / 2.0, y, w, h)
         }
         (true, false) => {
             let (w, h) = (HANDLE_W as f64, HANDLE_H as f64);
@@ -862,9 +872,12 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
             let _ = main.set_resizable(false);
             let _ = main.set_always_on_top(true);
             // A native rectangular drop shadow would poke past the rounded
-            // corners drawn by the `sidebar-docked` body CSS — only relevant for
-            // the vertical panel; the horizontal bar keeps its existing shadow.
-            if !horizontal {
+            // corners drawn by the `sidebar-docked` body CSS. On macOS the bar
+            // is see-through too (only its pill paints — see
+            // `dock::set_see_through`), so a window shadow there draws a
+            // second rounded outline around the whole window, framing the
+            // pill; its own CSS shadow is the only one it should have.
+            if !horizontal || cfg!(target_os = "macos") {
                 let _ = main.set_shadow(false);
             }
             // macOS positions the panel once, atomically, in AppKit points via
@@ -905,6 +918,10 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
                 let _ = app.run_on_main_thread(move || {
                     dock::allow_over_fullscreen_spaces(&main_for_appkit);
                     dock::join_fullscreen_space(&main_for_appkit);
+                    // Cards (sidebar) or the pill (bar) float over the desktop
+                    // with no panel behind them — see `dock::set_see_through`.
+                    dock::set_see_through(&main_for_appkit, true);
+                    let _ = main_for_appkit.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
                     match mac_drawer_frame(&st_for_appkit, false) {
                         Some(frame) => {
                             dock::set_window_frame(&main_for_appkit, frame);
@@ -1149,7 +1166,11 @@ fn disable_dock(app: &tauri::AppHandle) -> DockState {
         {
             MAC_DOCK_ACTIVE.store(false, Ordering::Relaxed);
             let window_for_appkit = window.clone();
-            let _ = app.run_on_main_thread(move || dock::restrict_to_current_space(&window_for_appkit));
+            let _ = app.run_on_main_thread(move || {
+                dock::restrict_to_current_space(&window_for_appkit);
+                dock::set_see_through(&window_for_appkit, false);
+                let _ = window_for_appkit.set_background_color(None);
+            });
         }
         let _ = window.set_decorations(true);
         let _ = window.set_resizable(true);
@@ -1264,6 +1285,34 @@ fn dock_set_width(app: tauri::AppHandle, width: u32) -> Result<DockState, String
     }
     emit_dock_state(&app, &state);
     Ok(state)
+}
+
+/// macOS: the frontend reports the horizontal bar pill's width (CSS px =
+/// points) whenever it changes, and the open bar is re-fit around it in place
+/// — see `BAR_CONTENT_WIDTH`. No-op elsewhere: other platforms keep an opaque
+/// full-width bar.
+#[tauri::command(rename_all = "snake_case")]
+fn dock_set_bar_content_width(app: tauri::AppHandle, width: u32) {
+    #[cfg(target_os = "macos")]
+    {
+        if BAR_CONTENT_WIDTH.swap(width, Ordering::Relaxed) == width {
+            return;
+        }
+        let st = load_dock_state(&app);
+        if !(st.enabled && st.mode == "drawer" && dock_is_horizontal(&st.side))
+            || DRAWER_COLLAPSED.load(Ordering::Relaxed)
+        {
+            return;
+        }
+        let Some(main) = app.get_webview_window("main") else { return };
+        let _ = app.run_on_main_thread(move || {
+            if let Some(frame) = mac_drawer_frame(&st, false) {
+                *MAIN_SCREEN_FRAME.lock().unwrap() = dock::set_window_frame(&main, frame);
+            }
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, width);
 }
 
 #[derive(serde::Serialize)]
@@ -3131,6 +3180,7 @@ pub fn run() {
         dock_expand,
         dock_collapse,
         dock_set_width,
+        dock_set_bar_content_width,
         dock_get_state,
         ai_cli::ai_cli_run,
         ai_cli::ai_cli_cancel,

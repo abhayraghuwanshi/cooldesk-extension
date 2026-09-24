@@ -10,6 +10,7 @@ import { getPendingSuggestions, runSeedingIfNeeded } from '../../services/appCat
 import '../../styles/cooldesk.css';
 import '../../styles/spatial.css';
 import '../../styles/tabCard.css';
+import '../../styles/dock-see-through.css';
 import { Face, WorkspaceShell } from './WorkspaceShell';
 import { GlobalSpotlight } from '../../features/spotlight/GlobalSpotlight';
 import { UpdateButton } from '../../features/updates/UpdateButton';
@@ -210,6 +211,20 @@ export function CoolDeskContainer({
 
   // Backend dock state — drives the horizontal-bar render mode below.
   const dockState = useDockState();
+
+  // macOS Dock look: while docked (sidebar or bar), the Rust side makes the
+  // window non-opaque and `dock-see-through.css` drops the panel/wallpaper
+  // background so only the cards (sidebar) or the pill (bar) float over the
+  // desktop. macOS only — other platforms keep an opaque window, where
+  // transparent CSS would just show black.
+  const isSeeThroughDock = isDesktopApp
+    && /Mac/.test(navigator.platform)
+    && dockState?.enabled
+    && dockState.mode === 'drawer';
+  useEffect(() => {
+    document.documentElement.classList.toggle('dock-see-through', !!isSeeThroughDock);
+    return () => document.documentElement.classList.remove('dock-see-through');
+  }, [isSeeThroughDock]);
 
   // Activate a workspace as a taskbar-style bottom bar: make it current, then
   // dock the main window to the bottom edge and slide it in.

@@ -17,10 +17,17 @@
             user-select: none;
         }
 
-        /* One grabber design for every edge: a slim translucent dark tab flush
-           to the screen edge, with a thin grip line running along it. The side
-           class (left/top/bottom; right is the default) sets which corners are
-           rounded and the grip's orientation. */
+        /* One grabber for every edge: just a slim floating pill, like the iOS
+           home indicator — no tab/box behind it, so it doesn't compete with
+           whatever app sits at that screen edge. The pill runs along the edge
+           (horizontal for top/bottom, vertical for left/right) and grows +
+           takes the accent color on hover.
+
+           The window is transparent; #handle keeps a near-invisible fill
+           (alpha 0.01) so the whole 132×22 strip still receives clicks —
+           macOS passes clicks on fully transparent pixels through to the
+           window underneath. Hover-to-open is polled from Rust, so it
+           doesn't depend on this. */
         #handle {
             width: 100%;
             height: 100%;
@@ -28,64 +35,42 @@
             align-items: center;
             justify-content: center;
             box-sizing: border-box;
-            background: rgba(22, 18, 30, 0.82);
-            border: 1px solid rgba(255, 255, 255, 0.14);
-            border-right: none;
-            border-radius: 10px 0 0 10px;
-            box-shadow: -2px 0 12px rgba(0, 0, 0, 0.4);
-            transition: background 0.15s ease, transform 0.15s ease;
+            background: rgba(0, 0, 0, 0.01);
         }
 
-        #handle.left {
-            border: 1px solid rgba(255, 255, 255, 0.14);
-            border-left: none;
-            border-radius: 0 10px 10px 0;
-            box-shadow: 2px 0 12px rgba(0, 0, 0, 0.4);
-        }
-
-        #handle.top {
-            border: 1px solid rgba(255, 255, 255, 0.14);
-            border-top: none;
-            border-radius: 0 0 10px 10px;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
-        }
-
-        #handle.bottom {
-            border: 1px solid rgba(255, 255, 255, 0.14);
-            border-bottom: none;
-            border-radius: 10px 10px 0 0;
-            box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.4);
-        }
-
-        /* Hover: gentle lift — slightly lighter tab, grip line turns purple. */
-        #handle:hover {
-            background: rgba(42, 34, 56, 0.92);
-        }
-
-        #handle:hover .grip {
-            background: #a78bfa;
-            opacity: 1;
-        }
-
-        #handle:active {
-            transform: scale(0.97);
-        }
-
-        /* The grip: one thin line along the edge. Vertical by default (right/
-           left edges); top/bottom rotate it horizontal. */
+        /* Vertical by default (right/left edges); top/bottom and the aspect
+           ratio safety net below rotate it horizontal. The dark halo keeps it
+           visible over light content without a box behind it. */
         .grip {
-            width: 3px;
-            height: 28px;
-            border-radius: 2px;
-            background: rgba(255, 255, 255, 0.55);
-            opacity: 0.85;
-            transition: background 0.15s ease, opacity 0.15s ease;
+            width: 5px;
+            height: 44px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.42);
+            box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.35), 0 1px 4px rgba(0, 0, 0, 0.35);
+            transition: width 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+                height 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+                background 0.18s ease;
         }
 
         #handle.top .grip,
         #handle.bottom .grip {
-            width: 28px;
-            height: 3px;
+            width: 44px;
+            height: 5px;
+        }
+
+        #handle:hover .grip {
+            height: 64px;
+            background: #a78bfa;
+        }
+
+        #handle.top:hover .grip,
+        #handle.bottom:hover .grip {
+            width: 64px;
+            height: 5px;
+        }
+
+        #handle:active .grip {
+            opacity: 0.8;
         }
 
         .grip span {
@@ -94,19 +79,16 @@
 
         /* Orientation safety net from the window's own shape: the handle window
            is wider than tall only when docked top/bottom (132×22 vs 22×132), so
-           this can't go stale the way the side class from dock state can.
-           Defaults to the bottom-edge look; the .top class still overrides. */
+           this can't go stale the way the side class from dock state can. */
         @media (min-aspect-ratio: 1/1) {
-            #handle {
-                border: 1px solid rgba(255, 255, 255, 0.14);
-                border-bottom: none;
-                border-radius: 10px 10px 0 0;
-                box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.4);
+            .grip {
+                width: 44px;
+                height: 5px;
             }
 
-            .grip {
-                width: 28px;
-                height: 3px;
+            #handle:hover .grip {
+                width: 64px;
+                height: 5px;
             }
         }
     </style>
