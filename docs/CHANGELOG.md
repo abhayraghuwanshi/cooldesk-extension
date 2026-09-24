@@ -4,6 +4,17 @@ All notable changes to CoolDesk (desktop app + Chrome extension) are documented 
 
 ## [Unreleased]
 
+## [2.0.14] — 2026-09-24
+
+### Added
+- **Linux desktop build**: `.deb`, `.AppImage` and `.rpm` bundles in release CI, an X11/EWMH app scanner and running-apps support, and fullscreen detection for the dock drawer handle.
+- **Native updater fallback for macOS/Linux** update installs.
+
+### Fixed
+- **macOS: the sidebar/handle only rendered correctly on one screen in multi-monitor setups.** tao's cursor/monitor lookup mixes point and scaled-pixel coordinates, so with a Retina primary display the drawer picked the wrong screen (or fell back to primary) and was positioned with the wrong scale factor. The drawer and handle are now placed in AppKit points on the `NSScreen` under the cursor, clear of each display's menu bar and Dock.
+- **winget submissions were failing since 2.0.9** (`CreateRef` permission error): the release workflow now syncs the `winget-pkgs` fork with upstream before komac creates the submission branch.
+- Navbar fixes for the Local and Media feed tabs.
+
 ## [2.0.13] — 2026-09-06
 
 ### Added
