@@ -34,39 +34,123 @@ html.dock-see-through *::after {
   -webkit-backdrop-filter: none !important;
 }
 
-/* Cards: solid dark tiles with a drop shadow so they read as separate
-   floating objects over any app or wallpaper. Anything that reaches the
-   window edge is hard-clipped in a transparent window (a straight cut line
-   instead of a soft fade), so the shadow stays tight (≈6px reach) and the
-   panel gets matching side padding — the card grid otherwise sits 2px from
-   the window edge (tabCard.css). */
-html.dock-see-through .tab-management {
-  padding-left: 8px;
-  padding-right: 8px;
+/* ---- Sidebar (left/right) ----
+   Notification Center style: no panel at all — each card is its own tile
+   floating straight on the desktop, with only the desktop between them.
+   (A single native frosted panel behind everything was tried and read as a
+   big slab, the opposite of Notification Center.) The cards can't blur the
+   desktop the way macOS's own do — `backdrop-filter` only blurs page
+   content, never what's behind the window. Without that blur, a see-through
+   fill let busy windows/wallpaper show through the text (78% was tried and
+   was hard to read), so the fill is near-solid; the "floating on the
+   desktop" feel comes from the gaps between cards, not from the cards
+   themselves being transparent. Only `html.dock-sidebar`: the full app and the bar are
+   unaffected.
+
+   Anything reaching the window edge is hard-clipped in a transparent window,
+   so the card shadow stays tight (≈4px) — within the container's own 8px
+   padding at sidebar widths (cooldesk.css).
+
+   No visible scrollbars: the custom 6px ones (theme.css) are always shown
+   and reserve a gutter, which read as a blank strip on the right with no
+   panel behind it. Trackpad/wheel scrolling is unaffected. */
+html.dock-sidebar * {
+  scrollbar-width: none;
+  scrollbar-gutter: auto !important;
 }
 
-html.dock-see-through.dock-see-through .cooldesk-tab-card,
-html.dock-see-through.dock-see-through .cooldesk-tab-group-card,
-html.dock-see-through.dock-see-through .cooldesk-workspace-card {
-  background: rgba(28, 28, 30, 0.94) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35) !important;
+html.dock-sidebar ::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
 }
 
-/* Section headers and the toolbar sit directly on the desktop now — give
-   them a pill backing so they stay legible over light and busy content. */
-html.dock-see-through .tab-management h3,
-html.dock-see-through .tab-management__toolbar {
-  align-self: flex-start;
-  width: fit-content;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: rgba(28, 28, 30, 0.88) !important;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+html.dock-sidebar.dock-sidebar .cooldesk-tab-card,
+html.dock-sidebar.dock-sidebar .cooldesk-tab-group-card,
+html.dock-sidebar.dock-sidebar .cooldesk-workspace-card {
+  background: rgba(34, 34, 38, 0.96) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3) !important;
 }
 
-html.dock-see-through .tab-management h3 {
-  color: #e5e7eb !important;
+html.dock-sidebar.dock-sidebar .cooldesk-tab-card:hover,
+html.dock-sidebar.dock-sidebar .cooldesk-tab-group-card:hover,
+html.dock-sidebar.dock-sidebar .cooldesk-workspace-card:hover {
+  background: rgba(48, 48, 54, 0.98) !important;
+}
+
+/* Popular Folders chips (cooldesk.css) have their own fill — a translucent
+   slate blue meant for the wallpaper panel — so they need the same tile
+   treatment, or they float see-through and off-color between the other
+   cards. Their dim grey path text is also lifted to stay readable. */
+html.dock-sidebar.dock-sidebar .cooldesk-folder-chip {
+  background: rgba(34, 34, 38, 0.96) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+html.dock-sidebar.dock-sidebar .cooldesk-folder-chip:hover {
+  background: rgba(48, 48, 54, 0.98) !important;
+  border-color: rgba(139, 92, 246, 0.45) !important;
+}
+
+html.dock-sidebar .folder-chip-path {
+  color: #9ca3af;
+}
+
+/* The corner control bar (update badge + layout switch) floats on the
+   desktop too — same near-solid tile as the cards. */
+html.dock-sidebar.dock-sidebar .sidebar-control-bar {
+  background: rgba(34, 34, 38, 0.96) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Section titles sit directly on the desktop, like Notification Center's
+   own "Notification Centre" heading: plain white text, no pill behind it.
+   A tight dark outline plus a wider soft halo keeps them legible over light
+   wallpapers and busy windows alike (one soft shadow alone washed out on
+   bright backgrounds). Font family/case are left to the user's settings —
+   this is contrast only. */
+html.dock-sidebar h3 {
+  color: #fff !important;
+  opacity: 1 !important;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.85),
+    0 0 10px rgba(0, 0, 0, 0.55);
+}
+
+html.dock-sidebar h3 svg {
+  opacity: 0.9 !important;
+}
+
+/* Text inside cards: the full app's secondary greys (#94A3B8 / #6B7280,
+   often at 10px and with extra opacity) were tuned for the wallpaper panel
+   and read too dim on these dark tiles. Primary lines go full white;
+   secondary lines use macOS's secondary-label contrast (~65% white). */
+html.dock-sidebar .tab-title,
+html.dock-sidebar .tab-group-domain,
+html.dock-sidebar .compact-icon-label {
+  color: #fff !important;
+}
+
+html.dock-sidebar .tab-hostname,
+html.dock-sidebar .tab-group-subtitle,
+html.dock-sidebar .tab-last-accessed,
+html.dock-sidebar .tab-group-item-text {
+  color: rgba(235, 235, 245, 0.68) !important;
+}
+
+html.dock-sidebar .tab-hostname {
+  font-size: 11px !important;
+}
+
+/* Workspace name on each card ("AI", "ENTERTAINMENT") — 10px slate at 85%
+   opacity in the full app. */
+html.dock-sidebar.dock-sidebar .cooldesk-workspace-card .compact-workspace-label {
+  color: rgba(235, 235, 245, 0.8) !important;
+  opacity: 1 !important;
+  font-size: 11px !important;
 }
 
 /* ---- Horizontal bar (dockbar.css) ----

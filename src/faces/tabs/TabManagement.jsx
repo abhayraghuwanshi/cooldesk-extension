@@ -17,7 +17,6 @@ import { AutoGroupToggle } from './parts/AutoGroupToggle';
 import { EmptyTabsState } from './parts/EmptyTabsState';
 import { FileManager } from '../../features/file-manager/FileManager';
 import { WidgetBoard } from '../../features/widgets/WidgetBoard';
-import { LayoutSwitchButton } from '../../features/dock/LayoutSwitchButton';
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
 import { usePendingRemoval } from '../../shared/hooks/usePendingRemoval.js';
 
@@ -94,8 +93,11 @@ export function TabManagement() {
   const isRemoteTabMode = !window.electronAPI && !(typeof chrome !== 'undefined' && chrome?.tabs?.query);
   // Tauri desktop app — only here is the Rust `kill_process_on_port` command available.
   const isTauriApp = typeof window !== 'undefined' && !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
-  // The header already carries a layout-switch button at full width; only
-  // show this one where that header is hidden (sidebar widths).
+  // The toolbar (just the Auto Group toggle) is hidden at sidebar widths: it's
+  // a set-and-forget setting, and in the extension flipping it regroups or
+  // ungroups every real browser tab — too big an action for a stray click in
+  // a narrow strip. It stays available in the full app; the saved setting
+  // still drives the grouping shown here.
   const isSidebarWidth = useIsSidebarWidth();
 
   // Load auto-group, smart sort, and task view state on mount
@@ -848,6 +850,7 @@ export function TabManagement() {
       overflow: 'hidden',
       border: '1px solid transparent'
     }}>
+      {!isSidebarWidth && (
       <div className="tab-management__toolbar" style={{
         display: 'flex',
         alignItems: 'center',
@@ -871,26 +874,9 @@ export function TabManagement() {
               }).catch(() => {/* ignore errors */ });
             }}
           />
-          {isElectronApp() && isSidebarWidth && (
-            <LayoutSwitchButton
-              style={{
-                width: '30px',
-                height: '30px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: '8px',
-                border: '1px solid rgba(100, 116, 139, 0.3)',
-                background: 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))',
-                color: '#94A3B8',
-                cursor: 'pointer',
-                fontSize: '13px',
-                padding: 0
-              }}
-            />
-          )}
         </div>
       </div>
+      )}
 
       {/* Stale tabs warning — shown when sync is down in remote-tab mode */}
       {isHostSyncEnabled() && !wsConnected && isRemoteTabMode && tabs.length > 0 && (

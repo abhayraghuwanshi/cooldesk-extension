@@ -1,6 +1,6 @@
-import { faBriefcase, faChevronDown, faChevronLeft, faDesktop, faGamepad, faGraduationCap, faRobot, faRocket, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faBriefcase, faChevronLeft, faDesktop, faGamepad, faGraduationCap, faRobot, faRocket, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { deleteWorkspace, getUrlAnalytics } from '../../db/index.js';
 import { clearWorkspaceSuggestions } from '../../services/appCategorizationService.js';
@@ -11,7 +11,6 @@ import { ShareToTeamModal } from '../team/ShareToTeamModal';
 import { WorkspaceCard } from './parts/WorkspaceCard';
 import { WorkspaceContextPanel } from './parts/WorkspaceContextPanel.jsx';
 import { AppGrid } from './parts/AppGrid';
-import { LayoutSwitchButton } from '../../features/dock/LayoutSwitchButton';
 
 // Same desktop-app detection as WorkspaceCard: positive signal only, since
 // WebView2 populates chrome.runtime inside the Tauri app.
@@ -117,22 +116,8 @@ export function WorkspaceList({
     const [activeMode, setActiveMode] = useState('all');
     const [isPending, startTransition] = useTransition();
 
-    // Narrow / sidebar width: collapse the mode chip row into a single dropdown
+    // Sidebar width: the mode selector row is hidden (see its render below).
     const isNarrow = useIsSidebarWidth();
-    const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
-    const modeMenuRef = useRef(null);
-
-    // Close the mode dropdown on outside click
-    useEffect(() => {
-        if (!isModeMenuOpen) return;
-        const onDocClick = (e) => {
-            if (modeMenuRef.current && !modeMenuRef.current.contains(e.target)) {
-                setIsModeMenuOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', onDocClick);
-        return () => document.removeEventListener('mousedown', onDocClick);
-    }, [isModeMenuOpen]);
 
     // Expanding a workspace takes over the list as a full detail view (status /
     // tasks / notes as their own full-width section below the items) at every
@@ -563,64 +548,17 @@ export function WorkspaceList({
                     </div>
                 )}
 
-                {/* Mode Selector - Always Visible */}
+                {/* Mode selector + greeting — full app only. The docked sidebar is
+                    for quick launching; its mode is still whatever was picked in
+                    the full app, and the section heading below names it. The
+                    layout switch lives in the sidebar's corner control bar
+                    (CoolDeskContainer) instead of a row here. */}
+                {!isNarrow && (
                 <div style={{
                     marginBottom: '20px',
                     padding: '0 4px'
                 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {isNarrow ? (
-                        /* Sidebar width: single dropdown instead of the chip row */
-                        <div className="mode-dropdown" ref={modeMenuRef} style={{ flex: 1, minWidth: 0 }}>
-                            <button
-                                className="mode-dropdown-trigger"
-                                onClick={() => setIsModeMenuOpen(open => !open)}
-                                style={{ '--mode-color': activeMode === 'all' ? undefined : modeConfigs[activeMode]?.theme }}
-                            >
-                                <span className="mode-icon">
-                                    {activeMode === 'all' ? (
-                                        <span style={{ fontSize: '12px', fontWeight: 700 }}>ALL</span>
-                                    ) : (
-                                        <FontAwesomeIcon icon={modeConfigs[activeMode].icon} />
-                                    )}
-                                </span>
-                                <span className="mode-label">
-                                    {activeMode === 'all' ? 'All Workspaces' : modeConfigs[activeMode].label}
-                                </span>
-                                <FontAwesomeIcon
-                                    icon={faChevronDown}
-                                    className={`mode-dropdown-chevron ${isModeMenuOpen ? 'open' : ''}`}
-                                />
-                            </button>
-
-                            {isModeMenuOpen && (
-                                <div className="mode-dropdown-menu">
-                                    <button
-                                        className={`mode-dropdown-item ${activeMode === 'all' ? 'active' : ''}`}
-                                        onClick={() => { handleModeChange('all'); setIsModeMenuOpen(false); }}
-                                    >
-                                        <span className="mode-icon">
-                                            <span style={{ fontSize: '12px', fontWeight: 700 }}>ALL</span>
-                                        </span>
-                                        <span className="mode-label">All Workspaces</span>
-                                    </button>
-                                    {Object.entries(modeConfigs).map(([key, config]) => (
-                                        <button
-                                            key={key}
-                                            className={`mode-dropdown-item ${activeMode === key ? 'active' : ''}`}
-                                            style={{ '--mode-color': config.theme }}
-                                            onClick={() => { handleModeChange(key); setIsModeMenuOpen(false); }}
-                                        >
-                                            <span className="mode-icon">
-                                                <FontAwesomeIcon icon={config.icon} />
-                                            </span>
-                                            <span className="mode-label">{config.label}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    ) : (
                         <div className="mode-selector-container" style={{ flex: 1, minWidth: 0 }}>
                             <button
                                 className={`mode-item ${activeMode === 'all' ? 'active' : ''}`}
@@ -653,27 +591,7 @@ export function WorkspaceList({
                                 );
                             })}
                         </div>
-                    )}
 
-                    {isDesktopApp && isNarrow && (
-                        <LayoutSwitchButton
-                            style={{
-                                width: '34px',
-                                height: '34px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                borderRadius: '8px',
-                                border: '1px solid rgba(100, 116, 139, 0.3)',
-                                background: 'rgba(100, 116, 139, 0.12)',
-                                color: '#94A3B8',
-                                cursor: 'pointer',
-                                fontSize: '13px',
-                                padding: 0,
-                                flexShrink: 0
-                            }}
-                        />
-                    )}
                 </div>
 
                     {/* Active Mode Greeting */}
@@ -707,6 +625,7 @@ export function WorkspaceList({
                         )}
                     </div>
                 </div>
+                )}
 
                 {/* Apps Mode - Show AppGrid */}
                 {activeMode === 'apps' && (

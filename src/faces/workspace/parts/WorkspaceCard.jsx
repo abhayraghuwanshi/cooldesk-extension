@@ -59,6 +59,7 @@ import { GroupedLinksPopover } from './GroupedLinksPopover.jsx';
 import { UrlAnalyticsPopover } from './UrlAnalyticsPopover.jsx';
 import { isEditorApp, workspaceActivityService } from '../../../services/workspaceActivityService.js';
 import { useIsSidebarWidth } from '../../../shared/hooks/useIsSidebarWidth.js';
+import { useWorkspaceAccent } from '../../../shared/hooks/useWorkspaceAccent.js';
 
 const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
 
@@ -170,7 +171,8 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   const isSidebarWidth = useIsSidebarWidth();
   // User-chosen accent color. Optimistic local state so the tint applies
   // instantly; persisted to the workspace record (survives reload / sync).
-  const [colorOverride, setColorOverride] = useState(workspace.color || null);
+  // Shared with the detail panel (WorkspaceContextPanel) — see useWorkspaceAccent.
+  const [colorOverride, setColorOverride] = useWorkspaceAccent(workspace);
   const activePopover = popoverState.index;
 
   // ── Context panel ────────────────────────────────────────────────────────

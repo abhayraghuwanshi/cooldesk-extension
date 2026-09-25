@@ -221,10 +221,16 @@ export function CoolDeskContainer({
     && /Mac/.test(navigator.platform)
     && dockState?.enabled
     && dockState.mode === 'drawer';
+  // Sidebar (left/right) additionally sits on a native frosted panel
+  // (`set_effects` in `expand_drawer`), so its cards switch to translucent
+  // widget tiles — see `dock-sidebar` in dock-see-through.css.
+  const isSidebarDock = isSeeThroughDock && (dockState.side === 'left' || dockState.side === 'right');
   useEffect(() => {
-    document.documentElement.classList.toggle('dock-see-through', !!isSeeThroughDock);
-    return () => document.documentElement.classList.remove('dock-see-through');
-  }, [isSeeThroughDock]);
+    const root = document.documentElement;
+    root.classList.toggle('dock-see-through', !!isSeeThroughDock);
+    root.classList.toggle('dock-sidebar', !!isSidebarDock);
+    return () => root.classList.remove('dock-see-through', 'dock-sidebar');
+  }, [isSeeThroughDock, isSidebarDock]);
 
   // Activate a workspace as a taskbar-style bottom bar: make it current, then
   // dock the main window to the bottom edge and slide it in.
@@ -689,13 +695,18 @@ export function CoolDeskContainer({
       </div>
 
       {/* Corner control bar — only visible at sidebar widths (CSS), where the
-          top header above is hidden. Just the update badge now: the layout
-          switch lives in the Tab Management toolbar instead, so this corner
-          isn't a second copy of it. */}
+          top header above is hidden: the update badge and the layout switch. */}
       <div className="sidebar-control-bar">
         {/* Outside the collapse: a pending update shouldn't hide behind the
             dots button, and it disappears again once installed. */}
         <UpdateButton compact />
+        {/* The one layout switch at sidebar widths (was a row in each page —
+            WorkspaceList and TabManagement). With the header hidden this is
+            the only on-screen way out of the sidebar, so it lives here where
+            every page shows it. */}
+        {isDesktopApp && (
+          <LayoutSwitchButton className="sidebar-control-btn" dockState={dockState} />
+        )}
         {/* No Settings or Cool Activity here. Both are full desktop surfaces —
             SettingsModal is a fixed two-column dialog and the activity graph
             wants real canvas area — and neither adapts to sidebar widths, so

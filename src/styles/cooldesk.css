@@ -3935,10 +3935,26 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 
 
 /* Corner control bar for sidebar widths — hidden while the full header shows.
-   Only holds the update badge now (see CoolDeskContainer); the layout switch
-   lives in the Tab Management toolbar instead. */
+   Holds the update badge and the layout switch (see CoolDeskContainer). */
 .sidebar-control-bar {
   display: none;
+}
+
+.sidebar-control-btn {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 13px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-control-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e5e7eb;
 }
 
 /* Sidebar mode (narrow screens below 500px) */
@@ -3990,12 +4006,11 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
   }
 
-  /* This bar only ever holds <UpdateButton compact />, which renders nothing
-     when there's no pending update — leaving an empty div that still paints
-     its own padding/background/border-radius as a small dark dot fixed in
-     the sidebar's top-right corner. Hide the bar itself once it has no
-     content to show; it reappears the moment UpdateButton has something to
-     render. */
+  /* Outside the desktop app the bar holds only <UpdateButton compact />,
+     which renders nothing when there's no pending update — leaving an empty
+     div that still paints its own padding/background/border-radius as a
+     small dark dot fixed in the sidebar's top-right corner. Hide the bar
+     itself once it has no content to show. */
   .sidebar-control-bar:empty {
     display: none;
   }
@@ -4348,7 +4363,17 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   padding: 16px var(--detail-gutter, 18px) 18px;
   border: 1px solid var(--border-primary, rgba(148, 163, 184, 0.15));
   border-radius: 14px;
-  background: var(--glass-bg, rgba(30, 41, 59, 0.5));
+  /* Same opaque dark surface as the base .workspace-context-panel. This rule
+     used to set `var(--glass-bg)` — ~5% opacity, meant for big panels over a
+     blurred wallpaper — and, being more specific, it replaced the base's
+     opaque background: with no card color the detail container was nearly
+     see-through and its white text washed out. A chosen card color only
+     "fixed" it because .has-accent (later in the file) wins over this.
+     The light theme still overrides via body.bg-white-cred. */
+  background:
+    radial-gradient(120% 80% at 0% 0%, rgba(96, 165, 250, 0.07), transparent 55%),
+    radial-gradient(80% 60% at 100% 100%, rgba(167, 139, 250, 0.06), transparent 60%),
+    linear-gradient(180deg, #161c2b 0%, #10141f 100%);
 }
 
 /* Single column: the two-column rail+notes grid crushes notes at this width */
@@ -6160,12 +6185,15 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
      differences: an opaque base as the bottom layer (the card floats over the
      page, but this panel must fully hide the content it overlaps), and no
      accent border — the panel is borderless. */
-  background:
-    linear-gradient(135deg,
-      color-mix(in srgb, var(--card-accent) 24%, transparent),
-      color-mix(in srgb, var(--card-accent) 8%, transparent)),
-    var(--glass-bg, rgba(30, 41, 59, 0.7)),
-    linear-gradient(180deg, #161c2b 0%, #10141f 100%);
+  /* The accent is mixed INTO the dark base (not over `transparent` + the
+     theme's --glass-bg, which can be near-clear or light): the panel keeps
+     the workspace's hue but can never get light enough to wash out its
+     white text — even a white/pastel accent lands on a dark grey (~#46494f
+     at 22%). Previously a light accent left notes/to-dos hard to read until
+     the user picked a darker card color by hand. */
+  background: linear-gradient(135deg,
+      color-mix(in srgb, var(--card-accent) 22%, #10141f),
+      color-mix(in srgb, var(--card-accent) 8%, #10141f));
 }
 
 /* Light theme keeps the panel opaque with a light surface. */

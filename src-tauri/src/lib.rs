@@ -779,7 +779,13 @@ fn mac_drawer_frame(st: &DockState, handle: bool) -> Option<(f64, f64, f64, f64)
     let horizontal = dock_is_horizontal(&st.side);
     let frame = match (handle, horizontal) {
         (false, false) => {
-            let margin = SIDEBAR_MARGIN as f64;
+            // No horizontal window margin on macOS: the sidebar window is
+            // see-through (only its cards paint), so `SIDEBAR_MARGIN` — the
+            // gap that framed the old visible panel — would just add empty
+            // space between the cards and the screen edge on top of the
+            // page's own padding. Notification Center-style, the cards sit
+            // ~8px (that padding) from the edge.
+            let margin = 0.0;
             let margin_v = SIDEBAR_MARGIN_VERTICAL as f64;
             let w = (st.width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH) as f64 - margin * 2.0).max(1.0);
             let x = if st.side == "left" { vx + margin } else { vx + vw - w - margin };

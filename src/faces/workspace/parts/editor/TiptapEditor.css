@@ -466,11 +466,19 @@ ul[data-type="taskList"]>li>div p {
     background: rgba(20, 20, 25, 0.85);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
-    padding: 6px;
-    border-radius: 12px;
+    padding: 3px;
+    border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
-    gap: 4px;
+    gap: 2px;
+    /* The floating menu is ~10 buttons (~380px) in one row and is shown with
+       tippy `maxWidth: 'none'` — wider than the docked sidebar, so it ran off
+       the window edge and got clipped. Cap it to the viewport and let the
+       buttons wrap onto a second row instead; tippy then keeps the narrower
+       box on screen. No effect at full width, where the row already fits. */
+    flex-wrap: wrap;
+    max-width: calc(100vw - 24px);
+    box-sizing: border-box;
     animation: menuFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     z-index: 50;
     font-family: 'Inter', sans-serif;
@@ -481,17 +489,17 @@ ul[data-type="taskList"]>li>div p {
     border: 1px solid transparent;
     background: transparent;
     color: rgba(255, 255, 255, 0.7);
-    border-radius: 8px;
-    padding: 6px 8px;
-    font-size: 13px;
+    border-radius: 5px;
+    padding: 3px 5px;
+    font-size: 10px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.15s ease;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 32px;
-    height: 32px;
+    min-width: 22px;
+    height: 22px;
 }
 
 .tiptap-floating-menu button:hover,
@@ -518,9 +526,9 @@ ul[data-type="taskList"]>li>div p {
 .tiptap-floating-menu .divider,
 .tiptap-bubble-menu .divider {
     width: 1px;
-    height: 20px;
+    height: 14px;
     background: rgba(255, 255, 255, 0.15);
-    margin: 0 4px;
+    margin: 0 2px;
     border-radius: 1px;
 }
 

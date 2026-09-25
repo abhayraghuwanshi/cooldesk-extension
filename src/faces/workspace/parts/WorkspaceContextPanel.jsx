@@ -1,11 +1,13 @@
-import { faArrowLeft, faBolt, faChevronDown, faChevronUp, faCompass, faPause, faPlus, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faArrowLeft, faBolt, faCompass, faPalette, faPause, faPlus, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { marked } from 'marked';
 import { AccentColorPicker } from '../../../shared/components/AccentColorPicker.jsx';
 import { CooldeskSection } from './CooldeskSection.jsx';
 import { fetchCooldesk, collectSharedTodos } from '../../../services/cooldeskService.js';
 import { useCooldeskVersion } from '../../../shared/hooks/useCooldeskProjects.js';
+import { useWorkspaceAccent } from '../../../shared/hooks/useWorkspaceAccent.js';
 import {
   deleteNote,
   deleteWorkspaceTodo,
@@ -129,10 +131,11 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
   // Status
   const [status, setStatus] = useState(workspace.status || null);
 
-  // Accent color (optimistic; persisted to the workspace record so the card
-  // and panel stay in sync on reload).
-  const [accent, setAccent] = useState(workspace.color || null);
-  const [colorOpen, setColorOpen] = useState(false);
+  // Accent color — changed from a right-click menu, on this panel or on the
+  // workspace card above (WorkspaceCard → Customize); useWorkspaceAccent keeps
+  // both painted the same.
+  const [accent, setAccent] = useWorkspaceAccent(workspace);
+  const [colorMenu, setColorMenu] = useState(null); // { x, y }
 
   // Todos
   const [todos, setTodos] = useState([]);
@@ -165,14 +168,36 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
       .catch(err => console.error('[WorkspaceContextPanel] saveWorkspace failed:', err));
   }, [workspace]);
 
-  // ── Accent color ──────────────────────────────────────────────────────────
+  // ── Accent color (right-click menu) ───────────────────────────────────────
   const applyAccent = useCallback((color) => {
     setAccent(color);
     const next = { ...workspace, updatedAt: Date.now() };
     if (color) next.color = color; else delete next.color;
     saveWorkspace(next)
       .catch(err => console.error('[WorkspaceContextPanel] save accent failed:', err));
-  }, [workspace]);
+  }, [workspace, setAccent]);
+
+  // Right-click anywhere on the panel except where the browser's own menu is
+  // what you want: the note editor, inputs and other editable text (copy /
+  // paste / spelling).
+  const handleContextMenu = useCallback((e) => {
+    if (e.target.closest?.('input, textarea, [contenteditable="true"], .wcp-note-editor')) return;
+    e.preventDefault();
+    setColorMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  // Dismiss on any press outside the menu. Capture phase on mousedown: the
+  // panel stops click propagation (onClick below), so a bubbling window
+  // 'click' listener would never hear clicks made inside the panel.
+  useEffect(() => {
+    if (!colorMenu) return;
+    const dismiss = (e) => {
+      if (e.target?.closest?.('.workspace-context-menu')) return;
+      setColorMenu(null);
+    };
+    window.addEventListener('mousedown', dismiss, true);
+    return () => window.removeEventListener('mousedown', dismiss, true);
+  }, [colorMenu]);
 
   // ── Todos ───────────────────────────────────────────────────────────────
   const handleAddTodo = useCallback(async (text) => {
@@ -304,7 +329,32 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
       className={`workspace-context-panel ${accent ? 'has-accent' : ''}`}
       style={accent ? { '--card-accent': accent } : undefined}
       onClick={e => e.stopPropagation()}
+      onContextMenu={handleContextMenu}
     >
+      {/* Same menu (and classes) as the workspace card's right-click
+          Customize — portaled so the panel's own stacking can't clip it. */}
+      {colorMenu && createPortal(
+        <div
+          className="workspace-context-menu"
+          style={{ top: colorMenu.y, left: colorMenu.x }}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <div className="context-menu-label">
+            <FontAwesomeIcon icon={faPalette} />
+            Customize
+          </div>
+          <AccentColorPicker
+            className="context-menu-swatches"
+            value={accent}
+            onSelect={(color, source) => {
+              applyAccent(color);
+              // Keep open for the live custom picker (closing unmounts its input).
+              if (source !== 'custom') setColorMenu(null);
+            }}
+          />
+        </div>,
+        document.body
+      )}
       <div className="wcp-grid">
 
         {/* ── LEFT RAIL: project (.cooldesk) + status + todos ───────────── */}
@@ -333,38 +383,6 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
                 </button>
               ))}
             </div>
-          </section>
-
-          <section className="wcp-section">
-            <button
-              type="button"
-              className="wcp-color-trigger"
-              data-accent="color"
-              onClick={() => setColorOpen(v => !v)}
-              aria-expanded={colorOpen}
-            >
-              <span className="wcp-section-bar" aria-hidden="true" />
-              <span className="wcp-section-title">Card Color</span>
-              <span
-                className="wcp-color-current"
-                style={{ background: accent || 'transparent' }}
-                aria-hidden="true"
-              />
-              <FontAwesomeIcon
-                icon={colorOpen ? faChevronUp : faChevronDown}
-                className="wcp-color-chevron"
-              />
-            </button>
-            {colorOpen && (
-              <AccentColorPicker
-                className="wcp-accent-picker"
-                value={accent}
-                onSelect={(color, source) => {
-                  applyAccent(color);
-                  if (source !== 'custom') setColorOpen(false);
-                }}
-              />
-            )}
           </section>
 
           <section className="wcp-section wcp-todos-section">

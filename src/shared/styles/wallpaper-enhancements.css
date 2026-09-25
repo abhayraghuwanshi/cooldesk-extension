@@ -367,12 +367,12 @@
 /* The context panel follows the same accent grammar as the card it belongs to,
    but with an opaque bottom layer — it overlaps content and must not bleed. */
 .wallpaper-enabled .workspace-context-panel.has-accent {
-    background:
-        linear-gradient(135deg,
-            color-mix(in srgb, var(--card-accent) 30%, transparent),
-            color-mix(in srgb, var(--card-accent) 10%, transparent)),
-        linear-gradient(135deg, rgba(15, 15, 20, 0.78) 0%, rgba(10, 10, 15, 0.72) 100%),
-        linear-gradient(180deg, #161c2b 0%, #10141f 100%) !important;
+    /* Accent mixed into the opaque dark base, not layered over it — see
+       .workspace-context-panel.has-accent in cooldesk.css: keeps white text
+       readable whatever card color is chosen. */
+    background: linear-gradient(135deg,
+            color-mix(in srgb, var(--card-accent) 22%, #0f0f14),
+            color-mix(in srgb, var(--card-accent) 8%, #0f0f14)) !important;
     /* Same neutral hairline the compact card gets above — not an accent-colored
        outline, just enough edge that the panel reads as a box like the card. */
     border: 1px solid rgba(255, 255, 255, 0.06) !important;
