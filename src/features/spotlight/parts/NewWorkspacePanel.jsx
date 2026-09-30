@@ -69,9 +69,25 @@ export function NewWorkspacePanel({ newWorkspace }) {
                 {newWorkspace.step === 'folders' && (
                     <div className="spotlight-ai-hint">
                         Search below and click (or arrow to it and press Enter) to add a folder,
-                        file, app, or a link from your tabs/history/bookmarks.
+                        file, app, or a link from your tabs/history/bookmarks. If nothing
+                        matches, pick "Ask the agent" to have AI find links.
                         Press Enter on an empty box when you're done — everything here is optional.
                     </div>
+                )}
+
+                {newWorkspace.step === 'folders' && newWorkspace.aiLoading && (
+                    <div className="spotlight-ai-hint">Asking AI for links (it may search the web — can take ~30s)… Esc to stop.</div>
+                )}
+
+                {newWorkspace.step === 'folders' && !newWorkspace.aiLoading && newWorkspace.aiSuggestions.length > 0 && (
+                    <div className="spotlight-ai-hint">
+                        AI found {newWorkspace.aiSuggestions.length} link{newWorkspace.aiSuggestions.length === 1 ? '' : 's'} — they're
+                        in the list below (badged AI) while the box is empty.
+                    </div>
+                )}
+
+                {newWorkspace.step === 'folders' && newWorkspace.aiError && !newWorkspace.aiLoading && (
+                    <div className="spotlight-ai-hint" style={{ color: '#F87171' }}>{newWorkspace.aiError}</div>
                 )}
 
                 {newWorkspace.step === 'confirm' && (

@@ -104,21 +104,35 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
   }, [sharedTodos]);
   const showCatHeads = sharedTodos.length > 0;
 
-  // Every committed README available for this workspace: the hub's own, plus each
-  // linked group member that ships one. Members often include the hub itself
-  // (path "."), so dedupe it out by project id / name.
+  // Every committed doc available for this workspace, read-only: the hub's own
+  // README and `.cooldesk/notes/*.md`, plus each linked group member's. Members
+  // often include the hub itself (path "."), so dedupe it out by project id / name.
   const readmeDocs = useMemo(() => {
     if (!cooldesk) return [];
     const out = [];
     const hubId = cooldesk.project?.id;
-    if (cooldesk.readme) {
-      out.push({ id: hubId || 'hub', name: cooldesk.project?.name || 'This project', readme: cooldesk.readme });
-    }
+    const isGroup = (cooldesk.members || []).length > 1;
+    const pushProject = (id, name, src) => {
+      if (src.readme) {
+        out.push({ id: `${id}:readme`, label: `README · ${name}`, preview: 'Committed project readme — read-only', readme: src.readme });
+      }
+      for (const n of (src.notes || [])) {
+        if (!n?.content) continue;
+        // Title from the note's first "# heading", falling back to its file name.
+        const heading = n.content.match(/^#\s+(.+)$/m)?.[1]?.trim();
+        const title = heading || n.name.replace(/\.(md|markdown|txt)$/i, '');
+        out.push({
+          id: `${id}:note:${n.name}`,
+          label: isGroup ? `${title} · ${name}` : title,
+          preview: `notes/${n.name} — shared, read-only`,
+          readme: n.content,
+        });
+      }
+    };
+    pushProject(hubId || 'hub', cooldesk.project?.name || 'This project', cooldesk);
     for (const m of (cooldesk.members || [])) {
       if ((m.project?.id || m.name) === hubId) continue; // skip the hub's own member entry
-      if (m.readme) {
-        out.push({ id: m.project?.id || m.path || m.name, name: m.project?.name || m.name || 'Linked project', readme: m.readme });
-      }
+      pushProject(m.project?.id || m.path || m.name, m.project?.name || m.name || 'Linked project', m);
     }
     return out;
   }, [cooldesk]);
@@ -468,7 +482,7 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
           <header className="wcp-section-head" data-accent="notes">
             <span className="wcp-section-bar" aria-hidden="true" />
             <h4 className="wcp-section-title">
-              {readmeDoc ? `README · ${readmeDoc.name}` : activeNote ? 'Drafting' : 'Notes'}
+              {readmeDoc ? readmeDoc.label : activeNote ? 'Drafting' : 'Notes'}
             </h4>
             {readmeDoc && (
               <span className="wcp-notes-readonly-tag" title="Read-only — from .cooldesk">shared</span>
@@ -555,17 +569,17 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setReadmeDoc(doc); } }}
                 >
                   <div className="wcp-note-card-row">
-                    <span className="wcp-note-card-title">README · {doc.name}</span>
+                    <span className="wcp-note-card-title">{doc.label}</span>
                     <span className="wcp-note-readme-tag">.cooldesk</span>
                   </div>
-                  <span className="wcp-note-card-preview">Committed project readme — read-only</span>
+                  <span className="wcp-note-card-preview">{doc.preview}</span>
                 </div>
               ))}
               {notes.length === 0 ? (
                 <button type="button" className="wcp-notes-empty" onClick={newNote}>
                   <span className="wcp-notes-empty-glyph">✎</span>
                   <span className="wcp-notes-empty-text">
-                    Nothing here yet. Start your first note.
+                    {readmeDocs.length > 0 ? 'No notes of your own yet. Start one.' : 'Nothing here yet. Start your first note.'}
                   </span>
                 </button>
               ) : (

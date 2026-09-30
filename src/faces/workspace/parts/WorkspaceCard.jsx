@@ -64,12 +64,20 @@ import { useWorkspaceAccent } from '../../../shared/hooks/useWorkspaceAccent.js'
 const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
 
 // Resolve a .cooldesk resource path (relative to the project root) to an absolute path.
+// Joins with the base path's own separator — always using '\\' produced
+// "/Users/me/proj\\crates\\common" on macOS/Linux, a path that doesn't exist.
 const joinProjectPath = (base, rel) => {
   if (!base || !rel || rel === '.') return base || rel;
+  const sep = base.includes('\\') && !base.includes('/') ? '\\' : '/';
   const b = base.replace(/[\\/]+$/, '');
-  const r = String(rel).replace(/[/\\]+/g, '\\').replace(/^\\+/, '');
-  return `${b}\\${r}`;
+  const r = String(rel).replace(/^\.[\\/]/, '').replace(/[/\\]+/g, sep).replace(/^[\\/]+/, '');
+  return `${b}${sep}${r}`;
 };
+
+// A resource "url" with no scheme (e.g. "spec.md", ".cooldesk/notes/x.md") is a
+// project-relative file, not a web link — the scaffold AI sometimes files local
+// docs as type "link". Handing those to the url opener made them dead clicks.
+const hasUrlScheme = (u) => /^[a-z][a-z0-9+.-]*:/i.test(String(u || '').trim());
 
 const ICON_MAP = {
   folder: faFolder,
@@ -661,10 +669,37 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     const norm = (u) => (u || '').replace(/\/+$/, '').toLowerCase();
     const existing = new Set((urls || []).map(u => norm(u.url)));
     return cooldesk.resources
-      .filter(r => r.url)
+      .filter(r => r.url && hasUrlScheme(r.url))
       .map(r => ({ url: r.url, title: r.name || r.url, type: 'single', _cd: true }))
       .filter(r => !existing.has(norm(r.url)));
   }, [cooldesk, urls]);
+  // Project-relative files: `type: "file"` resources, plus scheme-less "links"
+  // (see hasUrlScheme). Resolved against their own project's root and opened
+  // like any file app — same approach as cdFolders.
+  const cdFiles = useMemo(() => {
+    if (!cooldesk) return [];
+    const seen = new Set(fileApps.map(a => a.path?.toLowerCase()).filter(Boolean));
+    const out = [];
+    const addFiles = (resources, base, projectName) => {
+      if (!base) return;
+      for (const r of (resources || [])) {
+        const rel = r.type === 'file' ? (r.path || r.url) : (r.url && !hasUrlScheme(r.url) ? r.url : null);
+        if (!rel || r.type === 'folder') continue;
+        const path = joinProjectPath(base, rel);
+        const key = path?.toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push({ name: r.name || rel, path, appType: 'file', _cd: true, project: projectName });
+      }
+    };
+    addFiles(cooldesk.resources, projectFolderPath, cooldesk.project?.name);
+    const hubId = cooldesk.project?.id;
+    for (const m of (cooldesk.members || [])) {
+      if ((m.project?.id || m.name) === hubId) continue;
+      addFiles(m.resources, m.path, m.project?.name || m.name);
+    }
+    return out;
+  }, [cooldesk, fileApps, projectFolderPath]);
   const cdProjects = useMemo(() => {
     if (!cooldesk) return [];
     const hubId = cooldesk.project?.id;
@@ -1017,7 +1052,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                   { key: 'editors', label: 'Editors', icon: faCode, accent: '#38bdf8', items: editorApps, render: renderAppIcon },
                   { key: 'apps', label: 'Apps', icon: faDesktop, accent: '#8b5cf6', items: desktopApps, render: renderAppIcon },
                   { key: 'folders', label: 'Folders', icon: faFolderOpen, accent: '#facc15', items: [...folderApps, ...cdFolders], render: renderAppIcon },
-                  { key: 'files', label: 'Files', icon: faFileLines, accent: '#94a3b8', items: fileApps, render: renderAppIcon },
+                  { key: 'files', label: 'Files', icon: faFileLines, accent: '#94a3b8', items: [...fileApps, ...cdFiles], render: renderAppIcon },
                 ].filter(row => row.items.length > 0);
 
                 return (

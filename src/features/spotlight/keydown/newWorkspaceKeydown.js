@@ -4,10 +4,19 @@ import { resultToWorkspaceItem } from '../resultToWorkspaceItem';
 // confirm). Each step's Backspace-on-empty steps back, matching /agent's
 // own "Backspace on an empty box leaves the mode" grammar.
 export function handleNewWorkspaceKeydown(e, {
-    query, selectedIndex, setSelectedIndex, flatRows, newWorkspace, showFeedback,
+    query, selectedIndex, setSelectedIndex, flatRows, newWorkspace, showFeedback, setQuery,
 }) {
     if (e.key === 'Escape') {
         e.preventDefault();
+        // First Esc stops a running "Ask AI" instead of throwing away the
+        // whole half-filled wizard; a second Esc leaves as usual.
+        if (newWorkspace.aiLoading) {
+            // Keep it from reaching the window-level Esc listener, which
+            // would close the whole spotlight on top of stopping the AI.
+            e.stopPropagation();
+            newWorkspace.cancelAi();
+            return;
+        }
         newWorkspace.exit();
         return;
     }
@@ -32,6 +41,14 @@ export function handleNewWorkspaceKeydown(e, {
             // A highlighted result attaches — same interaction as
             // /agent's context chips (see attachToAgentContext).
             if (selectedIndex >= 0 && flatRows[selectedIndex]) {
+                const item = flatRows[selectedIndex].item;
+                // The "Ask the agent" offer row — same row as plain search
+                // and /edit-workspace; its links come back as result rows.
+                if (item.type === 'agent-suggest') {
+                    newWorkspace.askAiForLinks(item.query);
+                    setQuery('');
+                    return;
+                }
                 const mapped = resultToWorkspaceItem(flatRows[selectedIndex].item);
                 if (mapped) {
                     newWorkspace.addItem(mapped);

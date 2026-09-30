@@ -92,7 +92,7 @@ export function useWorkspaceScaffold({ expandedWorkspaceId, aiCli, showFeedback 
     // it computes a plan and wants to run it in the same action.
     const runCreateWorkspace = useCallback(async (focusHint, planOverride) => {
         const plan = planOverride || wsScaffoldPlan;
-        if (!plan?.hub || aiCli.running) return;
+        if (!plan?.hub || aiCli.running) return { ok: false };
         const focus = (focusHint || '').trim();
 
         const scaffoldOne = async (folder, scaffoldContext) => {
@@ -113,7 +113,7 @@ export function useWorkspaceScaffold({ expandedWorkspaceId, aiCli, showFeedback 
         const hubResult = await scaffoldOne(plan.hub, { plainFolders: plan.plain, linkedProjects: plan.members });
         if (hubResult.error) {
             showFeedback(`Couldn't scaffold "${plan.hub.name}": ${hubResult.error}`, 'error');
-            return;
+            return { ok: false };
         }
 
         for (const member of plan.members) {
@@ -142,6 +142,7 @@ export function useWorkspaceScaffold({ expandedWorkspaceId, aiCli, showFeedback 
                 : `Created .cooldesk workspace for "${plan.hub.name}"`,
             'success'
         );
+        return { ok: true };
     }, [wsScaffoldPlan, aiCli, showFeedback]);
 
     return { wsScaffoldPlan, setWsScaffoldPlan, buildScaffoldPlan, resolveWorkspaceProjects, runCreateWorkspace };

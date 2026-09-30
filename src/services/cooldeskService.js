@@ -52,6 +52,8 @@ export async function fetchCooldesk(projectPath) {
             readme: raw.readme ?? null,
             architecture: raw.architecture ?? null,
             decisions: raw.decisions ?? null,
+            // `.cooldesk/notes/*.md` with contents ([{ name, content }]).
+            notes: Array.isArray(raw.notes) ? raw.notes : [],
             docs: raw.docs || {},
             // Linking: a hub project's group + resolved member projects (star model).
             group: raw.group || null,
@@ -73,6 +75,7 @@ export async function fetchCooldesk(projectPath) {
                     readme: mem.readme ?? null,
                     architecture: mem.architecture ?? null,
                     decisions: mem.decisions ?? null,
+                    notes: Array.isArray(mem.notes) ? mem.notes : [],
                 }))
                 : [],
         };
@@ -239,7 +242,7 @@ function emptyShape() {
     return {
         project: null, resources: [], dock: null, sidebar: null, auto: null,
         todos: [], commands: [], services: [],
-        readme: null, architecture: null, decisions: null, docs: {},
+        readme: null, architecture: null, decisions: null, notes: [], docs: {},
         group: null, members: [],
     };
 }

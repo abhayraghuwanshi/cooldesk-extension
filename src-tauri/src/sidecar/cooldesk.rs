@@ -44,6 +44,32 @@ fn read_one(project_root: &Path) -> Value {
         out
     };
 
+    // Contents of `notes/*.md|*.txt` — the app renders them read-only next to the
+    // README. Capped so one huge or runaway file can't bloat every panel fetch.
+    let read_notes = || -> Vec<Value> {
+        const MAX_NOTES: usize = 50;
+        const MAX_BYTES: u64 = 256 * 1024;
+        let mut out = vec![];
+        for name in list_dir("notes") {
+            if out.len() >= MAX_NOTES {
+                break;
+            }
+            let lower = name.to_lowercase();
+            if !(lower.ends_with(".md") || lower.ends_with(".markdown") || lower.ends_with(".txt")) {
+                continue;
+            }
+            let path = root.join("notes").join(&name);
+            let too_big = fs::metadata(&path).map(|m| !m.is_file() || m.len() > MAX_BYTES).unwrap_or(true);
+            if too_big {
+                continue;
+            }
+            if let Ok(content) = fs::read_to_string(&path) {
+                out.push(json!({ "name": name, "content": content }));
+            }
+        }
+        out
+    };
+
     let manifest = match read_json("cooldesk.json") {
         Some(m) => m,
         None => {
@@ -61,6 +87,7 @@ fn read_one(project_root: &Path) -> Value {
         "readme": read_text("README.md"),
         "architecture": read_text("architecture.md"),
         "decisions": read_text("decisions.md"),
+        "notes": read_notes(),
         "docs": {
             "knowledge": list_dir("knowledge"),
             "prompts": list_dir("prompts"),
@@ -145,6 +172,7 @@ pub fn read_cooldesk(project_path: &str) -> Value {
                         "readme": one.get("readme").cloned().unwrap_or(Value::Null),
                         "architecture": one.get("architecture").cloned().unwrap_or(Value::Null),
                         "decisions": one.get("decisions").cloned().unwrap_or(Value::Null),
+                        "notes": one.get("notes").cloned().unwrap_or(Value::Null),
                     }));
                 }
             }

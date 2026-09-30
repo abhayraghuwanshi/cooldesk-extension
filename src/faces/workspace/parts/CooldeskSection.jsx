@@ -15,9 +15,11 @@ function groupByProject(items) {
 function commandCwd(c) {
   if (!c.projectPath) return undefined;
   if (!c.cwd || c.cwd === '.') return c.projectPath;
+  // Use the project path's own separator — a hardcoded '\\' broke cwd on macOS/Linux.
+  const sep = c.projectPath.includes('\\') && !c.projectPath.includes('/') ? '\\' : '/';
   const base = c.projectPath.replace(/[\\/]+$/, '');
-  const rel = String(c.cwd).replace(/[/\\]+/g, '\\').replace(/^\\+/, '');
-  return `${base}\\${rel}`;
+  const rel = String(c.cwd).replace(/^\.[\\/]/, '').replace(/[/\\]+/g, sep).replace(/^[\\/]+/, '');
+  return `${base}${sep}${rel}`;
 }
 
 function runCommand(c) {

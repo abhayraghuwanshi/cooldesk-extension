@@ -477,10 +477,26 @@ export function GlobalSpotlight({
         buildScaffoldPlan, resolveWorkspaceProjects, runCreateWorkspace,
     } = useWorkspaceScaffold({ expandedWorkspaceId, aiCli, showFeedback });
 
+    // After /new-workspace creates a workspace, open it in /edit-workspace
+    // (declared below, hence the ref). After a scaffold run this fires only
+    // if the user is still watching that run in /agent — if they've moved on
+    // to something else meanwhile, don't yank them back.
+    const editWorkspaceRef = useRef(null);
+    const commandModeRef = useRef(commandMode);
+    commandModeRef.current = commandMode;
+    const openCreatedWorkspace = useCallback((workspace, { afterScaffold }) => {
+        if (afterScaffold) {
+            if (commandModeRef.current !== 'agent') return;
+            aiCli.reset();
+            setWsScaffoldPlan(null); // done — don't re-offer "Create workspace" next /agent visit
+        }
+        editWorkspaceRef.current?.enter(workspace);
+    }, [aiCli, setWsScaffoldPlan]);
+
     // /new-workspace's guided create wizard — see useNewWorkspaceMode.js.
     const newWorkspace = useNewWorkspaceMode({
         aiCli, showFeedback, buildScaffoldPlan, setWsScaffoldPlan, runCreateWorkspace,
-        setCommandMode, setQuery, setExpandedWorkspaceId, setWorkspaces,
+        setCommandMode, setQuery, setExpandedWorkspaceId, setWorkspaces, openCreatedWorkspace,
     });
 
     // Typing an existing workspace's own name (e.g. "/cool-verse") opens it
@@ -488,6 +504,7 @@ export function GlobalSpotlight({
     const editWorkspace = useEditWorkspaceMode({
         showFeedback, setCommandMode, setQuery, setWorkspaces, onExit: onExitEditMode,
     });
+    editWorkspaceRef.current = editWorkspace;
 
     // Closing the note editor or an inline todo edit unmounts whatever DOM
     // node had focus (the Tiptap contenteditable, or the todo's <input>) —
@@ -1736,6 +1753,21 @@ export function GlobalSpotlight({
                         needsBrowsingData: true,
                         originWorkspace: { id: editWorkspace.workspace.id, name: editWorkspace.workspace.name },
                     });
+                } else if (weakOrEmpty && isNewWorkspaceFolderStep && isDesktopApp) {
+                    // /new-workspace's folder step: the same "Ask the agent"
+                    // offer row as everywhere else. The workspace isn't saved
+                    // yet, so the agent can't apply actions to it — picking
+                    // this row instead fetches links that come back as
+                    // ordinary result rows (see aiLinkRows below), attached
+                    // with the same click/Enter as any tab or bookmark.
+                    searchResults.unshift({
+                        id: `agent-suggest-${searchTerm}`,
+                        title: `Ask the agent: "${searchTerm}"`,
+                        description: 'No strong matches — let AI find links (web + your history)',
+                        type: 'agent-suggest',
+                        query: searchTerm,
+                        forNewWorkspace: true,
+                    });
                 } else if (weakOrEmpty && !isAgent && !isItemPicker && !scope) {
                     // Plain, broad search only — the agent (desktop app only)
                     // and/or a plain browser search (previously only reachable
@@ -1816,10 +1848,35 @@ export function GlobalSpotlight({
     // --- Folder tree helpers ---
     // Base rows = search results capped to the visible window; folders among
     // them can be expanded inline to reveal children (recursively).
+    // /new-workspace: links the agent found, shown as ordinary url rows
+    // (badged "AI") while the box is empty, minus any already attached — so
+    // several can be picked in a row, and typing a new search replaces them.
+    const aiLinkRows = useMemo(() => {
+        if (commandMode !== 'new-workspace' || newWorkspace.step !== 'folders' || query.trim()) return [];
+        const attached = new Set(newWorkspace.urls.map(u => u.url));
+        return newWorkspace.aiSuggestions
+            .filter(s => !attached.has(s.url))
+            .map(s => ({
+                id: `ai-link-${s.url}`,
+                type: 'url',
+                title: s.title || s.url,
+                url: s.url,
+                description: s.url,
+                _aiSuggested: true,
+            }));
+    }, [commandMode, newWorkspace.step, newWorkspace.urls, newWorkspace.aiSuggestions, query]);
+
     const baseRows = useMemo(
-        () => results.slice(0, showAllResults ? results.length : 10),
-        [results, showAllResults]
+        () => (aiLinkRows.length > 0 ? aiLinkRows : results.slice(0, showAllResults ? results.length : 10)),
+        [aiLinkRows, results, showAllResults]
     );
+
+    // After attaching an AI row the list shifts up under a still-set
+    // selectedIndex, so a reflex Enter would attach the *next* suggestion.
+    // Clear the highlight — every pick stays an explicit one.
+    useEffect(() => {
+        if (commandMode === 'new-workspace') setSelectedIndex(-1);
+    }, [commandMode, newWorkspace.urls.length, newWorkspace.aiSuggestions]);
 
     // Flatten the tree (base rows + expanded children) into a single navigable
     // list, tagging each row with its depth for indentation.
@@ -1988,7 +2045,7 @@ export function GlobalSpotlight({
         }
 
         if (commandMode === 'new-workspace') {
-            handleNewWorkspaceKeydown(e, { query, selectedIndex, setSelectedIndex, flatRows, newWorkspace, showFeedback });
+            handleNewWorkspaceKeydown(e, { query, selectedIndex, setSelectedIndex, flatRows, newWorkspace, showFeedback, setQuery });
             return;
         }
 
@@ -2308,6 +2365,11 @@ export function GlobalSpotlight({
         // variant needs real browsing data gathered and attached first (see
         // runAgentWithBrowsingSnapshot) — the agent has no tool of its own
         // that can search history/tabs/bookmarks/apps.
+        if (item.type === 'agent-suggest' && item.forNewWorkspace) {
+            newWorkspace.askAiForLinks(item.query);
+            setQuery('');
+            return;
+        }
         if (item.type === 'agent-suggest') {
             setCommandMode('agent');
             setQuery('');
@@ -2773,6 +2835,7 @@ export function GlobalSpotlight({
         if (item.type === 'setting') return 'Setting';
         if (item.type === 'tool') return 'Tool';
         if (item.type === 'command') return item.category || 'Command';
+        if (item._aiSuggested) return 'AI';
         if (item.type === 'agent-suggest') return 'Agent';
         if (item.type === 'websearch-suggest') return 'Web';
         if (item.type === 'workspace-edit') return 'Workspace';

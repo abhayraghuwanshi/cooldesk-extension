@@ -66,7 +66,8 @@ Step 3 — create:
     "project": { "id": "<kebab-id>", "name": "...", "description": "One line.", "status": "active" },
     "resources": [
       { "type": "github", "name": "...", "url": "..." },
-      { "type": "folder", "name": "...", "path": "..." }
+      { "type": "folder", "name": "...", "path": "..." },
+      { "type": "file", "name": "...", "path": "..." }
     ],
     "dock": { "pinned": [ { "type": "command", "ref": "dev" } ] },
     "sidebar": { "sections": ["todos", "decisions", "notes"] },
@@ -76,6 +77,8 @@ Step 3 — create:
   \`status\` is one of \`active | planning | on-hold\`. \`resource.type\` is provider-agnostic
   (\`github\`, \`gitlab\`, \`folder\`, \`link\`, \`figma\`, \`notion\`, \`jira\`, \`slack\`, \`docker\`,
   \`service\`, …) — pick whatever actually applies. Leave \`auto\` as \`{}\`.
+  Local files in the repo (e.g. \`spec.md\`, \`TODO.md\`) are \`{ "type": "file", "path": "<relative path>" }\`
+  — never a \`link\` with a relative \`url\`; \`url\` is only for real http(s) web addresses.
 - \`.cooldesk/README.md\` — what this project is and how to run it, from what you found.
 - \`.cooldesk/commands.json\` — \`{ "commands": [ { "id", "label", "run", "cwd" } ] }\`, the
   real run/build/test commands you detected.
