@@ -65,7 +65,7 @@
   align-items: center;
   gap: 7px;
   flex: 0 0 auto;
-  max-width: 168px;
+  max-width: 208px;
   height: 44px;
   padding: 0 13px 0 7px;
   border: 1px solid rgba(167, 139, 250, 0.28);
@@ -95,12 +95,35 @@
 }
 
 .dockbar-ws-name {
+  /* Fixed width: the name swaps to the hovered item's label (see
+     WorkspaceDockBar hoverLabel), and a content-sized chip would change the
+     pill's width on every hover — the window refits to the pill, so icons
+     would shift under the cursor. Fits the chip's 208px max with the logo. */
+  width: 150px;
   font-size: var(--font-size-xs, 12px);
   font-weight: 600;
   letter-spacing: 0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* While an icon is hovered the chip names it instead of the workspace — a
+   slightly dimmer weight so it reads as a label, not a workspace switch. */
+.dockbar-ws-name.is-hover-label {
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.92);
+  /* Item names ("Hosted app (computemesh.pages.dev)", a file path…) run
+     longer than a workspace name: wrap onto a second line inside the fixed
+     box instead of cutting off after a dozen characters. Breaks at spaces
+     first; `anywhere` only splits a single token too long for a line. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: 1.25;
 }
 
 /* Hairline dividers between the pill's three zones. */

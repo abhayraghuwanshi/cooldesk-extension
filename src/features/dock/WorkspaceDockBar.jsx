@@ -3,6 +3,8 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import logo from '../../../logo-2.png';
 import { isEditorApp, workspaceActivityService } from '../../services/workspaceActivityService';
+import { useCooldeskItems } from '../../shared/hooks/useCooldeskItems.js';
+import { ItemBadge } from '../../shared/components/ItemBadge.jsx';
 import { LayoutSwitchButton } from './LayoutSwitchButton';
 import '../../styles/dockbar.css';
 
@@ -65,11 +67,23 @@ const invokeDock = async (cmd, args) => {
  */
 export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWorkspace, side = 'bottom' }) {
   const workspace = activeWorkspace || workspaces[0] || null;
+  // The workspace's own links/apps, then its project's committed .cooldesk
+  // items (same resolution as the workspace cards — see useCooldeskItems).
+  // Linked projects become folder launchers; ones not on disk are skipped,
+  // since the bar has no room for a "not found locally" state.
+  const { cdLinks, cdFolders, cdFiles, cdProjects } = useCooldeskItems(workspace);
   const urls = useMemo(
-    () => (workspace?.urls || []).filter((u) => u.status !== 'draft'),
-    [workspace]
+    () => [...(workspace?.urls || []).filter((u) => u.status !== 'draft'), ...cdLinks],
+    [workspace, cdLinks]
   );
-  const apps = workspace?.apps || [];
+  const apps = useMemo(() => [
+    ...(workspace?.apps || []),
+    ...cdProjects
+      .filter((p) => p.exists && p.path)
+      .map((p) => ({ name: p.name, path: p.path, appType: 'folder', _cd: true })),
+    ...cdFolders,
+    ...cdFiles,
+  ], [workspace, cdProjects, cdFolders, cdFiles]);
 
   // Live running-apps + open-tabs state. `activity` is only a re-render tick;
   // the matching itself goes through the shared service.
@@ -145,7 +159,14 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
     });
   }, []);
 
+  // Hover label: the bar window hugs the pill, so a tooltip above an icon
+  // would be clipped at the window edge — and the native `title` tooltip only
+  // shows after the OS hover delay. Instead the workspace chip shows the
+  // hovered item's name, instantly, inside the bar.
+  const [hoverLabel, setHoverLabel] = useState(null);
+
   const handleDockMouseLeave = useCallback(() => {
+    setHoverLabel(null);
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     const container = itemsRef.current;
     if (!container) return;
@@ -230,7 +251,7 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
           title={workspaces.length > 1 ? `${workspace?.name || 'CoolDesk'} — click to switch workspace` : workspace?.name || 'CoolDesk'}
         >
           <img src={logo} alt="" className="dockbar-ws-logo" />
-          <span className="dockbar-ws-name">{workspace?.name || 'CoolDesk'}</span>
+          <span className={`dockbar-ws-name${hoverLabel ? ' is-hover-label' : ''}`}>{hoverLabel || workspace?.name || 'CoolDesk'}</span>
         </button>
 
         {(urls.length > 0 || apps.length > 0) && <span className="dockbar-sep" />}
@@ -251,7 +272,8 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
                 className={`dockbar-item${entering ? ' is-entering' : ''}${bouncingKey === `url-${idx}` ? ' is-bouncing' : ''}${isOpen ? ' is-active' : ''}`}
                 style={{ animationDelay: `${idx * 16}ms` }}
                 onClick={() => { bounce(`url-${idx}`); open(item); }}
-                title={`${item.title || item.url}${isOpen ? ' — open in browser' : ''}`}
+                onMouseEnter={() => setHoverLabel(item.title || item.url)}
+                aria-label={`${item.title || item.url}${isOpen ? ' — open in browser' : ''}`}
               >
                 {sources.length > 0 ? (
                   <img
@@ -275,12 +297,17 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
               className={`dockbar-item dockbar-item--app${entering ? ' is-entering' : ''}${bouncingKey === `app-${idx}` ? ' is-bouncing' : ''}${isRunning ? ' is-active' : ''}`}
               style={{ animationDelay: `${(urls.length + idx) * 16}ms` }}
               onClick={() => { bounce(`app-${idx}`); open(app); }}
-              title={`${app.name || app.path}${isRunning ? ' — running (click to focus)' : ''}`}
+              onMouseEnter={() => setHoverLabel(app.name || app.path)}
+              aria-label={`${app.name || app.path}${isRunning ? ' — running (click to focus)' : ''}`}
             >
               {app.icon ? (
                 <img src={app.icon} alt="" />
               ) : (
                 <FontAwesomeIcon icon={appFallbackIcon(app)} className="dockbar-app-glyph" />
+              )}
+              {/* Folders/files share one glyph — initials tell them apart. */}
+              {!app.icon && (app.appType === 'folder' || app.appType === 'file') && (
+                <ItemBadge name={app.name} path={app.path} size="md" />
               )}
             </button>
             );

@@ -2697,6 +2697,17 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   line-height: 1.3;
   letter-spacing: 0.01em;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  /* Always reserve two lines: the label swaps to the hovered icon's name
+     (WorkspaceCard hoverLabel), and a one→two line change would grow the
+     card and shift the icons under the cursor. */
+  min-height: 2.6em;
+}
+
+/* Hovered icon's name — normal case and a brighter tone, so it reads as a
+   label for that item rather than the workspace's own name. */
+.compact-workspace-label.is-hover-label {
+  color: #fff;
+  font-weight: 500;
 }
 
 /* Folder collage - neutral dark glass, no color distraction */
@@ -2854,10 +2865,20 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
     flex-direction: row;
     align-self: flex-start;
     padding-left: 2px;
+    /* A long hover label must ellipsize, not stretch the title row past the card. */
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
   .cooldesk-workspace-card.compact:not(.panel-open) .compact-workspace-label {
-    max-width: none;
+    max-width: 100%;
+    /* Sidebar strip: the title is one line above the icon row — keep it one
+       line (hover names included) so it never pushes the row down. */
+    min-height: 0;
+    display: block;
+    white-space: nowrap;
+    text-overflow: ellipsis;
     font-size: var(--font-xs, 10px);
     font-weight: 600;
     letter-spacing: 0.08em;
@@ -2875,6 +2896,15 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 
   .cooldesk-workspace-card.compact .compact-workspace-label {
     max-width: 96px;
+  }
+
+  /* Item names are read as-is — the strip's uppercase + wide tracking is for
+     the workspace title only. */
+  .cooldesk-workspace-card.compact:not(.panel-open) .compact-workspace-label.is-hover-label {
+    text-transform: none;
+    letter-spacing: 0.01em;
+    color: var(--text-primary, #fff);
+    opacity: 1;
   }
 }
 

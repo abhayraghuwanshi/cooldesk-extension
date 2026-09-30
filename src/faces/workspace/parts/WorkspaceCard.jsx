@@ -51,8 +51,8 @@ import {
   saveWorkspace,
 } from '../../../db/index.js';
 import { recordFeedbackEvent, recordUrlWorkspace } from '../../../services/feedbackService.js';
-import { fetchCooldesk } from '../../../services/cooldeskService.js';
-import { useCooldeskVersion } from '../../../shared/hooks/useCooldeskProjects.js';
+import { useCooldeskItems } from '../../../shared/hooks/useCooldeskItems.js';
+import { ItemBadge } from '../../../shared/components/ItemBadge.jsx';
 import { getBaseDomainFromUrl, getFaviconUrl, safeGetHostname } from '../../../utils/helpers.js';
 import { AccentColorPicker } from '../../../shared/components/AccentColorPicker.jsx';
 import { GroupedLinksPopover } from './GroupedLinksPopover.jsx';
@@ -62,22 +62,6 @@ import { useIsSidebarWidth } from '../../../shared/hooks/useIsSidebarWidth.js';
 import { useWorkspaceAccent } from '../../../shared/hooks/useWorkspaceAccent.js';
 
 const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
-
-// Resolve a .cooldesk resource path (relative to the project root) to an absolute path.
-// Joins with the base path's own separator — always using '\\' produced
-// "/Users/me/proj\\crates\\common" on macOS/Linux, a path that doesn't exist.
-const joinProjectPath = (base, rel) => {
-  if (!base || !rel || rel === '.') return base || rel;
-  const sep = base.includes('\\') && !base.includes('/') ? '\\' : '/';
-  const b = base.replace(/[\\/]+$/, '');
-  const r = String(rel).replace(/^\.[\\/]/, '').replace(/[/\\]+/g, sep).replace(/^[\\/]+/, '');
-  return `${b}${sep}${r}`;
-};
-
-// A resource "url" with no scheme (e.g. "spec.md", ".cooldesk/notes/x.md") is a
-// project-relative file, not a web link — the scaffold AI sometimes files local
-// docs as type "link". Handing those to the url opener made them dead clicks.
-const hasUrlScheme = (u) => /^[a-z][a-z0-9+.-]*:/i.test(String(u || '').trim());
 
 const ICON_MAP = {
   folder: faFolder,
@@ -171,6 +155,10 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   const [popoverState, setPopoverState] = useState({ index: null, rect: null });
   const [hoveredLink, setHoveredLink] = useState(null);
   const [showDrafts, setShowDrafts] = useState(false);
+  // Collapsed compact card: the title names the hovered icon (same idea as the
+  // bottom dock's chip) — icon-only rows otherwise have no instant label, and
+  // the native `title` tooltip waits out the OS hover delay.
+  const [hoverLabel, setHoverLabel] = useState(null);
   const [contextMenu, setContextMenu] = useState(null); // { x, y }
   // "Edit" opens the header search's /edit-workspace mode for this workspace
   // (same rename/add/remove/todo/note flow as typing its name there) — hidden
@@ -612,101 +600,10 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   const fileApps = useMemo(() => apps.filter(app => app.appType?.toLowerCase() === 'file'), [apps]);
 
   // ── .cooldesk resources merged into the categorized rows ─────────────────
-  // The workspace's project folder (an app of appType 'folder') may hold a
-  // committed .cooldesk manifest declaring folders / links / linked projects.
-  // Surface those alongside the workspace's own apps/urls instead of duplicating
-  // them in a separate chip list.
-  // A project folder may be a plain 'folder' app or an editor app (the folder
-  // added as "open in <editor>"); both name a root that can hold .cooldesk/.
-  // Prefer a plain folder, then fall back to an editor-associated folder.
-  const projectFolderPath = useMemo(() => {
-    const plain = apps.find(a => a.appType?.toLowerCase() === 'folder' && a.path);
-    if (plain) return plain.path;
-    const editorFolder = apps.find(a => isEditorApp(a) && a.path);
-    return editorFolder?.path || null;
-  }, [apps]);
-  const [cooldesk, setCooldesk] = useState(null);
-  // Re-read when the plugin announces a write to this project's .cooldesk/.
-  const cdVersion = useCooldeskVersion(projectFolderPath);
-  useEffect(() => {
-    if (!projectFolderPath) { setCooldesk(null); return; }
-    let cancelled = false;
-    fetchCooldesk(projectFolderPath)
-      .then(d => { if (!cancelled) setCooldesk(d?.exists ? d : null); })
-      .catch(() => { if (!cancelled) setCooldesk(null); });
-    return () => { cancelled = true; };
-  }, [projectFolderPath, cdVersion]);
-
-  const cdFolders = useMemo(() => {
-    if (!cooldesk) return [];
-    // Dedupe against the workspace's own folder apps and across projects.
-    const seen = new Set(folderApps.map(a => a.path?.toLowerCase()).filter(Boolean));
-    const out = [];
-    // Folder resources are relative to their own project's root, so each source
-    // (the hub and every linked member) is joined against its own base path.
-    const addFolders = (resources, base, projectName) => {
-      for (const r of (resources || [])) {
-        if (r.type !== 'folder' || !r.path) continue;
-        const path = joinProjectPath(base, r.path);
-        const key = path?.toLowerCase();
-        if (!key || seen.has(key)) continue;
-        seen.add(key);
-        out.push({ name: r.name || r.path, path, appType: 'folder', _cd: true, project: projectName });
-      }
-    };
-    // Hub's own folders.
-    addFolders(cooldesk.resources, projectFolderPath, cooldesk.project?.name);
-    // Each linked group member's folders (skip the hub's own member entry).
-    const hubId = cooldesk.project?.id;
-    for (const m of (cooldesk.members || [])) {
-      if ((m.project?.id || m.name) === hubId) continue;
-      addFolders(m.resources, m.path, m.project?.name || m.name);
-    }
-    return out;
-  }, [cooldesk, folderApps, projectFolderPath]);
-  const cdLinks = useMemo(() => {
-    if (!cooldesk) return [];
-    const norm = (u) => (u || '').replace(/\/+$/, '').toLowerCase();
-    const existing = new Set((urls || []).map(u => norm(u.url)));
-    return cooldesk.resources
-      .filter(r => r.url && hasUrlScheme(r.url))
-      .map(r => ({ url: r.url, title: r.name || r.url, type: 'single', _cd: true }))
-      .filter(r => !existing.has(norm(r.url)));
-  }, [cooldesk, urls]);
-  // Project-relative files: `type: "file"` resources, plus scheme-less "links"
-  // (see hasUrlScheme). Resolved against their own project's root and opened
-  // like any file app — same approach as cdFolders.
-  const cdFiles = useMemo(() => {
-    if (!cooldesk) return [];
-    const seen = new Set(fileApps.map(a => a.path?.toLowerCase()).filter(Boolean));
-    const out = [];
-    const addFiles = (resources, base, projectName) => {
-      if (!base) return;
-      for (const r of (resources || [])) {
-        const rel = r.type === 'file' ? (r.path || r.url) : (r.url && !hasUrlScheme(r.url) ? r.url : null);
-        if (!rel || r.type === 'folder') continue;
-        const path = joinProjectPath(base, rel);
-        const key = path?.toLowerCase();
-        if (!key || seen.has(key)) continue;
-        seen.add(key);
-        out.push({ name: r.name || rel, path, appType: 'file', _cd: true, project: projectName });
-      }
-    };
-    addFiles(cooldesk.resources, projectFolderPath, cooldesk.project?.name);
-    const hubId = cooldesk.project?.id;
-    for (const m of (cooldesk.members || [])) {
-      if ((m.project?.id || m.name) === hubId) continue;
-      addFiles(m.resources, m.path, m.project?.name || m.name);
-    }
-    return out;
-  }, [cooldesk, fileApps, projectFolderPath]);
-  const cdProjects = useMemo(() => {
-    if (!cooldesk) return [];
-    const hubId = cooldesk.project?.id;
-    return (cooldesk.members || [])
-      .filter(m => (m.project?.id || m.name) !== hubId)
-      .map(m => ({ name: m.project?.name || m.name, path: m.path, repo: m.repo, exists: m.exists, _cd: true }));
-  }, [cooldesk]);
+  // The workspace's project folder may hold a committed .cooldesk manifest
+  // declaring folders / links / files / linked projects. Surface those alongside
+  // the workspace's own apps/urls — resolution is shared with the dock bar.
+  const { cdFolders, cdLinks, cdFiles, cdProjects } = useCooldeskItems(workspace);
 
   const handleCardClick = () => {
     if (fullView) return; // detail view: card body is not a collapse target
@@ -799,7 +696,13 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   const activeUrls = useMemo(() => sortedUrls.filter(u => u.status !== 'draft'), [sortedUrls]);
   const draftUrls = sortedUrls.filter(u => u.status === 'draft');
 
-  const displayLinks = activeUrls;
+  // Grid view: the workspace's own links, then its project's .cooldesk links
+  // (the compact list and detail rows already merge these in).
+  const displayLinks = useMemo(() => [...activeUrls, ...cdLinks], [activeUrls, cdLinks]);
+  const displayFolderFiles = useMemo(
+    () => [...folderFileApps, ...cdFolders, ...cdFiles],
+    [folderFileApps, cdFolders, cdFiles]
+  );
 
   // One resolution pass for the whole card: no two items claim the same tab or
   // window, and every render site below reads the same answer the click acts on.
@@ -888,14 +791,14 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                 </div>
               )}
             </div>
-            <div className="compact-workspace-label">{name}</div>
+            <div className={`compact-workspace-label${hoverLabel ? ' is-hover-label' : ''}`}>{hoverLabel || name}</div>
           </div>
 
           {/* URL Favicons + Apps. Single-row when collapsed; categorized rows when
               expanded. No stopPropagation here: each icon stops its own click, and
               empty-row clicks must bubble so tapping the card expands it — the row
               spans nearly the whole card now that the title sits above it. */}
-          <div className="compact-icons-scroll">
+          <div className="compact-icons-scroll" onMouseLeave={() => setHoverLabel(null)}>
             {(() => {
               const renderLinkIcon = (item, idx, showLabel = false) => {
                 const isGroup = item.type === 'group';
@@ -917,9 +820,10 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                         openUrl(item.url, name, item.title, resolved.get(item));
                       }
                     }}
-                    title={isGroup
-                      ? `${item.label} (${item.urls.length}) - ${item.subLabel || item.domain}`
-                      : `${displayName}${isOpen ? ' — open in browser' : ''}`}
+                    onMouseEnter={showLabel ? undefined : () => setHoverLabel(isGroup
+                      ? `${item.label} (${item.urls.length})`
+                      : `${displayName}${isOpen ? ' — open' : ''}`)}
+                    aria-label={isGroup ? item.label : displayName}
                   >
                     {faviconUrl ? (
                       <img
@@ -982,13 +886,19 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                       e.stopPropagation();
                       activate(app);
                     }}
-                    title={`${app.path || app.name}${isRunning ? ' — running (click to focus)' : ''}`}
+                    onMouseEnter={showLabel ? undefined : () => setHoverLabel(`${app.name || app.path}${isRunning ? ' — running' : ''}`)}
+                    aria-label={app.name || app.path}
                     style={{ border: `1px solid ${appColor}55`, background: `${appColor}12` }}
                   >
                     {app.icon ? (
                       <img src={app.icon} alt="" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
                     ) : (
                       <FontAwesomeIcon icon={appIcon} style={{ color: appColor, fontSize: '18px' }} />
+                    )}
+                    {/* Folders/files share one glyph — the badge tells them apart
+                        (labeled rows already show the name, so skip it there). */}
+                    {!app.icon && !showLabel && (app.appType === 'folder' || app.appType === 'file') && (
+                      <ItemBadge name={app.name} path={app.path} />
                     )}
                     {showLabel && (
                       <span className="compact-icon-label" style={{ color: appColor }}>{app.name}</span>
@@ -1008,29 +918,32 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                 );
               };
 
+              // A linked .cooldesk project — opens its folder; shown in its own row.
+              const renderProjectIcon = (proj, idx, showLabel = false) => (
+                <div
+                  key={`proj-${idx}`}
+                  className={`compact-url-icon compact-app-icon${showLabel ? ' is-labeled' : ''}${proj.exists ? '' : ' is-missing'}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (proj.exists && proj.path && window.electronAPI?.openFolder) window.electronAPI.openFolder(proj.path);
+                    else if (proj.repo) openUrl(proj.repo, name, proj.name);
+                  }}
+                  onMouseEnter={showLabel ? undefined : () => setHoverLabel(proj.exists ? proj.name : `${proj.name} — not found locally`)}
+                  aria-label={proj.name}
+                  style={{ border: '1px solid #2dd4bf55', background: '#2dd4bf12' }}
+                >
+                  <FontAwesomeIcon icon={faBriefcase} style={{ color: '#2dd4bf', fontSize: '18px' }} />
+                  {!showLabel && <ItemBadge name={proj.name} path={proj.path} />}
+                  {showLabel && <span className="compact-icon-label" style={{ color: '#2dd4bf' }}>{proj.name}</span>}
+                </div>
+              );
+
               if (contextPanelVisible) {
                 // Expanded: categorized rows with name pills so folders/apps/files are distinguishable.
                 // Each link group (e.g. all Google links) becomes its own section with
                 // the links laid out flat — one click to open, no popover indirection.
                 const linkGroups = groupedItems.filter(item => item.type === 'group');
                 const singleLinks = groupedItems.filter(item => item.type !== 'group');
-                // A linked .cooldesk project — opens its folder; shown in its own row.
-                const renderProjectIcon = (proj, idx, showLabel = false) => (
-                  <div
-                    key={`proj-${idx}`}
-                    className={`compact-url-icon compact-app-icon${showLabel ? ' is-labeled' : ''}${proj.exists ? '' : ' is-missing'}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (proj.exists && proj.path && window.electronAPI?.openFolder) window.electronAPI.openFolder(proj.path);
-                      else if (proj.repo) openUrl(proj.repo, name, proj.name);
-                    }}
-                    title={proj.exists ? (proj.path || proj.name) : `${proj.name} — not found locally${proj.repo ? ` (${proj.repo})` : ''}`}
-                    style={{ border: '1px solid #2dd4bf55', background: '#2dd4bf12' }}
-                  >
-                    <FontAwesomeIcon icon={faBriefcase} style={{ color: '#2dd4bf', fontSize: '18px' }} />
-                    {showLabel && <span className="compact-icon-label" style={{ color: '#2dd4bf' }}>{proj.name}</span>}
-                  </div>
-                );
 
                 const linkRows = [
                   ...linkGroups.map(group => ({
@@ -1076,10 +989,18 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
               // Collapsed: single combined row, icon-only. Every URL gets its own
               // icon — the row scrolls horizontally at all widths, so domain-group
               // stacks would only hide links behind an extra popover hop.
+              // The project's committed .cooldesk items (links, linked projects,
+              // folders, files) ride along after the workspace's own — the
+              // expanded rows already showed them, the collapsed list didn't.
+              // Indices are offset so keys stay unique in this one container.
+              const cdAppItems = [...cdFolders, ...cdFiles];
               return (
                 <div className="compact-icons-container">
                   {activeUrls.map((item, idx) => renderLinkIcon(item, idx, false))}
+                  {cdLinks.map((item, idx) => renderLinkIcon(item, activeUrls.length + idx, false))}
                   {apps.map((app, idx) => renderAppIcon(app, idx, false))}
+                  {cdProjects.map((proj, idx) => renderProjectIcon(proj, idx, false))}
+                  {cdAppItems.map((app, idx) => renderAppIcon(app, apps.length + idx, false))}
                 </div>
               );
             })()}
@@ -1265,14 +1186,14 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
           )}
 
           {/* Row 3: Folders & Files */}
-          {folderFileApps.length > 0 && (
+          {displayFolderFiles.length > 0 && (
             <div className="workspace-row-section">
               <div className="workspace-row-label">
                 <FontAwesomeIcon icon={faFolderOpen} style={{ fontSize: '9px', color: '#facc15' }} />
                 Folders & Files
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {folderFileApps.map((app, idx) => {
+                {displayFolderFiles.map((app, idx) => {
                   const appColor = app.appType === 'folder' ? '#facc15' : '#94a3b8';
                   const appIcon = app.appType === 'folder' ? faFolderOpen : faFileLines;
                   const isOpen = !!resolved.get(app);
