@@ -4450,12 +4450,6 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   overscroll-behavior: auto;
 }
 
-/* The ≤720px rule stacks the status pills for the cramped in-card rail; the
-   detail-view panel is full width, so keep them as one compact segmented row. */
-.workspace-detail-view .wcp-status-seg {
-  flex-direction: row;
-}
-
 /* Stacked single-column: the notes column follows the whole rail top-to-bottom,
    so the Next Up "What's next…" add-todo input ends up butting against the NOTES
    header and reads as floating between the two lists. A divider marks NOTES as
@@ -5497,6 +5491,39 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   gap: 8px;
 }
 
+.folders-chip-row .cooldesk-folder-chip.is-active,
+.folders-chip-grid .cooldesk-folder-chip.is-active {
+  background: rgba(139, 92, 246, 0.18);
+  border-color: rgba(139, 92, 246, 0.6);
+}
+
+/* Sidebar: Popular Folders as a single horizontally-scrolling row — same
+   pattern as a workspace card's icon row — so the inline file browser below
+   it gets the height instead of a multi-row chip grid. Path line dropped to
+   keep each chip one line; the full path is still in its hover title. */
+.folders-chip-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+}
+.folders-chip-row::-webkit-scrollbar { height: 4px; }
+.folders-chip-row::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 2px;
+}
+.folders-chip-row .cooldesk-folder-chip {
+  flex: 0 0 auto;
+  max-width: 170px;
+  padding: 6px 8px;
+  scroll-snap-align: start;
+}
+.folders-chip-row .cooldesk-folder-chip:hover { transform: none; }
+.folders-chip-row .folder-chip-path { display: none; }
+
 .cooldesk-folder-chip {
   display: flex;
   align-items: center;
@@ -6510,74 +6537,6 @@ body.bg-white-cred .workspace-context-panel.has-accent {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Status segmented control ────────────────────────────────────────── */
-.wcp-status-seg {
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  border-radius: 11px;
-  background: rgba(8, 11, 22, 0.42);
-  border: 1px solid rgba(148, 163, 184, 0.08);
-}
-.wcp-status-pill {
-  --seg-color: #94a3b8;
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-width: 0;
-  padding: 7px 8px;
-  border-radius: 8px;
-  background: transparent;
-  border: 1px solid transparent;
-  color: #cbd5e1;
-  font-size: var(--font-sm, 12px);
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
-}
-.wcp-status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-  flex-shrink: 0;
-  opacity: 0.55;
-  transition: opacity 160ms ease, box-shadow 160ms ease;
-}
-.wcp-status-pill-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  line-height: 1;
-}
-.wcp-status-pill:hover {
-  color: #e2e8f0;
-  background: rgba(255, 255, 255, 0.03);
-}
-.wcp-status-pill:hover .wcp-status-dot { opacity: 0.85; }
-.wcp-status-pill.is-active {
-  color: var(--seg-color);
-  background: color-mix(in srgb, var(--seg-color) 14%, transparent);
-  border-color: color-mix(in srgb, var(--seg-color) 32%, transparent);
-}
-.wcp-status-pill.is-active .wcp-status-dot {
-  opacity: 1;
-  box-shadow: 0 0 8px color-mix(in srgb, var(--seg-color) 70%, transparent);
-}
-.wcp-status-pill:focus-visible {
-  outline: none;
-  border-color: color-mix(in srgb, var(--seg-color) 50%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--seg-color) 20%, transparent);
-}
-
-/* Narrow rail — stack vertically if there's no horizontal room */
-@media (max-width: 720px) {
-  .wcp-status-seg { flex-direction: column; }
-}
-
 /* ── Todos ───────────────────────────────────────────────────────────── */
 .wcp-todos { display: flex; flex-direction: column; gap: 1px; }
 /* Category-wise (per-project) grouping of the Next Up list */
@@ -6591,6 +6550,36 @@ body.bg-white-cred .workspace-context-panel.has-accent {
   color: rgba(148, 163, 184, 0.7);
   padding: 0 6px 3px;
 }
+/* Panel cards — each section of the workspace panel is its own box. The
+   `.is-shared` variant marks the project's committed .cooldesk content (same
+   teal treatment as .cdk-section), so shared read-only items never blend into
+   the user's own todos and notes. */
+.wcp-card {
+  padding: 10px 12px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.04);
+  box-sizing: border-box;
+  min-width: 0;
+}
+.wcp-card.is-shared {
+  border-color: color-mix(in srgb, #2dd4bf 22%, transparent);
+  background: color-mix(in srgb, #2dd4bf 6%, transparent);
+}
+/* Notes column: cards stack; the main card (my notes / open note or doc)
+   takes the remaining height, the shared-docs card stays compact and
+   scrolls its own list past ~45% of the column. */
+.wcp-notes-col > .wcp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+.wcp-notes-col > .wcp-card.is-main { flex: 1 1 auto; }
+.wcp-notes-col > .wcp-card.is-shared:not(.is-main) { flex: 0 1 auto; max-height: 45%; }
+/* Detail view grows with its content (one page scroller) — no cap there. */
+.workspace-detail-view .wcp-notes-col > .wcp-card.is-shared { max-height: none; }
+
 .wcp-todo-row {
   display: flex;
   align-items: center;

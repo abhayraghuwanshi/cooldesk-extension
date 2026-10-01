@@ -3,7 +3,7 @@ import {
   faExternalLinkAlt, faFile, faFileAudio, faFileCode, faFileExcel, faFileImage, faFilePdf,
   faEye, faEyeSlash, faFileVideo, faFileZipper, faFolder, faHardDrive, faHouse, faList, faSearch,
   faTableCellsLarge, faThumbtack, faTimes, faPlay, faDiagramProject, faCheckDouble, faLink,
-  faLinkSlash, faPlus, faSpinner, faPowerOff, faSync
+  faLinkSlash, faPlus, faSpinner, faPowerOff, faSync, faEllipsis
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -233,7 +233,14 @@ function loadJSON(key, fallback) {
  * contents. Keyboard drives the same moves: arrows + Enter, Backspace for the
  * parent, Ctrl+L to type a path, any printable key to filter.
  */
-export function FileManager({ isOpen, initialPath, places = [], onClose }) {
+/**
+ * @param {boolean} [inline] render in place (no backdrop/portal) — used by the
+ *   sidebar-width Tabs page, where a full-screen modal covered everything.
+ *   Inline it only takes the keyboard while focus is inside it, since the rest
+ *   of the page is still right there and usable.
+ */
+export function FileManager({ isOpen, initialPath, places = [], onClose, inline = false }) {
+  const windowRef = useRef(null);
   const [path, setPath] = useState(initialPath || '');
   // Navigation history — index points at the current entry, so back/forward
   // are just moves along this array (same model as a browser).
@@ -260,6 +267,8 @@ export function FileManager({ isOpen, initialPath, places = [], onClose }) {
   // toggles it open as a temporary overlay instead, via the `fm-places-toggle`
   // button that CSS only shows at that same breakpoint (see fileManager.css).
   const [placesOpen, setPlacesOpen] = useState(false);
+  // Inline (sidebar) compact toolbar: which of its dropdowns is open.
+  const [compactMenu, setCompactMenu] = useState(null); // 'more' | 'ancestors' | null
   // Screen coords for whichever popup is open. The bars that host the triggers
   // scroll horizontally (`overflow-x: auto`), which clips any absolutely
   // positioned child — so menus are rendered fixed, anchored to the trigger.
@@ -730,10 +739,14 @@ export function FileManager({ isOpen, initialPath, places = [], onClose }) {
   const anchorTo = useCallback((el) => {
     const r = el.getBoundingClientRect();
     const width = 260;
-    setMenuPos({
-      left: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)),
-      top: r.bottom + 6,
-    });
+    const MENU_MAX_H = 330; // .fm-menu max-height + padding
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
+    // Open upward when there's no room below but there is above (e.g. the
+    // inline browser near the bottom of the sidebar).
+    const below = window.innerHeight - r.bottom;
+    setMenuPos(below < MENU_MAX_H && r.top > below
+      ? { left, bottom: window.innerHeight - r.top + 6 }
+      : { left, top: r.bottom + 6 });
   }, []);
 
   // Sibling picker: the chevron after a breadcrumb lists that folder's
@@ -770,6 +783,10 @@ export function FileManager({ isOpen, initialPath, places = [], onClose }) {
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e) => {
+      // Inline: only while focus is inside the browser — otherwise arrows,
+      // Backspace and typing belong to the rest of the page around it.
+      if (inline && !windowRef.current?.contains(document.activeElement)
+        && !document.activeElement?.closest?.('.fm-menu')) return;
       const inFilter = document.activeElement === filterRef.current;
       const inPath = document.activeElement === pathInputRef.current;
       // While the modal is open it owns the keyboard: every key it acts on is
@@ -783,8 +800,8 @@ export function FileManager({ isOpen, initialPath, places = [], onClose }) {
       };
       if (e.key === 'Escape') {
         take();
-        if (crumbMenu || showRecent || showLinkMenu) {
-          setCrumbMenu(null); setShowRecent(false); setShowLinkMenu(false); return;
+        if (crumbMenu || showRecent || showLinkMenu || compactMenu) {
+          setCrumbMenu(null); setShowRecent(false); setShowLinkMenu(false); setCompactMenu(null); return;
         }
         if (editingPath !== null) { setEditingPath(null); return; }
         if (filter) { setFilter(''); return; }
@@ -837,7 +854,31 @@ export function FileManager({ isOpen, initialPath, places = [], onClose }) {
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [isOpen, filter, visible, cursor, view, editingPath, crumbMenu, showRecent, showLinkMenu,
-      path, onClose, goBack, goForward, goUp, openEntry]);
+      path, onClose, goBack, goForward, goUp, openEntry, inline, compactMenu]);
+
+  // Inline has no backdrop, and its menus are portaled outside the window —
+  // so close them on any press that lands in neither the window nor a menu
+  // (presses inside the window are handled by its own onClick).
+  const anyMenuOpen = !!(compactMenu || showLinkMenu || crumbMenu || showRecent);
+  useEffect(() => {
+    if (!inline || !anyMenuOpen) return;
+    const onDown = (e) => {
+      if (e.target?.closest?.('.fm-menu') || windowRef.current?.contains(e.target)) return;
+      setCompactMenu(null); setShowLinkMenu(false); setCrumbMenu(null); setShowRecent(false);
+    };
+    window.addEventListener('mousedown', onDown, true);
+    return () => window.removeEventListener('mousedown', onDown, true);
+  }, [inline, anyMenuOpen]);
+
+  // Inline: on open (or when a different folder chip is clicked) bring the
+  // browser into view and give it focus, so the keyboard works right away.
+  useEffect(() => {
+    if (!inline || !isOpen) return;
+    const el = windowRef.current;
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [inline, isOpen, initialPath]);
 
   // Keep the highlighted row scrolled into view as the cursor moves.
   useEffect(() => {
@@ -870,10 +911,193 @@ export function FileManager({ isOpen, initialPath, places = [], onClose }) {
     </button>
   );
 
-  return createPortal(
-    <div className="fm-backdrop" onClick={onClose}>
-      <div className="fm-window" onClick={(e) => { e.stopPropagation(); setCrumbMenu(null); setShowRecent(false); setPlacesOpen(false); }}>
+  // Dropdowns are position:fixed at coordinates from the trigger's rect. Inline,
+  // the browser lives inside the app's sliding face track, which carries a
+  // CSS transform — and a transformed ancestor becomes the containing block
+  // for fixed children, so the menus landed offset by the track's translate.
+  // Portaling them to <body> restores real viewport coordinates. (The modal
+  // is already portaled, so it never had this problem.)
+  const floatMenu = (node) => (inline ? createPortal(node, document.body) : node);
+
+  // Filter box — shared by the full toolbar and the compact one.
+  const searchBox = (
+    <div className="fm-search">
+      <FontAwesomeIcon icon={faSearch} className="fm-search-icon" />
+      <input
+        ref={filterRef}
+        value={filter}
+        onChange={(e) => { setFilter(e.target.value); setCursor(0); }}
+        onKeyDown={(e) => {
+          // Enter from the filter box opens the top hit — type a few
+          // letters, hit Enter, you're there.
+          if (e.key === 'Enter' && visible.length) { e.preventDefault(); openEntry(visible[Math.min(cursor, visible.length - 1)]); }
+        }}
+        placeholder="Filter…"
+        spellCheck={false}
+      />
+      {filter && (
+        <button className="fm-search-clear" onClick={() => setFilter('')} title="Clear filter">
+          <FontAwesomeIcon icon={faTimes} />
+        </button>
+      )}
+    </div>
+  );
+
+  // ── Compact toolbar (inline / sidebar) ───────────────────────────────────
+  // The full toolbar is one row of 11 buttons + breadcrumb + filter; in a
+  // ~300px sidebar that crushed the path into broken fragments. Here:
+  //   row 1 — back · up · path (last two folders; earlier ones
+  //           collapse into "…") · close
+  //   row 2 — filter (full width) · "⋯" for everything else
+  const tailCrumbs = crumbs.slice(-2);
+  const hiddenCrumbs = crumbs.slice(0, -2);
+  const toggleCompactMenu = (which, e) => {
+    e.stopPropagation();
+    if (compactMenu === which) { setCompactMenu(null); return; }
+    anchorTo(e.currentTarget);
+    setCrumbMenu(null); setShowRecent(false); setShowLinkMenu(false); setPlacesOpen(false);
+    setCompactMenu(which);
+  };
+  const fromMenu = (fn) => () => { setCompactMenu(null); fn(); };
+  const editPath = () => { setEditingPath(path); setTimeout(() => pathInputRef.current?.select(), 0); };
+
+  // No Places drawer here: in the narrow sidebar it only covered the file
+  // list, and its Popular section repeated the folder chips right above. Up,
+  // the "…" ancestors list, the chips and "Go to path…" cover navigation —
+  // so Pin is left out of "⋯" too (pins only show in that drawer).
+  const compactToolbar = (
+    <div className="fm-toolbar fm-toolbar--compact">
+      <div className="fm-tb-row">
+        <button className="fm-icon-btn" onClick={goBack} disabled={histIndex <= 0} title="Back (Alt+←)">
+          <FontAwesomeIcon icon={faArrowLeft} />
+        </button>
+        <button className="fm-icon-btn" onClick={goUp} disabled={!parentOf(path)} title="Up one folder (Backspace)">
+          <FontAwesomeIcon icon={faArrowUp} />
+        </button>
+
+        {editingPath !== null ? (
+          <input
+            ref={pathInputRef}
+            className="fm-path-input"
+            value={editingPath}
+            autoFocus
+            spellCheck={false}
+            onChange={(e) => setEditingPath(e.target.value)}
+            onBlur={() => setEditingPath(null)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); navigate(editingPath.trim()); }
+              if (e.key === 'Escape') { e.preventDefault(); setEditingPath(null); }
+            }}
+          />
+        ) : (
+          <div className="fm-crumbs fm-crumbs--compact" onDoubleClick={editPath} title={`${path}\nDouble-click (or Ctrl+L) to type a path`}>
+            {hiddenCrumbs.length > 0 && (
+              <button
+                className={`fm-crumb fm-crumb-more ${compactMenu === 'ancestors' ? 'active' : ''}`}
+                onClick={(e) => toggleCompactMenu('ancestors', e)}
+                title="Parent folders"
+              >…</button>
+            )}
+            {tailCrumbs.map((c, i) => (
+              <span key={c.path} className={`fm-crumb-wrap${c.path === path ? ' is-current' : ''}`}>
+                {(i > 0 || hiddenCrumbs.length > 0) && (
+                  <FontAwesomeIcon icon={faChevronRight} className="fm-crumb-sep" />
+                )}
+                <button
+                  className={`fm-crumb ${c.path === path ? 'current' : ''}`}
+                  onClick={() => c.path !== path && navigate(c.path)}
+                  title={c.path}
+                >
+                  {c.label}
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <button className="fm-icon-btn fm-close" onClick={onClose} title="Close (Esc)">
+          <FontAwesomeIcon icon={faTimes} />
+        </button>
+      </div>
+
+      <div className="fm-tb-row">
+        {searchBox}
+        <button
+          className={`fm-icon-btn ${compactMenu === 'more' ? 'active' : ''}`}
+          onClick={(e) => toggleCompactMenu('more', e)}
+          title="More"
+        >
+          <FontAwesomeIcon icon={faEllipsis} />
+        </button>
+      </div>
+
+      {compactMenu === 'ancestors' && floatMenu(
+        <div className="fm-menu" style={menuPos} onClick={(e) => e.stopPropagation()}>
+          {[...hiddenCrumbs].reverse().map(c => (
+            <button key={c.path} className="fm-menu-item" onClick={fromMenu(() => navigate(c.path))} title={c.path}>
+              <FontAwesomeIcon icon={faFolder} className="fm-menu-icon" style={{ color: '#FACC15' }} />
+              <span className="fm-menu-label">{c.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {compactMenu === 'more' && floatMenu(
+        <div className="fm-menu" style={menuPos} onClick={(e) => e.stopPropagation()}>
+          <button className="fm-menu-item" onClick={fromMenu(goForward)} disabled={histIndex >= history.length - 1}>
+            <FontAwesomeIcon icon={faArrowRight} className="fm-menu-icon" />
+            <span className="fm-menu-label">Forward</span>
+          </button>
+          <button className="fm-menu-item" onClick={fromMenu(editPath)}>
+            <FontAwesomeIcon icon={faSearch} className="fm-menu-icon" />
+            <span className="fm-menu-label">Go to path…</span>
+          </button>
+          <button className="fm-menu-item" onClick={fromMenu(() => setShowHidden(v => !v))}>
+            <FontAwesomeIcon icon={showHidden ? faEyeSlash : faEye} className="fm-menu-icon" />
+            <span className="fm-menu-label">{showHidden ? 'Hide hidden items' : `Show hidden items (${hiddenCount})`}</span>
+          </button>
+          <button className="fm-menu-item" onClick={fromMenu(() => setView(v => (v === 'list' ? 'grid' : 'list')))}>
+            <FontAwesomeIcon icon={view === 'list' ? faTableCellsLarge : faList} className="fm-menu-icon" />
+            <span className="fm-menu-label">{view === 'list' ? 'Grid view' : 'List view'}</span>
+          </button>
+          <button className="fm-menu-item" onClick={fromMenu(copyPath)}>
+            <FontAwesomeIcon icon={faCopy} className="fm-menu-icon" />
+            <span className="fm-menu-label">Copy path</span>
+          </button>
+          <button className="fm-menu-item" onClick={fromMenu(() => openWithSystem(path))}>
+            <FontAwesomeIcon icon={faExternalLinkAlt} className="fm-menu-icon" />
+            <span className="fm-menu-label">Open in system file manager</span>
+          </button>
+          {recentPaths.length > 1 && (
+            <>
+              <div className="fm-menu-heading">
+                <FontAwesomeIcon icon={faClockRotateLeft} /> Recent
+              </div>
+              {recentPaths.filter(p => p !== path).slice(0, 8).map(p => (
+                <button key={p} className="fm-menu-item" onClick={fromMenu(() => navigate(p))} title={p}>
+                  <FontAwesomeIcon icon={faFolder} className="fm-menu-icon" />
+                  <span className="fm-menu-label">{baseName(p)}</span>
+                  <span className="fm-menu-sub">{p}</span>
+                </button>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  const windowEl = (
+      <div
+        ref={windowRef}
+        className={`fm-window${inline ? ' fm-window--inline' : ''}`}
+        // Inline has no backdrop to give focus to, so make the window itself
+        // focusable — clicking anywhere in it then routes keys to it.
+        tabIndex={inline ? -1 : undefined}
+        onClick={(e) => { e.stopPropagation(); setCrumbMenu(null); setShowRecent(false); setPlacesOpen(false); setCompactMenu(null); }}
+      >
         {/* Toolbar: history + address bar + filter */}
+        {inline ? compactToolbar : (
         <div className="fm-toolbar">
           <div className="fm-nav">
             {/* Only visible below the 720px breakpoint (see fileManager.css) —
@@ -909,7 +1133,7 @@ export function FileManager({ isOpen, initialPath, places = [], onClose }) {
               >
                 <FontAwesomeIcon icon={faClockRotateLeft} />
               </button>
-              {showRecent && (
+              {showRecent && floatMenu(
                 <div className="fm-menu" style={menuPos} onClick={(e) => e.stopPropagation()}>
                   {recentPaths.map(p => (
                     <button key={p} className={`fm-menu-item ${p === path ? 'current' : ''}`} onClick={() => navigate(p)} title={p}>
@@ -961,7 +1185,7 @@ export function FileManager({ isOpen, initialPath, places = [], onClose }) {
                     >
                       <FontAwesomeIcon icon={faChevronRight} />
                     </button>
-                    {crumbMenu?.path === c.path && (
+                    {crumbMenu?.path === c.path && floatMenu(
                       <div className="fm-menu" style={menuPos} onClick={(e) => e.stopPropagation()}>
                         {crumbMenu.items === null && <div className="fm-menu-empty">Loading…</div>}
                         {crumbMenu.items?.length === 0 && <div className="fm-menu-empty">No subfolders</div>}
@@ -984,26 +1208,7 @@ export function FileManager({ isOpen, initialPath, places = [], onClose }) {
             </div>
           )}
 
-          <div className="fm-search">
-            <FontAwesomeIcon icon={faSearch} className="fm-search-icon" />
-            <input
-              ref={filterRef}
-              value={filter}
-              onChange={(e) => { setFilter(e.target.value); setCursor(0); }}
-              onKeyDown={(e) => {
-                // Enter from the filter box opens the top hit — type a few
-                // letters, hit Enter, you're there.
-                if (e.key === 'Enter' && visible.length) { e.preventDefault(); openEntry(visible[Math.min(cursor, visible.length - 1)]); }
-              }}
-              placeholder="Filter…"
-              spellCheck={false}
-            />
-            {filter && (
-              <button className="fm-search-clear" onClick={() => setFilter('')} title="Clear filter">
-                <FontAwesomeIcon icon={faTimes} />
-              </button>
-            )}
-          </div>
+          {searchBox}
 
           <div className="fm-toolbar-actions">
             <button
@@ -1040,6 +1245,7 @@ export function FileManager({ isOpen, initialPath, places = [], onClose }) {
             </button>
           </div>
         </div>
+        )}
 
         {/* Project bar — the owning .cooldesk/ workspace: its commands, resource
             folders and open todo count, available from anywhere inside it. */}
@@ -1203,7 +1409,7 @@ export function FileManager({ isOpen, initialPath, places = [], onClose }) {
                 <FontAwesomeIcon icon={faPlus} />
                 <span>Link</span>
               </button>
-              {showLinkMenu && (
+              {showLinkMenu && floatMenu(
                 <div className="fm-menu" style={menuPos} onClick={(e) => e.stopPropagation()}>
                   {linkError && <div className="fm-menu-empty fm-menu-error">{linkError}</div>}
                   {linkCandidates.length === 0 && !linkError && (
@@ -1405,6 +1611,13 @@ ${c.path}`}
           )}
         </div>
       </div>
+  );
+
+  if (inline) return windowEl;
+
+  return createPortal(
+    <div className="fm-backdrop" onClick={onClose}>
+      {windowEl}
     </div>,
     document.body
   );

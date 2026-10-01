@@ -94,6 +94,12 @@ html.dock-sidebar.dock-sidebar .cooldesk-folder-chip:hover {
   border-color: rgba(139, 92, 246, 0.45) !important;
 }
 
+/* The open folder's chip — must out-rank the tile !important fills above. */
+html.dock-sidebar.dock-sidebar .cooldesk-folder-chip.is-active {
+  background: rgba(76, 52, 140, 0.96) !important;
+  border-color: rgba(139, 92, 246, 0.7) !important;
+}
+
 html.dock-sidebar .folder-chip-path {
   color: #9ca3af;
 }

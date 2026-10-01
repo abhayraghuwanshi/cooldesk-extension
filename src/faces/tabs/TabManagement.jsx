@@ -650,9 +650,20 @@ export function TabManagement() {
 
   // Folders open in the in-app file manager; the OS explorer stays available
   // as an explicit secondary action on the chip and inside the manager.
+  // Clicking the chip of the folder that's already open closes it again.
   const handleFolderClick = useCallback((folder) => {
-    if (folder?.path) setBrowsingFolder(folder.path);
+    if (!folder?.path) return;
+    setBrowsingFolder(prev => (prev === folder.path ? null : folder.path));
   }, []);
+
+  // Sidebar: keep the open folder's chip visible in the one-row strip
+  // (it may be scrolled off to the side when picked from the browser's Places).
+  const folderRowRef = useRef(null);
+  useEffect(() => {
+    if (!isSidebarWidth || !browsingFolder) return;
+    folderRowRef.current?.querySelector('.cooldesk-folder-chip.is-active')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  }, [isSidebarWidth, browsingFolder]);
 
   const handleFolderOpenExternal = useCallback(async (folder) => {
     try {
@@ -919,7 +930,11 @@ export function TabManagement() {
           overflowY: 'auto',
           display: 'flex',
           flexDirection: 'column',
-          gap: '12px'
+          gap: '12px',
+          // Breathing room after the last section — Popular Folders (and its
+          // inline file browser in the sidebar) sits at the very end, and
+          // without this its bottom edge ran flush into the window edge.
+          paddingBottom: '28px'
         }}>
         {/* Reserved widget area — same store as the overview board, its own layout. */}
         <WidgetBoard storageArea="tabs" compact defaultBoard={TABS_WIDGET_DEFAULT} />
@@ -1155,16 +1170,36 @@ export function TabManagement() {
             {frequentFolders.length > 0 && (
               <div>
                 <SectionHeader icon={faFolderOpen}>Popular Folders ({Math.min(frequentFolders.length, 8)})</SectionHeader>
-                <div className="folders-chip-grid">
+                {/* Sidebar: one horizontally-scrolling row (like a workspace
+                    card's icon row) so the browser below gets the height;
+                    the full app keeps the wrapping grid. */}
+                <div
+                  ref={folderRowRef}
+                  className={isSidebarWidth ? 'folders-chip-row' : 'folders-chip-grid'}
+                >
                   {frequentFolders.slice(0, 8).map(folder => (
                     <FolderCard
                       key={folder.path}
                       folder={folder}
                       onClick={handleFolderClick}
                       onOpenExternal={handleFolderOpenExternal}
+                      isActive={isSidebarWidth && browsingFolder === folder.path}
                     />
                   ))}
                 </div>
+                {/* Sidebar width: browse right here under the chips — the
+                    full-screen modal covered the whole narrow strip. */}
+                {isSidebarWidth && browsingFolder && (
+                  <div style={{ marginTop: 10 }}>
+                    <FileManager
+                      inline
+                      isOpen
+                      initialPath={browsingFolder}
+                      places={frequentFolders}
+                      onClose={() => setBrowsingFolder(null)}
+                    />
+                  </div>
+                )}
               </div>
             )}
 
@@ -1189,9 +1224,10 @@ export function TabManagement() {
         )}
       </div>
 
-      {/* In-app folder browser — opened from any folder chip */}
+      {/* In-app folder browser — opened from any folder chip. At sidebar
+          width it renders inline under Popular Folders instead (above). */}
       <FileManager
-        isOpen={!!browsingFolder}
+        isOpen={!!browsingFolder && !isSidebarWidth}
         initialPath={browsingFolder}
         places={frequentFolders}
         onClose={() => setBrowsingFolder(null)}

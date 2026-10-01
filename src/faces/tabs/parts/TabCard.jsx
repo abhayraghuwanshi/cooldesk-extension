@@ -436,7 +436,7 @@ export const AppCard = memo(function AppCard({ app, onClick, onKill = null }) {
  * cramped drill-down inside a grid card was the wrong surface for a file tree.
  * The secondary button hands the folder to the OS file manager.
  */
-export const FolderCard = memo(function FolderCard({ folder, onClick, onOpenExternal }) {
+export const FolderCard = memo(function FolderCard({ folder, onClick, onOpenExternal, isActive = false }) {
   if (!folder?.path) return null;
 
   const { name, path } = folder;
@@ -446,10 +446,11 @@ export const FolderCard = memo(function FolderCard({ folder, onClick, onOpenExte
 
   return (
     <div
-      className="cooldesk-folder-chip"
+      className={`cooldesk-folder-chip${isActive ? ' is-active' : ''}`}
       onClick={() => onClick?.(folder)}
+      aria-pressed={isActive}
       title={`${path}
-Click to browse in CoolDesk`}
+${isActive ? 'Click to close' : 'Click to browse in CoolDesk'}`}
     >
       <div className={`folder-chip-icon ${colorClass}`}>
         <FontAwesomeIcon icon={faFolder} />
