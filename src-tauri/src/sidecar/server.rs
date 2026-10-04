@@ -236,6 +236,10 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/cooldesk/discover", get(get_cooldesk_discover))
         // Project linking (star/hub group.json) — the one .cooldesk/ write path
         .route("/cooldesk/link", post(post_cooldesk_link))
+        // Personal (gitignored) / shared (committed) project resources
+        .route("/cooldesk/resources", post(post_cooldesk_resources))
+        // Live dev servers by project — read-only; start/stop are Tauri commands
+        .route("/local/servers", get(get_local_servers))
         // Plugin -> app push: a .cooldesk/ folder was created or changed
         .route("/cooldesk/announce", post(post_cooldesk_announce))
         .route("/notes", get(get_notes).post(post_notes))

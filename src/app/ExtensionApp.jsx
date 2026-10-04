@@ -156,6 +156,18 @@ export default function ExtensionApp() {
     try { localStorage.setItem('wallpaperUrl', nextWallpaper); } catch { }
   }, []);
 
+  // Next curated wallpaper, in list order (wraps; a custom URL starts from the
+  // top). The one after it is preloaded so the following click swaps instantly.
+  const nextWallpaper = () => {
+    const list = CURATED_WALLPAPER_URLS;
+    if (!list.length) return;
+    const i = list.indexOf(wallpaperUrl);
+    const next = list[(i + 1) % list.length];
+    setWallpaperUrl(next);
+    try { localStorage.setItem('wallpaperUrl', next); } catch { }
+    new Image().src = list[(i + 2) % list.length];
+  };
+
   // Load settings
   useEffect(() => {
     (async () => {
@@ -195,17 +207,32 @@ export default function ExtensionApp() {
           onAddUrlToWorkspace={handleAddUrlToWorkspace}
         /> */}
 
-        {/* Floating Settings Button */}
-        <button
-          className="cooldesk-settings-btn"
-          onClick={() => setShowSettings(true)}
-          title="Settings"
-          style={{ position: 'fixed', top: 16, right: 16, zIndex: 100 }}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
-          </svg>
-        </button>
+        {/* Floating top-right buttons: next wallpaper (only when a wallpaper is on) + settings */}
+        <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 100, display: 'flex', gap: 8 }}>
+          {wallpaperEnabled && (
+            <button
+              className="cooldesk-settings-btn"
+              onClick={nextWallpaper}
+              title="Next wallpaper"
+              aria-label="Next wallpaper"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="3" />
+                <circle cx="9" cy="9" r="1.5" />
+                <path d="M21 15l-5-5L5 21" />
+              </svg>
+            </button>
+          )}
+          <button
+            className="cooldesk-settings-btn"
+            onClick={() => setShowSettings(true)}
+            title="Settings"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+            </svg>
+          </button>
+        </div>
 
         {/* Settings Modal */}
         {showSettings && (

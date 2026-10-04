@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { allAdapters, buildPrompt, buildSpec, extractReply, parseActions } from './aiAdapters';
-import { buildScaffoldPrompt, buildScaffoldSpec } from './workspaceScaffold';
+import { allAdapters, buildPrompt, buildSpec, createOutputParser, extractReply, parseActions, partialReply } from './aiAdapters';
+import { buildScaffoldPrompt, buildScaffoldSpec, SCAFFOLD_OUTPUT_FORMAT } from './workspaceScaffold';
 import { validateActions } from '../../services/workspaceActions';
 
 const isTauri = () =>
@@ -49,7 +49,7 @@ export function useAiCli() {
   const [history, setHistory] = useState(loadHistory);
 
   const activeRef = useRef(null);   // id of the turn currently streaming
-  const bufferRef = useRef('');
+  const parserRef = useRef(null);   // createOutputParser() for the active run
   const unlistenRef = useRef([]);
   const turnsRef = useRef([]);      // mirror, so run() can read history without re-binding
 
@@ -99,7 +99,11 @@ export function useAiCli() {
   // other: a member links against the hub, which must exist on disk first).
   // Existing fire-and-forget callers (plain /agent chat) just don't await it.
   const run = useCallback((request, workspaces, cwd, opts = {}) => {
-    if (!request?.trim() || running) return Promise.resolve({ id: null, error: 'A run is already in progress.' });
+    // activeRef, not the `running` state: callers that await one run and
+    // start the next (the scaffold loop) hold a closure from before the first
+    // run, so `running` there is stale either way.
+    if (!request?.trim()) return Promise.resolve({ id: null, error: 'Nothing to ask.' });
+    if (activeRef.current) return Promise.resolve({ id: null, error: 'A run is already in progress.' });
     // 'scaffold' is the /agent panel's "Create workspace" action: a one-shot
     // Claude Code run with Write/Edit allowed against a real project folder,
     // entirely separate from the sandboxed workspace-record chat below (see
@@ -107,7 +111,9 @@ export function useAiCli() {
     const scaffold = opts.mode === 'scaffold';
 
     const id = `run-${Date.now()}`;
-    const turn = { id, request: request.trim(), lines: [], reply: '', proposal: null, error: null, running: true };
+    // `lines` are progress/diagnostic lines (tool calls, stderr); `partial` is
+    // the answer as it streams in, replaced by `reply` once the run ends.
+    const turn = { id, request: request.trim(), contextNote: opts.contextNote || null, lines: [], partial: '', reply: '', proposal: null, outcome: null, error: null, running: true };
 
     if (!isTauri()) {
       const error = 'The AI CLI only runs in the desktop app.';
@@ -125,8 +131,10 @@ export function useAiCli() {
     });
 
     const priorTurns = turnsRef.current;
+    const adapterFormat = scaffold ? SCAFFOLD_OUTPUT_FORMAT : adapter.format;
+    const label = scaffold ? 'Claude Code' : adapter.label;
     activeRef.current = id;
-    bufferRef.current = '';
+    parserRef.current = createOutputParser(scaffold ? SCAFFOLD_OUTPUT_FORMAT : adapter.format);
     setTurns(prev => [...prev, turn]);
     setRunning(true);
 
@@ -141,10 +149,20 @@ export function useAiCli() {
           const onOutput = await listen('ai-cli-output', (e) => {
             const p = e.payload;
             if (!p || p.id !== activeRef.current) return;
-            if (p.stream === 'stdout') bufferRef.current += p.line + '\n';
-            setTurns(prev => prev.map(t =>
-              t.id === p.id ? { ...t, lines: [...t.lines, { stream: p.stream, text: p.line }] } : t
-            ));
+            const update = p.stream === 'stdout'
+              ? parserRef.current.push(p.line)
+              : { status: p.line };
+            const isPlain = p.stream === 'stdout' && !adapterFormat;
+            if (!update.status && update.partial == null) return;
+            setTurns(prev => prev.map(t => {
+              if (t.id !== p.id) return t;
+              const next = { ...t };
+              // A plain-text CLI's stdout *is* the answer, so it streams as
+              // the partial reply rather than also echoing as status lines.
+              if (update.status && !isPlain) next.lines = [...t.lines, { stream: p.stream, text: update.status }];
+              if (update.partial != null) next.partial = partialReply(update.partial);
+              return next;
+            }));
           });
 
           const onDone = await listen('ai-cli-done', (e) => {
@@ -155,26 +173,25 @@ export function useAiCli() {
             activeRef.current = null;
             teardown();
 
-            if (p.error) {
-              patchTurn(p.id, { running: false, error: p.error });
-              resolve({ id: p.id, error: p.error });
-              return;
-            }
-            if (p.code !== 0 && p.code !== null) {
-              const error = `${adapter.label} exited with code ${p.code}`;
-              patchTurn(p.id, { running: false, error });
+            const out = parserRef.current.result();
+            parserRef.current = null;
+            if (p.error || out.error || (p.code !== 0 && p.code !== null)) {
+              // Prefer the CLI's own explanation (a stream-json error result,
+              // e.g. "not logged in") over a bare exit code.
+              const error = out.error || p.error || `${label} exited with code ${p.code}`;
+              patchTurn(p.id, { running: false, partial: '', error });
               resolve({ id: p.id, error });
               return;
             }
 
             // No action list is the *normal* case now — most messages are plain
             // conversation. Only the prose is required; a proposal is a bonus.
-            const raw = bufferRef.current;
+            const raw = out.text;
             const parsed = parseActions(raw);
             const reply = extractReply(raw);
             const proposal = parsed ? { ...validateActions(parsed), raw } : null;
             const error = (!reply && !parsed) ? 'The agent returned nothing — see the output below.' : null;
-            patchTurn(p.id, { running: false, reply, proposal, error });
+            patchTurn(p.id, { running: false, partial: '', reply, proposal, error });
 
             // Keep the answer alongside the question. Only the prose is stored:
             // raw stdout can be thousands of lines, and a *proposal* is
@@ -206,7 +223,7 @@ export function useAiCli() {
         }
       })();
     });
-  }, [adapter, running, teardown, patchTurn]);
+  }, [adapter, teardown, patchTurn]);
 
   const cancel = useCallback(async () => {
     const id = activeRef.current;
@@ -217,14 +234,26 @@ export function useAiCli() {
     } catch (e) {
       console.warn('[AiCli] cancel failed:', e);
     }
-    patchTurn(id, { running: false, error: 'Stopped.' });
+    // Keep whatever had streamed so far — it's still worth reading.
+    setTurns(prev => prev.map(t => (t.id === id
+      ? { ...t, running: false, reply: t.partial || t.reply, partial: '', error: 'Stopped.' }
+      : t)));
     setRunning(false);
     activeRef.current = null;
+    parserRef.current = null;
     teardown();
-  }, [teardown, patchTurn]);
+  }, [teardown]);
 
-  /** Drop a turn's proposal once it has been applied or dismissed. */
-  const clearProposal = useCallback((id) => patchTurn(id, { proposal: null }), [patchTurn]);
+  /**
+   * Drop a turn's proposal once it has been applied or dismissed. The outcome
+   * is kept so the next prompt can tell the agent what actually happened to
+   * it (see buildHistory) — "undo that" means nothing otherwise.
+   */
+  const clearProposal = useCallback((id, status = 'discarded') => {
+    setTurns(prev => prev.map(t => (t.id === id && t.proposal
+      ? { ...t, proposal: null, outcome: { status, count: t.proposal.valid.length } }
+      : t)));
+  }, []);
 
   /** Reopen a past exchange as the transcript, so its answer is readable again. */
   const restoreFromHistory = useCallback((entry) => {
@@ -234,7 +263,9 @@ export function useAiCli() {
       request: entry.text,
       reply: entry.reply || '',
       lines: [],
+      partial: '',
       proposal: null,
+      outcome: null,
       error: entry.reply ? null : 'No answer was recorded for this request.',
       running: false,
     }]);
@@ -248,7 +279,6 @@ export function useAiCli() {
   /** Wipe the transcript (leaving the mode active). */
   const reset = useCallback(() => {
     setTurns([]);
-    bufferRef.current = '';
   }, []);
 
   return {

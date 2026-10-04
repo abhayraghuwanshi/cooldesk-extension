@@ -54,6 +54,10 @@ export async function fetchCooldesk(projectPath) {
             decisions: raw.decisions ?? null,
             // `.cooldesk/notes/*.md` with contents ([{ name, content }]).
             notes: Array.isArray(raw.notes) ? raw.notes : [],
+            // Personal resources from `.cooldesk/local/resources.json` —
+            // gitignored, so local file paths and browsing-derived links live
+            // here instead of the committed manifest above.
+            localResources: Array.isArray(raw.local?.resources) ? raw.local.resources : [],
             docs: raw.docs || {},
             // Linking: a hub project's group + resolved member projects (star model).
             group: raw.group || null,
@@ -127,6 +131,38 @@ export async function linkCooldeskProject(hubPath, memberPath, opts = {}) {
  * @param {string} projectPath project root that owns the `.cooldesk/` folder
  * @returns {Promise<{ ok: boolean, path?: string, error?: string }>}
  */
+/**
+ * Add/remove a project's resources.
+ *
+ * `scope: 'local'` → `.cooldesk/local/resources.json`, personal and gitignored
+ * (the sidecar adds the ignore rule itself and refuses to write if git would
+ * still pick the file up). `scope: 'shared'` → `cooldesk.json` resources,
+ * committed for teammates; the sidecar rejects absolute/`file:` paths there.
+ * Announces on success so every open `.cooldesk/` reader refreshes.
+ *
+ * @param {string} projectPath
+ * @param {{scope: 'local'|'shared', add?: object[], remove?: string[]}} change
+ * @returns {Promise<{ok: true, cooldesk: object} | {ok: false, error: string}>}
+ */
+export async function updateCooldeskResources(projectPath, { scope, add = [], remove = [] }) {
+    if (!projectPath) return { ok: false, error: 'Missing project path' };
+    try {
+        const res = await fetch(`${SIDECAR_URL}/cooldesk/resources`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: projectPath, scope, add, remove }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok || !body?.ok) {
+            return { ok: false, error: body?.error || `Request failed (${res.status})` };
+        }
+        await announceCooldesk(projectPath);
+        return { ok: true, cooldesk: body.cooldesk };
+    } catch (err) {
+        return { ok: false, error: err?.message || String(err) };
+    }
+}
+
 export async function announceCooldesk(projectPath) {
     if (!projectPath) return { ok: false, error: 'Missing project path' };
     try {
@@ -243,6 +279,7 @@ function emptyShape() {
         project: null, resources: [], dock: null, sidebar: null, auto: null,
         todos: [], commands: [], services: [],
         readme: null, architecture: null, decisions: null, notes: [], docs: {},
+        localResources: [],
         group: null, members: [],
     };
 }

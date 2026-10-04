@@ -6,7 +6,7 @@
 const BADGE_COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899'];
 
 /** Last path segment without extension: "crates/control-plane" → "control-plane". */
-function baseName(nameOrPath) {
+export function baseName(nameOrPath) {
   const last = String(nameOrPath || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
   return last.replace(/\.[a-z0-9]{1,6}$/i, '') || last;
 }
@@ -16,7 +16,7 @@ function baseName(nameOrPath) {
  * "reddit-posts" → "RP"), or the first two letters of a single word
  * ("common" → "Co"), so siblings like common/control-plane still differ.
  */
-function itemInitials(nameOrPath) {
+export function itemInitials(nameOrPath) {
   const base = baseName(nameOrPath);
   const words = base.split(/[^a-z0-9]+/i).filter(Boolean);
   if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
@@ -25,7 +25,7 @@ function itemInitials(nameOrPath) {
 }
 
 /** Stable color per item, from its path (or name) — same item, same color everywhere. */
-function itemColor(key) {
+export function itemColor(key) {
   const s = String(key || '');
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;

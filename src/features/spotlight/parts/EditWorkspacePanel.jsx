@@ -20,7 +20,9 @@ export function EditWorkspacePanel({
     // needing to know anything about this panel's toolbar.
     const noteEditorRef = useRef(null);
 
-    const itemsCount = (editWorkspace.workspace.urls?.length || 0) + (editWorkspace.workspace.apps?.length || 0);
+    // Links/apps lead editWorkspaceItems — the workspace's own, then its
+    // project's .cooldesk ones — so count them from the list itself.
+    const itemsCount = editWorkspaceItems.filter(it => it.kind === 'url' || it.kind === 'app').length;
     const todosCount = editWorkspace.todos.length;
     const items = editWorkspaceItems.slice(0, itemsCount);
     const activeNote = editWorkspace.activeNoteId
@@ -145,6 +147,11 @@ export function EditWorkspacePanel({
                 const resultItem = it.kind === 'url'
                     ? { id: `url:${it.url}`, type: 'bookmark', title: it.name, url: it.url }
                     : { id: `app:${it.path}`, type: it.appType === 'folder' ? 'folder' : (it.appType === 'file' ? 'file' : 'app'), title: it.name, path: it.path, icon: it.icon };
+                // .cooldesk items: say where they come from in the subtitle.
+                if (it._cd) {
+                    const where = it.kind === 'url' ? formatUrl(it.url) : String(it.path || '').split(/[/\\]/).pop();
+                    resultItem.description = `.cooldesk · ${where}`;
+                }
                 return (
                     <ResultItem
                         key={resultItem.id}
@@ -153,7 +160,8 @@ export function EditWorkspacePanel({
                         isSelected={!query.trim() && i === selectedIndex}
                         onSelect={() => openExistingWorkspaceItem(it)}
                         onHover={setSelectedIndex}
-                        onRemove={() => (it.kind === 'url' ? editWorkspace.removeUrl(it.url) : editWorkspace.removeApp(it.path))}
+                        // Committed in the repo — not removable from here.
+                        onRemove={it._cd ? undefined : () => (it.kind === 'url' ? editWorkspace.removeUrl(it.url) : editWorkspace.removeApp(it.path))}
                         formatUrl={formatUrl}
                         getBadgeLabel={getBadgeLabel}
                         getAppIcon={getAppIcon}

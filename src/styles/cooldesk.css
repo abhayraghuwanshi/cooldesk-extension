@@ -1231,6 +1231,31 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
      neutral border/hover from the base rules. */
 }
 
+/* Readable text on accent-tinted surfaces. The --card-text-* / --card-accent-text
+   vars are set inline next to --card-accent / --tile-accent by accentTextVars()
+   (utils/readableColor.js): APCA-checked against the tint mixed over the glass
+   base, so a light or dark accent never washes out the text on top of it.
+   Mapping them onto the theme's --text-* tokens lets every existing rule inside
+   the surface pick them up without per-rule changes. */
+.cooldesk-workspace-card.has-accent,
+.workspace-context-panel.has-accent,
+.overview-left-column.has-accent,
+.overview-activity-column.has-accent,
+.wgb-tile.has-accent {
+  --text-primary: var(--card-text-1);
+  --text-secondary: var(--card-text-2);
+  --text-muted: var(--card-text-3);
+}
+body.bg-white-cred .cooldesk-workspace-card.has-accent,
+body.bg-white-cred .workspace-context-panel.has-accent,
+body.bg-white-cred .overview-left-column.has-accent,
+body.bg-white-cred .overview-activity-column.has-accent,
+body.bg-white-cred .wgb-tile.has-accent {
+  --text-primary: var(--card-text-1-light);
+  --text-secondary: var(--card-text-2-light);
+  --text-muted: var(--card-text-3-light);
+}
+
 .workspace-card-header {
   display: flex;
   align-items: flex-start;
@@ -2843,7 +2868,161 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 .cooldesk-workspace-card.compact:not(.panel-open) .compact-icons-container {
   flex-wrap: nowrap;
   padding-left: 8px;
+  /* max-content so the sticky scroll arrows below have the whole row as their
+     containing block (a viewport-wide box would pin the right arrow mid-row),
+     and so the card's ResizeObserver sees the content grow. Centered so the
+     taller labeled pills and the round icons share one midline. */
+  width: max-content;
+  min-width: 100%;
+  box-sizing: border-box;
+  align-items: center;
 }
+
+/* Folder / file / project tiles in the collapsed row (WorkspaceCard
+   renderPlaceTile): the favicon plate showing the folder's stack logo. Same
+   footprint as a link icon — no caption (the name shows in the card title on
+   hover, like a link's), so rows keep one height. */
+.compact-place-tile {
+  display: flex;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.compact-place-icon {
+  overflow: visible;
+}
+.compact-place-tile:hover .compact-place-icon {
+  transform: translateY(-2px) scale(1.06);
+}
+/* Stack logo — sized like the link favicons' artwork. Black "original"
+   logos (Rust, Markdown, Next) are inverted to show on the dark plate. */
+.compact-place-logo {
+  width: calc(var(--font-5xl) * 0.72) !important;
+  height: calc(var(--font-5xl) * 0.72) !important;
+  object-fit: contain;
+  pointer-events: none;
+}
+.compact-place-logo.is-inverted {
+  filter: invert(1) brightness(0.92);
+}
+.compact-place-fallback {
+  font-size: calc(var(--font-5xl) * 0.62);
+  color: rgba(203, 213, 225, 0.88);
+  pointer-events: none;
+}
+/* Folder tab on top of the plate — the one cue that this logo is a folder,
+   not a website. */
+.compact-place-tab {
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 3px;
+  border-radius: 2px 2px 0 0;
+  background: rgba(148, 163, 184, 0.32);
+  pointer-events: none;
+}
+/* One badge on the plate's foot: git branch, or the live dev-server port. */
+.compact-place-badge {
+  position: absolute;
+  /* Inside the plate's bottom edge, not straddling its border. */
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 6px);
+  padding: 0 4px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #151a26;
+  color: #cbd5e1;
+  font: 600 8.5px/1.35 ui-monospace, 'SF Mono', Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: auto;
+}
+.compact-place-badge i {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 3px;
+  border-radius: 50%;
+  background: #fbbf24;
+  vertical-align: 1px;
+}
+.compact-place-badge.is-live {
+  cursor: pointer;
+  color: #86efac;
+  background: #0f1a14;
+  border-color: rgba(74, 222, 128, 0.45);
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.25);
+}
+.compact-place-badge.is-live i {
+  background: #4ade80;
+  box-shadow: 0 0 5px #4ade80;
+}
+.compact-place-badge.is-live:hover {
+  border-color: rgba(74, 222, 128, 0.8);
+  color: #bbf7d0;
+}
+/* Uncommitted changes on main/master: just an amber dot, bottom-right. */
+.compact-place-dirty {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fbbf24;
+  box-shadow: 0 0 0 2px rgba(22, 24, 30, 0.9);
+  pointer-events: auto;
+}
+.compact-place-icon.is-live {
+  border-color: rgba(74, 222, 128, 0.5) !important;
+}
+.compact-place-tile.is-missing {
+  opacity: 0.45;
+}
+
+/* Overflowing collapsed row: the edge tiles fade out (a mask, so it works
+   over any card background — glass, accent tint, theme) and a small ‹ ›
+   sits on the fade. The arrows are siblings of the scroller, positioned from
+   its measured box (WorkspaceCard rowScroll), so the mask doesn't touch them. */
+.cooldesk-workspace-card.compact:not(.panel-open) .compact-icons-scroll {
+  --fade-l: 0px;
+  --fade-r: 0px;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%);
+}
+.cooldesk-workspace-card.compact:not(.panel-open) .compact-icons-scroll.fade-left { --fade-l: 44px; }
+.cooldesk-workspace-card.compact:not(.panel-open) .compact-icons-scroll.fade-right { --fade-r: 44px; }
+
+.compact-scroll-arrow {
+  position: absolute;
+  z-index: 4;
+  width: 22px;
+  height: 22px;
+  margin-top: -11px;
+  padding: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(22, 24, 30, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  color: #cbd5e1;
+  font-size: 9px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.compact-scroll-arrow:hover {
+  background: rgba(139, 92, 246, 0.35);
+  border-color: rgba(167, 139, 250, 0.55);
+  color: #fff;
+}
+.compact-scroll-arrow.is-left { margin-left: 2px; }
+.compact-scroll-arrow.is-right { margin-left: -24px; }
 
 @media (max-width: 500px) {
   /* Tighter leading padding once the title stacks above the row. Matched to
@@ -2965,10 +3144,10 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 
   .cooldesk-workspace-card.compact.panel-open .compact-card-inner {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr auto auto;
     grid-template-areas:
-      "title btn"
-      "icons icons";
+      "title edit btn"
+      "icons icons icons";
     gap: 8px 10px;
     /* Don't let the card shrink this below its content — otherwise the icon rows
        (overflow: visible) spill down over the STATUS/notes panel. Both this and
@@ -3011,7 +3190,10 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   }
 
   .cooldesk-workspace-card.compact.panel-open .wcp-grid {
-    grid-template-columns: 1fr;
+    /* minmax(0, …), not plain 1fr: a 1fr track can't shrink below its
+       content's min-content width, so a wide note table pushed the whole
+       column (and the card) past the sidebar's edge. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 14px;
     height: auto;
   }
@@ -3278,6 +3460,19 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 .item-remove-btn.is-inline:hover {
   background: rgba(248, 113, 113, 0.2);
   color: #f87171;
+}
+
+/* Labeled rows (expanded / full view) stay neutral like the link rows; the
+   app icon or stack logo carries the color. The purple plate above is for
+   the icon-only tiles, where it marks "app" at a glance. */
+.compact-app-icon.is-labeled {
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+.compact-app-icon.is-labeled:hover {
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  background: rgba(255, 255, 255, 0.09) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
 
 .compact-app-icon img {
@@ -3576,8 +3771,11 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   gap: 24px;
   /* Two-pane app layout: the grid is a fixed viewport-height frame and each
      column scrolls on its OWN inside it (widget rail + activity feed scroll
-     independently). Below 600px this switches to page-scroll (see @container). */
-  height: calc(100vh - 96px);
+     independently). Below 600px this switches to page-scroll (see @container).
+     Height budget: .popup-wrap's top padding (16–24px) + the 64px margin-top
+     above, leaving ~32px clear at the bottom. (It was 100vh - 96px, which with
+     the wrapper padding left the cards ~8px from the screen edge.) */
+  height: calc(100vh - 120px);
   overflow: hidden;
   margin-top: 64px;
   /* Readable line lengths on ultrawide monitors — cap and center. */
@@ -3842,16 +4040,33 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   -webkit-backdrop-filter: none;
 }
 
-/* The feed's sticky tab-switcher bar carries its own solid backing (inline,
-   see ActivityFeed.jsx) so scrolling rows don't bleed through it. Rides the
-   same --colorless-opacity knob, offset darker since rows scroll directly
-   underneath it and need it to stay legible above them; alpha channels over
-   1 are clamped to opaque by the browser, so the +0.2 offset is safe even at
-   the slider's max. No blur, matching the column rule above. */
-.overview-activity-column.is-colorless .activity-feed-sticky-tabs {
-  background: rgba(11, 11, 14, calc(var(--colorless-opacity, 0.55) + 0.2)) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
+/* …and with no blur, busy wallpaper detail sits right behind the text. The
+   column's inline vars come from colorlessTextVars() (utils/readableColor.js),
+   which measures the sampled wallpaper + its opacity + the darkness slider:
+   --card-text-* are the lowest text alphas that still read on that stack, and
+   --legibility-shadow (0–1) grows as the slider goes lighter / the wallpaper
+   brighter. text-shadow inherits, so it also reaches text with hardcoded
+   colours that the --text-* tokens don't. Unset vars (wallpaper off) keep the
+   theme tokens and a faint halo. */
+.overview-left-column.is-colorless,
+.overview-activity-column.is-colorless {
+  --text-primary: var(--card-text-1, #e5e7eb);
+  --text-secondary: var(--card-text-2, #9ca3af);
+  --text-muted: var(--card-text-3, #6b7280);
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, calc(0.15 + 0.6 * var(--legibility-shadow, 0))),
+    0 0 10px rgba(0, 0, 0, calc(0.5 * var(--legibility-shadow, 0)));
+}
+
+/* The feed's sticky tab-switcher only gets a backing once rows scroll under
+   it (.is-stuck, see ActivityFeed.jsx). In colorless mode it rides the same
+   --colorless-opacity knob, offset darker since rows sit directly underneath;
+   alpha over 1 is clamped, so +0.2 is safe at the slider's max. No blur,
+   matching the column rule above. */
+.overview-activity-column.is-colorless .activity-feed-sticky-tabs.is-stuck {
+  background: rgba(11, 11, 14, calc(var(--colorless-opacity, 0.55) + 0.2));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 /* Floating trigger — hidden until the column is hovered, portaled popover
@@ -4326,14 +4541,75 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 .cooldesk-workspace-card.compact.full-view .compact-icons-container {
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
+  gap: 4px;
 }
 
 .cooldesk-workspace-card.compact.full-view .compact-url-icon.is-labeled {
   width: 100% !important;
   max-width: none;
-  border-radius: 12px;
-  padding: 7px 12px 7px 8px;
+  border-radius: 10px;
+  padding: 6px 10px 6px 8px;
+}
+
+/* Folder / file / project rows (WorkspaceCard renderPlaceRow): stack logo,
+   name, and — right-aligned — a live dev-server port or non-default branch,
+   or just an amber dot for uncommitted changes on main/master. */
+.compact-place-row img.is-inverted {
+  filter: invert(1) brightness(0.92);
+}
+.compact-place-row-glyph {
+  width: 24px !important;
+  flex-shrink: 0;
+  font-size: 16px;
+  color: rgba(203, 213, 225, 0.8);
+}
+.compact-place-row-badge {
+  flex-shrink: 0;
+  margin-left: auto;
+  max-width: 45%;
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+  font: 600 10px/1.4 ui-monospace, 'SF Mono', Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.compact-place-row-badge i {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: #fbbf24;
+  vertical-align: 1px;
+}
+.compact-place-row-badge.is-live {
+  cursor: pointer;
+  color: #86efac;
+  background: rgba(74, 222, 128, 0.08);
+  border-color: rgba(74, 222, 128, 0.45);
+}
+.compact-place-row-badge.is-live i {
+  background: #4ade80;
+  box-shadow: 0 0 5px #4ade80;
+}
+.compact-place-row-badge.is-live:hover {
+  border-color: rgba(74, 222, 128, 0.8);
+  color: #bbf7d0;
+}
+.compact-place-row-dirty {
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fbbf24;
+}
+.compact-place-row.is-missing {
+  opacity: 0.5;
 }
 
 /* Header (icon + name + collapse chevron) on its own row, item rows spanning
@@ -4342,10 +4618,10 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
    below then read as two differently-indented columns. */
 .cooldesk-workspace-card.compact.full-view .compact-card-inner {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   grid-template-areas:
-    "title btn"
-    "icons icons";
+    "title edit btn"
+    "icons icons icons";
   gap: 8px 10px;
   padding: 12px var(--detail-gutter, 18px);
 }
@@ -4505,6 +4781,18 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   background: rgba(139, 92, 246, 0.16);
   border-color: rgba(139, 92, 246, 0.5);
   color: #c4b5fd;
+}
+
+/* Edit sits just left of the collapse chevron in the opened card's header row
+   (grid area `edit`; the chevron is `btn`). Shares the chevron's box style. */
+.cooldesk-workspace-card.compact.panel-open .compact-edit-btn,
+.cooldesk-workspace-card.compact.full-view .compact-edit-btn {
+  grid-area: edit;
+  margin-left: 0;
+  font-size: 10px;
+}
+.cooldesk-workspace-card.compact:not(.panel-open) .compact-edit-btn {
+  display: none;
 }
 
 .compact-expand-btn.is-open {
@@ -6276,7 +6564,7 @@ body.bg-white-cred .workspace-context-panel.has-accent {
 /* Two-column working grid */
 .wcp-grid {
   display: grid;
-  grid-template-columns: minmax(220px, 300px) 1fr;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
   gap: 22px;
   height: 100%;
   min-height: 0;
@@ -6333,7 +6621,8 @@ body.bg-white-cred .workspace-context-panel.has-accent {
 .wcp-section-head[data-accent="todos"]  { color: #f59e0b; }
 .wcp-section-head[data-accent="notes"]  { color: #a78bfa; }
 .wcp-section-head[data-accent="cooldesk"] { color: #2dd4bf; }
-.wcp-section-head[data-accent="color"] { color: var(--card-accent, #94a3b8); }
+.wcp-section-head[data-accent="color"] { color: var(--card-accent-text, var(--card-accent, #94a3b8)); }
+body.bg-white-cred .wcp-section-head[data-accent="color"] { color: var(--card-accent-text-light, var(--card-accent, #94a3b8)); }
 
 /* ── CoolDesk project section (.cooldesk reader) ─────────────────────── */
 .cdk-section {
@@ -6451,6 +6740,9 @@ body.bg-white-cred .workspace-context-panel.has-accent {
 /* Shared todos (from .cooldesk) merged into the Next Up list — read-only, teal-tinted */
 .wcp-todo-row.is-shared {
   cursor: default;
+}
+.wcp-todo-row.is-shared .wcp-todo-shared-dot {
+  margin-top: 4px;
 }
 .wcp-todo-shared-dot {
   width: 7px; height: 7px; border-radius: 50%;
@@ -6582,7 +6874,8 @@ body.bg-white-cred .workspace-context-panel.has-accent {
 
 .wcp-todo-row {
   display: flex;
-  align-items: center;
+  /* Long tasks wrap (see .wcp-todo-text), so pin the check/dot/× to line 1. */
+  align-items: flex-start;
   gap: 10px;
   padding: 6px 6px 6px 8px;
   border-radius: 8px;
@@ -6626,9 +6919,10 @@ body.bg-white-cred .workspace-context-panel.has-accent {
   color: #e2e8f0;
   line-height: 1.35;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Wrap in full rather than ellipsize: rows aren't editable in place, so a
+     cut-off task had no way to be read. */
+  white-space: normal;
+  overflow-wrap: anywhere;
   transition: color 160ms ease;
 }
 .wcp-todo-row.is-done .wcp-todo-text {
@@ -7072,7 +7366,15 @@ body.bg-white-cred .workspace-context-panel.has-accent {
    to the workspace note so NotesCanvas keeps its own roomy padding. */
 .wcp-note-tiptap .tiptap-content {
   padding: 0 0 32px;
+  /* .wcp-note-tiptap is the scroller here (or, at sidebar widths, the card
+     itself). The shared editor makes .tiptap-content a second scroll container
+     with overscroll-behavior: contain, which swallows wheel events even when
+     it has nothing to scroll, so the note/doc under the cursor wouldn't scroll
+     the card. */
+  overflow: visible;
+  overscroll-behavior: auto;
 }
+.wcp-note-tiptap { min-width: 0; }
 .wcp-note-tiptap::-webkit-scrollbar { width: 6px; }
 .wcp-note-tiptap::-webkit-scrollbar-thumb {
   background: rgba(148, 163, 184, 0.16);
@@ -7158,6 +7460,32 @@ body.bg-white-cred .workspace-context-panel.has-accent {
   text-decoration-color: rgba(167, 139, 250, 0.4);
   text-underline-offset: 2px;
 }
+/* Tables: scroll sideways inside the note instead of widening the panel.
+   Editable notes get Tiptap's .tableWrapper (already overflow-x: auto); the
+   read-only shared doc view has no wrapper, so the bare table scrolls itself. */
+.wcp-note-tiptap .ProseMirror .tableWrapper { max-width: 100%; margin: 0.6em 0; }
+.wcp-note-tiptap .ProseMirror > table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 0.6em 0;
+}
+.wcp-note-tiptap .ProseMirror table { font-size: 0.92em; border-radius: 8px; }
+.wcp-note-tiptap .ProseMirror td,
+.wcp-note-tiptap .ProseMirror th {
+  min-width: 72px;
+  padding: 6px 9px;
+  vertical-align: top;
+  overflow-wrap: break-word;
+}
+.wcp-note-tiptap .ProseMirror th {
+  padding: 7px 9px;
+  font-size: 0.92em;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.wcp-note-tiptap .ProseMirror td p,
+.wcp-note-tiptap .ProseMirror th p { margin: 0; }
 .wcp-note-tiptap .ProseMirror hr {
   border: none;
   border-top: 1px dashed rgba(148, 163, 184, 0.18);
@@ -7166,6 +7494,621 @@ body.bg-white-cred .workspace-context-panel.has-accent {
 
 /* Stack to single column when the card is narrow */
 @media (max-width: 720px) {
-  .wcp-grid { grid-template-columns: 1fr; gap: 16px; }
+  .wcp-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .wcp-notes-col { border-left: none; padding-left: 0; padding-top: 16px; border-top: 1px solid rgba(148, 163, 184, 0.08); }
+}
+
+/* ── Finder → workspace drop (WorkspaceFileDrop.jsx) ───────────────────────
+   The card / detail view / dock bar under the cursor while files are dragged
+   in from the OS. Class toggled directly on the element, not via React. */
+.is-file-drop-target {
+  outline: 2px dashed rgba(139, 92, 246, 0.85) !important;
+  outline-offset: 2px;
+  background-color: rgba(139, 92, 246, 0.08) !important;
+  transition: outline-color 0.1s ease, background-color 0.1s ease;
+}
+
+.workspace-drop-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 10070;
+  max-width: calc(100vw - 32px);
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(15, 15, 22, 0.94);
+  border: 1px solid rgba(139, 92, 246, 0.45);
+  color: #f1f5f9;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  animation: workspace-drop-toast-in 0.18s ease;
+}
+.workspace-drop-toast.is-info { border-color: rgba(148, 163, 184, 0.4); }
+.workspace-drop-toast.is-error { border-color: rgba(239, 68, 68, 0.6); }
+@keyframes workspace-drop-toast-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ── Activity feed: Suites tab — icon tiles, one per service ──────────────
+   Services under one org (mail./drive./calendar.google.com) are recognised by
+   their own favicon; the page title is in the tooltip, not on the tile.
+   --tint is set per tile from the icon's dominant colour (utils/iconTint.js). */
+.suite-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 2px 6px;
+  padding: 4px 12px 14px;
+}
+.suite-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 2px 6px;
+  border-radius: 12px;
+  cursor: pointer;
+  outline: none;
+  transition: background 0.18s ease;
+}
+.suite-tile:focus-visible { background: rgba(255, 255, 255, 0.05); }
+.suite-tile-icon {
+  --tint: 148, 163, 184;            /* rgb, set per icon from its favicon (TileIcon) */
+  position: relative;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 55%),
+    rgba(var(--tint), 0.16);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--tint), 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.18s cubic-bezier(.2, .8, .2, 1), box-shadow 0.18s ease, background 0.18s ease;
+}
+.suite-tile:hover .suite-tile-icon,
+.suite-tile:focus-visible .suite-tile-icon,
+.fav-tile:hover .suite-tile-icon,
+.fav-tile:focus-visible .suite-tile-icon {
+  transform: translateY(-2px);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0) 55%),
+    rgba(var(--tint), 0.24);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--tint), 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 6px 14px -4px rgba(var(--tint), 0.45);
+}
+.suite-tile:active .suite-tile-icon,
+.fav-tile:active .suite-tile-icon { transform: translateY(0) scale(0.96); }
+.suite-tile-img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  /* Square favicons with an opaque background (GitHub's white square) get
+     rounded corners, so they read as an icon rather than a pasted sticker. */
+  border-radius: 6px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3));
+}
+/* Dark, colourless favicons (see isDarkMonochrome in utils/iconTint.js). */
+.suite-tile-img.is-inverted {
+  filter: invert(1) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3));
+}
+.suite-tile-fallback {
+  font-size: 18px;
+  font-weight: 700;
+  color: rgb(var(--tint-text, var(--tint)));
+  letter-spacing: -0.02em;
+}
+.suite-tile-dot {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #34D399;
+  box-shadow: 0 0 0 2.5px var(--bg-primary, #0f172a), 0 0 8px rgba(52, 211, 153, 0.6);
+}
+.suite-tile-label {
+  max-width: 100%;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: rgba(226, 232, 240, 0.86);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.18s ease;
+}
+.suite-tile.is-open .suite-tile-label,
+.suite-tile:hover .suite-tile-label { color: var(--text-primary, #F1F5F9); }
+.suite-tile-close {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(30, 41, 59, 0.95);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 2px 6px rgba(0, 0, 0, 0.4);
+  color: #94A3B8;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 0.15s ease, transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.suite-tile:hover .suite-tile-close,
+.suite-tile:focus-within .suite-tile-close { opacity: 1; transform: scale(1); }
+.suite-tile-close:hover { background: #7f1d1d; color: #FECACA; }
+
+/* ── Activity feed: Search tab — app cards, two columns ──────────────────
+   Capped at two columns: each track is at least half the row, so a wide
+   panel still gives 2, and below ~360px it drops to 1 rather than squeezing
+   names to an ellipsis. */
+.search-apps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(max(170px, calc(50% - 4px)), 1fr));
+  gap: 8px;
+  padding: 4px 16px 4px; /* same 16px gutter as the tab bar above */
+  align-items: start;
+}
+
+.search-app-cell {
+  min-width: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);
+  overflow: hidden;
+  transition: box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.search-app-cell:hover {
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.16);
+}
+
+.search-app-cell.is-open {
+  box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.22);
+}
+
+/* Rows inside a card: the card is the hover target, not each row edge-to-edge. */
+.search-app-cell .feed-row { border-radius: 0; }
+.search-app-cell .feed-row + .feed-row { box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.06); }
+
+/* Hide/close buttons only take space while the card is hovered, so the app
+   name gets the full width of a half-column otherwise. */
+.search-app-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.search-app-cell:hover .search-app-actions,
+.search-app-cell:focus-within .search-app-actions {
+  width: auto;
+  opacity: 1;
+}
+
+/* ── Activity feed: tab switcher ───────────────────────────────────────────
+   Neutral segmented control — same white-on-glass language as the rest of
+   the overview (widget chips, tiles), not a lone blue accent. Transparent at
+   rest; a light blur only once content scrolls beneath it (.is-stuck). */
+.activity-feed-sticky-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 4px 16px 10px;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.activity-feed-sticky-tabs.is-stuck {
+  background: rgba(10, 10, 12, 0.45);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.feed-tabs {
+  display: inline-flex;
+  max-width: 100%;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  /* Eight tabs don't fit a narrow column — scroll sideways, no scrollbar. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.feed-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.feed-tab {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 12px;
+  background: transparent;
+  color: rgba(226, 232, 240, 0.6);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.feed-tab:hover {
+  color: rgba(241, 245, 249, 0.92);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.feed-tab.is-active {
+  color: #F8FAFC;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.11);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.feed-tab:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: 1px;
+}
+
+/* ── Activity feed: Favorites — the same tinted icon box as suite tiles,
+   icon only (title in the tooltip). */
+.fav-tile {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 13px;
+  cursor: pointer;
+  outline: none;
+}
+
+.fav-tile:focus-visible {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
+}
+
+/* ── Activity feed: Local tab — one card per project ──────────────────────
+   Live ports as chips (green dot), dead ones dimmed; "yours" = declared in
+   .cooldesk/services.json, the agent tag = started by an AI CLI. */
+.local-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 16px 12px;
+}
+
+.local-card {
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.local-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.16);
+}
+
+.local-card.is-running {
+  box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.22);
+}
+
+/* Not running: dim the identity, not the Start button. */
+.local-card:not(.is-running):not(.is-starting) .local-card-text,
+.local-card:not(.is-running):not(.is-starting) .suite-tile-icon {
+  opacity: 0.72;
+}
+
+.local-card-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  outline: none;
+}
+
+.local-card-main .suite-tile-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.local-card-main .suite-tile-img {
+  width: 20px;
+  height: 20px;
+}
+
+.local-card-main .suite-tile-fallback {
+  font-size: 15px;
+}
+
+.local-card-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.local-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #F1F5F9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.local-card-sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: rgba(203, 213, 225, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.local-card-sub.is-note {
+  color: #FBBF24;
+}
+
+.local-start-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(52, 211, 153, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.3);
+  color: #6EE7B7;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.local-start-btn:hover {
+  background: rgba(52, 211, 153, 0.24);
+}
+
+.local-start-btn svg {
+  font-size: 9px;
+}
+
+.local-starting-icon {
+  color: #6EE7B7;
+  font-size: 12px;
+}
+
+.local-confirm {
+  margin: 0 12px 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.local-confirm-text {
+  font-size: 11px;
+  color: rgba(203, 213, 225, 0.7);
+  margin-bottom: 8px;
+}
+
+.local-confirm-cmds {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.local-confirm-cmd {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary, #F1F5F9);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.local-confirm-cmd:hover {
+  background: rgba(52, 211, 153, 0.16);
+}
+
+.local-confirm-cmd code {
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.local-confirm-cmd span {
+  font-size: 11px;
+  color: rgba(203, 213, 225, 0.55);
+}
+
+.local-confirm-cancel {
+  margin-top: 6px;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: rgba(203, 213, 225, 0.6);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.local-ports {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 12px 10px 60px; /* aligned under the name, past the icon */
+}
+
+.local-port {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 4px 0 2px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+}
+
+.local-port.is-dead {
+  opacity: 0.55;
+}
+
+.local-port.is-dead.is-yours {
+  opacity: 0.8;
+  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.35);
+}
+
+.local-port-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary, #F1F5F9);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.local-port-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34D399;
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.6);
+}
+
+.local-port-tag {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(226, 232, 240, 0.75);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.local-port-tag.is-agent {
+  background: rgba(217, 119, 87, 0.18);
+  color: #F0A58A;
+}
+
+.local-port-x {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(148, 163, 184, 0.8);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.local-port-x:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #FCA5A5;
+}
+
+.local-port-confirm {
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: rgba(239, 68, 68, 0.25);
+  color: #FECACA;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.local-hint,
+.local-notice {
+  font-size: 11px;
+  color: rgba(203, 213, 225, 0.6);
+  padding: 2px 2px 4px;
+}
+
+.local-notice {
+  color: #6EE7B7;
+}
+
+.local-old-toggle {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(203, 213, 225, 0.6);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.local-old-toggle:hover {
+  color: var(--text-primary, #F1F5F9);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.local-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 20px;
+  color: #64748B;
+  font-size: var(--font-sm, 13px);
+}
+
+.local-empty svg {
+  font-size: 20px;
+  opacity: 0.5;
 }

@@ -40,6 +40,26 @@ function setState(patch) {
   listeners.forEach((fn) => {
     try { fn(state); } catch { /* a bad subscriber must not break the rest */ }
   });
+  if ('info' in patch) broadcastToHandle();
+}
+
+// The collapsed drawer handle (handle.html) is a separate, React-less window
+// that must not run its own check — that would double the heartbeat ping. So
+// whichever window actually checked tells it, and answers its "what's the
+// state?" ask on load in case the check finished before the handle listened.
+// Only a window that has really checked speaks up: another window importing
+// this module with a still-null `info` must not clear the handle's badge.
+function broadcastToHandle() {
+  if (!isTauri() || !lastCheckedAt) return;
+  import('@tauri-apps/api/event')
+    .then(({ emit }) => emit('update-state', { hasUpdate: !!state.info, latest: state.info?.latest || '' }))
+    .catch(() => {});
+}
+
+if (isTauri()) {
+  import('@tauri-apps/api/event')
+    .then(({ listen }) => listen('update-state-request', broadcastToHandle))
+    .catch(() => {});
 }
 
 export function getUpdateState() {

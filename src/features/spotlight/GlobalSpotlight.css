@@ -1820,6 +1820,13 @@ body.spotlight-window {
   border-top: 1px solid rgba(148, 163, 184, 0.12);
 }
 
+/* "Using .cooldesk from …" — which project knowledge this run was given. */
+.spotlight-agent-context-note {
+  font-size: 11px;
+  color: rgba(226, 232, 240, 0.55);
+  margin: -4px 0 8px 16px;
+}
+
 .spotlight-agent-request {
   display: flex;
   gap: 8px;

@@ -77,6 +77,38 @@
             display: none;
         }
 
+        /* Update pending: the grip takes the update pill's emerald and grows a
+           dot just past its leading end (above it when vertical, left of it
+           when horizontal), so the update is visible with the drawer closed. */
+        .grip {
+            position: relative;
+        }
+
+        #handle.has-update .grip {
+            background: rgba(110, 231, 183, 0.75);
+        }
+
+        #handle.has-update .grip::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: -11px;
+            width: 7px;
+            height: 7px;
+            margin-left: -3.5px;
+            border-radius: 50%;
+            background: #34d399;
+            box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.35), 0 0 6px rgba(52, 211, 153, 0.8);
+        }
+
+        #handle.has-update.top .grip::after,
+        #handle.has-update.bottom .grip::after {
+            left: -11px;
+            top: 50%;
+            margin-left: 0;
+            margin-top: -3.5px;
+        }
+
         /* Orientation safety net from the window's own shape: the handle window
            is wider than tall only when docked top/bottom (132×22 vs 22×132), so
            this can't go stale the way the side class from dock state can. */
@@ -89,6 +121,13 @@
             #handle:hover .grip {
                 width: 64px;
                 height: 5px;
+            }
+
+            #handle.has-update .grip::after {
+                left: -11px;
+                top: 50%;
+                margin-left: 0;
+                margin-top: -3.5px;
             }
         }
     </style>

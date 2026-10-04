@@ -2,11 +2,9 @@ import {
     faBookmark,
     faCalendarAlt,
     faChevronDown,
-    faCode,
     faEyeSlash,
     faGlobe,
     faLayerGroup,
-    faLink,
     faPlus,
     faPause,
     faPlay,
@@ -22,13 +20,13 @@ import { isElectronApp } from '../../../services/environmentDetector';
 import { runningAppsService } from '../../../services/runningAppsService.js';
 import { getDeviceId, getHostUrl, isSyncFeatureEnabled, loadSyncConfig } from '../../../services/syncConfig.js';
 import '../../../styles/cooldesk.css';
+import { LocalServers } from './LocalServers.jsx';
+import { TileIcon } from './TileIcon.jsx';
 import {
     enrichRunningAppsWithIcons,
     getBaseDomainFromUrl,
     getFaviconUrl,
     getGroupDomainFromUrl,
-    getLocalUrlLabel,
-    isLocalhostUrl,
     safeGetHostname
 } from '../../../utils/helpers.js';
 
@@ -206,6 +204,37 @@ function writeFeedSnapshot(links, feed) {
 const SUITE_SKIP_DOMAINS = new Set(['System', 'Local Files', 'Local', 'Other', 'Unknown', 'localhost']);
 const SUITE_MIN_SERVICES = 3;
 
+// Short name under a suite tile: the subdomain's first label ("mail.google.com"
+// → "Mail"), or the org's own name for its root site. The icon carries the
+// identity; the full page title is in the tooltip.
+function suiteServiceLabel(service, base) {
+    const host = String(service || '').replace(/^www\./, '');
+    const sub = host.endsWith(`.${base}`) ? host.slice(0, -(base.length + 1)) : '';
+    const word = (sub ? sub.split('.')[0] : base.split('.')[0]).replace(/[-_]+/g, ' ');
+    return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+function SuiteTile({ service, label, onOpen, onClose }) {
+    return (
+        <div
+            className={`suite-tile${service.isOpen ? ' is-open' : ''}`}
+            role="button"
+            tabIndex={0}
+            title={`${service.title || service.service}\n${service.service}${service.isOpen ? ' · open' : ''}`}
+            onClick={onOpen}
+            onKeyDown={e => { if (e.key === 'Enter') onOpen(); }}
+        >
+            <TileIcon item={service} label={label}>
+                {service.isOpen && <span className="suite-tile-dot" aria-label="Open" />}
+            </TileIcon>
+            <span className="suite-tile-label">{label}</span>
+            {service.isOpen && !service.remote && (
+                <button type="button" className="suite-tile-close" title="Close tab" aria-label="Close tab" onClick={onClose}>×</button>
+            )}
+        </div>
+    );
+}
+
 // "Media" tab: how many recently-played entries to keep in localStorage.
 const RECENT_MEDIA_LIMIT = 20;
 
@@ -222,6 +251,23 @@ export function ActivityFeed() {
     // and caps at 100 items: a port or a Google product you haven't touched
     // in weeks should still show up.
     const [deepActivity, setDeepActivity] = useState({ tabs: [], history: [] });
+
+    // The tab bar is sticky, but it only needs a backing once rows actually
+    // scroll underneath it — at rest it sits on the card like everything
+    // else. A 1px sentinel just above it leaves view exactly when it sticks.
+    const tabsSentinelRef = useRef(null);
+    const [tabsStuck, setTabsStuck] = useState(false);
+    useEffect(() => {
+        const el = tabsSentinelRef.current;
+        if (!el || typeof IntersectionObserver === 'undefined') return;
+        const io = new IntersectionObserver(([entry]) => {
+            // Only "stuck" when the sentinel went out the *top*, not when the
+            // whole feed is simply off-screen below.
+            setTabsStuck(!entry.isIntersecting && entry.boundingClientRect.top < (entry.rootBounds?.top ?? 0) + 1);
+        }, { threshold: 0 });
+        io.observe(el);
+        return () => io.disconnect();
+    }, []);
     // Tabs currently playing audio — see the polling effect below (Media tab).
     const [audibleTabs, setAudibleTabs] = useState([]);
     // Persisted "recently played" media (Media tab) — a snapshot is kept
@@ -348,7 +394,11 @@ export function ActivityFeed() {
             const seenUrls = new Set();
 
             // Priority 1: Explicitly pinned items
-            const pins = await listPins();
+            // listPins goes through withErrorHandling: it resolves to
+            // { success, data }, never a bare array — reading `.length` off
+            // the wrapper silently dropped every pin, leaving only top sites.
+            const pinsRes = await listPins({ limit: 50 });
+            const pins = pinsRes?.success ? pinsRes.data : (Array.isArray(pinsRes) ? pinsRes : []);
             if (pins && pins.length > 0) {
                 pins.forEach(pin => {
                     if (!pin.url || isSearchQuery(pin.url)) return; // Exclude Google Searches from pins
@@ -364,7 +414,7 @@ export function ActivityFeed() {
                             title: pin.title || hostname,
                             url: pin.url,
                             type: 'link',
-                            favicon: pin.favicon || `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`,
+                            favIconUrl: pin.favicon || pin.favIconUrl || null,
                             hostname
                         });
                     } catch (e) {
@@ -395,7 +445,7 @@ export function ActivityFeed() {
                                 title: site.title || hostname,
                                 url: site.url,
                                 type: 'top_site',
-                                favicon: `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`,
+                                favIconUrl: null,
                                 hostname
                             });
                         }
@@ -1138,6 +1188,10 @@ export function ActivityFeed() {
 
         return (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {/* Two columns of app cards (one when the panel is too narrow —
+                    see .search-apps-grid). Each card keeps its own open tabs /
+                    recent visits underneath, so it can't flow into the next. */}
+                <div className="search-apps-grid">
                 {ordered.map(app => {
                     const appTabs = tabsByApp[app.name] || [];
                     const activeTabItem = appTabs[0];
@@ -1149,17 +1203,16 @@ export function ActivityFeed() {
                     const historyGrouped = appHistory.length > 1;
 
                     return (
-                        <div key={app.url || app.name}>
+                        <div key={app.url || app.name} className={`search-app-cell${activeUrl ? ' is-open' : ''}`}>
                         <div
                             className="feed-row"
                             onClick={() => handleItemClick(activeUrl || lastVisit?.url || app.url)}
                             style={{
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '12px',
-                                padding: '12px 16px',
+                                gap: '10px',
+                                padding: '10px 10px 10px 12px',
                                 cursor: 'pointer',
-                                borderBottom: (grouped || historyGrouped) ? 'none' : '1px solid rgba(148, 163, 184, 0.05)',
                                 transition: 'background 0.2s'
                             }}
                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
@@ -1222,12 +1275,12 @@ export function ActivityFeed() {
                                     gap: '5px'
                                 }}>
                                     <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34D399' }}></span>
-                                    {grouped ? `${appTabs.length} open` : 'Open'}
+                                    {grouped ? appTabs.length : 'Open'}
                                 </div>
                             )}
 
                             {/* Hover actions: remove-from-list (always) + close-tab (when a single tab is open). Fixed width keeps right edges aligned. */}
-                            <div style={{ width: '52px', flexShrink: 0, marginLeft: '4px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '2px' }}>
+                            <div className="search-app-actions">
                                 {renderHideBtn(app)}
                                 {activeTabItem && !grouped && renderTabCloseBtn(activeTabItem)}
                             </div>
@@ -1242,19 +1295,18 @@ export function ActivityFeed() {
                                 style={{
                                     display: 'flex',
                                     alignItems: 'center',
-                                    gap: '12px',
-                                    padding: '8px 16px 8px 42px',
+                                    gap: '8px',
+                                    padding: '6px 10px 6px 12px',
                                     cursor: 'pointer',
-                                    borderBottom: tab === appTabs[appTabs.length - 1] ? '1px solid rgba(148, 163, 184, 0.05)' : 'none',
                                     transition: 'background 0.2s'
                                 }}
                                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
                                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                             >
                                 <div style={{
-                                    fontSize: 'var(--font-base)',
-                                    color: 'var(--text-primary, #F1F5F9)',
-                                    fontWeight: 500,
+                                    fontSize: 'var(--font-sm)',
+                                    color: 'var(--text-secondary, #CBD5E1)',
+                                    fontWeight: 400,
                                     flex: 1,
                                     minWidth: 0,
                                     whiteSpace: 'nowrap',
@@ -1268,26 +1320,25 @@ export function ActivityFeed() {
                         ))}
 
                         {/* A few recent visits when nothing's open — pick one up to continue it. */}
-                        {historyGrouped && appHistory.map((item, idx) => (
+                        {historyGrouped && appHistory.map((item) => (
                             <div key={item.url}
                                 className="feed-row"
                                 onClick={() => handleItemClick(item.url)}
                                 style={{
                                     display: 'flex',
                                     alignItems: 'center',
-                                    gap: '12px',
-                                    padding: '8px 16px 8px 42px',
+                                    gap: '8px',
+                                    padding: '6px 10px 6px 12px',
                                     cursor: 'pointer',
-                                    borderBottom: idx === appHistory.length - 1 ? '1px solid rgba(148, 163, 184, 0.05)' : 'none',
                                     transition: 'background 0.2s'
                                 }}
                                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
                                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                             >
                                 <div style={{
-                                    fontSize: 'var(--font-base)',
-                                    color: 'var(--text-primary, #F1F5F9)',
-                                    fontWeight: 500,
+                                    fontSize: 'var(--font-sm)',
+                                    color: 'var(--text-secondary, #CBD5E1)',
+                                    fontWeight: 400,
                                     flex: 1,
                                     minWidth: 0,
                                     whiteSpace: 'nowrap',
@@ -1309,6 +1360,7 @@ export function ActivityFeed() {
                         </div>
                     );
                 })}
+                </div>
 
                 {/* Add a custom app */}
                 {addingSearchApp ? (
@@ -1410,187 +1462,17 @@ export function ActivityFeed() {
         );
     };
 
-    // Local dev servers (localhost/loopback/LAN, any port), derived from
-    // deepActivity. Deduped by hostname:port, since that's what actually
-    // tells two dev servers apart; an open tab wins the slot over a history
-    // entry for the same port so clicking focuses it instead of opening a
-    // duplicate.
-    const localApps = useMemo(() => {
-        const byLabel = new Map();
-
-        deepActivity.tabs.forEach(tab => {
-            if (!tab.url || !isLocalhostUrl(tab.url)) return;
-            const label = getLocalUrlLabel(tab.url);
-            byLabel.set(label, {
-                id: `tab_${tab.id}`,
-                label,
-                title: tab.title || label,
-                url: tab.url,
-                timestamp: tab.lastAccessed || Date.now(),
-                isOpen: true,
-            });
-        });
-
-        deepActivity.history.forEach(item => {
-            if (!item.url || !isLocalhostUrl(item.url)) return;
-            const label = getLocalUrlLabel(item.url);
-            if (byLabel.get(label)?.isOpen) return; // an open tab already claims this port
-            const ts = item.lastVisitTime || 0;
-            const existing = byLabel.get(label);
-            if (!existing || ts > existing.timestamp) {
-                byLabel.set(label, {
-                    id: `hist_${item.id || item.url}`,
-                    label,
-                    title: item.title || label,
-                    url: item.url,
-                    timestamp: ts,
-                    isOpen: false,
-                    visitCount: item.visitCount || 1,
-                });
-            }
-        });
-
-        // A dev server restarted during debugging (port already taken, hot
-        // reload, etc.) reappears in history under a new hostname:port each
-        // time, even though it's the same app — e.g. "compute mesh" started
-        // on 10 different ports leaves 10 stale rows here. Its page title
-        // stays stable across those restarts, so history-only entries sharing
-        // a real title are candidates for collapsing down to the most recent
-        // port. But title alone isn't a safe grouping key: scaffolded dev
-        // servers commonly ship identical default titles (CRA's "React App",
-        // Vite's "Vite + React"), so two *unrelated* projects run weeks apart
-        // would otherwise wrongly merge into one row. Require the visits to
-        // also be close together in time — same debugging session, not same
-        // generic title reused later — before collapsing them. Never applies
-        // to currently-open tabs, which are genuinely live and may
-        // legitimately be running on several ports at once.
-        const SESSION_GAP_MS = 6 * 60 * 60 * 1000; // 6h — a restart-storm lands within this; a return visit weeks later doesn't.
-        const open = [];
-        const singleton = [];
-        const byTitle = new Map();
-        for (const item of byLabel.values()) {
-            if (item.isOpen) { open.push(item); continue; }
-            // No real title was ever recorded (title fell back to the label
-            // itself) — nothing to group on, so leave it as its own row.
-            const titleKey = item.title && item.title !== item.label ? item.title.trim().toLowerCase() : null;
-            if (!titleKey) { singleton.push(item); continue; }
-            if (!byTitle.has(titleKey)) byTitle.set(titleKey, []);
-            byTitle.get(titleKey).push(item);
-        }
-
-        const closed = [...singleton];
-        for (const items of byTitle.values()) {
-            items.sort((a, b) => a.timestamp - b.timestamp);
-            for (let i = 1; i <= items.length; i++) {
-                const gap = i < items.length ? items[i].timestamp - items[i - 1].timestamp : Infinity;
-                if (gap > SESSION_GAP_MS) closed.push(items[i - 1]); // most recent port in this session cluster
-            }
-        }
-
-        return [...open, ...closed].sort((a, b) => (b.isOpen - a.isOpen) || b.timestamp - a.timestamp);
-    }, [deepActivity]);
-
-    // "Local" tab: dev servers detected on this run, same row layout/actions as
-    // the other feed rows (renderActionSlot's × closes an open tab). Reads
-    // localApps, defined above.
-    const renderLocalApps = () => {
-        if (localApps.length === 0) {
-            return (
-                <div style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    padding: '40px 20px',
-                    color: '#64748B',
-                    textAlign: 'center'
-                }}>
-                    <FontAwesomeIcon icon={faCode} style={{ fontSize: '20px', opacity: 0.5 }} />
-                    <div style={{ fontSize: 'var(--font-sm)' }}>No local dev servers detected</div>
-                </div>
-            );
-        }
-
-        return (
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {localApps.map(item => (
-                    <div key={item.label}
-                        className="feed-row"
-                        onClick={() => handleItemClick(item.url, item)}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '12px',
-                            padding: '12px 16px',
-                            cursor: 'pointer',
-                            borderBottom: '1px solid rgba(148, 163, 184, 0.05)',
-                            transition: 'background 0.2s'
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                    >
-                        <div style={{
-                            width: '32px',
-                            height: '32px',
-                            borderRadius: '8px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            background: 'rgba(16, 185, 129, 0.12)',
-                            color: '#34D399',
-                            flexShrink: 0
-                        }}>
-                            <FontAwesomeIcon icon={faCode} style={{ fontSize: '13px' }} />
-                        </div>
-
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{
-                                fontSize: 'var(--font-base)',
-                                color: 'var(--text-primary, #F1F5F9)',
-                                fontWeight: 500,
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis'
-                            }}>
-                                {item.title || item.url}
-                            </div>
-                            <div style={{
-                                fontSize: 'var(--font-xs)',
-                                color: '#34D399',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis'
-                            }}>
-                                {item.label}
-                            </div>
-                        </div>
-
-                        {item.isOpen && (
-                            <div style={{
-                                flexShrink: 0,
-                                fontSize: 'var(--font-xs)',
-                                fontWeight: 600,
-                                color: '#34D399',
-                                background: 'rgba(16, 185, 129, 0.12)',
-                                border: '1px solid rgba(16, 185, 129, 0.3)',
-                                padding: '2px 8px',
-                                borderRadius: '999px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '5px'
-                            }}>
-                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34D399' }}></span>
-                                Open
-                            </div>
-                        )}
-
-                        {renderActionSlot(item.isOpen ? item : null)}
-                    </div>
-                ))}
-            </div>
-        );
-    };
+    // "Local" tab: dev servers grouped by project, with live/dead ports,
+    // who started each one, and Start/Stop — see LocalServers.jsx.
+    const renderLocalApps = () => (
+        <LocalServers
+            tabs={deepActivity.tabs}
+            history={deepActivity.history}
+            active={activeTab === 'local'}
+            onOpen={handleItemClick}
+            onCloseTab={handleCloseTab}
+        />
+    );
 
     // Actually pause playback in a tab, not just mute its output — injects a
     // content script that pauses every <video>/<audio> element on the page.
@@ -1984,7 +1866,7 @@ export function ActivityFeed() {
             if (!byBase.has(base)) byBase.set(base, new Map());
             const services = byBase.get(base);
             if (!services.has(service)) {
-                services.set(service, { service, id: null, title: null, url: null, timestamp: 0, isOpen: false, visitCount: 0 });
+                services.set(service, { service, base, id: null, title: null, url: null, favIconUrl: null, timestamp: 0, isOpen: false, visitCount: 0 });
             }
             return services.get(service);
         };
@@ -2019,6 +1901,7 @@ export function ActivityFeed() {
                 entry.url = tab.url;
                 entry.id = `tab_${tab.id}`;
             }
+            if (tab.favIconUrl) entry.favIconUrl = tab.favIconUrl;
         });
 
         return [...byBase.entries()]
@@ -2081,65 +1964,20 @@ export function ActivityFeed() {
                             </span>
                         </div>
 
-                        {org.services.map(s => (
-                            <div key={s.service}
-                                className="feed-row"
-                                onClick={() => handleItemClick(s.url, s)}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '12px',
-                                    padding: '8px 16px 8px 42px',
-                                    cursor: 'pointer',
-                                    transition: 'background 0.2s'
-                                }}
-                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
-                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                            >
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{
-                                        fontSize: 'var(--font-base)',
-                                        color: 'var(--text-primary, #F1F5F9)',
-                                        fontWeight: 500,
-                                        whiteSpace: 'nowrap',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis'
-                                    }}>
-                                        {s.title}
-                                    </div>
-                                    <div style={{
-                                        fontSize: 'var(--font-xs)',
-                                        color: '#64748B',
-                                        whiteSpace: 'nowrap',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis'
-                                    }}>
-                                        {s.service}
-                                    </div>
-                                </div>
-
-                                {s.isOpen && (
-                                    <div style={{
-                                        flexShrink: 0,
-                                        fontSize: 'var(--font-xs)',
-                                        fontWeight: 600,
-                                        color: '#34D399',
-                                        background: 'rgba(16, 185, 129, 0.12)',
-                                        border: '1px solid rgba(16, 185, 129, 0.3)',
-                                        padding: '2px 8px',
-                                        borderRadius: '999px',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '5px'
-                                    }}>
-                                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34D399' }}></span>
-                                        Open
-                                    </div>
-                                )}
-
-                                {renderActionSlot(s.isOpen ? s : null)}
-                            </div>
-                        ))}
+                        {/* One icon tile per service — recognised by its own
+                            favicon, not read. Page title + hostname live in the
+                            tooltip instead of two lines of text per row. */}
+                        <div className="suite-grid">
+                            {org.services.map(s => (
+                                <SuiteTile
+                                    key={s.service}
+                                    service={s}
+                                    label={suiteServiceLabel(s.service, org.base)}
+                                    onOpen={() => handleItemClick(s.url, s)}
+                                    onClose={(e) => handleCloseTab(s, e)}
+                                />
+                            ))}
+                        </div>
                     </div>
                 ))}
             </div>
@@ -2400,59 +2238,16 @@ export function ActivityFeed() {
                     }}
                 >
                     {quickLinks.length > 0 ? quickLinks.map(link => (
-                        <div key={link.id}
+                        <button
+                            key={link.id}
+                            type="button"
+                            className="fav-tile"
                             onClick={() => handleItemClick(link.url)}
-                            title={link.title}
-                            style={{
-                                width: '44px',
-                                height: '44px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                background: 'rgba(59, 130, 246, 0.12)',
-                                border: '1.5px solid rgba(59, 130, 246, 0.25)',
-                                borderRadius: '12px',
-                                cursor: 'pointer',
-                                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                                flexShrink: 0,
-                                position: 'relative',
-                                overflow: 'hidden'
-                            }}
-                            onMouseEnter={e => {
-                                e.currentTarget.style.background = 'rgba(59, 130, 246, 0.25)';
-                                e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.5)';
-                                e.currentTarget.style.transform = 'translateY(-2px) scale(1.05)';
-                                e.currentTarget.style.boxShadow = '0 8px 20px rgba(59, 130, 246, 0.3)';
-                            }}
-                            onMouseLeave={e => {
-                                e.currentTarget.style.background = 'rgba(59, 130, 246, 0.12)';
-                                e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.25)';
-                                e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                                e.currentTarget.style.boxShadow = 'none';
-                            }}
+                            title={`${link.title}\n${link.hostname || link.url}`}
+                            aria-label={link.title}
                         >
-                            <img
-                                src={getFaviconUrl(link.url, 24)}
-                                onError={e => {
-                                    e.target.style.display = 'none';
-                                    e.target.nextSibling.style.display = 'flex';
-                                }}
-                                style={{
-                                    width: '22px',
-                                    height: '22px',
-                                    borderRadius: '4px',
-                                    filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))'
-                                }}
-                            />
-                            <FontAwesomeIcon
-                                icon={faLink}
-                                style={{
-                                    display: 'none',
-                                    fontSize: 'var(--font-xl)',
-                                    color: 'rgba(96, 165, 250, 0.8)'
-                                }}
-                            />
-                        </div>
+                            <TileIcon item={link} label={link.title} />
+                        </button>
                     )) : (
                         <div style={{ color: '#64748B', fontSize: '12px' }}>No favorites yet</div>
                     )}
@@ -2463,70 +2258,19 @@ export function ActivityFeed() {
                 wide two-pane = scrolls inside the fixed-height card; stacked
                 (≤600px) = grows and flows into the single page scroll. */}
             <div className="activity-feed-list" style={{ padding: '0', display: 'flex', flexDirection: 'column' }}>
-                <div
-                    className="activity-feed-sticky-tabs"
-                    style={{
-                        padding: '4px 16px 12px',
-                        position: 'sticky',
-                        top: 0,
-                        // Solid-enough backing: rows scrolling underneath must not
-                        // bleed through the segmented control. Colorless card color
-                        // (.overview-activity-column.is-colorless) strips this back
-                        // out via CSS — see cooldesk.css — so the whole column reads
-                        // as fully transparent, not just its base layer.
-                        background: 'rgba(11, 11, 14, 0.85)',
-                        zIndex: 10,
-                        backdropFilter: 'blur(12px)',
-                        WebkitBackdropFilter: 'blur(12px)',
-                    }}>
-                    {/* Modern Pill-Style Segmented Control */}
-                    <div style={{
-                        display: 'inline-flex',
-                        background: 'rgba(15, 23, 42, 0.5)',
-                        border: '1px solid rgba(148, 163, 184, 0.12)',
-                        borderRadius: '12px',
-                        padding: '4px',
-                        gap: '4px',
-                        position: 'relative'
-                    }}>
+                <div ref={tabsSentinelRef} aria-hidden="true" style={{ height: 1, marginBottom: -1 }} />
+                <div className={`activity-feed-sticky-tabs${tabsStuck ? ' is-stuck' : ''}`}>
+                    <div className="feed-tabs" role="tablist">
                         {(isDesktopApp ? ['all', 'chats', 'tabs', 'apps', 'local', 'suites', 'search', 'media'] : ['all', 'tabs', 'local', 'suites', 'search', 'media']).map(tab => {
                             const isActive = activeTab === tab;
                             return (
                                 <button
                                     key={tab}
                                     type="button"
+                                    role="tab"
+                                    aria-selected={isActive}
+                                    className={`feed-tab${isActive ? ' is-active' : ''}`}
                                     onClick={() => setActiveTab(tab)}
-                                    style={{
-                                        appearance: 'none',
-                                        WebkitAppearance: 'none',
-                                        border: isActive ? '1px solid rgba(96, 165, 250, 0.45)' : '1px solid transparent',
-                                        outline: 'none',
-                                        padding: '7px 16px',
-                                        borderRadius: '9px',
-                                        background: isActive ? 'rgba(96, 165, 250, 0.18)' : 'transparent',
-                                        color: isActive ? '#93C5FD' : '#94A3B8',
-                                        fontSize: '12px',
-                                        fontWeight: isActive ? 600 : 500,
-                                        cursor: 'pointer',
-                                        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                                        textTransform: 'capitalize',
-                                        position: 'relative',
-                                        zIndex: 1,
-                                        whiteSpace: 'nowrap',
-                                        boxShadow: isActive ? '0 2px 8px rgba(96, 165, 250, 0.18)' : 'none'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                        if (!isActive) {
-                                            e.currentTarget.style.background = 'rgba(148, 163, 184, 0.08)';
-                                            e.currentTarget.style.color = '#CBD5E1';
-                                        }
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        if (!isActive) {
-                                            e.currentTarget.style.background = 'transparent';
-                                            e.currentTarget.style.color = '#94A3B8';
-                                        }
-                                    }}
                                 >
                                     {tab === 'all' ? 'All Activity' : tab === 'tabs' ? 'Browsing' : tab.charAt(0).toUpperCase() + tab.slice(1)}
                                 </button>

@@ -1,7 +1,7 @@
 import '@fortawesome/fontawesome-svg-core/styles.css';
 import { config } from '@fortawesome/fontawesome-svg-core';
 config.autoAddCss = false;
-import React, { Suspense } from 'react';
+import React, { Suspense, useCallback, useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { initChromePolyfill } from '../services/chromePolyfill';
 
@@ -58,10 +58,39 @@ const isDesktopApp = typeof window !== 'undefined' &&
     !!(window.__TAURI__ || window.__TAURI_INTERNALS__ || window.electronAPI);
 
 function SpotlightApp() {
+    // "Edit" from the sidebar card or the dock bar — the main window has no
+    // embedded spotlight there, so it asks the backend (open_spotlight_edit)
+    // to show this window and leaves the target in a pending slot. Take it on
+    // mount (target set before this webview finished loading) and on every
+    // nudge event. A fresh object each time, so re-editing the same
+    // workspace re-triggers GlobalSpotlight's editTarget effect.
+    const [editTarget, setEditTarget] = useState(null);
+    useEffect(() => {
+        if (!isDesktopApp) return;
+        let unlisten = null;
+        let cancelled = false;
+        const take = async () => {
+            try {
+                const { invoke } = await import('@tauri-apps/api/core');
+                const ws = await invoke('take_spotlight_edit');
+                if (ws?.id && !cancelled) setEditTarget({ id: ws.id, name: ws.name });
+            } catch (e) {
+                console.warn('[Spotlight] take_spotlight_edit failed:', e);
+            }
+        };
+        take();
+        import('@tauri-apps/api/event')
+            .then(({ listen }) => listen('spotlight-edit-workspace', take))
+            .then((fn) => { if (cancelled) fn(); else unlisten = fn; })
+            .catch(() => {});
+        return () => { cancelled = true; unlisten?.(); };
+    }, []);
+    const handleExitEditMode = useCallback(() => setEditTarget(null), []);
+
     return (
         <ErrorBoundary>
             <Suspense fallback={<div style={{ color: '#fff', padding: '20px' }}>Loading Spotlight...</div>}>
-                <GlobalSpotlight isDesktopApp={isDesktopApp} />
+                <GlobalSpotlight isDesktopApp={isDesktopApp} editTarget={editTarget} onExitEditMode={handleExitEditMode} />
             </Suspense>
         </ErrorBoundary>
     );

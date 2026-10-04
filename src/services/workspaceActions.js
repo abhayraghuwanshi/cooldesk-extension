@@ -10,6 +10,8 @@
  */
 
 import { deleteWorkspace, saveWorkspace } from '../db/unified-api';
+import { updateCooldeskResources } from './cooldeskService';
+import { projectFolderOf } from '../shared/hooks/useCooldeskItems';
 
 const TYPES = new Set([
   'create_workspace',
@@ -18,7 +20,14 @@ const TYPES = new Set([
   'remove_url',
   'add_app',
   'remove_app',
+  'add_project_resource',
+  'remove_project_resource',
 ]);
+
+// Mirrors the sidecar's check (cooldesk.rs `is_machine_specific`): absolute,
+// home-relative and file: locations can't go in a committed manifest. Checked
+// here too so the confirm step rejects it up front instead of failing on Apply.
+const isMachineSpecific = (v) => /^(file:|[\\/~]|[a-z]:)/i.test(v);
 
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
 
@@ -77,6 +86,26 @@ export function validateActions(actions) {
         a.path = str(raw.path);
         if (!a.workspace || !a.path) bad = 'missing workspace/path';
         break;
+      // Project (.cooldesk) resources. "local" is personal and gitignored —
+      // the default, and the only place browsing-derived links or local file
+      // paths may go; "shared" is committed to the repo for teammates.
+      case 'add_project_resource':
+      case 'remove_project_resource': {
+        a.workspace = str(raw.workspace);
+        a.scope = str(raw.scope) === 'shared' ? 'shared' : 'local';
+        a.url = str(raw.url) || undefined;
+        a.path = str(raw.path) || undefined;
+        if (!a.workspace || (!a.url && !a.path)) { bad = 'missing workspace and url/path'; break; }
+        if (type === 'remove_project_resource') break;
+        a.name = str(raw.name) || a.url || a.path.split(/[\\/]/).pop();
+        a.resourceType = ['link', 'file', 'folder', 'github', 'doc'].includes(str(raw.resourceType || raw.kind))
+          ? str(raw.resourceType || raw.kind)
+          : (a.url && !/^file:/i.test(a.url) ? 'link' : 'file');
+        if (a.url && !/^https?:\/\//i.test(a.url) && !(a.scope === 'local' && /^file:/i.test(a.url))) bad = 'url must be http(s)';
+        else if (a.scope === 'shared' && [a.url, a.path].some(v => v && isMachineSpecific(v))) bad = 'a local path can only be saved as personal (scope "local")';
+        else if (a.scope === 'shared' && a.path && a.path.split(/[\\/]/).includes('..')) bad = 'shared paths must stay inside the project';
+        break;
+      }
       default:
         bad = 'unhandled';
     }
@@ -97,6 +126,10 @@ export function describeAction(a) {
     case 'remove_url': return `Remove link ${a.url} from "${a.workspace}"`;
     case 'add_app': return `Add ${a.appType || 'app'} ${a.path} to "${a.workspace}"`;
     case 'remove_app': return `Remove ${a.path} from "${a.workspace}"`;
+    case 'add_project_resource':
+      return `Save ${a.url || a.path} to "${a.workspace}" project — ${a.scope === 'shared' ? 'shared with team (committed)' : 'personal (not committed)'}`;
+    case 'remove_project_resource':
+      return `Remove ${a.url || a.path} from "${a.workspace}" project (${a.scope === 'shared' ? 'shared' : 'personal'})`;
     default: return a.type;
   }
 }
@@ -184,6 +217,22 @@ export async function applyActions(actions, workspaces) {
           w.apps = (w.apps || []).filter(x => (x.path || '').toLowerCase() !== p);
           w.updatedAt = Date.now();
           await saveWorkspace(w);
+          applied++;
+          break;
+        }
+        case 'add_project_resource':
+        case 'remove_project_resource': {
+          const w = need(a.workspace);
+          if (!w) break;
+          const root = projectFolderOf(w);
+          if (!root) { errors.push(`"${a.workspace}" has no project folder`); break; }
+          const adding = a.type === 'add_project_resource';
+          const res = await updateCooldeskResources(root, {
+            scope: a.scope,
+            add: adding ? [{ type: a.resourceType, name: a.name, url: a.url, path: a.path, source: 'agent' }] : [],
+            remove: adding ? [] : [a.url || a.path],
+          });
+          if (!res.ok) { errors.push(`${describeAction(a)}: ${res.error}`); break; }
           applied++;
           break;
         }

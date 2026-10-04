@@ -15,6 +15,7 @@
 
 export const SCAFFOLD_BIN = 'claude';
 export const SCAFFOLD_ALLOWED_TOOLS = 'Read,Glob,Grep,Write,Edit';
+export const SCAFFOLD_OUTPUT_FORMAT = 'claude-stream-json';
 
 /**
  * Turn a scaffold prompt into the spec `ai_cli_run` expects. Always stdin —
@@ -23,7 +24,10 @@ export const SCAFFOLD_ALLOWED_TOOLS = 'Read,Glob,Grep,Write,Edit';
 export function buildScaffoldSpec(prompt, cwd) {
   return {
     bin: SCAFFOLD_BIN,
-    args: ['-p', '--allowedTools', SCAFFOLD_ALLOWED_TOOLS],
+    // stream-json for the same reason as the chat adapter (aiAdapters.js):
+    // a scaffold run reads the repo for a minute or more, and plain `-p` is
+    // silent until it exits. Parsed with format 'claude-stream-json'.
+    args: ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--allowedTools', SCAFFOLD_ALLOWED_TOOLS],
     stdin: prompt,
     cwd: cwd || null,
   };

@@ -18,6 +18,7 @@ import {
     saveCustomWidget,
 } from '../../data/customWidgets';
 import { attachWidgetHostBridge } from '../../services/widgetHostBridge';
+import { accentTextVars } from '../../utils/readableColor.js';
 import './WidgetBoard.css';
 
 // Every widget iframe gets the host bridge on load: widget data mirrors into
@@ -200,7 +201,7 @@ const WidgetTile = memo(function WidgetTile({ tile, widget, theme, dragging, onR
             style={{
                 gridColumn: `span ${cols}`,
                 gridRow: `span ${rows}`,
-                ...(tile.color ? { '--tile-accent': tile.color } : {}),
+                ...(tile.color ? { '--tile-accent': tile.color, ...accentTextVars(tile.color, 0.2) } : {}),
             }}
             onDragOver={e => e.preventDefault()}
             onDragEnter={() => onDragEnter(tile.id)}

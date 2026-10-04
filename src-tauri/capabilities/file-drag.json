@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "file-drag",
+  "description": "Native file drag-out from the in-app file manager (copy into Finder / Explorer / upload fields). Main window only: the webapp-* windows host remote sites, which must not be able to start drags of local files.",
+  "windows": ["main"],
+  "permissions": ["drag:default"]
+}

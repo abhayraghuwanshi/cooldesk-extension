@@ -30,6 +30,7 @@ import { useModelPicker } from './useModelPicker';
 import { resultToWorkspaceItem } from './resultToWorkspaceItem';
 import { handleEditWorkspaceKeydown } from './keydown/editWorkspaceKeydown';
 import { handleNewWorkspaceKeydown } from './keydown/newWorkspaceKeydown';
+import { useCooldeskItems } from '../../shared/hooks/useCooldeskItems.js';
 import { handleAgentKeydown } from './keydown/agentKeydown';
 import { handleAiChatKeydown } from './keydown/aiChatKeydown';
 import { handleModelPickerKeydown } from './keydown/modelPickerKeydown';
@@ -48,6 +49,7 @@ import { ModelPickerPanel } from './parts/ModelPickerPanel';
 import { AgentPanel } from './parts/AgentPanel';
 import { NewWorkspacePanel } from './parts/NewWorkspacePanel';
 import { EditWorkspacePanel } from './parts/EditWorkspacePanel';
+import { buildCooldeskAttachment } from './cooldeskContext';
 import './GlobalSpotlight.css';
 
 
@@ -590,8 +592,24 @@ export function GlobalSpotlight({
         // every run). This directory is app-owned and pre-trusted in Claude
         // Code's config, so it never hits that prompt.
         const cwd = await getOrCreateAgentWorkspaceCwd();
-        aiCli.run(request, list, cwd, { attachments: [...agentContext, ...extraAttachments] });
-    }, [aiCli, agentContext]);
+        // The projects' own .cooldesk/ knowledge (README, decisions, todos…) —
+        // read here because the run itself can't (see cooldeskContext.js).
+        // Never blocks a run: no sidecar or no .cooldesk just means none.
+        let cooldesk = null;
+        try {
+            cooldesk = await buildCooldeskAttachment(
+                list.filter(w => w.id !== AGENT_WORKSPACE_ID),
+                request,
+                [agentOriginWorkspace?.id, expandedWorkspaceId],
+            );
+        } catch (e) {
+            console.warn('[Spotlight] agent: failed to read .cooldesk context', e);
+        }
+        aiCli.run(request, list, cwd, {
+            attachments: [...agentContext, ...extraAttachments, ...(cooldesk ? [cooldesk.attachment] : [])],
+            contextNote: cooldesk?.projects.length ? `Using .cooldesk from ${cooldesk.projects.join(', ')}` : null,
+        });
+    }, [aiCli, agentContext, agentOriginWorkspace, expandedWorkspaceId]);
 
     // The agent has no tool that can query the user's actual browser history,
     // tabs, bookmarks or installed apps — its only tools are WebSearch/WebFetch
@@ -667,7 +685,7 @@ export function GlobalSpotlight({
                 errors.length ? 'error' : 'success'
             );
             if (errors.length) console.warn('[Spotlight] agent apply errors:', errors);
-            aiCli.clearProposal(turn.id);
+            aiCli.clearProposal(turn.id, applied > 0 ? 'applied' : 'discarded');
 
             if (applied > 0 && agentOriginWorkspace) {
                 const fresh = list.find(w => w.id === agentOriginWorkspace.id) || agentOriginWorkspace;
@@ -2004,18 +2022,33 @@ export function GlobalSpotlight({
     // isn't necessarily the idle-selected workspace (expandedWorkspaceId).
     // Everything (browsing, adding, editing) goes through this one list and
     // the single search box — no separate add-fields to tab between.
+    // The open workspace's project .cooldesk items (links, linked projects,
+    // folders, files) — same resolution as the workspace cards and dock (see
+    // useCooldeskItems). Null workspace outside /edit-workspace → no fetch.
+    const cd = useCooldeskItems(editWorkspace.workspace);
+
     const editWorkspaceItems = useMemo(() => {
         const ws = editWorkspace.workspace;
         if (!ws) return [];
         const urls = (ws.urls || []).map(u => ({ kind: 'url', name: u.title || u.url, url: u.url }));
         const apps = (ws.apps || []).map(a => ({ kind: 'app', name: a.name, path: a.path, appType: a.appType }));
+        // `_cd`: read-only (committed in the repo) — the panel shows no remove ×.
+        const cdItems = [
+            ...cd.cdLinks.map(l => ({ kind: 'url', name: l.title, url: l.url, _cd: true })),
+            ...cd.cdProjects
+                .filter(p => p.exists && p.path)
+                .map(p => ({ kind: 'app', name: p.name, path: p.path, appType: 'folder', _cd: true })),
+            ...[...cd.cdFolders, ...cd.cdFiles]
+                .map(a => ({ kind: 'app', name: a.name, path: a.path, appType: a.appType, _cd: true })),
+        ];
         const todos = editWorkspace.todos.map(t => ({ kind: 'todo', name: t.text, id: t.id, done: t.done }));
         const notes = editWorkspace.notes.map(n => ({
             kind: 'note', id: n.id,
             name: n.title || editWorkspace.stripHtml(n.text).slice(0, 40) || 'Untitled',
         }));
-        return [...urls, ...apps, ...todos, ...notes];
-    }, [editWorkspace.workspace, editWorkspace.todos, editWorkspace.notes, editWorkspace.stripHtml]);
+        return [...urls, ...apps, ...cdItems, ...todos, ...notes];
+    }, [editWorkspace.workspace, editWorkspace.todos, editWorkspace.notes, editWorkspace.stripHtml,
+        cd.cdLinks, cd.cdProjects, cd.cdFolders, cd.cdFiles]);
 
     const openExistingWorkspaceItem = useCallback((item) => {
         if (!item) return;
@@ -3398,7 +3431,7 @@ export function GlobalSpotlight({
                 {sections.footer && commandMode === 'agent' && (
                     <div className="spotlight-footer">
                         <div className="shortcut-hint">
-                            <span className="shortcut-key">↵</span> {aiCli.proposal ? 'Apply' : 'Run'}
+                            <span className="shortcut-key">↵</span> {aiCli.turns.some(t => t.proposal?.valid.length) ? 'Apply' : 'Run'}
                         </div>
                         <div className="shortcut-hint">
                             <span className="shortcut-key">Esc</span> {aiCli.running ? 'Stop' : 'Close'}

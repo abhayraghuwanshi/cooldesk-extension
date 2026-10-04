@@ -649,8 +649,10 @@ class SyncOrchestrator {
                     }
                     break;
                 case 'pinsChanged':
-                    const pins = await listPins();
-                    const pinsArray = Array.isArray(pins) ? pins : [];
+                    // { success, data } wrapper (withErrorHandling) — not an
+                    // array, so this used to push nothing on every pin change.
+                    const pins = await listPins({ limit: 1000 });
+                    const pinsArray = pins?.success ? (pins.data || []) : (Array.isArray(pins) ? pins : []);
                     const changedPins = this.getChangedItems(pinsArray, 'pins');
                     if (changedPins.length > 0) {
                         const pinsPushResult = await this.pushChanges('pins', changedPins, { delta: true });

@@ -2,9 +2,16 @@
 //! knowledge authored by the CoolDesk Claude Code plugin — into a single JSON blob for
 //! the desktop app to render (dock, todos, decisions, README).
 //!
-//! Read-only by design: the app never writes `.cooldesk/`. The plugin/AI owns authoring
-//! it, and it is committed to the project's git repo. See the `cooldesk` plugin for the
-//! on-disk format contract.
+//! Mostly read-only: the plugin/AI owns authoring `.cooldesk/`, and it is committed to
+//! the project's git repo. The app writes in exactly two places — project linking
+//! (`group.json`, see `link_project`) and resources (`update_resources`):
+//!
+//!   shared   `cooldesk.json` → `resources`   committed; portable items only (web
+//!            urls, paths relative to the repo) — what teammates get on pull.
+//!   personal `local/resources.json`          gitignored via `.cooldesk/.gitignore`;
+//!            local file paths, items found in the user's own tabs/history.
+//!
+//! Personal data is never written unless `local/` is verifiably ignored.
 //!
 //! Linking / groups: a hub project may carry `.cooldesk/group.json` listing member
 //! projects (star topology — scales to many projects without N² pairwise links). When
@@ -88,6 +95,8 @@ fn read_one(project_root: &Path) -> Value {
         "architecture": read_text("architecture.md"),
         "decisions": read_text("decisions.md"),
         "notes": read_notes(),
+        // Personal, gitignored resources (see update_resources).
+        "local": read_json("local/resources.json"),
         "docs": {
             "knowledge": list_dir("knowledge"),
             "prompts": list_dir("prompts"),
@@ -572,6 +581,205 @@ pub fn unlink_project(hub_path: &str, member_path: &str) -> Result<Value, String
     Ok(read_cooldesk(hub_path))
 }
 
+/// Where a resource is stored. See the module docs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ResourceScope {
+    Local,
+    Shared,
+}
+
+/// Dedupe key for a resource: its url or path, case-folded, trailing slash dropped.
+fn resource_key(r: &Value) -> Option<String> {
+    let raw = r
+        .get("url")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| r.get("path").and_then(|v| v.as_str()))?;
+    let k = raw.trim().trim_end_matches(['/', '\\']).to_lowercase();
+    (!k.is_empty()).then_some(k)
+}
+
+/// Is this a machine-specific location that must never reach a committed file?
+/// Absolute paths (`/Users/..`, `C:\..`, `\\server`), `~`, and `file:` urls.
+fn is_machine_specific(s: &str) -> bool {
+    let t = s.trim();
+    let lower = t.to_lowercase();
+    lower.starts_with("file:")
+        || t.starts_with('/')
+        || t.starts_with('\\')
+        || t.starts_with('~')
+        || (t.len() >= 3 && t.as_bytes()[1] == b':' && t.as_bytes()[0].is_ascii_alphabetic())
+}
+
+/// Keep only the fields a resource is allowed to carry, and check it fits `scope`.
+fn sanitize_resource(raw: &Value, scope: ResourceScope) -> Result<Value, String> {
+    let get = |k: &str| raw.get(k).and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty());
+    let url = get("url");
+    let path = get("path");
+    if url.is_none() && path.is_none() {
+        return Err("resource needs a url or a path".into());
+    }
+    if let Some(u) = url {
+        let lower = u.to_lowercase();
+        let web = lower.starts_with("http://") || lower.starts_with("https://");
+        // Shared: web links only (a relative file belongs in `path`). Personal may
+        // also hold file: urls, but never script/data schemes.
+        let ok = web || (scope == ResourceScope::Local && lower.starts_with("file:"));
+        if !ok {
+            return Err(format!("unsupported url: {u}"));
+        }
+    }
+    if scope == ResourceScope::Shared {
+        for v in [url, path].into_iter().flatten() {
+            if is_machine_specific(v) {
+                return Err(format!(
+                    "{v} is a local path — save it as personal, or use a path relative to the project"
+                ));
+            }
+        }
+        if path.is_some_and(|p| p.split(['/', '\\']).any(|seg| seg == "..")) {
+            return Err("shared paths must stay inside the project".into());
+        }
+    }
+    let kind = get("type").unwrap_or(if url.is_some() { "link" } else { "file" });
+    let mut out = serde_json::Map::new();
+    out.insert("type".into(), json!(kind));
+    out.insert("name".into(), json!(get("name").or(url).or(path).unwrap_or_default()));
+    if let Some(u) = url {
+        out.insert("url".into(), json!(u));
+    }
+    if let Some(p) = path {
+        out.insert("path".into(), json!(p));
+    }
+    // Provenance is useful locally ("found in history"); in a shared manifest it
+    // would just leak how one person found the link.
+    if scope == ResourceScope::Local {
+        if let Some(src) = get("source") {
+            out.insert("source".into(), json!(src));
+        }
+        out.insert("addedAt".into(), json!(chrono_millis()));
+    }
+    Ok(Value::Object(out))
+}
+
+fn chrono_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Make sure `.cooldesk/local/` is ignored by git before anything personal is
+/// written there: append `local/` to `.cooldesk/.gitignore` if it is missing, then
+/// ask git itself. Refuses (rather than writing) if files under `local/` are
+/// already tracked — a .gitignore line doesn't untrack them, so the next commit
+/// would still publish them.
+fn ensure_local_ignored(project_root: &Path) -> Result<PathBuf, String> {
+    let cd = project_root.join(".cooldesk");
+    let gi = cd.join(".gitignore");
+    let current = fs::read_to_string(&gi).unwrap_or_default();
+    let has = current
+        .lines()
+        .map(str::trim)
+        .any(|l| matches!(l, "local" | "local/" | "/local" | "/local/" | "local/*" | "/local/*"));
+    if !has {
+        let mut body = current;
+        if !body.is_empty() && !body.ends_with('\n') {
+            body.push('\n');
+        }
+        body.push_str("# Personal — never committed (CoolDesk writes local file paths and\n# browsing-derived links here).\nlocal/\n");
+        fs::write(&gi, body).map_err(|e| format!("write {}: {e}", gi.display()))?;
+    }
+
+    let local = cd.join("local");
+    fs::create_dir_all(&local).map_err(|e| format!("create {}: {e}", local.display()))?;
+
+    // Only meaningful inside a git work tree; no git (or not a repo) means there
+    // is nothing that could commit the file.
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .args(args)
+            .current_dir(project_root)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+    };
+    if git(&["rev-parse", "--is-inside-work-tree"]).is_some() {
+        if let Some(out) = git(&["ls-files", "--", ".cooldesk/local"]) {
+            if !String::from_utf8_lossy(&out.stdout).trim().is_empty() {
+                return Err("files in .cooldesk/local/ are already committed — run `git rm -r --cached .cooldesk/local` first so personal data stays out of git".into());
+            }
+        }
+        if git(&["check-ignore", "-q", ".cooldesk/local/resources.json"]).is_none() {
+            return Err(".cooldesk/local/ is not ignored by git (a negation rule may override it) — refusing to write personal data there".into());
+        }
+    }
+    Ok(local)
+}
+
+/// Add and/or remove resources in one project's shared manifest or personal list.
+/// `remove` takes urls or paths. Returns the re-read `.cooldesk/` on success.
+pub fn update_resources(
+    project_path: &str,
+    scope: ResourceScope,
+    add: &[Value],
+    remove: &[String],
+) -> Result<Value, String> {
+    let root = Path::new(project_path);
+    let manifest_path = root.join(".cooldesk").join("cooldesk.json");
+    if !manifest_path.is_file() {
+        return Err(format!("{} has no .cooldesk/cooldesk.json", root.display()));
+    }
+
+    // Validate everything before touching disk — all or nothing.
+    let clean: Vec<Value> = add
+        .iter()
+        .map(|r| sanitize_resource(r, scope))
+        .collect::<Result<_, _>>()?;
+
+    let (file, mut doc) = match scope {
+        ResourceScope::Shared => {
+            let doc: Value = serde_json::from_str(&fs::read_to_string(&manifest_path).map_err(|e| e.to_string())?)
+                .map_err(|e| format!("cooldesk.json is not valid JSON: {e}"))?;
+            (manifest_path, doc)
+        }
+        ResourceScope::Local => {
+            let file = ensure_local_ignored(root)?.join("resources.json");
+            let doc = fs::read_to_string(&file)
+                .ok()
+                .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+                .filter(|v| v.is_object())
+                .unwrap_or_else(|| json!({ "resources": [] }));
+            (file, doc)
+        }
+    };
+
+    let obj = doc.as_object_mut().ok_or("resource file is not a JSON object")?;
+    let list = obj.entry("resources").or_insert_with(|| json!([]));
+    if !list.is_array() {
+        *list = json!([]);
+    }
+    let arr = list.as_array_mut().unwrap();
+
+    let drop: std::collections::HashSet<String> = remove
+        .iter()
+        .map(|r| r.trim().trim_end_matches(['/', '\\']).to_lowercase())
+        .collect();
+    arr.retain(|r| resource_key(r).map_or(true, |k| !drop.contains(&k)));
+
+    for r in clean {
+        let key = resource_key(&r);
+        if key.is_some() && arr.iter().any(|x| resource_key(x) == key) {
+            continue; // already there
+        }
+        arr.push(r);
+    }
+
+    write_json(&file, &doc)?;
+    Ok(read_cooldesk(project_path))
+}
+
 #[cfg(test)]
 mod link_tests {
     use super::*;
@@ -765,5 +973,66 @@ mod link_tests {
         );
 
         let _ = fs::remove_dir_all(root);
+    }
+}
+
+
+#[cfg(test)]
+mod resource_tests {
+    use super::*;
+
+    fn project(tag: &str, git: bool) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("cd-res-{tag}-{}", chrono_millis()));
+        fs::create_dir_all(dir.join(".cooldesk")).unwrap();
+        fs::write(dir.join(".cooldesk/cooldesk.json"), r#"{"schemaVersion":1,"project":{"id":"p","name":"P"},"resources":[]}"#).unwrap();
+        if git {
+            std::process::Command::new("git").args(["init", "-q"]).current_dir(&dir).status().unwrap();
+        }
+        dir
+    }
+
+    #[test]
+    fn local_write_adds_gitignore_and_is_ignored() {
+        let dir = project("local", true);
+        let p = dir.to_string_lossy().to_string();
+        let res = update_resources(&p, ResourceScope::Local, &[json!({"path":"/Users/me/spec.pdf","source":"history"})], &[]).unwrap();
+        assert_eq!(res["local"]["resources"][0]["path"], "/Users/me/spec.pdf");
+        assert!(fs::read_to_string(dir.join(".cooldesk/.gitignore")).unwrap().contains("local/"));
+        let ignored = std::process::Command::new("git")
+            .args(["check-ignore", "-q", ".cooldesk/local/resources.json"])
+            .current_dir(&dir).status().unwrap().success();
+        assert!(ignored);
+        // dedupe
+        update_resources(&p, ResourceScope::Local, &[json!({"path":"/Users/me/spec.pdf/"})], &[]).unwrap();
+        let again = read_cooldesk(&p);
+        assert_eq!(again["local"]["resources"].as_array().unwrap().len(), 1);
+        // remove
+        let gone = update_resources(&p, ResourceScope::Local, &[], &["/users/me/spec.pdf".into()]).unwrap();
+        assert_eq!(gone["local"]["resources"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn shared_rejects_machine_paths_and_keeps_portable_ones() {
+        let dir = project("shared", false);
+        let p = dir.to_string_lossy().to_string();
+        for bad in ["/Users/me/x", "C:\\x", "file:///x", "~/x", "../other"] {
+            assert!(update_resources(&p, ResourceScope::Shared, &[json!({"path": bad})], &[]).is_err(), "{bad}");
+        }
+        assert!(update_resources(&p, ResourceScope::Shared, &[json!({"url":"javascript:alert(1)"})], &[]).is_err());
+        let ok = update_resources(&p, ResourceScope::Shared, &[json!({"url":"https://docs.rs","name":"Docs","source":"history"}), json!({"path":"docs/spec.md"})], &[]).unwrap();
+        let arr = ok["manifest"]["resources"].as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert!(arr[0].get("source").is_none(), "provenance must not reach the shared manifest");
+    }
+
+    #[test]
+    fn refuses_when_local_is_tracked() {
+        let dir = project("tracked", true);
+        fs::create_dir_all(dir.join(".cooldesk/local")).unwrap();
+        fs::write(dir.join(".cooldesk/local/resources.json"), "{}").unwrap();
+        std::process::Command::new("git").args(["add", "-f", ".cooldesk/local/resources.json"]).current_dir(&dir).status().unwrap();
+        let p = dir.to_string_lossy().to_string();
+        let err = update_resources(&p, ResourceScope::Local, &[json!({"url":"https://a.b"})], &[]).unwrap_err();
+        assert!(err.contains("already committed"), "{err}");
     }
 }

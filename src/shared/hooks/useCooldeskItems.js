@@ -17,6 +17,9 @@ import { useCooldeskVersion } from './useCooldeskProjects.js';
 // "/Users/me/proj\crates\common" on macOS/Linux, a path that doesn't exist.
 export const joinProjectPath = (base, rel) => {
   if (!base || !rel || rel === '.') return base || rel;
+  // Already absolute ("C:\x", "\\server\share", "/Users/x") — use as-is;
+  // joining it onto the project root produced "C:\proj\C:\x".
+  if (/^([a-z]:[\\/]|[\\/])/i.test(String(rel))) return String(rel);
   const sep = base.includes('\\') && !base.includes('/') ? '\\' : '/';
   const b = base.replace(/[\\/]+$/, '');
   const r = String(rel).replace(/^\.[\\/]/, '').replace(/[/\\]+/g, sep).replace(/^[\\/]+/, '');
@@ -26,7 +29,24 @@ export const joinProjectPath = (base, rel) => {
 // A resource "url" with no scheme (e.g. "spec.md", ".cooldesk/notes/x.md") is a
 // project-relative file, not a web link — the scaffold AI sometimes files local
 // docs as type "link". Handing those to the url opener made them dead clicks.
-export const hasUrlScheme = (u) => /^[a-z][a-z0-9+.-]*:/i.test(String(u || '').trim());
+// Two+ chars before the colon: a single letter is a Windows drive ("C:\x"),
+// not a scheme — otherwise local Windows paths were treated as web links.
+export const hasUrlScheme = (u) => /^[a-z][a-z0-9+.-]+:/i.test(String(u || '').trim());
+
+// Personal resources may store a local file as a `file:` url; everything below
+// works on paths, so turn it into one ("file:///C:/x" → "C:/x").
+function fileUrlToPath(u) {
+  try {
+    const p = decodeURIComponent(new URL(u).pathname);
+    return /^\/[a-z]:\//i.test(p) ? p.slice(1) : p;
+  } catch {
+    return null;
+  }
+}
+
+const normaliseLocal = (r) => (/^file:/i.test(r?.url || '') && !r.path
+  ? { ...r, url: undefined, path: fileUrlToPath(r.url), type: r.type === 'folder' ? 'folder' : 'file' }
+  : r);
 
 /**
  * The folder a workspace calls its project root. A project folder may be a plain
@@ -69,9 +89,13 @@ export function useCooldeskItems(workspace) {
     const urls = workspace?.urls || [];
     const apps = workspace?.apps || [];
     const hubId = cooldesk.project?.id;
+    // Personal (gitignored `.cooldesk/local/`) resources render next to the
+    // shared ones, tagged `_local` so a surface can tell them apart.
+    const localResources = (cooldesk.localResources || []).map(normaliseLocal);
     // Each linked member is walked alongside the hub, skipping the hub's own entry.
     const sources = [
       { resources: cooldesk.resources, base: projectFolderPath, project: cooldesk.project?.name },
+      { resources: localResources, base: projectFolderPath, project: cooldesk.project?.name, local: true },
       ...(cooldesk.members || [])
         .filter(m => (m.project?.id || m.name) !== hubId)
         .map(m => ({ resources: m.resources, base: m.path, project: m.project?.name || m.name })),
@@ -79,10 +103,20 @@ export function useCooldeskItems(workspace) {
 
     const normUrl = (u) => (u || '').replace(/\/+$/, '').toLowerCase();
     const existingUrls = new Set(urls.map(u => normUrl(u.url)));
-    const cdLinks = (cooldesk.resources || [])
-      .filter(r => r.url && hasUrlScheme(r.url))
-      .map(r => ({ url: r.url, title: r.name || r.url, type: 'single', _cd: true }))
-      .filter(r => !existingUrls.has(normUrl(r.url)));
+    const cdLinks = [
+      ...(cooldesk.resources || []).map(r => ({ r, local: false })),
+      ...localResources.map(r => ({ r, local: true })),
+    ]
+      // Shared: any scheme, as before. Personal: web links only — its file:
+      // urls were turned into paths above and render as files.
+      .filter(({ r, local }) => r.url && (local ? /^https?:/i.test(r.url) : hasUrlScheme(r.url)))
+      .filter(({ r }) => {
+        const k = normUrl(r.url);
+        if (existingUrls.has(k)) return false;
+        existingUrls.add(k); // shared wins over a personal copy of the same link
+        return true;
+      })
+      .map(({ r, local }) => ({ url: r.url, title: r.name || r.url, type: 'single', _cd: true, ...(local ? { _local: true } : {}) }));
 
     // Folder and file resources are relative to their own project's root, so
     // each source is joined against its own base path.
@@ -100,7 +134,7 @@ export function useCooldeskItems(workspace) {
           const key = path?.toLowerCase();
           if (!key || seen.has(key)) continue;
           seen.add(key);
-          out.push({ name: r.name || rel, path, appType, _cd: true, project: src.project });
+          out.push({ name: r.name || rel, path, appType, _cd: true, project: src.project, ...(src.local ? { _local: true } : {}) });
         }
       }
       return out;

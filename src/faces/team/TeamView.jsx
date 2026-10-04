@@ -382,7 +382,7 @@ const TeamView = React.memo(function TeamView({ team: propTeam }) {
 
     return (
         <div style={{
-            display: 'flex', height: '100%', color: '#fff',
+            display: 'flex', height: '100%', minHeight: 0, color: '#fff',
             borderRadius: 16, overflow: 'hidden',
             border: '1px solid rgba(255,255,255,0.1)'
         }}>
@@ -484,7 +484,7 @@ const TeamView = React.memo(function TeamView({ team: propTeam }) {
             </div>
 
             {/* Main Content */}
-            <div className="team-view-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div className="team-view-content" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 {!activeTeam ? (
                     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.5, flexDirection: 'column', gap: 16 }}>
                         <FontAwesomeIcon icon={faUsers} size="3x" />
@@ -661,7 +661,7 @@ const TeamView = React.memo(function TeamView({ team: propTeam }) {
                         </div>
 
                         {/* Scrollable Content Area */}
-                        <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 32 }}>
+                        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingBottom: 32 }}>
 
                             {/* Context Panel - Hidden for now, will activate later */}
                             {/* <div style={{ padding: '0 0 24px 0' }}>

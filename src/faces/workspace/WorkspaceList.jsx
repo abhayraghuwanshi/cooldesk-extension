@@ -458,7 +458,12 @@ export function WorkspaceList({
                     /* Sidebar width: single workspace opened in full, in-depth view.
                        stopPropagation keeps the container's outside-click-close from
                        firing for clicks inside the detail view (e.g. the back button). */
-                    <div className="workspace-detail-view" onMouseDown={(e) => e.stopPropagation()}>
+                    <div
+                        className="workspace-detail-view"
+                        // Whole detail view (card + panel) accepts Finder drops — see WorkspaceFileDrop.
+                        data-workspace-id={expandedDetailWorkspace.id}
+                        onMouseDown={(e) => e.stopPropagation()}
+                    >
                         <button
                             className="workspace-detail-back"
                             onClick={() => onWorkspaceClick?.(expandedDetailWorkspace)}

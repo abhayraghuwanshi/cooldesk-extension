@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>CoolDesk</title>
+  <defs>
+    <mask id="cd-knockout" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+      <rect width="512" height="512" fill="#fff"/>
+      <g fill="none" stroke="#000" stroke-width="11" stroke-linecap="round"><circle cx="256" cy="256" r="19"/><path d="M294.83 227.79 A48 48 0 0 1 294.83 284.21"/><path d="M217.17 227.79 A48 48 0 0 0 217.17 284.21"/><path d="M314.25 213.68 A72 72 0 0 1 314.25 298.32"/><path d="M197.75 213.68 A72 72 0 0 0 197.75 298.32"/><path d="M333.66 199.57 A96 96 0 0 1 333.66 312.43"/><path d="M178.34 199.57 A96 96 0 0 0 178.34 312.43"/></g>
+    </mask>
+  </defs>
+  <circle cx="256" cy="256" r="232" fill="#6D4AFF"/>
+  <g transform="translate(256 256) scale(1.12) translate(-256 -256)">
+    <path fill="#FFFFFF" mask="url(#cd-knockout)" d="M249.26 195.42 A10 10 0 0 0 262.74 195.42 A82 82 0 1 1 262.74 316.58 A10 10 0 0 0 249.26 316.58 A82 82 0 1 1 249.26 195.42 Z"/>
+  </g>
+</svg>

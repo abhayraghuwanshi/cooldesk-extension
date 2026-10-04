@@ -8,6 +8,7 @@ import { CooldeskSection } from './CooldeskSection.jsx';
 import { fetchCooldesk, collectSharedTodos } from '../../../services/cooldeskService.js';
 import { useCooldeskVersion } from '../../../shared/hooks/useCooldeskProjects.js';
 import { useWorkspaceAccent } from '../../../shared/hooks/useWorkspaceAccent.js';
+import { accentTextVars } from '../../../utils/readableColor.js';
 import {
   deleteNote,
   deleteWorkspaceTodo,
@@ -629,7 +630,7 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
   return (
     <div
       className={`workspace-context-panel ${accent ? 'has-accent' : ''}`}
-      style={accent ? { '--card-accent': accent } : undefined}
+      style={accent ? { '--card-accent': accent, ...accentTextVars(accent, 0.15) } : undefined}
       onClick={e => e.stopPropagation()}
       onContextMenu={handleContextMenu}
     >

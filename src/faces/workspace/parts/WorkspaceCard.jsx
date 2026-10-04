@@ -5,6 +5,8 @@ import {
   faChartLine,
   faCheckCircle,
   faChevronDown,
+  faChevronLeft,
+  faChevronRight,
   faChevronUp,
   faCloud,
   faCode,
@@ -53,6 +55,7 @@ import {
 import { recordFeedbackEvent, recordUrlWorkspace } from '../../../services/feedbackService.js';
 import { useCooldeskItems } from '../../../shared/hooks/useCooldeskItems.js';
 import { ItemBadge } from '../../../shared/components/ItemBadge.jsx';
+import { fileStack, stackLogo, useFolderIdentity } from '../../../shared/hooks/useFolderIdentity.js';
 import { getBaseDomainFromUrl, getFaviconUrl, safeGetHostname } from '../../../utils/helpers.js';
 import { AccentColorPicker } from '../../../shared/components/AccentColorPicker.jsx';
 import { GroupedLinksPopover } from './GroupedLinksPopover.jsx';
@@ -60,6 +63,7 @@ import { UrlAnalyticsPopover } from './UrlAnalyticsPopover.jsx';
 import { isEditorApp, workspaceActivityService } from '../../../services/workspaceActivityService.js';
 import { useIsSidebarWidth } from '../../../shared/hooks/useIsSidebarWidth.js';
 import { useWorkspaceAccent } from '../../../shared/hooks/useWorkspaceAccent.js';
+import { accentTextVars } from '../../../utils/readableColor.js';
 
 const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
 
@@ -145,6 +149,10 @@ const openUrl = (url, workspaceName, title, target) => {
 // `!chrome.runtime?.id` because WebView2 populates `chrome.runtime`, which made
 // the context panel/resize handle vanish in the app. electron-shim guarantees
 // window.electronAPI (and __TAURI__) in the app; neither exists in the extension.
+// Folder tiles badge a branch only when it isn't one of these — a row of
+// identical "main" labels is noise.
+const DEFAULT_BRANCHES = new Set(['main', 'master']);
+
 const isDesktopApp = typeof window !== 'undefined' &&
   !!(window.__TAURI__ || window.__TAURI_INTERNALS__ || window.electronAPI);
 
@@ -160,10 +168,10 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   // the native `title` tooltip waits out the OS hover delay.
   const [hoverLabel, setHoverLabel] = useState(null);
   const [contextMenu, setContextMenu] = useState(null); // { x, y }
-  // "Edit" opens the header search's /edit-workspace mode for this workspace
-  // (same rename/add/remove/todo/note flow as typing its name there) — hidden
-  // in the sidebar, so offering it there just opens a menu item that does
-  // nothing visible.
+  // "Edit" opens /edit-workspace for this workspace (same rename/add/remove/
+  // todo/note flow as typing its name in the search) — in the header search,
+  // or at sidebar widths, where that's hidden, in the spotlight window. The
+  // extension has no spotlight window, so it stays hidden there.
   const isSidebarWidth = useIsSidebarWidth();
   // User-chosen accent color. Optimistic local state so the tint applies
   // instantly; persisted to the workspace record (survives reload / sync).
@@ -605,6 +613,15 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   // the workspace's own apps/urls — resolution is shared with the dock bar.
   const { cdFolders, cdLinks, cdFiles, cdProjects } = useCooldeskItems(workspace);
 
+  // Folder tiles: stack logo, git branch / dirty, and any dev server running
+  // from the folder (useFolderIdentity). Folders only — files get their logo
+  // from the extension, no backend call.
+  const placeFolderPaths = useMemo(
+    () => [...folderApps, ...cdFolders, ...cdProjects.filter((p) => p.exists)].map((i) => i.path).filter(Boolean),
+    [folderApps, cdFolders, cdProjects]
+  );
+  const folderInfo = useFolderIdentity(placeFolderPaths);
+
   const handleCardClick = () => {
     if (fullView) return; // detail view: card body is not a collapse target
     onClick?.(workspace);
@@ -711,6 +728,47 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   // `workspace.urls` would produce a map none of these lookups could hit.
   // `activity` is unread but load-bearing: resolveAll reads the service's
   // mutable snapshot, so a poll landing is the only cue to recompute.
+  // Collapsed icon row: one line that scrolls sideways. Its scrollbar is
+  // hidden (it collided with the card's bottom edge), and the mouse wheel
+  // can't be borrowed for it — the workspace list itself scrolls vertically
+  // under these rows. So an overflowing row gets ‹ › buttons at whichever
+  // edge has more to show; a sideways trackpad swipe still scrolls natively.
+  const iconsScrollRef = useRef(null);
+  // The ‹ › live OUTSIDE the scroller (siblings, same offsetParent) so the
+  // row's edge-fade mask doesn't fade them too; they're placed over the row's
+  // edges from its measured box, which works in both the side-by-side and the
+  // stacked (sidebar) card layouts.
+  const [rowScroll, setRowScroll] = useState({ left: false, right: false, y: 0, x0: 0, x1: 0 });
+  const updateRowScroll = useCallback(() => {
+    const el = iconsScrollRef.current;
+    if (!el) return;
+    const next = {
+      left: el.scrollLeft > 2,
+      right: el.scrollLeft + el.clientWidth < el.scrollWidth - 2,
+      y: el.offsetTop + el.offsetHeight / 2,
+      x0: el.offsetLeft,
+      x1: el.offsetLeft + el.clientWidth,
+    };
+    setRowScroll((prev) => (Object.keys(next).every((k) => prev[k] === next[k]) ? prev : next));
+  }, []);
+  const scrollRow = useCallback((dir) => {
+    const el = iconsScrollRef.current;
+    if (el) el.scrollBy({ left: dir * Math.max(120, el.clientWidth * 0.7), behavior: 'smooth' });
+  }, []);
+  // Re-measure when the row or its content changes size (items added, card
+  // resized, fonts loaded). The container is max-content wide while
+  // collapsed, so observing it catches content growth.
+  useEffect(() => {
+    if (contextPanelVisible) return;
+    const el = iconsScrollRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    updateRowScroll();
+    const ro = new ResizeObserver(updateRowScroll);
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => ro.disconnect();
+  }, [contextPanelVisible, updateRowScroll]);
+
   const resolved = useMemo(
     () => (isDesktopApp ? workspaceActivityService.resolveAll([...activeUrls, ...apps]) : new Map()),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -742,10 +800,12 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   return (
     <div
       ref={cardRef}
+      // Drop target for files/folders from Finder (see WorkspaceFileDrop).
+      data-workspace-id={workspace.id}
       className={`cooldesk-workspace-card ${isActive ? 'active' : ''} ${compact ? 'compact' : ''} ${contextPanelVisible ? 'panel-open' : ''} ${fullView ? 'full-view' : ''} ${colorOverride ? 'has-accent' : ''}`}
       onClick={handleCardClick}
       onContextMenu={handleContextMenu}
-      style={colorOverride ? { ...cardStyle, '--card-accent': colorOverride } : cardStyle}
+      style={colorOverride ? { ...cardStyle, '--card-accent': colorOverride, ...accentTextVars(colorOverride, 0.16) } : cardStyle}
       {...rest}
     >
       {compact ? (
@@ -798,7 +858,12 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
               expanded. No stopPropagation here: each icon stops its own click, and
               empty-row clicks must bubble so tapping the card expands it — the row
               spans nearly the whole card now that the title sits above it. */}
-          <div className="compact-icons-scroll" onMouseLeave={() => setHoverLabel(null)}>
+          <div
+            className={`compact-icons-scroll${!contextPanelVisible && rowScroll.left ? ' fade-left' : ''}${!contextPanelVisible && rowScroll.right ? ' fade-right' : ''}`}
+            ref={iconsScrollRef}
+            onScroll={contextPanelVisible ? undefined : updateRowScroll}
+            onMouseLeave={() => setHoverLabel(null)}
+          >
             {(() => {
               const renderLinkIcon = (item, idx, showLabel = false) => {
                 const isGroup = item.type === 'group';
@@ -888,7 +953,9 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                     }}
                     onMouseEnter={showLabel ? undefined : () => setHoverLabel(`${app.name || app.path}${isRunning ? ' — running' : ''}`)}
                     aria-label={app.name || app.path}
-                    style={{ border: `1px solid ${appColor}55`, background: `${appColor}12` }}
+                    // Tint only the icon-only tile; labeled rows stay neutral like
+                    // the link rows — the icon itself carries the color.
+                    style={showLabel ? undefined : { border: `1px solid ${appColor}55`, background: `${appColor}12` }}
                   >
                     {app.icon ? (
                       <img src={app.icon} alt="" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
@@ -918,25 +985,87 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                 );
               };
 
-              // A linked .cooldesk project — opens its folder; shown in its own row.
-              const renderProjectIcon = (proj, idx, showLabel = false) => (
-                <div
-                  key={`proj-${idx}`}
-                  className={`compact-url-icon compact-app-icon${showLabel ? ' is-labeled' : ''}${proj.exists ? '' : ' is-missing'}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (proj.exists && proj.path && window.electronAPI?.openFolder) window.electronAPI.openFolder(proj.path);
-                    else if (proj.repo) openUrl(proj.repo, name, proj.name);
-                  }}
-                  onMouseEnter={showLabel ? undefined : () => setHoverLabel(proj.exists ? proj.name : `${proj.name} — not found locally`)}
-                  aria-label={proj.name}
-                  style={{ border: '1px solid #2dd4bf55', background: '#2dd4bf12' }}
-                >
-                  <FontAwesomeIcon icon={faBriefcase} style={{ color: '#2dd4bf', fontSize: '18px' }} />
-                  {!showLabel && <ItemBadge name={proj.name} path={proj.path} />}
-                  {showLabel && <span className="compact-icon-label" style={{ color: '#2dd4bf' }}>{proj.name}</span>}
-                </div>
-              );
+
+              // Expanded / full-view row for a folder, file or linked project:
+              // the same identity as the collapsed tile (stack logo; live port,
+              // non-default branch or dirty dot) laid out as a labeled row.
+              const renderPlaceRow = (item, key, { isFile = false, missing = false, onOpen, removable = false, onRemove }) => {
+                const label = item.name || item.path;
+                const info = isFile
+                  ? { stack: fileStack(item.path || item.name), branch: null, dirty: false, ports: [] }
+                  : folderInfo(item.path);
+                const logo = stackLogo(info.stack);
+                const port = info.ports[0];
+                const isRunning = !missing && !!resolved.get(item);
+                const showBranch = info.branch && !DEFAULT_BRANCHES.has(info.branch);
+                return (
+                  <div
+                    key={key}
+                    className={`compact-url-icon compact-app-icon is-labeled compact-place-row${isRunning ? ' is-open' : ''}${missing ? ' is-missing' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); onOpen(); }}
+                    title={item.path || label}
+                    aria-label={label}
+                  >
+                    {logo && (
+                      <img
+                        className={logo.invert ? 'is-inverted' : ''}
+                        src={logo.src}
+                        alt=""
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.nextSibling.style.display = 'inline-block';
+                        }}
+                      />
+                    )}
+                    <FontAwesomeIcon
+                      icon={isFile ? faFileLines : faFolderOpen}
+                      className="compact-place-row-glyph"
+                      style={{ display: logo ? 'none' : 'inline-block' }}
+                    />
+                    <span className="compact-icon-label">{label}</span>
+                    {port ? (
+                      <button
+                        type="button"
+                        className="compact-place-row-badge is-live"
+                        onClick={(e) => { e.stopPropagation(); openUrl(`http://localhost:${port}`, name, `${label} :${port}`); }}
+                        title={`Dev server running — open localhost:${port}`}
+                      >
+                        <i />:{port}
+                      </button>
+                    ) : showBranch ? (
+                      <span className="compact-place-row-badge" title={info.dirty ? 'Uncommitted changes' : undefined}>
+                        {info.dirty && <i />}{info.branch}
+                      </span>
+                    ) : info.dirty ? (
+                      <span className="compact-place-row-dirty" title={`${info.branch} — uncommitted changes`} />
+                    ) : null}
+                    {removable && (
+                      <button
+                        type="button"
+                        className="item-remove-btn"
+                        onClick={(e) => onRemove(e, item)}
+                        title={`Remove ${label}`}
+                        aria-label={`Remove ${label} from ${name}`}
+                      >
+                        <FontAwesomeIcon icon={faXmark} />
+                      </button>
+                    )}
+                  </div>
+                );
+              };
+              const placeRowForApp = (app, idx) => renderPlaceRow(app, `app-${idx}`, {
+                isFile: app.appType === 'file',
+                onOpen: () => activate(app),
+                removable: !app._cd,
+                onRemove: handleRemoveApp,
+              });
+              const projectRow = (proj, idx) => renderPlaceRow(proj, `proj-${idx}`, {
+                missing: !proj.exists,
+                onOpen: () => {
+                  if (proj.exists && proj.path && window.electronAPI?.openFolder) window.electronAPI.openFolder(proj.path);
+                  else if (proj.repo) openUrl(proj.repo, name, proj.name);
+                },
+              });
 
               if (contextPanelVisible) {
                 // Expanded: categorized rows with name pills so folders/apps/files are distinguishable.
@@ -961,11 +1090,11 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
 
                 const ROWS = [
                   ...linkRows,
-                  { key: 'projects', label: 'Projects', icon: faBriefcase, accent: '#2dd4bf', items: cdProjects, render: renderProjectIcon },
+                  { key: 'projects', label: 'Projects', icon: faBriefcase, accent: '#2dd4bf', items: cdProjects, render: projectRow },
                   { key: 'editors', label: 'Editors', icon: faCode, accent: '#38bdf8', items: editorApps, render: renderAppIcon },
                   { key: 'apps', label: 'Apps', icon: faDesktop, accent: '#8b5cf6', items: desktopApps, render: renderAppIcon },
-                  { key: 'folders', label: 'Folders', icon: faFolderOpen, accent: '#facc15', items: [...folderApps, ...cdFolders], render: renderAppIcon },
-                  { key: 'files', label: 'Files', icon: faFileLines, accent: '#94a3b8', items: [...fileApps, ...cdFiles], render: renderAppIcon },
+                  { key: 'folders', label: 'Folders', icon: faFolderOpen, accent: '#facc15', items: [...folderApps, ...cdFolders], render: placeRowForApp },
+                  { key: 'files', label: 'Files', icon: faFileLines, accent: '#94a3b8', items: [...fileApps, ...cdFiles], render: placeRowForApp },
                 ].filter(row => row.items.length > 0);
 
                 return (
@@ -993,18 +1122,148 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
               // folders, files) ride along after the workspace's own — the
               // expanded rows already showed them, the collapsed list didn't.
               // Indices are offset so keys stay unique in this one container.
+              //
+              // Folders, files and linked projects get stack-logo tiles
+              // (renderPlaceTile): as one shared folder glyph they were all
+              // identical; the logo + branch/port badge tells them apart.
               const cdAppItems = [...cdFolders, ...cdFiles];
+              const isPlace = (app) => app.appType === 'folder' || app.appType === 'file';
+              // Folder / file / project as a logo tile: the same neutral round
+              // plate as a link favicon, showing the folder's stack (React,
+              // Rust, Tauri, Markdown…) so it reads at the weight of the logos
+              // beside it. A small tab on top says "folder". One badge below:
+              // a dev server running from it (green port — click opens it),
+              // else its git branch (amber dot = uncommitted changes).
+              const renderPlaceTile = (item, key, { glyph, onOpen, isFile = false, missing = false, removable = false, onRemove }) => {
+                const isRunning = !missing && !!resolved.get(item);
+                const label = item.name || item.path;
+                const info = isFile
+                  ? { stack: fileStack(item.path || item.name), branch: null, dirty: false, ports: [] }
+                  : folderInfo(item.path);
+                const logo = stackLogo(info.stack);
+                const port = info.ports[0];
+                // No caption under the tile (links have none, and a caption
+                // made every row taller): the name shows in the card title on
+                // hover, like a link's, with the branch or live port after it.
+                const hoverText = `${label}${missing ? ' — not found locally'
+                  : port ? ` — :${port}` : info.branch ? ` — ${info.branch}${info.dirty ? ' (changes)' : ''}` : ''}`;
+                return (
+                  <div
+                    key={key}
+                    className={`compact-place-tile${missing ? ' is-missing' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); onOpen(); }}
+                    onMouseEnter={() => setHoverLabel(hoverText)}
+                    title={item.path || label}
+                    aria-label={label}
+                  >
+                    <div className={`compact-url-icon compact-place-icon${isRunning ? ' is-open' : ''}${port ? ' is-live' : ''}`}>
+                      {!isFile && <span className="compact-place-tab" aria-hidden="true" />}
+                      {logo && (
+                        <img
+                          className={`compact-place-logo${logo.invert ? ' is-inverted' : ''}`}
+                          src={logo.src}
+                          alt=""
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            e.currentTarget.nextSibling.style.display = 'inline-block';
+                          }}
+                        />
+                      )}
+                      <FontAwesomeIcon
+                        icon={glyph}
+                        className="compact-place-fallback"
+                        style={{ display: logo ? 'none' : 'inline-block' }}
+                      />
+                      {port ? (
+                        <button
+                          type="button"
+                          className="compact-place-badge is-live"
+                          onClick={(e) => { e.stopPropagation(); openUrl(`http://localhost:${port}`, name, `${label} :${port}`); }}
+                          title={`Dev server running — open localhost:${port}`}
+                        >
+                          <i />:{port}{info.ports.length > 1 ? ` +${info.ports.length - 1}` : ''}
+                        </button>
+                      ) : info.branch && !DEFAULT_BRANCHES.has(info.branch) ? (
+                        <span
+                          className="compact-place-badge"
+                          title={`${info.branch}${info.dirty ? ' — uncommitted changes' : ''}`}
+                        >
+                          {info.dirty && <i />}{info.branch}
+                        </span>
+                      ) : info.dirty ? (
+                        // On main/master the branch name says nothing new —
+                        // only uncommitted changes are worth a mark.
+                        <span className="compact-place-dirty" title={`${info.branch} — uncommitted changes`} />
+                      ) : null}
+                      {removable && (
+                        <button
+                          type="button"
+                          className="item-remove-btn"
+                          onClick={(e) => onRemove(e, item)}
+                          title={`Remove ${label}`}
+                          aria-label={`Remove ${label} from ${name}`}
+                        >
+                          <FontAwesomeIcon icon={faXmark} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              };
+              const placeTileForApp = (app, key) => renderPlaceTile(app, key, {
+                glyph: app.appType === 'file' ? faFileLines : faFolderOpen,
+                isFile: app.appType === 'file',
+                onOpen: () => activate(app),
+                removable: !app._cd,
+                onRemove: handleRemoveApp,
+              });
               return (
                 <div className="compact-icons-container">
                   {activeUrls.map((item, idx) => renderLinkIcon(item, idx, false))}
                   {cdLinks.map((item, idx) => renderLinkIcon(item, activeUrls.length + idx, false))}
-                  {apps.map((app, idx) => renderAppIcon(app, idx, false))}
-                  {cdProjects.map((proj, idx) => renderProjectIcon(proj, idx, false))}
-                  {cdAppItems.map((app, idx) => renderAppIcon(app, apps.length + idx, false))}
+                  {apps.filter((a) => !isPlace(a)).map((app) => renderAppIcon(app, apps.indexOf(app), false))}
+                  {apps.filter(isPlace).map((app) => placeTileForApp(app, `app-${apps.indexOf(app)}`))}
+                  {cdProjects.map((proj, idx) => renderPlaceTile(proj, `proj-${idx}`, {
+                    glyph: faBriefcase,
+                    missing: !proj.exists,
+                    onOpen: () => {
+                      if (proj.exists && proj.path && window.electronAPI?.openFolder) window.electronAPI.openFolder(proj.path);
+                      else if (proj.repo) openUrl(proj.repo, name, proj.name);
+                    },
+                  }))}
+                  {cdAppItems.map((app, idx) => placeTileForApp(app, `app-${apps.length + idx}`))}
                 </div>
               );
             })()}
           </div>
+          {!contextPanelVisible && [-1, 1].map((dir) => (rowScroll[dir < 0 ? 'left' : 'right'] ? (
+            <button
+              key={dir}
+              type="button"
+              className={`compact-scroll-arrow is-${dir < 0 ? 'left' : 'right'}`}
+              style={{ top: rowScroll.y, left: dir < 0 ? rowScroll.x0 : rowScroll.x1 }}
+              onClick={(e) => { e.stopPropagation(); scrollRow(dir); }}
+              aria-label={dir < 0 ? 'Scroll left' : 'Scroll right'}
+              tabIndex={-1}
+            >
+              <FontAwesomeIcon icon={dir < 0 ? faChevronLeft : faChevronRight} />
+            </button>
+          ) : null))}
+
+          {/* Edit — sidebar only, while open. The header search (where the
+              right-click "Edit" lands at full width) is hidden here, so this
+              opens the spotlight window in /edit-workspace mode instead (see
+              CoolDeskContainer's handleOpenEditModal). */}
+          {contextPanelVisible && isSidebarWidth && isDesktopApp && onEditWorkspace && (
+            <button
+              className="compact-expand-btn compact-edit-btn"
+              onClick={(e) => { e.stopPropagation(); onEditWorkspace(workspace); }}
+              title="Edit workspace"
+              aria-label="Edit workspace"
+            >
+              <FontAwesomeIcon icon={faPen} />
+            </button>
+          )}
 
           {/* Expand / collapse — pops the card open inline (status, tasks, notes) */}
           {totalCount > 0 && (
@@ -1395,7 +1654,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
               mode. Lives here rather than as a permanent "+" on the card:
               every card would carry one, and an always-visible button
               competes with the items the card exists to show. */}
-          {onEditWorkspace && !isSidebarWidth && (
+          {onEditWorkspace && (!isSidebarWidth || isDesktopApp) && (
             <button
               className="context-menu-item"
               onClick={() => { onEditWorkspace(workspace); setContextMenu(null); }}

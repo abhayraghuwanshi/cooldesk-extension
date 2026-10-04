@@ -242,6 +242,9 @@ export function AgentPanel({
                             <span className="spotlight-agent-request-mark">›</span>
                             {turn.request}
                         </div>
+                        {turn.contextNote && (
+                            <div className="spotlight-agent-context-note">{turn.contextNote}</div>
+                        )}
 
                         {/* The answer. Ordinary conversation is the common
                             case, so this is the headline; raw stdout is
@@ -261,10 +264,24 @@ export function AgentPanel({
                             </div>
                         )}
 
-                        {/* Raw output — the underlying stream-json protocol
-                            lines (system init, tool calls, the final result
-                            envelope), not prose. While the run is in flight
-                            this is the only sign of life, so it stays open.
+                        {/* The answer as it streams in — replaced by the
+                            reply block above once the run finishes. */}
+                        {turn.running && turn.partial && (
+                            <div className="spotlight-agent-reply">
+                                <div className="spotlight-agent-reply-head">
+                                    <span className="spotlight-agent-reply-who">CoolDesk</span>
+                                </div>
+                                <div className="spotlight-agent-reply-text">
+                                    <AgentMarkdown text={turn.partial} />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Progress — tool calls ("Searching the web: …")
+                            and stderr, already turned into readable lines by
+                            createOutputParser rather than raw protocol.
+                            While the run is in flight this is the main sign
+                            of life, so it stays open.
                             Once it's done, a plain conversational reply
                             already says everything there is to say — showing
                             a second "Output" toggle full of protocol noise
@@ -297,7 +314,7 @@ export function AgentPanel({
                             </details>
                         ) : null)}
 
-                        {turn.running && !turn.lines.length && (
+                        {turn.running && !turn.lines.length && !turn.partial && (
                             <div className="spotlight-agent-waiting">Waiting for {aiCli.adapter.label}…</div>
                         )}
 
@@ -350,7 +367,7 @@ export function AgentPanel({
                                     <button
                                         type="button"
                                         className="spotlight-agent-discard"
-                                        onMouseDown={(e) => { e.preventDefault(); aiCli.clearProposal(turn.id); }}
+                                        onMouseDown={(e) => { e.preventDefault(); aiCli.clearProposal(turn.id, 'discarded'); }}
                                     >
                                         Discard
                                     </button>

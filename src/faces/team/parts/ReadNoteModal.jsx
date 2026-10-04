@@ -53,6 +53,11 @@ export function ReadNoteModal({ isOpen, onClose, note }) {
         .read-note-content pre code { background: transparent; padding: 0; white-space: pre-wrap; word-break: break-all; }
         .read-note-content a { color: #60a5fa; text-decoration: underline; word-break: break-all; }
         .read-note-content hr { border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 2em 0; }
+        .read-note-content { min-width: 0; overflow-wrap: anywhere; }
+        .read-note-content table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 1em 0; font-size: 0.9em; }
+        .read-note-content th, .read-note-content td { border: 1px solid rgba(255,255,255,0.12); padding: 6px 10px; text-align: left; vertical-align: top; min-width: 80px; overflow-wrap: normal; }
+        .read-note-content th { background: rgba(255,255,255,0.05); color: #fff; font-weight: 600; }
+        .read-note-content td p, .read-note-content th p { margin: 0; }
         .read-note-content img { max-width: 100%; height: auto; border-radius: 12px; margin: 1.5em 0; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
         @keyframes modalSlideUp {
             from { transform: translateY(20px); opacity: 0; }
@@ -79,7 +84,7 @@ export function ReadNoteModal({ isOpen, onClose, note }) {
 
                 {/* Header */}
                 <div style={{
-                    padding: '32px 40px',
+                    padding: '32px 40px', flexShrink: 0,
                     borderBottom: '1px solid rgba(255,255,255,0.06)',
                     background: 'rgba(255,255,255,0.01)',
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center'
@@ -107,7 +112,8 @@ export function ReadNoteModal({ isOpen, onClose, note }) {
                 </div>
 
                 <div style={{
-                    overflowY: 'auto', padding: '16px 40px 40px 40px',
+                    flex: '1 1 auto', minHeight: 0,
+                    overflowY: 'auto', overflowX: 'hidden', padding: '16px 40px 40px 40px',
                     color: '#e2e8f0', lineHeight: 1.7, fontSize: 17
                 }}>
                     <div
@@ -117,7 +123,7 @@ export function ReadNoteModal({ isOpen, onClose, note }) {
                 </div>
 
                 <div style={{
-                    padding: '24px 40px', borderTop: '1px solid rgba(255,255,255,0.06)',
+                    padding: '24px 40px', flexShrink: 0, borderTop: '1px solid rgba(255,255,255,0.06)',
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     background: 'rgba(15, 23, 42, 0.95)',
                     marginTop: 'auto'

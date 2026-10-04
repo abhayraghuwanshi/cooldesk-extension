@@ -5,6 +5,7 @@ import { ActivityFeed } from './parts/ActivityFeed';
 import { ActivityOverview } from '../../features/activity/ActivityOverview';
 import { WidgetBoard } from '../../features/widgets/WidgetBoard';
 import { AccentColorPicker, TRANSPARENT_ACCENT } from '../../shared/components/AccentColorPicker.jsx';
+import { accentTextVars, colorlessTextVars, sampleWallpaper } from '../../utils/readableColor.js';
 
 const LEFT_COLOR_KEY = 'cooldesk-overview-left-color';
 const ACTIVITY_COLOR_KEY = 'cooldesk-overview-activity-color';
@@ -71,6 +72,51 @@ function useColumnOpacity(storageKey) {
 // card instead of a repeating tile. Portaled to <body> because both columns
 // use backdrop-filter, which makes them a containing block for
 // position:fixed descendants (see WidgetBoard.jsx's picker-overlay comment).
+// The current wallpaper as Colorless columns see it: its bright-area colour
+// (sampled once per URL) and the layer opacity, read from the body vars that
+// ExtensionApp/App set, and followed live (next-wallpaper button, settings).
+// null when wallpaper is off.
+function readWallpaper() {
+    const b = document.body;
+    if (!b.classList.contains('wallpaper-enabled')) return null;
+    const m = /url\("?(.*?)"?\)/.exec(b.style.getPropertyValue('--wallpaper-url') || '');
+    const opacity = parseFloat(b.style.getPropertyValue('--wallpaper-opacity'));
+    return m ? { url: m[1], opacity: Number.isFinite(opacity) ? opacity : 0.3 } : null;
+}
+
+function useWallpaperBacking() {
+    const [wall, setWall] = useState(readWallpaper);
+    const [color, setColor] = useState(null);
+    useEffect(() => {
+        const sync = () => setWall(prev => {
+            const next = readWallpaper();
+            return prev?.url === next?.url && prev?.opacity === next?.opacity ? prev : next;
+        });
+        const obs = new MutationObserver(sync);
+        obs.observe(document.body, { attributes: true, attributeFilter: ['style', 'class'] });
+        sync();
+        return () => obs.disconnect();
+    }, []);
+    useEffect(() => {
+        let alive = true;
+        setColor(null);
+        if (wall?.url) sampleWallpaper(wall.url).then(c => { if (alive) setColor(c); });
+        return () => { alive = false; };
+    }, [wall?.url]);
+    if (!wall) return null;
+    // Unreadable (cross-origin custom URL): assume a fairly bright photo so the
+    // text still gets help that scales with the darkness slider.
+    return { color: color || '#b8bcc4', opacity: wall.opacity };
+}
+
+function colorlessStyle(opacity, wall) {
+    return {
+        '--colorless-opacity': opacity,
+        // No wallpaper: the slab sits on the theme background, nothing to beat.
+        ...(wall ? colorlessTextVars(wall.color, wall.opacity, opacity) : {}),
+    };
+}
+
 function ColumnColorChip({ color, onChange, opacity, onOpacityChange }) {
     const [menu, setMenu] = useState(null);
 
@@ -165,6 +211,7 @@ const OverviewDashboard = memo(function OverviewDashboard() {
     const [activityColor, setActivityColor] = useColumnAccent(ACTIVITY_COLOR_KEY);
     const [leftOpacity, setLeftOpacity] = useColumnOpacity(LEFT_OPACITY_KEY);
     const [activityOpacity, setActivityOpacity] = useColumnOpacity(ACTIVITY_OPACITY_KEY);
+    const wall = useWallpaperBacking();
 
     return (
         // .overview-scope establishes the container-query context; the grid
@@ -175,8 +222,8 @@ const OverviewDashboard = memo(function OverviewDashboard() {
                 <div
                     className={`overview-left-column ${leftColor === TRANSPARENT_ACCENT ? 'is-colorless' : leftColor ? 'has-accent' : ''}`}
                     style={
-                        leftColor === TRANSPARENT_ACCENT ? { '--colorless-opacity': leftOpacity }
-                            : leftColor ? { '--card-accent': leftColor }
+                        leftColor === TRANSPARENT_ACCENT ? colorlessStyle(leftOpacity, wall)
+                            : leftColor ? { '--card-accent': leftColor, ...accentTextVars(leftColor, 0.13) }
                                 : undefined
                     }
                 >
@@ -194,8 +241,8 @@ const OverviewDashboard = memo(function OverviewDashboard() {
                 <div
                     className={`overview-activity-column ${activityColor === TRANSPARENT_ACCENT ? 'is-colorless' : activityColor ? 'has-accent' : ''}`}
                     style={
-                        activityColor === TRANSPARENT_ACCENT ? { '--colorless-opacity': activityOpacity }
-                            : activityColor ? { '--card-accent': activityColor }
+                        activityColor === TRANSPARENT_ACCENT ? colorlessStyle(activityOpacity, wall)
+                            : activityColor ? { '--card-accent': activityColor, ...accentTextVars(activityColor, 0.13) }
                                 : undefined
                     }
                 >

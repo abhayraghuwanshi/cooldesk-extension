@@ -23,6 +23,25 @@ import('@tauri-apps/api/event')
   .then(({ listen }) => listen('dock-state-changed', (e) => applySide(e.payload?.side)))
   .catch(() => {});
 
+// Pending update: badge the grip so it's visible while the drawer is collapsed
+// (the sidebar's own update button is only on screen when it's open). The
+// main window owns the check and broadcasts it; ask once on load in case it
+// already finished before this listener existed.
+const applyUpdate = (payload) => {
+  const has = !!payload?.hasUpdate;
+  el.classList.toggle('has-update', has);
+  el.title = has
+    ? `Open CoolDesk — update${payload.latest ? ` ${payload.latest}` : ''} available`
+    : 'Open CoolDesk';
+};
+
+import('@tauri-apps/api/event')
+  .then(async ({ listen, emit }) => {
+    await listen('update-state', (e) => applyUpdate(e.payload));
+    emit('update-state-request').catch(() => {});
+  })
+  .catch(() => {});
+
 const expand = () => {
   invoke('dock_expand').catch((e) => console.error('[Handle] dock_expand failed:', e));
 };

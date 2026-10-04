@@ -705,6 +705,50 @@ pub async fn post_cooldesk_link(
     }
 }
 
+/// Live local dev servers grouped by project (see sidecar/local_servers.rs).
+/// Shells out to lsof/ps, so it runs off the async runtime.
+/// GET /local/servers
+pub async fn get_local_servers() -> Json<serde_json::Value> {
+    let v = tokio::task::spawn_blocking(crate::sidecar::local_servers::local_servers)
+        .await
+        .unwrap_or_else(|_| serde_json::json!({ "servers": [], "projects": [] }));
+    Json(v)
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct CooldeskResourcesBody {
+    /// Project root that owns the `.cooldesk/` folder.
+    pub path: String,
+    /// "local" (personal, gitignored) or "shared" (committed cooldesk.json).
+    pub scope: crate::sidecar::cooldesk::ResourceScope,
+    #[serde(default)]
+    pub add: Vec<serde_json::Value>,
+    /// Urls or paths to remove.
+    #[serde(default)]
+    pub remove: Vec<String>,
+}
+
+/// Add/remove a project's resources — personal (`.cooldesk/local/`, gitignored)
+/// or shared (`cooldesk.json`, committed). Blocking fs + git, so off the runtime.
+/// POST /cooldesk/resources  { "path": "...", "scope": "local", "add": [..], "remove": [..] }
+pub async fn post_cooldesk_resources(
+    Json(body): Json<CooldeskResourcesBody>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let result = tokio::task::spawn_blocking(move || {
+        crate::sidecar::cooldesk::update_resources(&body.path, body.scope, &body.add, &body.remove)
+    })
+    .await
+    .map_err(|e| e.to_string())
+    .and_then(|r| r);
+    match result {
+        Ok(v) => (StatusCode::OK, Json(serde_json::json!({ "ok": true, "cooldesk": v }))),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "ok": false, "error": e })),
+        ),
+    }
+}
+
 #[derive(Debug, serde::Deserialize)]
 pub struct CooldeskAnnounceBody {
     /// Absolute path to the project root that owns the `.cooldesk/` folder.

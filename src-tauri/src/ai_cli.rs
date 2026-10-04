@@ -339,27 +339,40 @@ pub async fn ai_cli_run(app: AppHandle, id: String, spec: AiCliSpec) -> Result<(
         .spawn()
         .map_err(|e| format!("Failed to start `{}`: {}", spec.bin, e))?;
 
-    if let Some(prompt) = spec.stdin {
-        let mut sink = child
-            .stdin
-            .take()
-            .ok_or_else(|| "stdin was not piped".to_string())?;
-        sink.write_all(prompt.as_bytes())
-            .await
-            .map_err(|e| format!("Failed to write prompt: {}", e))?;
-        // Dropping the handle closes stdin — without it a CLI reading to EOF
-        // waits forever and the run looks hung.
-        drop(sink);
-    }
-
+    let stdin = child.stdin.take();
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
 
     // Park the child so ai_cli_cancel can reach it.
     RUNNING.lock().unwrap().insert(id.clone(), child);
 
+    // Readers first, then the prompt. Writing a large prompt (attached files,
+    // a browsing snapshot) before anything drains stdout/stderr can deadlock
+    // once both pipe buffers fill; and an early `?` on a failed write used to
+    // return with the child still running but never parked, so it could
+    // neither be cancelled nor reaped.
     let out_task = tokio::spawn(pump(stdout, "stdout", app.clone(), id.clone()));
     let err_task = tokio::spawn(pump(stderr, "stderr", app.clone(), id.clone()));
+
+    if let (Some(prompt), Some(mut sink)) = (spec.stdin, stdin) {
+        let app = app.clone();
+        let id = id.clone();
+        tokio::spawn(async move {
+            if let Err(e) = sink.write_all(prompt.as_bytes()).await {
+                let _ = app.emit(
+                    "ai-cli-output",
+                    OutputEvent {
+                        id,
+                        stream: "stderr".to_string(),
+                        line: format!("Failed to write prompt: {}", e),
+                    },
+                );
+            }
+            // Dropping the handle closes stdin — without it a CLI reading to
+            // EOF waits forever and the run looks hung.
+            drop(sink);
+        });
+    }
 
     tauri::async_runtime::spawn(async move {
         let _ = out_task.await;

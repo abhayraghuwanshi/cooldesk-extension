@@ -14,8 +14,10 @@ import '../../styles/dock-see-through.css';
 import { Face, WorkspaceShell } from './WorkspaceShell';
 import { GlobalSpotlight } from '../../features/spotlight/GlobalSpotlight';
 import { UpdateButton } from '../../features/updates/UpdateButton';
+import { openSpotlightEdit } from '../../services/spotlightEdit';
 import { OverviewDashboard } from '../overview/OverviewDashboard';
 import { WorkspaceDockBar } from '../../features/dock/WorkspaceDockBar';
+import { WorkspaceFileDrop } from '../../features/workspace-drop/WorkspaceFileDrop.jsx';
 import { useDockState } from '../../features/dock/useDockState';
 import { useLayoutSwitch } from '../../features/dock/useLayoutSwitch';
 import { LayoutSwitchButton } from '../../features/dock/LayoutSwitchButton';
@@ -193,11 +195,18 @@ export function CoolDeskContainer({
   // reports the mode closed (Esc, its chip's ×, or picking another workspace),
   // so the next right-click "Edit" — even on the same workspace — re-triggers.
   const [editTarget, setEditTarget] = useState(null);
+  const isSidebarWidth = useIsSidebarWidth();
 
+  // At sidebar widths the header (and its embedded spotlight) isn't mounted,
+  // so hand the edit to the standalone spotlight window instead.
   const handleOpenEditModal = useCallback((workspace = null) => {
     if (!workspace) return;
+    if (isDesktopApp && isSidebarWidth) {
+      openSpotlightEdit(workspace);
+      return;
+    }
     setEditTarget({ id: workspace.id, name: workspace.name });
-  }, []);
+  }, [isDesktopApp, isSidebarWidth]);
 
   const handleExitEditMode = useCallback(() => setEditTarget(null), []);
 
@@ -207,7 +216,6 @@ export function CoolDeskContainer({
   // widths (same reasoning that already keeps it out of `sidebar-control-bar`
   // below) — gate WorkspaceShell's own settings nav dot on the same check so
   // it isn't reachable from a width where it can't actually open correctly.
-  const isSidebarWidth = useIsSidebarWidth();
 
   // Backend dock state — drives the horizontal-bar render mode below.
   const dockState = useDockState();
@@ -606,17 +614,22 @@ export function CoolDeskContainer({
   // is a ~96px-tall strip — render only the taskbar-style workspace bar.
   if (isDesktopApp && dockState?.enabled && (dockState.side === 'top' || dockState.side === 'bottom')) {
     return (
-      <WorkspaceDockBar
-        workspaces={savedWorkspaces}
-        activeWorkspace={currentWorkspace}
-        onSelectWorkspace={setCurrentWorkspace}
-        side={dockState.side}
-      />
+      <>
+        <WorkspaceDockBar
+          workspaces={savedWorkspaces}
+          activeWorkspace={currentWorkspace}
+          onSelectWorkspace={setCurrentWorkspace}
+          side={dockState.side}
+        />
+        <WorkspaceFileDrop />
+      </>
     );
   }
 
   return (
     <div className={`cooldesk-container ${themeClass}`}>
+      {/* Finder/Explorer → workspace card drops (desktop app only). */}
+      <WorkspaceFileDrop />
       {/* Wallpaper Background Overlay (Blur) handled by React, Image handled by Body CSS */}
       {/* {wallpaperEnabled && wallpaperUrl && (
         <div style={{

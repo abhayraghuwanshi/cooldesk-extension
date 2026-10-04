@@ -4,6 +4,12 @@
    floating a few pixels off the screen edge, not a slab that fills the window. */
 
 .dockbar {
+  /* Tile size follows the window band instead of a fixed 44px. At the default
+     72px bar a fixed 44px tile + the row's 7px magnify headroom + the pill's
+     padding/border used exactly 64px of 64 — zero slack, so subpixel rounding
+     or a hover lift clipped the row's bottom. 100vh − 32px = 40px at 72px. */
+  --tile: clamp(30px, calc(100vh - 32px), 44px);
+  --tile-art: calc(var(--tile) - 13px);
   position: fixed;
   inset: 0;
   z-index: 9999;
@@ -28,6 +34,11 @@
   gap: 9px;
   box-sizing: border-box;
   max-width: 100%;
+  /* Without this the pill's automatic min-width (a flex item's min-content —
+     for a row of launchers, ALL of them side by side) beats max-width: the
+     pill grew past the screen and got clipped by the window, so the launcher
+     row never overflowed and never scrolled. */
+  min-width: 0;
   padding: 2px 9px;
   border-radius: 21px;
   /* Near-neutral dark glass — barely-there warmth, not a purple wash. The
@@ -66,7 +77,7 @@
   gap: 7px;
   flex: 0 0 auto;
   max-width: 208px;
-  height: 44px;
+  height: var(--tile);
   padding: 0 13px 0 7px;
   border: 1px solid rgba(167, 139, 250, 0.28);
   border-radius: 999px;
@@ -87,8 +98,8 @@
 }
 
 .dockbar-ws-logo {
-  width: 30px;
-  height: 30px;
+  width: var(--tile-art);
+  height: var(--tile-art);
   object-fit: contain;
   flex: 0 0 auto;
   border-radius: 8px;
@@ -165,8 +176,8 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 44px;
-  height: 44px;
+  width: var(--tile);
+  height: var(--tile);
   border: none;
   border-radius: 13px;
   /* Almost no plate at rest — the icon reads as artwork, the way a real dock
@@ -252,8 +263,8 @@
 }
 
 .dockbar-item img {
-  width: 30px;
-  height: 30px;
+  width: var(--tile-art);
+  height: var(--tile-art);
   object-fit: contain;
   border-radius: 7px;
   pointer-events: none;
@@ -263,8 +274,8 @@
 .dockbar-letter {
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: var(--tile-art);
+  height: var(--tile-art);
   border-radius: 9px;
   color: #fff;
   font-size: var(--font-size-sm, 13px);
@@ -278,6 +289,187 @@
   font-size: 18px;
   pointer-events: none;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
+}
+
+/* ---- Folders & files: labeled chips (see WorkspaceDockBar) ----
+   Same 44px height as an icon tile so the row stays one even band; width
+   comes from the name, capped so one long name can't dominate the pill. */
+.dockbar-sep--inner {
+  height: 22px;
+  margin: 0 3px;
+}
+
+.dockbar-place {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  max-width: 168px;
+  height: var(--tile);
+  padding: 0 11px 0 6px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.045);
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), background 0.15s ease, border-color 0.15s ease;
+}
+
+.dockbar-place:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateY(-2px);
+}
+
+.dockbar--top .dockbar-place:hover {
+  transform: translateY(2px);
+}
+
+.dockbar-place:active {
+  filter: brightness(0.85);
+}
+
+.dockbar-place.is-entering {
+  animation: dockItemIn 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.dockbar-place.is-bouncing {
+  animation: dockBounce 0.52s cubic-bezier(0.28, 0.84, 0.42, 1);
+}
+
+/* Art tile: one neutral plate for every kind of item — the favicon, app icon
+   or stack logo supplies the color, so a row of mixed items stays calm. */
+.dockbar-place-tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--tile-art);
+  height: var(--tile-art);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0, 0, 0, 0.3);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 14px;
+}
+
+.dockbar-place-tile img {
+  width: calc(var(--tile-art) - 8px);
+  height: calc(var(--tile-art) - 8px);
+  object-fit: contain;
+  border-radius: 5px;
+  pointer-events: none;
+}
+
+/* Black "original" stack logos (Rust, Markdown, Next) on the dark plate. */
+.dockbar-place-tile img.is-inverted {
+  filter: invert(1) brightness(0.92);
+}
+
+.dockbar-place-tile .dockbar-letter {
+  width: calc(var(--tile-art) - 6px);
+  height: calc(var(--tile-art) - 6px);
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+/* Folder tab — the cue that a stack logo is a folder, not an app. */
+.dockbar-place-tab {
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 4px;
+  border-radius: 3px 3px 0 0;
+  background: rgba(148, 163, 184, 0.45);
+}
+
+.dockbar-place-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.dockbar-place-name {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  color: rgba(255, 255, 255, 0.94);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dockbar-place-parent {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dockbar-place-parent.is-running {
+  color: #c4b5fd;
+}
+
+/* Git branch / live port: monospace, like they'd read in a terminal. */
+.dockbar-place-parent.is-branch,
+.dockbar-place-parent.is-live {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 9.5px;
+}
+
+.dockbar-place-parent i {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: #fbbf24;
+  vertical-align: 1px;
+}
+
+/* A dev server is running from this folder: green port, click opens it. */
+.dockbar-place-parent.is-live {
+  color: #86efac;
+  cursor: pointer;
+}
+
+.dockbar-place-parent.is-live i {
+  background: #4ade80;
+  box-shadow: 0 0 5px #4ade80;
+}
+
+.dockbar-place-parent.is-live:hover {
+  color: #bbf7d0;
+  text-decoration: underline;
+}
+
+.dockbar-place.is-live {
+  border-color: rgba(74, 222, 128, 0.35);
+}
+
+/* Open in Finder / an editor: same dot as the icon tiles, on the tile's foot. */
+.dockbar-place.is-active::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  left: 21px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #c4b5fd;
+  box-shadow: 0 0 5px rgba(196, 181, 253, 0.85);
+}
+
+.dockbar--top .dockbar-place.is-active::after {
+  bottom: auto;
+  top: 3px;
 }
 
 .dockbar-empty {
@@ -327,10 +519,12 @@
 
 @media (prefers-reduced-motion: reduce) {
   .dockbar-shelf,
-  .dockbar-item {
+  .dockbar-item,
+  .dockbar-place {
     animation: none;
   }
   .dockbar-item,
+  .dockbar-place,
   .dockbar-ws-chip,
   .dockbar-ctrl {
     transition: none;

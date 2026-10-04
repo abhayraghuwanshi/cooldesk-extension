@@ -1,4 +1,4 @@
-import { buildSpec } from './aiAdapters';
+import { buildSpec, createOutputParser } from './aiAdapters';
 
 // /new-workspace's "Ask AI for links" — a one-shot run of the user's terminal
 // AI CLI (the same adapter /agent uses), kept entirely separate from /agent's
@@ -152,13 +152,16 @@ export function suggestLinks({ adapter, workspaceName, topic, candidates = [] })
                     import('@tauri-apps/api/core'),
                     import('@tauri-apps/api/event'),
                 ]);
-                let stdout = '';
+                // The adapter may stream events rather than plain text (Claude
+                // Code's stream-json), so stdout goes through the same parser
+                // /agent uses and only the final answer text is searched.
+                const parser = createOutputParser(adapter.format);
                 let stderrTail = '';
 
                 unlisten.push(await listen('ai-cli-output', (e) => {
                     const p = e.payload;
                     if (!p || p.id !== id) return;
-                    if (p.stream === 'stdout') stdout += p.line + '\n';
+                    if (p.stream === 'stdout') parser.push(p.line);
                     else stderrTail = (stderrTail + p.line + '\n').slice(-400);
                 }));
                 unlisten.push(await listen('ai-cli-done', (e) => {
@@ -168,13 +171,14 @@ export function suggestLinks({ adapter, workspaceName, topic, candidates = [] })
                         finish(reject, new Error(p.error));
                         return;
                     }
-                    const links = parseLinksReply(stdout);
+                    const out = parser.result();
+                    const links = parseLinksReply(out.text);
                     if (links.length > 0) {
                         finish(resolve, links);
                         return;
                     }
                     if (p.code !== 0 && p.code !== null) {
-                        const hint = stderrTail.trim().split('\n').pop();
+                        const hint = out.error || stderrTail.trim().split('\n').pop();
                         finish(reject, new Error(`${adapter.label} exited with code ${p.code}${hint ? ` — ${hint}` : ''}`));
                         return;
                     }

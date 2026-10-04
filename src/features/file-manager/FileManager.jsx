@@ -8,6 +8,7 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { startDrag } from '@crabnebula/tauri-plugin-drag';
 import { fetchCooldesk, linkCooldeskProject } from '../../services/cooldeskService.js';
 import { getPreviewItem } from '../../utils/filePreviewKind.js';
 import { isRealPointerMove } from '../../utils/helpers.js';
@@ -25,6 +26,43 @@ async function listDirRaw(path) {
 }
 
 /** Hand a path to the OS (opens a file with its default app, a folder in Explorer). */
+// Native drag-out (Tauri only): a row dragged out of the file manager becomes
+// a real OS file drag, so dropping it on Finder/Explorer copies the file there
+// and dropping it on a web page's upload field uploads it — what a plain HTML5
+// drag can't do, since it carries no actual file. Mode is "copy": the source
+// is never moved. Statically imported because the native drag must start
+// while the button is still held — awaiting a dynamic import first can miss it.
+const IS_TAURI = typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__;
+
+// The plugin needs a PNG (as a data URL) for the image under the cursor.
+// Drawn once per kind and cached — a folder/file glyph on a rounded tile.
+const dragIconCache = {};
+function dragIconFor(isDir) {
+  const key = isDir ? 'dir' : 'file';
+  if (dragIconCache[key]) return dragIconCache[key];
+  const size = 64;
+  const c = document.createElement('canvas');
+  c.width = size; c.height = size;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(30, 30, 40, 0.85)';
+  g.beginPath();
+  g.roundRect?.(4, 4, size - 8, size - 8, 12);
+  g.fill();
+  g.font = '34px -apple-system, "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(isDir ? '📁' : '📄', size / 2, size / 2 + 2);
+  dragIconCache[key] = c.toDataURL('image/png');
+  return dragIconCache[key];
+}
+
+function startNativeDrag(e, entry) {
+  // Cancel the webview's own HTML5 drag — the OS drag replaces it.
+  e.preventDefault();
+  startDrag({ item: [entry.path], icon: dragIconFor(entry.is_dir), mode: 'copy' })
+    .catch(err => console.warn('[FileManager] native drag failed:', err));
+}
+
 async function openWithSystem(path) {
   if (window.electronAPI?.openFolder) return window.electronAPI.openFolder(path);
   const { invoke } = await import('@tauri-apps/api/core');
@@ -1548,7 +1586,10 @@ ${c.path}`}
                   className: `fm-item ${view === 'grid' ? 'fm-tile' : 'fm-row'} ${active ? 'active' : ''} ${entry.hidden ? 'hidden-entry' : ''}`,
                   onClick: () => { setCursor(i); openEntry(entry); },
                   onMouseEnter: (e) => { if (isRealHover(e)) { setCursor(i); prefetch(entry); } },
-                  title: entry.path,
+                  title: IS_TAURI ? `${entry.path}\nDrag out to copy it into a folder or an upload box` : entry.path,
+                  // Drag out → copy into Finder/Explorer or a web upload field.
+                  draggable: IS_TAURI,
+                  onDragStart: IS_TAURI ? (e) => startNativeDrag(e, entry) : undefined,
                 };
                 if (view === 'grid') {
                   return (

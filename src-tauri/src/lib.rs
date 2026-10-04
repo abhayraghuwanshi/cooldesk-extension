@@ -16,6 +16,7 @@ mod matcher;
 mod tab_uia;
 mod webapp_embed;
 mod dock;
+mod folder_identity;
 mod ai_cli;
 mod folder_index;
 mod preview;
@@ -1861,6 +1862,34 @@ fn toggle_spotlight(app: tauri::AppHandle) {
     }
 }
 
+// Workspace the spotlight window should open /edit-workspace for — set by
+// `open_spotlight_edit`, taken (once) by the spotlight window. Held here
+// rather than only sent as the event payload so a spotlight webview that
+// hasn't finished loading yet still picks it up on mount.
+static PENDING_SPOTLIGHT_EDIT: std::sync::Mutex<Option<serde_json::Value>> = std::sync::Mutex::new(None);
+
+/// Open the spotlight window straight into edit mode for `workspace`
+/// (`{ id, name }`). Used where the main window has no embedded spotlight of
+/// its own: the sidebar (header hidden) and the top/bottom dock bar.
+#[tauri::command]
+fn open_spotlight_edit(app: tauri::AppHandle, workspace: serde_json::Value) {
+    *PENDING_SPOTLIGHT_EDIT.lock().unwrap() = Some(workspace);
+    let visible = app
+        .get_webview_window("spotlight")
+        .map(|w| w.is_visible().unwrap_or(false))
+        .unwrap_or(false);
+    // toggle_spotlight would hide an already-open spotlight — only call it to show.
+    if !visible {
+        toggle_spotlight(app.clone());
+    }
+    let _ = app.emit("spotlight-edit-workspace", ());
+}
+
+#[tauri::command]
+fn take_spotlight_edit() -> Option<serde_json::Value> {
+    PENDING_SPOTLIGHT_EDIT.lock().unwrap().take()
+}
+
 #[tauri::command]
 fn hide_spotlight(app: tauri::AppHandle) {
     // Grant any process foreground permission BEFORE hiding our window.
@@ -2726,6 +2755,40 @@ async fn search_files(app: tauri::AppHandle, query: String) -> Result<Vec<Search
     }
 }
 
+#[derive(serde::Serialize)]
+struct PathKind {
+    path: String,
+    exists: bool,
+    is_dir: bool,
+}
+
+/// Classify paths dropped onto the window from the OS (Finder / Explorer), so
+/// the app can file each as a workspace "folder" or "file" reference. One stat
+/// per path — cheaper than listing a folder just to learn it is one.
+#[tauri::command]
+fn path_kinds(paths: Vec<String>) -> Vec<PathKind> {
+    paths
+        .into_iter()
+        .map(|path| {
+            let meta = std::fs::metadata(&path).ok();
+            PathKind {
+                exists: meta.is_some(),
+                is_dir: meta.map(|m| m.is_dir()).unwrap_or(false),
+                path,
+            }
+        })
+        .collect()
+}
+
+/// Stack / git branch / dirty state of a folder, for the workspace cards'
+/// folder tiles. See `folder_identity.rs`.
+#[tauri::command]
+async fn folder_identity(path: String) -> folder_identity::FolderIdentity {
+    tauri::async_runtime::spawn_blocking(move || folder_identity::folder_identity(&path))
+        .await
+        .unwrap_or_default()
+}
+
 /// List the immediate children of a folder (folders first, then files).
 /// Powers the spotlight's inline folder drill-down.
 #[tauri::command]
@@ -3140,6 +3203,8 @@ pub fn run() {
         show_main_window(app);
     }))
     .plugin(tauri_plugin_dialog::init())
+    // Native file drag-out from the file manager (see FileManager.jsx onItemDrag).
+    .plugin(tauri_plugin_drag::init())
     .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_process::init())
     .plugin(tauri_plugin_autostart::init(
@@ -3156,6 +3221,9 @@ pub fn run() {
         focus_window_tab,
         folder_display_name,
         toggle_spotlight,
+        open_spotlight_edit,
+        folder_identity,
+        take_spotlight_edit,
         hide_spotlight,
         set_spotlight_shortcut,
         launch_app,
@@ -3170,6 +3238,7 @@ pub fn run() {
         get_frequent_folders,
         search_files,
         list_dir,
+        path_kinds,
         get_user_places,
         get_focused_app,
         get_app_version,
