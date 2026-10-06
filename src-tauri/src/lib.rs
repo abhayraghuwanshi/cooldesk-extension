@@ -776,7 +776,13 @@ fn cursor_geom(app: &tauri::AppHandle) -> Option<(i32, i32, i32, i32)> {
 /// spans the full screen width (see the note in `expand_drawer`).
 #[cfg(target_os = "macos")]
 fn mac_drawer_frame(st: &DockState, handle: bool) -> Option<(f64, f64, f64, f64)> {
-    let ((fx, _, fw, _), (vx, vy, vw, vh)) = dock::cursor_screen_rects()?;
+    let ((fx, fy, fw, fh), visible) = dock::cursor_screen_rects()?;
+    // In a fullscreen app the macOS Dock and menu bar are hidden, so lay out
+    // against the whole screen: the bar sits right on the bottom edge,
+    // using the space the hidden Dock leaves free, instead of floating where
+    // `visibleFrame` still reserves room for it.
+    let fullscreen = dock::any_fullscreen_space();
+    let (vx, vy, vw, vh) = if fullscreen { (fx, fy, fw, fh) } else { visible };
     let horizontal = dock_is_horizontal(&st.side);
     let frame = match (handle, horizontal) {
         (false, false) => {
@@ -812,7 +818,41 @@ fn mac_drawer_frame(st: &DockState, handle: bool) -> Option<(f64, f64, f64, f64)
             (fx + (fw - w) / 2.0, y, w, h)
         }
     };
-    Some(frame)
+    Some(if fullscreen { frame } else { clear_of_mac_dock(st, frame) })
+}
+
+/// Gap (points) kept between the drawer and the space the macOS Dock pops up
+/// into, on top of the Dock's icon size (its padding is roughly this much).
+#[cfg(target_os = "macos")]
+const MAC_DOCK_CLEARANCE: f64 = 18.0;
+
+/// Adapts the drawer to the macOS Dock's own settings so the two docks don't
+/// fight over one edge.
+///
+/// When the macOS Dock is always shown, `visibleFrame` already excludes it,
+/// so the drawer sits beside it and nothing changes. When the Dock is on the
+/// drawer's edge with auto-hide on, the edge itself is the Dock's reveal
+/// zone: a handle flush against it gets covered when the Dock appears, and
+/// reaching for one opens the other. So the drawer moves in by the Dock's
+/// thickness (icon size + clearance): the very edge stays the macOS Dock's,
+/// and CoolDesk's handle/bar sits just past where it appears.
+///
+/// Not applied in a fullscreen app (see `mac_drawer_frame`): there the bar
+/// deliberately sits flush on the bottom edge, in the space the hidden Dock
+/// leaves free.
+#[cfg(target_os = "macos")]
+fn clear_of_mac_dock(st: &DockState, (x, y, w, h): (f64, f64, f64, f64)) -> (f64, f64, f64, f64) {
+    let dock = dock::mac_dock_prefs();
+    if dock.orientation != st.side || !dock.autohide {
+        return (x, y, w, h);
+    }
+    let inset = dock.tile_size + MAC_DOCK_CLEARANCE;
+    match st.side.as_str() {
+        "bottom" => (x, y + inset, w, h),
+        "left" => (x + inset, y, w, h),
+        "right" => (x - inset, y, w, h),
+        _ => (x, y, w, h),
+    }
 }
 
 /// Geometry the drawer lays out against. Horizontal (top/bottom) docks use the
@@ -3607,15 +3647,37 @@ pub fn run() {
           let app_handle = app.handle().clone();
           std::thread::spawn(move || {
               let mut anchor: Option<(i32, i32)> = None;
+              // macOS: what `clear_of_mac_dock` depends on — the macOS Dock's
+              // side/auto-hide/icon size and whether an app is fullscreen. When
+              // any of it changes (the user edits Desktop & Dock settings, or
+              // enters/leaves a fullscreen app) the drawer is re-placed too, so
+              // the handle never sits where the macOS Dock now pops up.
+              #[cfg(target_os = "macos")]
+              let mut mac_dock_sig: Option<(String, bool, i64, bool)> = None;
               loop {
                   std::thread::sleep(std::time::Duration::from_millis(500));
                   if !DOCK_ACTIVE.load(Ordering::Relaxed) {
                       anchor = None;
+                      #[cfg(target_os = "macos")]
+                      {
+                          mac_dock_sig = None;
+                      }
                       continue;
                   }
                   let Some((mx, my, _, _)) = cursor_geom(&app_handle) else { continue };
                   let moved = anchor.is_some_and(|(ax, ay)| (ax, ay) != (mx, my));
                   anchor = Some((mx, my));
+                  #[cfg(target_os = "macos")]
+                  let moved = {
+                      let prefs = dock::mac_dock_prefs();
+                      let sig = (prefs.orientation, prefs.autohide, prefs.tile_size.round() as i64, dock::any_fullscreen_space());
+                      let changed = mac_dock_sig.as_ref().is_some_and(|old| *old != sig);
+                      if changed {
+                          log::info!("[Dock] macOS Dock settings or fullscreen state changed ({sig:?}) — re-placing dock");
+                      }
+                      mac_dock_sig = Some(sig);
+                      moved || changed
+                  };
                   if !moved {
                       continue;
                   }
@@ -3623,7 +3685,7 @@ pub fn run() {
                   if !st.enabled || st.mode != "drawer" {
                       continue;
                   }
-                  log::info!("[Dock] Cursor moved to a different monitor — re-anchoring dock");
+                  log::info!("[Dock] Re-anchoring dock (monitor or macOS Dock change)");
                   if DRAWER_COLLAPSED.load(Ordering::Relaxed) {
                       collapse_drawer(&app_handle, &st);
                   } else {

@@ -23,6 +23,10 @@
 // `AppHandle::run_on_main_thread` rather than calling these directly from a
 // background thread (e.g. an async Tauri command runs on a tokio worker).
 
+use core_foundation::base::{CFType, TCFType};
+use core_foundation::boolean::CFBoolean;
+use core_foundation::number::CFNumber;
+use core_foundation::string::{CFString, CFStringRef};
 use objc2_app_kit::{NSApplication, NSEvent, NSScreen, NSWindow, NSWindowCollectionBehavior, NSFloatingWindowLevel, NSStatusWindowLevel};
 
 /// AppKit-space `(frame, visibleFrame)` — each as `(x, y, width, height)` in
@@ -267,4 +271,66 @@ pub fn restrict_to_current_space(window: &tauri::WebviewWindow) {
         & !(NSWindowCollectionBehavior::CanJoinAllSpaces | NSWindowCollectionBehavior::FullScreenAuxiliary);
     ns_window.setCollectionBehavior(behavior);
     ns_window.setLevel(NSFloatingWindowLevel);
+}
+
+/// The macOS Dock's own settings (System Settings → Desktop & Dock), read
+/// from its preferences domain `com.apple.dock`.
+#[derive(Debug, Clone)]
+pub struct MacDockPrefs {
+    /// "bottom", "left" or "right".
+    pub orientation: String,
+    /// "Automatically hide and show the Dock".
+    pub autohide: bool,
+    /// Icon size in points (the Dock's thickness, minus its padding).
+    pub tile_size: f64,
+}
+
+#[link(name = "CoreFoundation", kind = "framework")]
+extern "C" {
+    fn CFPreferencesCopyAppValue(key: CFStringRef, application_id: CFStringRef) -> core_foundation::base::CFTypeRef;
+    fn CFPreferencesAppSynchronize(application_id: CFStringRef) -> u8;
+}
+
+fn dock_pref(key: &str) -> Option<CFType> {
+    let app = CFString::new("com.apple.dock");
+    let key = CFString::new(key);
+    unsafe {
+        let raw = CFPreferencesCopyAppValue(key.as_concrete_TypeRef(), app.as_concrete_TypeRef());
+        if raw.is_null() { None } else { Some(CFType::wrap_under_create_rule(raw)) }
+    }
+}
+
+/// Reads the macOS Dock's current settings. Re-syncs the preferences domain
+/// first so a change the user just made in System Settings is picked up.
+/// Missing keys fall back to macOS's defaults (bottom, always shown, 48pt).
+/// Cheap (an in-process preferences read, no subprocess); safe off the main
+/// thread.
+pub fn mac_dock_prefs() -> MacDockPrefs {
+    unsafe {
+        let app = CFString::new("com.apple.dock");
+        CFPreferencesAppSynchronize(app.as_concrete_TypeRef());
+    }
+    let orientation = dock_pref("orientation")
+        .and_then(|v| v.downcast::<CFString>())
+        .map(|v| v.to_string())
+        .filter(|v| v == "left" || v == "right" || v == "bottom")
+        .unwrap_or_else(|| "bottom".to_string());
+    let autohide = dock_pref("autohide")
+        .and_then(|v| {
+            v.downcast::<CFBoolean>()
+                .map(bool::from)
+                .or_else(|| v.downcast::<CFNumber>().and_then(|n| n.to_i64()).map(|n| n != 0))
+        })
+        .unwrap_or(false);
+    let tile_size = dock_pref("tilesize")
+        .and_then(|v| v.downcast::<CFNumber>())
+        .and_then(|n| n.to_f64())
+        .filter(|n| *n > 0.0)
+        .unwrap_or(48.0);
+    MacDockPrefs { orientation, autohide, tile_size }
+}
+
+/// Whether any display is showing an app's fullscreen Space right now.
+pub fn any_fullscreen_space() -> bool {
+    super::cgs::any_active_space_fullscreen()
 }

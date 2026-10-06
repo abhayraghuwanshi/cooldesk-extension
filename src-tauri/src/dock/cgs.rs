@@ -92,3 +92,34 @@ pub fn join_active_spaces(window_number: i64) -> Vec<i64> {
     }
     space_ids
 }
+
+/// `type` of a Space in `CGSCopyManagedDisplaySpaces`: 0 is an ordinary
+/// desktop Space, 4 is an app's fullscreen Space (green-button fullscreen).
+const SPACE_TYPE_FULLSCREEN: i64 = 4;
+
+/// Whether any display is currently showing an app's fullscreen Space. Used
+/// to keep the dock clear of the macOS Dock, which (whatever its auto-hide
+/// setting) only appears on demand in fullscreen apps — so its edge is then
+/// contested the same way it is with auto-hide on.
+pub fn any_active_space_fullscreen() -> bool {
+    unsafe {
+        let cid = CGSMainConnectionID();
+        let raw = CGSCopyManagedDisplaySpaces(cid);
+        if raw.is_null() {
+            return false;
+        }
+        let displays: CFArray<UntypedDict> = CFArray::wrap_under_create_rule(raw);
+        for display in displays.iter() {
+            let Some(current) = dict_get(&display, "Current Space") else { continue };
+            let Some(current_dict) = current.downcast::<UntypedDict>() else { continue };
+            let space_type = dict_get(&current_dict, "type")
+                .and_then(|t| t.downcast::<CFNumber>())
+                .and_then(|t| t.to_i64())
+                .unwrap_or(0);
+            if space_type == SPACE_TYPE_FULLSCREEN {
+                return true;
+            }
+        }
+        false
+    }
+}

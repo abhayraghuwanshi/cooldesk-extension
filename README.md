@@ -102,6 +102,14 @@ brew install --cask cooldesk
 
 Update later with `brew upgrade --cask cooldesk`.
 
+> **First launch on macOS:** CoolDesk isn't notarized by Apple yet, so macOS may say it "can't be verified".
+> Open **System Settings → Privacy & Security**, scroll down and click **Open Anyway**. You only need to do this once.
+> Or run this in Terminal:
+>
+> ```bash
+> xattr -dr com.apple.quarantine /Applications/CoolDesk.app
+> ```
+
 **macOS / Linux (manual):** download the installer from the
 [latest release](https://github.com/abhayraghuwanshi/cooldesk-extension/releases/latest).
 
