@@ -15,14 +15,87 @@ pub struct PatternTracker {
     keyword_workspaces: HashMap<String, Vec<WorkspaceAssociation>>,
     /// Category patterns learned from user groupings
     category_patterns: HashMap<String, CategoryPattern>,
+    /// Agent placements the user applied that are still on probation — see
+    /// `check_placements` and `placement_used`.
+    pending: Vec<PendingPlacement>,
+}
+
+/// How long an applied agent placement is watched for a delayed verdict.
+pub const PROBATION_MS: i64 = 7 * 24 * 60 * 60 * 1000;
+
+/// An agent placement the user applied. Hitting Apply is a weak "yes" — it
+/// may have been a skim — so for a week afterwards the placement is watched:
+/// removing it is a rejection, opening it through CoolDesk a real acceptance.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PendingPlacement {
+    pub url: String,
+    #[serde(default)]
+    pub title: String,
+    pub workspace: String,
+    pub placed_at: i64,
+}
+
+/// What became of a pending placement, as of a workspace snapshot.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PlacementVerdict {
+    /// Gone from its workspace (or the workspace is gone).
+    Removed { url: String, workspace: String },
+    /// Gone from its workspace, and now in these others instead.
+    Moved { url: String, from: String, to: Vec<String> },
+}
+
+/// Compare urls ignoring scheme-less trivia: trailing slash and `www.`.
+fn same_page(a: &str, b: &str) -> bool {
+    let n = |u: &str| {
+        let u = u.trim().trim_end_matches('/');
+        let u = u.split_once("://").map_or(u, |(_, rest)| rest);
+        u.strip_prefix("www.").unwrap_or(u).to_lowercase()
+    };
+    n(a) == n(b)
 }
 
 #[derive(Debug, Clone)]
 pub struct WorkspaceAssociation {
     pub workspace_name: String,
+    /// Times a url like this was actually filed here.
     pub count: u32,
     pub last_seen: i64,
+    /// Posterior mean of "the user keeps this placement" — see `rate`.
     pub acceptance_rate: f64,
+    /// Placements here the user kept: their own adds, and agent proposals applied.
+    pub accepted: u32,
+    /// Agent placements here the user unticked or discarded.
+    pub rejected: u32,
+}
+
+impl WorkspaceAssociation {
+    fn new(workspace_name: &str, now: i64) -> Self {
+        Self { workspace_name: workspace_name.to_string(), count: 0, last_seen: now, acceptance_rate: 0.5, accepted: 0, rejected: 0 }
+    }
+
+    /// Beta(1,1) posterior mean: one rejection after one acceptance is a coin
+    /// flip, not the barely-moved 0.9 the old 0.1-step moving average gave —
+    /// an explicit "no" from the user should count for something.
+    fn update_rate(&mut self) {
+        self.acceptance_rate = (self.accepted as f64 + 1.0) / ((self.accepted + self.rejected) as f64 + 2.0);
+    }
+
+    /// Ranking weight. `count` can be 0 for a placement that was only ever
+    /// rejected, so it's floored before the log.
+    fn score(&self) -> f64 {
+        (self.count.max(1) as f64).ln().max(0.1) * self.acceptance_rate
+    }
+}
+
+/// Find this workspace's association in a list, adding an empty one if missing.
+fn assoc_for<'a>(list: &'a mut Vec<WorkspaceAssociation>, workspace_name: &str, now: i64) -> &'a mut WorkspaceAssociation {
+    match list.iter().position(|a| a.workspace_name == workspace_name) {
+        Some(i) => &mut list[i],
+        None => {
+            list.push(WorkspaceAssociation::new(workspace_name, now));
+            list.last_mut().unwrap()
+        }
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -40,7 +113,88 @@ impl PatternTracker {
             domain_workspaces: HashMap::new(),
             keyword_workspaces: HashMap::new(),
             category_patterns: HashMap::new(),
+            pending: Vec::new(),
         }
+    }
+
+    /// Start watching placements the user just applied from an agent proposal.
+    pub fn add_pending(&mut self, placements: impl IntoIterator<Item = (String, String, String)>, now: i64) {
+        for (workspace, url, title) in placements {
+            self.pending.retain(|p| !(p.workspace == workspace && same_page(&p.url, &url)));
+            self.pending.push(PendingPlacement { url, title, workspace, placed_at: now });
+        }
+    }
+
+    pub fn pending(&self) -> &[PendingPlacement] {
+        &self.pending
+    }
+
+    /// Settle pending placements against what the workspaces hold now.
+    ///
+    /// `workspaces` is (name, urls) as of `taken_at`. Only placements made
+    /// before the snapshot are judged — one applied while the snapshot was
+    /// being read would look removed. A placement past probation that's still
+    /// in place is dropped with no further reward; Apply already counted it.
+    /// An empty snapshot is treated as a failed read, not "everything deleted".
+    pub fn check_placements(&mut self, workspaces: &[(String, Vec<String>)], taken_at: i64, now: i64) -> Vec<PlacementVerdict> {
+        if workspaces.is_empty() {
+            return Vec::new();
+        }
+        let mut verdicts = Vec::new();
+        let mut keep = Vec::new();
+        for p in std::mem::take(&mut self.pending) {
+            if p.placed_at >= taken_at {
+                keep.push(p);
+                continue;
+            }
+            let home = workspaces.iter().find(|(name, _)| *name == p.workspace);
+            let still_there = home.is_some_and(|(_, urls)| urls.iter().any(|u| same_page(u, &p.url)));
+            if still_there {
+                if now - p.placed_at < PROBATION_MS {
+                    keep.push(p);
+                }
+                continue;
+            }
+            let to: Vec<String> = workspaces.iter()
+                .filter(|(name, urls)| *name != p.workspace && urls.iter().any(|u| same_page(u, &p.url)))
+                .map(|(name, _)| name.clone())
+                .collect();
+            let verdict = if to.is_empty() {
+                PlacementVerdict::Removed { url: p.url.clone(), workspace: p.workspace.clone() }
+            } else {
+                PlacementVerdict::Moved { url: p.url.clone(), from: p.workspace.clone(), to }
+            };
+            self.apply_verdict(&verdict, &p.title);
+            verdicts.push(verdict);
+        }
+        self.pending = keep;
+        verdicts
+    }
+
+    fn apply_verdict(&mut self, verdict: &PlacementVerdict, title: &str) {
+        match verdict {
+            PlacementVerdict::Removed { url, workspace } => self.record_suggestion_result(url, title, workspace, false),
+            PlacementVerdict::Moved { url, from, to } => {
+                self.record_suggestion_result(url, title, from, false);
+                for ws in to {
+                    self.record_url_workspace(url, title, ws);
+                }
+            }
+        }
+    }
+
+    /// The user opened `url` through CoolDesk: every pending placement of it
+    /// is confirmed (one more acceptance) and leaves probation. Returns the
+    /// workspaces confirmed.
+    pub fn placement_used(&mut self, url: &str) -> Vec<String> {
+        let (used, keep): (Vec<_>, Vec<_>) = std::mem::take(&mut self.pending)
+            .into_iter()
+            .partition(|p| same_page(&p.url, url));
+        self.pending = keep;
+        for p in &used {
+            self.record_suggestion_result(&p.url, &p.title, &p.workspace, true);
+        }
+        used.into_iter().map(|p| p.workspace).collect()
     }
 
     /// Extract domain from URL
@@ -80,50 +234,22 @@ impl PatternTracker {
         keywords
     }
 
-    /// Record that a URL was added to a workspace
+    /// Record that a URL was added to a workspace (by the user, or an agent
+    /// proposal they applied): one more filing, and one more acceptance.
     pub fn record_url_workspace(&mut self, url: &str, title: &str, workspace_name: &str) {
         let now = chrono::Utc::now().timestamp_millis();
-
-        // Track domain association
-        if let Some(domain) = Self::extract_domain(url) {
-            let associations = self.domain_workspaces.entry(domain).or_default();
-            if let Some(assoc) = associations
-                .iter_mut()
-                .find(|a| a.workspace_name == workspace_name)
-            {
-                assoc.count += 1;
-                assoc.last_seen = now;
-            } else {
-                associations.push(WorkspaceAssociation {
-                    workspace_name: workspace_name.to_string(),
-                    count: 1,
-                    last_seen: now,
-                    acceptance_rate: 1.0,
-                });
-            }
-        }
-
-        // Track keyword associations
-        for keyword in Self::extract_keywords(title, url) {
-            let associations = self.keyword_workspaces.entry(keyword).or_default();
-            if let Some(assoc) = associations
-                .iter_mut()
-                .find(|a| a.workspace_name == workspace_name)
-            {
-                assoc.count += 1;
-                assoc.last_seen = now;
-            } else {
-                associations.push(WorkspaceAssociation {
-                    workspace_name: workspace_name.to_string(),
-                    count: 1,
-                    last_seen: now,
-                    acceptance_rate: 1.0,
-                });
-            }
+        for list in self.lists_for(url, title) {
+            let assoc = assoc_for(list, workspace_name, now);
+            assoc.count += 1;
+            assoc.accepted += 1;
+            assoc.last_seen = now;
+            assoc.update_rate();
         }
     }
 
-    /// Update acceptance rate for a workspace suggestion
+    /// The user's verdict on a placement they didn't make themselves (an
+    /// agent proposal). A rejection is remembered even for a pairing never
+    /// seen before, so the same bad guess loses weight next time.
     pub fn record_suggestion_result(
         &mut self,
         url: &str,
@@ -131,32 +257,46 @@ impl PatternTracker {
         workspace_name: &str,
         accepted: bool,
     ) {
-        // Update domain association
-        if let Some(domain) = Self::extract_domain(url) {
-            if let Some(associations) = self.domain_workspaces.get_mut(&domain) {
-                if let Some(assoc) = associations
-                    .iter_mut()
-                    .find(|a| a.workspace_name == workspace_name)
-                {
-                    // Exponential moving average
-                    let value = if accepted { 1.0 } else { 0.0 };
-                    assoc.acceptance_rate = assoc.acceptance_rate * 0.9 + value * 0.1;
-                }
-            }
+        let now = chrono::Utc::now().timestamp_millis();
+        for list in self.lists_for(url, title) {
+            let assoc = assoc_for(list, workspace_name, now);
+            if accepted { assoc.accepted += 1 } else { assoc.rejected += 1 }
+            assoc.last_seen = now;
+            assoc.update_rate();
         }
+    }
 
-        // Update keyword associations
-        for keyword in Self::extract_keywords(title, url) {
-            if let Some(associations) = self.keyword_workspaces.get_mut(&keyword) {
-                if let Some(assoc) = associations
-                    .iter_mut()
-                    .find(|a| a.workspace_name == workspace_name)
-                {
-                    let value = if accepted { 1.0 } else { 0.0 };
-                    assoc.acceptance_rate = assoc.acceptance_rate * 0.9 + value * 0.1;
-                }
-            }
+    /// The domain list and each keyword list this url/title touches.
+    fn lists_for(&mut self, url: &str, title: &str) -> Vec<&mut Vec<WorkspaceAssociation>> {
+        let domain = Self::extract_domain(url);
+        let mut keywords = Self::extract_keywords(title, url);
+        keywords.sort();
+        keywords.dedup();
+        let mut out = Vec::new();
+        if let Some(domain) = domain {
+            out.push(self.domain_workspaces.entry(domain).or_default());
         }
+        for k in &keywords {
+            self.keyword_workspaces.entry(k.clone()).or_default();
+        }
+        out.extend(self.keyword_workspaces.iter_mut().filter(|(k, _)| keywords.binary_search(k).is_ok()).map(|(_, v)| v));
+        out
+    }
+
+    /// How often the user turned down placing this url's site in each
+    /// workspace, most-rejected first.
+    pub fn rejections(&self, url: &str) -> Vec<(String, u32)> {
+        self.verdicts(url).into_iter().filter(|v| v.2 > 0).map(|(ws, _, rejected)| (ws, rejected)).collect()
+    }
+
+    /// (workspace, kept, turned down) for this url's site, most-rejected first.
+    pub fn verdicts(&self, url: &str) -> Vec<(String, u32, u32)> {
+        let Some(domain) = Self::extract_domain(url) else { return Vec::new() };
+        let mut out: Vec<(String, u32, u32)> = self.domain_workspaces.get(&domain).into_iter().flatten()
+            .map(|a| (a.workspace_name.clone(), a.accepted, a.rejected))
+            .collect();
+        out.sort_by(|a, b| b.2.cmp(&a.2).then(b.1.cmp(&a.1)));
+        out
     }
 
     /// Suggest workspace for a URL based on learned patterns
@@ -167,8 +307,7 @@ impl PatternTracker {
         if let Some(domain) = Self::extract_domain(url) {
             if let Some(associations) = self.domain_workspaces.get(&domain) {
                 for assoc in associations {
-                    let score = (assoc.count as f64).ln() * assoc.acceptance_rate;
-                    *scores.entry(assoc.workspace_name.clone()).or_default() += score * 2.0; // Domain weight
+                    *scores.entry(assoc.workspace_name.clone()).or_default() += assoc.score() * 2.0; // Domain weight
                 }
             }
         }
@@ -177,8 +316,7 @@ impl PatternTracker {
         for keyword in Self::extract_keywords(title, url) {
             if let Some(associations) = self.keyword_workspaces.get(&keyword) {
                 for assoc in associations {
-                    let score = (assoc.count as f64).ln() * assoc.acceptance_rate;
-                    *scores.entry(assoc.workspace_name.clone()).or_default() += score;
+                    *scores.entry(assoc.workspace_name.clone()).or_default() += assoc.score();
                 }
             }
         }
@@ -198,8 +336,7 @@ impl PatternTracker {
         if let Some(domain) = Self::extract_domain(url) {
             if let Some(associations) = self.domain_workspaces.get(&domain) {
                 for assoc in associations {
-                    let score = (assoc.count as f64).ln().max(0.1) * assoc.acceptance_rate;
-                    *scores.entry(assoc.workspace_name.clone()).or_default() += score * 2.0;
+                    *scores.entry(assoc.workspace_name.clone()).or_default() += assoc.score() * 2.0;
                 }
             }
         }
@@ -208,8 +345,7 @@ impl PatternTracker {
         for keyword in Self::extract_keywords(title, url) {
             if let Some(associations) = self.keyword_workspaces.get(&keyword) {
                 for assoc in associations {
-                    let score = (assoc.count as f64).ln().max(0.1) * assoc.acceptance_rate;
-                    *scores.entry(assoc.workspace_name.clone()).or_default() += score;
+                    *scores.entry(assoc.workspace_name.clone()).or_default() += assoc.score();
                 }
             }
         }
@@ -319,44 +455,80 @@ impl PatternTracker {
 
     /// Export patterns for persistence
     pub fn export(&self) -> PatternExport {
-        PatternExport {
-            domain_workspaces: self
-                .domain_workspaces
-                .iter()
+        let dump = |map: &HashMap<String, Vec<WorkspaceAssociation>>| {
+            map.iter()
                 .map(|(k, v)| {
-                    (
-                        k.clone(),
-                        v.iter()
-                            .map(|a| ExportedAssociation {
-                                workspace_name: a.workspace_name.clone(),
-                                count: a.count,
-                                acceptance_rate: a.acceptance_rate,
-                            })
-                            .collect(),
-                    )
+                    (k.clone(), v.iter().map(|a| ExportedAssociation {
+                        workspace_name: a.workspace_name.clone(),
+                        count: a.count,
+                        acceptance_rate: a.acceptance_rate,
+                        accepted: a.accepted,
+                        rejected: a.rejected,
+                        last_seen: a.last_seen,
+                    }).collect())
                 })
-                .collect(),
+                .collect()
+        };
+        PatternExport {
+            domain_workspaces: dump(&self.domain_workspaces),
+            keyword_workspaces: dump(&self.keyword_workspaces),
             category_patterns: self.category_patterns.clone(),
+            pending: self.pending.clone(),
         }
     }
 
     /// Import patterns from persistence
     pub fn import(&mut self, data: PatternExport) {
         let now = chrono::Utc::now().timestamp_millis();
-
-        for (domain, assocs) in data.domain_workspaces {
-            let entry = self.domain_workspaces.entry(domain).or_default();
-            for a in assocs {
-                entry.push(WorkspaceAssociation {
-                    workspace_name: a.workspace_name,
-                    count: a.count,
-                    last_seen: now,
-                    acceptance_rate: a.acceptance_rate,
-                });
+        let load = |map: &mut HashMap<String, Vec<WorkspaceAssociation>>, from: HashMap<String, Vec<ExportedAssociation>>| {
+            for (key, assocs) in from {
+                let entry = map.entry(key).or_default();
+                for a in assocs {
+                    // Older exports had only count + rate: every filing was an acceptance.
+                    let accepted = if a.accepted + a.rejected == 0 { a.count } else { a.accepted };
+                    entry.push(WorkspaceAssociation {
+                        workspace_name: a.workspace_name,
+                        count: a.count,
+                        last_seen: if a.last_seen > 0 { a.last_seen } else { now },
+                        acceptance_rate: a.acceptance_rate,
+                        accepted,
+                        rejected: a.rejected,
+                    });
+                }
             }
-        }
-
+        };
+        load(&mut self.domain_workspaces, data.domain_workspaces);
+        load(&mut self.keyword_workspaces, data.keyword_workspaces);
         self.category_patterns = data.category_patterns;
+        self.pending = data.pending;
+    }
+
+    /// Load from `path`, or start empty if it's missing or unreadable.
+    pub fn load(path: &std::path::Path) -> Self {
+        let mut tracker = Self::new();
+        match std::fs::read_to_string(path) {
+            Ok(text) => match serde_json::from_str::<PatternExport>(&text) {
+                Ok(data) => {
+                    tracker.import(data);
+                    log::info!("[Patterns] Loaded {} domain patterns", tracker.domain_workspaces.len());
+                }
+                Err(e) => log::warn!("[Patterns] Ignoring unreadable {}: {}", path.display(), e),
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => log::warn!("[Patterns] Could not read {}: {}", path.display(), e),
+        }
+        tracker
+    }
+
+    /// Write to `path` via a temp file, so a crash mid-write never leaves a
+    /// truncated file that `load` would throw away along with everything learned.
+    pub fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        let tmp = path.with_extension("json.tmp");
+        std::fs::write(&tmp, serde_json::to_vec(&self.export())?)?;
+        std::fs::rename(&tmp, path)
     }
 }
 
@@ -369,7 +541,12 @@ impl Default for PatternTracker {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PatternExport {
     pub domain_workspaces: HashMap<String, Vec<ExportedAssociation>>,
+    #[serde(default)]
+    pub keyword_workspaces: HashMap<String, Vec<ExportedAssociation>>,
+    #[serde(default)]
     pub category_patterns: HashMap<String, CategoryPattern>,
+    #[serde(default)]
+    pub pending: Vec<PendingPlacement>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -377,6 +554,12 @@ pub struct ExportedAssociation {
     pub workspace_name: String,
     pub count: u32,
     pub acceptance_rate: f64,
+    #[serde(default)]
+    pub accepted: u32,
+    #[serde(default)]
+    pub rejected: u32,
+    #[serde(default)]
+    pub last_seen: i64,
 }
 
 /// Common stop words to filter out
@@ -447,5 +630,137 @@ mod tests {
         assert!(suggestion.is_some());
         let (workspace, _) = suggestion.unwrap();
         assert_eq!(workspace, "Development");
+    }
+}
+
+#[cfg(test)]
+mod learning_tests {
+    use super::*;
+
+    const URL: &str = "https://dashboard.stripe.com/payments";
+
+    fn score_for(t: &PatternTracker, ws: &str) -> f64 {
+        t.suggest_workspaces(URL, "Payments", 5).into_iter().find(|(w, _)| w == ws).map_or(0.0, |(_, s)| s)
+    }
+
+    #[test]
+    fn a_rejection_outweighs_nothing_and_lowers_a_kept_placement() {
+        let mut t = PatternTracker::new();
+        t.record_url_workspace(URL, "Payments", "Billing");
+        t.record_url_workspace(URL, "Payments", "Billing");
+        let before = score_for(&t, "Billing");
+        t.record_suggestion_result(URL, "Payments", "Billing", false);
+        assert!(score_for(&t, "Billing") < before);
+
+        // Rejected-only pairing: remembered, ranked below a kept one, no NaN.
+        t.record_suggestion_result(URL, "Payments", "Social", false);
+        let social = score_for(&t, "Social");
+        assert!(social.is_finite() && social < score_for(&t, "Billing"));
+        let mut rejected = t.rejections(URL);
+        rejected.sort();
+        assert_eq!(rejected, vec![("Billing".to_string(), 1), ("Social".to_string(), 1)]);
+    }
+
+    #[test]
+    fn save_and_load_round_trip() {
+        let dir = std::env::temp_dir().join(format!("cooldesk-patterns-{}", std::process::id()));
+        let path = dir.join("workspace-patterns.json");
+        let mut t = PatternTracker::new();
+        t.record_url_workspace(URL, "Payments", "Billing");
+        t.record_suggestion_result(URL, "Payments", "Social", false);
+        t.save(&path).unwrap();
+
+        let loaded = PatternTracker::load(&path);
+        assert_eq!(loaded.suggest_workspaces(URL, "Payments", 1)[0].0, "Billing");
+        assert_eq!(loaded.rejections(URL), vec![("Social".to_string(), 1)]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn old_exports_without_counts_still_load() {
+        let old = r#"{"domain_workspaces":{"dashboard.stripe.com":[{"workspace_name":"Billing","count":3,"acceptance_rate":0.9}]},"category_patterns":{}}"#;
+        let mut t = PatternTracker::new();
+        t.import(serde_json::from_str(old).unwrap());
+        assert_eq!(t.suggest_workspaces(URL, "", 1)[0].0, "Billing");
+        // Treated as three acceptances, so one rejection doesn't wipe it out.
+        t.record_suggestion_result(URL, "", "Billing", false);
+        assert!(score_for(&t, "Billing") > 0.5);
+    }
+}
+
+#[cfg(test)]
+mod probation_tests {
+    use super::*;
+
+    const URL: &str = "https://dashboard.stripe.com/payments";
+    const DAY: i64 = 24 * 60 * 60 * 1000;
+
+    fn tracker_with_placement(at: i64) -> PatternTracker {
+        let mut t = PatternTracker::new();
+        t.record_url_workspace(URL, "Payments", "Billing");
+        t.add_pending([("Billing".into(), URL.into(), "Payments".into())], at);
+        t
+    }
+
+    fn ws(name: &str, urls: &[&str]) -> (String, Vec<String>) {
+        (name.into(), urls.iter().map(|u| u.to_string()).collect())
+    }
+
+    #[test]
+    fn still_in_place_stays_pending_then_expires_quietly() {
+        let mut t = tracker_with_placement(0);
+        let snap = [ws("Billing", &["https://www.dashboard.stripe.com/payments/"])];
+        assert!(t.check_placements(&snap, DAY, DAY).is_empty());
+        assert_eq!(t.pending().len(), 1);
+        assert!(t.check_placements(&snap, 8 * DAY, 8 * DAY).is_empty());
+        assert!(t.pending().is_empty());
+        assert!(t.rejections(URL).is_empty());
+    }
+
+    #[test]
+    fn removal_within_probation_is_a_rejection() {
+        let mut t = tracker_with_placement(0);
+        let v = t.check_placements(&[ws("Billing", &[]), ws("Other", &["https://x.com"])], DAY, DAY);
+        assert_eq!(v, vec![PlacementVerdict::Removed { url: URL.into(), workspace: "Billing".into() }]);
+        assert_eq!(t.verdicts(URL), vec![("Billing".to_string(), 1, 1)]);
+        assert!(t.pending().is_empty());
+    }
+
+    #[test]
+    fn moving_it_rejects_the_old_home_and_files_the_new_one() {
+        let mut t = tracker_with_placement(0);
+        let v = t.check_placements(&[ws("Billing", &[]), ws("Finance", &[URL])], DAY, DAY);
+        assert_eq!(v, vec![PlacementVerdict::Moved { url: URL.into(), from: "Billing".into(), to: vec!["Finance".into()] }]);
+        assert_eq!(t.suggest_workspaces(URL, "Payments", 1)[0].0, "Finance");
+    }
+
+    #[test]
+    fn empty_or_older_snapshots_judge_nothing() {
+        let mut t = tracker_with_placement(5 * DAY);
+        assert!(t.check_placements(&[], 6 * DAY, 6 * DAY).is_empty());
+        // Snapshot read before the placement was applied: it can't know about it yet.
+        assert!(t.check_placements(&[ws("Billing", &[])], 4 * DAY, 6 * DAY).is_empty());
+        assert_eq!(t.pending().len(), 1);
+    }
+
+    #[test]
+    fn opening_it_confirms_and_ends_probation() {
+        let mut t = tracker_with_placement(0);
+        assert_eq!(t.placement_used("http://dashboard.stripe.com/payments/"), vec!["Billing".to_string()]);
+        assert!(t.pending().is_empty());
+        assert_eq!(t.verdicts(URL), vec![("Billing".to_string(), 2, 0)]);
+        assert!(t.placement_used(URL).is_empty());
+    }
+
+    #[test]
+    fn pending_survives_save_and_load() {
+        let mut t = tracker_with_placement(42);
+        let dir = std::env::temp_dir().join(format!("cd-probation-{}", std::process::id()));
+        let path = dir.join("p.json");
+        t.save(&path).unwrap();
+        let loaded = PatternTracker::load(&path);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(loaded.pending(), t.pending());
+        t.placement_used(URL);
     }
 }

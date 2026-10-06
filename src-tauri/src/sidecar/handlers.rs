@@ -2145,10 +2145,21 @@ use crate::sidecar::data::{
 lazy_static! {
     /// Global feedback store
     static ref FEEDBACK_STORE: Mutex<Option<FeedbackStore>> = Mutex::new(None);
-    /// Global pattern tracker
-    static ref PATTERN_TRACKER: Mutex<PatternTracker> = Mutex::new(PatternTracker::new());
+    /// Global pattern tracker — loaded from disk, so what it learned survives
+    /// a restart (it used to start empty every launch).
+    static ref PATTERN_TRACKER: Mutex<PatternTracker> = Mutex::new(PatternTracker::load(&patterns_file()));
     /// Reward calculator
     static ref REWARD_CALCULATOR: RewardCalculator = RewardCalculator::new();
+}
+
+fn patterns_file() -> std::path::PathBuf {
+    crate::sidecar::storage::get_data_dir().join("workspace-patterns.json")
+}
+
+fn persist_patterns(tracker: &PatternTracker) {
+    if let Err(e) = tracker.save(&patterns_file()) {
+        log::warn!("[Patterns] Failed to save: {}", e);
+    }
 }
 
 /// Initialize or get feedback store
@@ -2330,8 +2341,183 @@ pub async fn feedback_record_url_workspace(
     // rather than faked with a self-pair.
     let mut tracker = PATTERN_TRACKER.lock().await;
     tracker.record_url_workspace(&req.url, &req.title, &req.workspace_name);
+    persist_patterns(&tracker);
 
     Json(SuccessResponse { success: true })
+}
+
+/// What the user did with an /agent proposal. `accepted` holds the actions
+/// they kept and that applied cleanly; `rejected` the ones they unticked, or
+/// every action when the whole proposal was discarded.
+#[derive(Debug, serde::Deserialize)]
+pub struct AgentOutcomeRequest {
+    /// "applied" | "discarded"
+    pub outcome: String,
+    #[serde(default)]
+    pub accepted: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub rejected: Vec<serde_json::Value>,
+    pub request: Option<String>,
+    pub response_time_ms: Option<i64>,
+}
+
+/// Cap on urls per workspace for pair feedback: n² pairs, so a 40-tab dump
+/// would otherwise write 780 rows for one click.
+const OUTCOME_PAIR_CAP: usize = 15;
+
+/// Reward signal from the /agent proposal card — the user's Apply/untick/
+/// Discard is the label for every placement the agent proposed.
+///
+/// - kept `add_url`: a filing (count + acceptance) for its domain/keywords,
+///   plus "belong together" for every pair filed into the same workspace;
+/// - unticked `add_url` while applying the rest: a rejection, and "doesn't
+///   belong with" each url that was kept in that workspace — the most
+///   specific signal there is;
+/// - whole proposal discarded: a rejection per placement, but no pair
+///   feedback — a discard can be about naming or scope, not every pairing;
+/// - `add_app` kept: an app↔workspace association;
+/// - `create_workspace`: accepted/rejected workspace-name event.
+pub async fn feedback_agent_outcome(Json(req): Json<AgentOutcomeRequest>) -> Json<SuccessResponse> {
+    let applied = req.outcome == "applied";
+    let field = |a: &serde_json::Value, k: &str| a.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let urls_of = |list: &[serde_json::Value]| -> Vec<(String, String, String)> {
+        list.iter()
+            .filter(|a| a.get("type").and_then(|t| t.as_str()) == Some("add_url"))
+            .map(|a| (field(a, "workspace"), field(a, "url"), field(a, "title")))
+            .filter(|(ws, url, _)| !ws.is_empty() && !url.is_empty())
+            .collect()
+    };
+    let kept = urls_of(&req.accepted);
+    let dropped = urls_of(&req.rejected);
+
+    {
+        let mut tracker = PATTERN_TRACKER.lock().await;
+        for (ws, url, title) in &kept {
+            tracker.record_url_workspace(url, title, ws);
+        }
+        for (ws, url, title) in &dropped {
+            tracker.record_suggestion_result(url, title, ws, false);
+        }
+        // Apply is only a provisional yes; the placement's real verdict comes
+        // from what the user does with it over the next week.
+        if applied {
+            tracker.add_pending(kept.iter().cloned(), chrono::Utc::now().timestamp_millis());
+        }
+        persist_patterns(&tracker);
+    }
+
+    let store_mutex = get_feedback_store().await;
+    let store_guard = store_mutex.lock().await;
+    let Some(store) = store_guard.as_ref() else {
+        return Json(SuccessResponse { success: false });
+    };
+
+    let mut by_ws: HashMap<&str, Vec<&str>> = HashMap::new();
+    for (ws, url, _) in &kept {
+        by_ws.entry(ws.as_str()).or_default().push(url.as_str());
+    }
+    for urls in by_ws.values() {
+        let urls = &urls[..urls.len().min(OUTCOME_PAIR_CAP)];
+        for (i, a) in urls.iter().enumerate() {
+            for b in &urls[i + 1..] {
+                store.record_co_occurrence(a, b, true).await;
+                store.record_grouping_feedback(a, b, true).await;
+            }
+        }
+    }
+    if applied {
+        for (ws, url, _) in &dropped {
+            for other in by_ws.get(ws.as_str()).into_iter().flatten().take(OUTCOME_PAIR_CAP) {
+                store.record_grouping_feedback(url, other, false).await;
+            }
+        }
+    }
+
+    for a in &req.accepted {
+        if a.get("type").and_then(|t| t.as_str()) == Some("add_app") {
+            store.record_app_workspace(&field(a, "name"), &field(a, "path"), &field(a, "workspace")).await;
+        }
+    }
+
+    let event = |kind: SuggestionType, action: UserAction, content: String, ws: Option<String>| {
+        let mut e = FeedbackEvent::new(kind, action, content)
+            .with_context(ws, Vec::new())
+            .with_tool("agent".to_string());
+        if let Some(rt) = req.response_time_ms {
+            e = e.with_response_time(rt);
+        }
+        if let Some(q) = &req.request {
+            e = e.with_session(q.chars().take(200).collect());
+        }
+        e
+    };
+    for (list, action) in [(&req.accepted, UserAction::Accepted), (&req.rejected, UserAction::Rejected)] {
+        for a in list.iter() {
+            match a.get("type").and_then(|t| t.as_str()) {
+                Some("add_url") => store.record_event(event(SuggestionType::UrlToWorkspace, action.clone(), field(a, "url"), Some(field(a, "workspace")))).await,
+                Some("create_workspace") => store.record_event(event(SuggestionType::WorkspaceName, action.clone(), field(a, "name"), None)).await,
+                _ => {}
+            }
+        }
+    }
+    let _ = store.save().await;
+
+    log::info!(
+        "[Feedback] agent proposal {}: {} kept, {} rejected",
+        req.outcome, req.accepted.len(), req.rejected.len()
+    );
+    Json(SuccessResponse { success: true })
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct PlacementSnapshotWorkspace {
+    pub name: String,
+    #[serde(default)]
+    pub urls: Vec<String>,
+}
+
+/// The client's workspaces as of `taken_at`. The sidecar's own copy can't be
+/// used: its merge only ever adds urls, so it never sees one removed.
+#[derive(Debug, serde::Deserialize)]
+pub struct PlacementCheckRequest {
+    pub taken_at: i64,
+    pub workspaces: Vec<PlacementSnapshotWorkspace>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct PlacementCheckResponse {
+    pub removed: usize,
+    pub moved: usize,
+    pub pending: usize,
+}
+
+/// Delayed reward for agent placements: anything the user took out of the
+/// workspace it was applied to, within a week, counts against that placement.
+pub async fn feedback_check_agent_placements(Json(req): Json<PlacementCheckRequest>) -> Json<PlacementCheckResponse> {
+    use crate::sidecar::feedback::patterns::PlacementVerdict;
+    let snapshot: Vec<(String, Vec<String>)> = req.workspaces.into_iter().map(|w| (w.name, w.urls)).collect();
+    let mut tracker = PATTERN_TRACKER.lock().await;
+    let before = tracker.pending().len();
+    let verdicts = tracker.check_placements(&snapshot, req.taken_at, chrono::Utc::now().timestamp_millis());
+    let moved = verdicts.iter().filter(|v| matches!(v, PlacementVerdict::Moved { .. })).count();
+    if tracker.pending().len() != before {
+        persist_patterns(&tracker);
+    }
+    for v in &verdicts {
+        log::info!("[Feedback] agent placement settled: {:?}", v);
+    }
+    Json(PlacementCheckResponse { removed: verdicts.len() - moved, moved, pending: tracker.pending().len() })
+}
+
+/// (workspace, kept, turned down) for a url's site, for the /mcp tools.
+pub async fn learned_workspace_verdicts(url: &str) -> Vec<(String, u32, u32)> {
+    PATTERN_TRACKER.lock().await.verdicts(url)
+}
+
+/// Learned workspace suggestions for a URL, for in-process callers (the /mcp
+/// tools) that don't go through the HTTP handler below.
+pub async fn learned_workspace_suggestions(url: &str, title: &str, n: usize) -> Vec<(String, f64)> {
+    PATTERN_TRACKER.lock().await.suggest_workspaces(url, title, n)
 }
 
 /// Get workspace suggestions for a URL
@@ -2433,6 +2619,16 @@ pub async fn feedback_url_click(
     Json(req): Json<UrlClickRequest>,
 ) -> Json<SuccessResponse> {
     let action = parse_user_action(&req.action);
+
+    // Coming back to a page the agent filed is the strongest sign the filing was right.
+    if matches!(action, UserAction::Accepted) {
+        let mut tracker = PATTERN_TRACKER.lock().await;
+        let confirmed = tracker.placement_used(&req.url);
+        if !confirmed.is_empty() {
+            log::info!("[Feedback] agent placement confirmed by use: {} in {:?}", req.url, confirmed);
+            persist_patterns(&tracker);
+        }
+    }
 
     let store_mutex = get_feedback_store().await;
     let store_guard = store_mutex.lock().await;

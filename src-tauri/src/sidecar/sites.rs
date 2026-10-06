@@ -105,7 +105,7 @@ fn day_bounds(date: &str) -> Option<(i64, i64)> {
 
 /// Bare host for a groupable web page: http(s) only, no www., no local dev
 /// hosts (CoolDesk's own UI lives on localhost and would track itself).
-fn domain_of(url: &str) -> Option<String> {
+pub(crate) fn domain_of(url: &str) -> Option<String> {
     let parsed = url::Url::parse(url).ok()?;
     if !matches!(parsed.scheme(), "http" | "https") {
         return None;

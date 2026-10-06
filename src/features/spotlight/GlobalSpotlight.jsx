@@ -1,11 +1,11 @@
 import { faChrome, faDiscord, faEdge, faFirefox, faGithub, faSlack, faSpotify } from '@fortawesome/free-brands-svg-icons';
-import { faCalculator, faCode, faCog, faComments, faDesktop, faEnvelope, faFile, faFileLines, faFolder, faFolderOpen, faGamepad, faGlobe, faImage, faMicrophone, faMusic, faPlus, faTerminal, faTimes, faVideo } from '@fortawesome/free-solid-svg-icons';
+import { faCalculator, faCode, faCog, faComments, faDesktop, faEnvelope, faFile, faFileLines, faFolder, faFolderOpen, faGamepad, faGlobe, faImage, faMicrophone, faMusic, faPen, faPlus, faTerminal, faTimes, faVideo } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { storageGet, storageSet } from '../../services/extensionApi';
 import { syncWebSocket } from '../../services/syncWebSocket';
 import { isHostSyncEnabled } from '../../services/syncConfig';
-import { recordSearchSelection } from '../../services/feedbackService';
+import { recordAgentOutcome, recordSearchSelection, watchAgentPlacements } from '../../services/feedbackService';
 import { recordSpotlightOpen } from '../../services/analytics';
 import * as LocalAI from '../../services/localAIService';
 import { runningAppsService } from '../../services/runningAppsService';
@@ -35,6 +35,7 @@ import { handleAgentKeydown } from './keydown/agentKeydown';
 import { handleAiChatKeydown } from './keydown/aiChatKeydown';
 import { handleModelPickerKeydown } from './keydown/modelPickerKeydown';
 import { useWorkspaceScaffold } from './useWorkspaceScaffold';
+import { cooldeskToolsReachable } from './aiAdapters';
 import { useNewWorkspaceMode } from './useNewWorkspaceMode';
 import { useEditWorkspaceMode } from './useEditWorkspaceMode';
 import { VOICE_SEARCH_ENABLED } from '../../config/features';
@@ -46,7 +47,7 @@ import { ResultItem } from './parts/ResultItem';
 import { MoreResultsRow } from './parts/MoreResultsRow';
 import { AiChatPanel } from './parts/AiChatPanel';
 import { ModelPickerPanel } from './parts/ModelPickerPanel';
-import { AgentPanel } from './parts/AgentPanel';
+import { AgentPanel, AgentToolbar } from './parts/AgentPanel';
 import { NewWorkspacePanel } from './parts/NewWorkspacePanel';
 import { EditWorkspacePanel } from './parts/EditWorkspacePanel';
 import { buildCooldeskAttachment } from './cooldeskContext';
@@ -380,6 +381,12 @@ export function GlobalSpotlight({
     const isEmbedded = variant === 'embedded';
     const sections = { context: true, pins: true, workspaces: true, footer: true, ...(sectionsProp || {}) };
     const [query, setQuery] = useState('');
+    // /u /a /f, once typed with a space, become a pill (like /agent) instead of
+    // staying in the text. Everything that searches or asks "is the user
+    // searching?" reads `scopedQuery`, which puts the prefix back — so the
+    // search code is unchanged.
+    const [scopeKey, setScopeKey] = useState(null);
+    const scopedQuery = scopeKey ? `/${scopeKey} ${query}` : query;
     // Embedded: the idle/results panel drops down only while the search is engaged
     const [panelOpen, setPanelOpen] = useState(false);
     // Command/voice feedback toast ({ message, type })
@@ -423,6 +430,8 @@ export function GlobalSpotlight({
 
     // AI/Model command states
     const [commandMode, setCommandMode] = useState(null); // null, 'ai', 'model'
+    // A command mode owns the input; a leftover scope would silently filter it.
+    useEffect(() => { if (commandMode) setScopeKey(null); }, [commandMode]);
     const [aiMessages, setAiMessages] = useState([]);
     const [isAiLoading, setIsAiLoading] = useState(false);
     const { isModelLoading, availableModels, fetchAvailableModels, loadModel } = useModelPicker();
@@ -471,13 +480,16 @@ export function GlobalSpotlight({
         if (el) el.scrollTop = el.scrollHeight;
     }, [aiCli.turns]);
 
+    // Agent placements the user later removes are learned as rejections.
+    useEffect(() => watchAgentPlacements(), []);
+
     // .cooldesk scaffold/link logic (used by the /agent panel's "Create
     // workspace" button and /new-workspace's confirm step) — pulled into its
     // own hook so this already-large file doesn't also carry that machinery.
     const {
         wsScaffoldPlan, setWsScaffoldPlan,
-        buildScaffoldPlan, resolveWorkspaceProjects, runCreateWorkspace,
-    } = useWorkspaceScaffold({ expandedWorkspaceId, aiCli, showFeedback });
+        buildScaffoldPlan, runCreateWorkspace,
+    } = useWorkspaceScaffold({ aiCli, showFeedback });
 
     // After /new-workspace creates a workspace, open it in /edit-workspace
     // (declared below, hence the ref). After a scaffold run this fires only
@@ -575,7 +587,12 @@ export function GlobalSpotlight({
     // first and reading agentContext here wouldn't work, because React hasn't
     // re-rendered (and handed this callback a fresh closure) by the time the
     // same synchronous flow calls runAgent.
-    const runAgent = useCallback(async (request, extraAttachments = []) => {
+    // `originWorkspace` is for the run that *starts* from a workspace: the
+    // agentOriginWorkspace state set alongside it isn't visible to this call
+    // yet, so the first question used to go out without it. Follow-ups read
+    // the state.
+    const runAgent = useCallback(async (request, extraAttachments = [], { originWorkspace } = {}) => {
+        const origin = originWorkspace || agentOriginWorkspace;
         let list = [];
         try {
             const { listWorkspaces } = await import('../../db/index.js');
@@ -600,7 +617,11 @@ export function GlobalSpotlight({
             cooldesk = await buildCooldeskAttachment(
                 list.filter(w => w.id !== AGENT_WORKSPACE_ID),
                 request,
-                [agentOriginWorkspace?.id, expandedWorkspaceId],
+                // Started from a space: always that space's knowledge.
+                [origin?.id],
+                // The space chip remembered in Spotlight (persisted across
+                // sessions) is not intent — only used for project questions.
+                [expandedWorkspaceId],
             );
         } catch (e) {
             console.warn('[Spotlight] agent: failed to read .cooldesk context', e);
@@ -608,20 +629,27 @@ export function GlobalSpotlight({
         aiCli.run(request, list, cwd, {
             attachments: [...agentContext, ...extraAttachments, ...(cooldesk ? [cooldesk.attachment] : [])],
             contextNote: cooldesk?.projects.length ? `Using .cooldesk from ${cooldesk.projects.join(', ')}` : null,
+            focusWorkspace: origin?.name || null,
         });
     }, [aiCli, agentContext, agentOriginWorkspace, expandedWorkspaceId]);
 
-    // The agent has no tool that can query the user's actual browser history,
-    // tabs, bookmarks or installed apps — its only tools are WebSearch/WebFetch
-    // (see aiAdapters.js), and it correctly says so rather than fabricating
-    // urls when asked to "search my history". The fix isn't a better prompt —
-    // it's giving it real data: run the same browse used for a bare "/u"/"/a"
-    // ourselves (this code, unlike the agent, has actual access to
-    // history/tabs/bookmarks/apps) and hand the results over as an attachment,
-    // the same mechanism a picked file/folder already uses. The agent's job
-    // becomes picking from real rows instead of imagining ones that don't exist.
-    const runAgentWithBrowsingSnapshot = useCallback(async (rawQuery, originWorkspace) => {
+    // "Ask the agent" from /edit-workspace: the same run as a plain /agent
+    // question, aimed at that workspace. The pill shows the workspace, the
+    // bubble shows only what the user typed, and the workspace focus goes to
+    // the agent in the prompt (focusWorkspace), not appended to the request.
+    //
+    // An agent with CoolDesk's tools looks up tabs/history/apps itself. Only
+    // one without them (an adapter we don't wire MCP into, or the sidecar
+    // down) gets the old up-front snapshot of what /u and /a browse, attached
+    // as a chip, so it has real rows to pick from instead of inventing urls.
+    const runAgentFromWorkspace = useCallback(async (rawQuery, originWorkspace) => {
         setAgentOriginWorkspace(originWorkspace || null);
+        const opts = { originWorkspace };
+        if (aiCli.adapter?.cooldeskTools && await cooldeskToolsReachable()) {
+            runAgent(rawQuery, [], opts);
+            return;
+        }
+
         showFeedback('Gathering your tabs, history, bookmarks & apps…', 'info');
         const SNAPSHOT_CAP = 60;
         let urls = [];
@@ -646,46 +674,62 @@ export function GlobalSpotlight({
             lines.push(lines.length ? '\nInstalled apps:' : 'Installed apps:');
             for (const a of apps) lines.push(`  ${a.title || a.name}${a.path ? `  [${a.path}]` : ''}`);
         }
-        const content = lines.join('\n') || '(nothing found)';
-
         const attachment = {
             id: `ctx-browsing-${Date.now()}`,
             kind: 'data',
             name: 'Tabs, history, bookmarks & installed apps',
             path: null,
-            content,
+            content: lines.join('\n') || '(nothing found)',
             status: 'ready',
         };
         // Visible as a chip too (same as an attached file/folder), so it's
         // clear afterwards what the agent actually had to work with.
         setAgentContext(prev => [...prev, attachment]);
-
-        const request = `${rawQuery}\n\n(Attached below: a snapshot of my actual tabs, browsing history, bookmarks and installed apps. Pick whatever is relevant to the "${originWorkspace?.name}" workspace and add it — use the urls/paths exactly as given.)`;
-        runAgent(request, [attachment]);
-    }, [runAgent, showFeedback, isDesktopApp]);
+        runAgent(rawQuery, [attachment], opts);
+    }, [aiCli.adapter, runAgent, showFeedback, isDesktopApp]);
 
     // Apply one turn's proposal. The transcript stays up afterwards — the whole
     // point of history is that "now also do X" is a follow-up, not a new session.
     //
     // When this run started *from* /edit-workspace (agentOriginWorkspace set —
-    // see runAgentWithBrowsingSnapshot), applying drops the user straight back
+    // see runAgentFromWorkspace), applying drops the user straight back
     // into editing that same workspace instead of leaving them in a bare agent
     // chat — the whole point of asking the agent was to add to that workspace,
     // not to start an unrelated conversation.
+    //
+    // Only the ticked actions run. What the user kept, unticked or discarded is
+    // also the reward signal for the url→workspace learner (recordAgentOutcome
+    // → the sidecar's feedback_agent_outcome), which the agent reads back
+    // through the cooldesk tools' "learned guess" next time.
     const applyProposal = useCallback(async (turn) => {
-        if (!turn?.proposal?.valid?.length) return;
+        const proposal = turn?.proposal;
+        if (!proposal?.valid?.length) return;
+        const excluded = new Set(proposal.excluded || []);
+        const selected = proposal.valid.filter((_, i) => !excluded.has(i));
+        const skipped = proposal.valid.filter((_, i) => excluded.has(i));
+        if (!selected.length) return;
         try {
-            const { applyActions } = await import('../../services/workspaceActions');
+            const { applyActions, describeAction } = await import('../../services/workspaceActions');
             const { listWorkspaces } = await import('../../db/index.js');
             const res = await listWorkspaces();
             const list = res?.success ? res.data : (Array.isArray(res) ? res : []);
-            const { applied, errors } = await applyActions(turn.proposal.valid, list);
+            const { applied, errors, ok } = await applyActions(selected, list);
             showFeedback(
                 errors.length ? `Applied ${applied}, ${errors.length} failed` : `Applied ${applied} change${applied === 1 ? '' : 's'}`,
                 errors.length ? 'error' : 'success'
             );
             if (errors.length) console.warn('[Spotlight] agent apply errors:', errors);
-            aiCli.clearProposal(turn.id, applied > 0 ? 'applied' : 'discarded');
+            aiCli.clearProposal(turn.id, applied > 0 ? 'applied' : 'discarded', {
+                skipped: skipped.map(describeAction),
+            });
+            recordAgentOutcome({
+                outcome: 'applied',
+                // A failed action is neither kept nor rejected — no signal.
+                accepted: selected.filter((_, i) => ok[i]),
+                rejected: skipped,
+                request: turn.request,
+                responseTimeMs: proposal.shownAt ? Date.now() - proposal.shownAt : undefined,
+            });
 
             if (applied > 0 && agentOriginWorkspace) {
                 const fresh = list.find(w => w.id === agentOriginWorkspace.id) || agentOriginWorkspace;
@@ -699,6 +743,21 @@ export function GlobalSpotlight({
             showFeedback('Could not apply changes — see console', 'error');
         }
     }, [aiCli, showFeedback, agentOriginWorkspace, editWorkspace]);
+
+    // Discard is a rejection of every placement in the proposal.
+    const discardProposal = useCallback((turn) => {
+        const proposal = turn?.proposal;
+        if (!proposal) return;
+        aiCli.clearProposal(turn.id, 'discarded');
+        if (proposal.valid?.length) {
+            recordAgentOutcome({
+                outcome: 'discarded',
+                rejected: proposal.valid,
+                request: turn.request,
+                responseTimeMs: proposal.shownAt ? Date.now() - proposal.shownAt : undefined,
+            });
+        }
+    }, [aiCli]);
 
     // "/name <title>" — a fast local shortcut inside /agent mode: renames the
     // active workspace immediately via the same rename_workspace action
@@ -714,8 +773,8 @@ export function GlobalSpotlight({
             ]);
             const res = await listWorkspaces();
             const list = res?.success ? res.data : (Array.isArray(res) ? res : []);
-            const ws = list.find(w => w.id === expandedWorkspaceId) || list[0] || null;
-            if (!ws) { showFeedback('No workspace selected to rename', 'error'); return; }
+            const ws = expandedWorkspaceId ? list.find(w => w.id === expandedWorkspaceId) : null;
+            if (!ws) { showFeedback('Pick a workspace in the dropdown first', 'error'); return; }
             if (ws.name === name) { showFeedback(`Already named "${name}"`, 'success'); return; }
             const { applied, errors } = await applyActions([{ type: 'rename_workspace', from: ws.name, to: name }], list);
             showFeedback(applied ? `Renamed to "${name}"` : (errors[0] || 'Rename failed'), applied ? 'success' : 'error');
@@ -1328,6 +1387,17 @@ export function GlobalSpotlight({
             return;
         }
 
+        // "/u ", "/a ", "/f " → scope pill. Needs the space: "/a" alone may be
+        // the start of "/agent" or "/ai".
+        if (!commandMode) {
+            const m = /^\/([uaf])\s(.*)$/is.exec(query);
+            if (m) {
+                setScopeKey(m[1].toLowerCase());
+                setQuery(m[2].replace(/^\s+/, ''));
+                return;
+            }
+        }
+
         // Detect /agent — the terminal AI CLI (Claude Code, opencode …).
         // Separate from /ai, which is the LM Studio chat: this one produces
         // workspace edits and needs a confirm step, that one just talks.
@@ -1340,10 +1410,11 @@ export function GlobalSpotlight({
             if (commandMode !== 'agent') {
                 setCommandMode('agent');
                 setResults([]);
-                // Resolve which of the selected workspace's folders can be
-                // scaffolded/linked, for the panel's "Create workspace" button.
-                setWsScaffoldPlan(undefined);
-                resolveWorkspaceProjects().then(setWsScaffoldPlan);
+                // No scaffold button for a plain /agent: the only workspace to
+                // aim it at was the dropdown's remembered pick, which isn't
+                // intent — it kept offering to set up the same project every
+                // visit. /new-workspace sets a plan when it hands off here.
+                setWsScaffoldPlan(null);
             }
             setQuery(query.replace(/^\s*\/agent\s*/i, ''));
             return;
@@ -1447,7 +1518,7 @@ export function GlobalSpotlight({
     // OPTIMIZED SEARCH with caching & race handling
     // ==========================================
     useEffect(() => {
-        const trimmedQuery = query.trim();
+        const trimmedQuery = scopedQuery.trim();
 
         // A new query collapses any expanded folder tree from the previous search.
         setExpandedPaths(new Set());
@@ -1494,7 +1565,9 @@ export function GlobalSpotlight({
         // editing a *different* workspace mid-add makes no sense), so either
         // one reaching that far surfaced as "can't be added to a workspace".
         // Add mode only ever wants addable search results.
-        const commandItems = addTarget ? null : slash.getSuggestions(trimmedQuery);
+        // A scope pill (scopeKey) is a search, never a command or a workspace
+        // name — "/u" would otherwise match a workspace called "Utilities".
+        const commandItems = (addTarget || scopeKey) ? null : slash.getSuggestions(trimmedQuery);
         // Existing workspaces whose name starts with what's typed — computed
         // independently of the command palette above (which is disabled on
         // the dedicated overlay surface, spotlight-main.jsx: enableSlashCommands
@@ -1504,7 +1577,7 @@ export function GlobalSpotlight({
         // whenever the prefix is ambiguous between two of them (e.g. "cool"
         // matching both "cooldesk" and "cooldesk website"): picking one is a
         // click/Enter away instead of needing to type enough to disambiguate.
-        const typedName = (!addTarget && trimmedQuery.startsWith('/')) ? trimmedQuery.slice(1).toLowerCase() : '';
+        const typedName = (!addTarget && !scopeKey && trimmedQuery.startsWith('/')) ? trimmedQuery.slice(1).toLowerCase() : '';
         const wsMatches = typedName
             ? workspaces
                 .filter(w => workspaceNameMatchesTyped(w.name, typedName))
@@ -1755,7 +1828,7 @@ export function GlobalSpotlight({
                 // that's a request, not a search term. Hand it to the agent
                 // instead, scoped to the workspace already open — but the
                 // agent has no tool of its own to search history/tabs/
-                // bookmarks/apps (see runAgentWithBrowsingSnapshot), so
+                // bookmarks/apps (see runAgentFromWorkspace), so
                 // needsBrowsingData tells the select handler to gather that
                 // data itself first and attach it, rather than sending an
                 // instruction the agent has no way to fulfill. No web-search
@@ -1861,7 +1934,7 @@ export function GlobalSpotlight({
         }, debounceMs);
 
         return () => clearTimeout(timeoutId);
-    }, [query, deepSearch, commandMode, slash, addTarget, isDesktopApp, newWorkspace.step]);
+    }, [query, scopeKey, deepSearch, commandMode, slash, addTarget, isDesktopApp, newWorkspace.step]);
 
     // --- Folder tree helpers ---
     // Base rows = search results capped to the visible window; folders among
@@ -2105,7 +2178,14 @@ export function GlobalSpotlight({
             return;
         }
 
-        const isSearching = !!query.trim();
+        // Backspace in an empty box removes the scope pill, like a tag input.
+        if (e.key === 'Backspace' && scopeKey && !query) {
+            e.preventDefault();
+            setScopeKey(null);
+            return;
+        }
+
+        const isSearching = !!scopedQuery.trim();
 
         // Build complete navigable list depending on state.
         // Visual order (idle): Apps → Tabs → Pinned → Workspace items.
@@ -2287,13 +2367,13 @@ export function GlobalSpotlight({
                 // unselected bare Enter (see setSelectedIndex above) — only a
                 // deliberate arrow-to-it-and-Enter or a click.
                 handleSelect(flatRows[0].item);
-            } else if (query.trim() && !addTarget) {
+            } else if (scopedQuery.trim() && !addTarget) {
                 // No results — search the web instead (without any /u /a /f prefix;
                 // a bare prefix with no term does nothing). Suppressed in add
                 // mode: Enter there means "file the thing I picked", and
                 // launching a browser tab is the opposite of that.
-                const { scope: qScope, term: qTerm } = parseScopedQuery(query.trim());
-                const webQuery = qScope ? qTerm : query.trim();
+                const { scope: qScope, term: qTerm } = parseScopedQuery(scopedQuery.trim());
+                const webQuery = qScope ? qTerm : scopedQuery.trim();
                 if (webQuery) {
                     searchInBrowser(webQuery);
                     handleClose();
@@ -2395,9 +2475,8 @@ export function GlobalSpotlight({
         // into agent mode and send the original query as the request — no
         // panel close (agent mode's transcript view takes over instead, same
         // as typing "/agent <query>" and hitting Enter). The /edit-workspace
-        // variant needs real browsing data gathered and attached first (see
-        // runAgentWithBrowsingSnapshot) — the agent has no tool of its own
-        // that can search history/tabs/bookmarks/apps.
+        // variant is the same run aimed at that workspace (see
+        // runAgentFromWorkspace).
         if (item.type === 'agent-suggest' && item.forNewWorkspace) {
             newWorkspace.askAiForLinks(item.query);
             setQuery('');
@@ -2407,7 +2486,7 @@ export function GlobalSpotlight({
             setCommandMode('agent');
             setQuery('');
             if (item.needsBrowsingData) {
-                runAgentWithBrowsingSnapshot(item.query, item.originWorkspace);
+                runAgentFromWorkspace(item.query, item.originWorkspace);
             } else {
                 runAgent(item.query);
             }
@@ -2459,7 +2538,7 @@ export function GlobalSpotlight({
         // Record feedback for RAG (fire-and-forget, non-blocking). The query is
         // included so the backend learns keyword→URL associations for ranking —
         // strip any /u /a /f scope prefix so it learns the bare keyword.
-        recordSearchSelection(item, resultsDisplayedAtRef.current, parseScopedQuery(query?.trim() || '').term).catch(() => { });
+        recordSearchSelection(item, resultsDisplayedAtRef.current, parseScopedQuery(scopedQuery.trim()).term).catch(() => { });
 
         // For tabs, switch to the existing tab instead of opening new
         if (item.type === 'tab') {
@@ -2777,6 +2856,7 @@ export function GlobalSpotlight({
 
     const handleClose = useCallback(() => {
         setQuery('');
+        setScopeKey(null);
         setResults([]);
         setExpandedPaths(new Set());
         setTreeChildren({});
@@ -2879,7 +2959,7 @@ export function GlobalSpotlight({
 
     // When the active workspace has no entries, the workspace nav slot is the
     // selector itself — highlight the trigger so keyboard position stays visible.
-    const wsSelectorSelected = !query.trim() && !commandMode
+    const wsSelectorSelected = !scopedQuery.trim() && !commandMode
         && wsNavItems.length === 0 && workspaces.length > 0
         && selectedPinIndex === pinnedItems.length + contextGroups.visibleList.length;
 
@@ -2896,8 +2976,9 @@ export function GlobalSpotlight({
         <div className={isEmbedded ? 'spotlight-embedded' : 'spotlight-overlay'}>
             <div className="spotlight-container" ref={containerRef}>
                 {/* Search Header */}
-                <div className={`spotlight-search-box${voice.isListening ? ' listening' : ''}${addTarget ? ' add-mode' : ''}`}>
-                    <span className="spotlight-prompt">{'>'}</span>
+                <div className={`spotlight-search-box${voice.isListening ? ' listening' : ''}${addTarget ? ' add-mode' : ''}${commandMode === 'agent' ? ' agent-mode' : ''}`}>
+                    {/* The agent pill below takes the prompt's place in that mode. */}
+                    {commandMode !== 'agent' && !(scopeKey && !commandMode) && <span className="spotlight-prompt">{'>'}</span>}
                     {/* Add-mode chip — the search looks identical in both modes,
                         so the target workspace has to be visible or a click
                         files something instead of opening it with no warning. */}
@@ -2919,9 +3000,15 @@ export function GlobalSpotlight({
                     {/* Command-mode chip — same grammar as the add badge, so
                         "the box is in a mode" always looks the same. */}
                     {commandMode === 'agent' && (
-                        <span className="spotlight-add-badge spotlight-mode-badge">
-                            <FontAwesomeIcon icon={faTerminal} />
-                            <span>{agentOriginWorkspace ? `Agent · ${agentOriginWorkspace.name}` : 'Agent'}</span>
+                        // One soft pill in place of the prompt: "Agent", or the
+                        // space it was started from. The × only shows on hover —
+                        // a second always-visible × next to the panel's close
+                        // button read as two ways to do the same thing.
+                        <span
+                            className="spotlight-add-badge spotlight-mode-badge is-agent"
+                            title={agentOriginWorkspace ? `Agent · ${agentOriginWorkspace.name}` : 'Agent mode'}
+                        >
+                            <span>{agentOriginWorkspace ? agentOriginWorkspace.name : 'Agent'}</span>
                             <button
                                 type="button"
                                 className="spotlight-add-badge-exit"
@@ -2934,9 +3021,9 @@ export function GlobalSpotlight({
                         </span>
                     )}
                     {commandMode === 'new-workspace' && (
-                        <span className="spotlight-add-badge spotlight-mode-badge">
-                            <FontAwesomeIcon icon={faFolder} />
-                            <span>New workspace</span>
+                        <span className="spotlight-add-badge spotlight-mode-badge is-compact is-quiet" title="New workspace">
+                            <FontAwesomeIcon icon={faPlus} />
+                            <span>New</span>
                             <button
                                 type="button"
                                 className="spotlight-add-badge-exit"
@@ -2949,8 +3036,12 @@ export function GlobalSpotlight({
                         </span>
                     )}
                     {commandMode === 'edit-workspace' && (
-                        <span className="spotlight-add-badge spotlight-mode-badge">
-                            <FontAwesomeIcon icon={faFolder} />
+                        // A quiet label, not a pill: the name is the useful part.
+                        <span
+                            className="spotlight-add-badge spotlight-mode-badge is-compact is-quiet"
+                            title={`Editing ${editWorkspace.workspace?.name || 'workspace'}`}
+                        >
+                            <FontAwesomeIcon icon={faPen} />
                             <span>{editWorkspace.workspace?.name || 'Edit workspace'}</span>
                             <button
                                 type="button"
@@ -2963,10 +3054,20 @@ export function GlobalSpotlight({
                             </button>
                         </span>
                     )}
-                    {(() => {
-                        const { scope } = parseScopedQuery(query.trim());
-                        return scope ? <span className="spotlight-scope-badge">{scope.label}</span> : null;
-                    })()}
+                    {scopeKey && !commandMode && (
+                        <span className="spotlight-add-badge spotlight-mode-badge is-agent" title={`Searching ${SEARCH_SCOPES[scopeKey].label} only`}>
+                            <span>{SEARCH_SCOPES[scopeKey].label}</span>
+                            <button
+                                type="button"
+                                className="spotlight-add-badge-exit"
+                                onMouseDown={(e) => { e.preventDefault(); setScopeKey(null); inputRef.current?.focus(); }}
+                                title="Search everything (Backspace)"
+                                aria-label={`Stop searching ${SEARCH_SCOPES[scopeKey].label} only`}
+                            >
+                                <FontAwesomeIcon icon={faTimes} />
+                            </button>
+                        </span>
+                    )}
                     <input
                         ref={inputRef}
                         className="spotlight-input"
@@ -2982,7 +3083,9 @@ export function GlobalSpotlight({
                                     ? 'Search to add a link/folder, or /name, /todo, /notes…'
                                     : addTarget
                                         ? `Search to add to ${addTarget.name}…`
-                                        : (placeholder || (isEmbedded ? 'Search or type / for commands...' : 'Almighty Search...'))}
+                                        : scopeKey
+                                            ? `Search ${SEARCH_SCOPES[scopeKey].label.toLowerCase()}…`
+                                            : (placeholder || (isEmbedded ? 'Search or type / for commands...' : 'Almighty Search...'))}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleKeyDown}
@@ -2990,6 +3093,22 @@ export function GlobalSpotlight({
                         autoFocus={!isEmbedded}
                         spellCheck={false}
                     />
+                    {commandMode === 'agent' && (
+                        <AgentToolbar
+                            aiCli={aiCli}
+                            agentAdapterOpen={agentAdapterOpen}
+                            setAgentAdapterOpen={setAgentAdapterOpen}
+                            agentHistoryOpen={agentHistoryOpen}
+                            setAgentHistoryOpen={setAgentHistoryOpen}
+                            wsScaffoldPlan={wsScaffoldPlan}
+                            runCreateWorkspace={runCreateWorkspace}
+                            query={query}
+                            setQuery={setQuery}
+                            setAgentContext={setAgentContext}
+                            inputRef={inputRef}
+                            setAgentOriginWorkspace={setAgentOriginWorkspace}
+                        />
+                    )}
                     {loading && <div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.2)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>}
                     {/* WS connection indicator — only meaningful in extension (desktop uses IPC, not WS) */}
                     {isHostSyncEnabled() && !window.electronAPI && !(window.__TAURI__ || window.__TAURI_INTERNALS__) && (
@@ -3081,20 +3200,14 @@ export function GlobalSpotlight({
                 {commandMode === 'agent' && (
                     <AgentPanel
                         aiCli={aiCli}
-                        agentAdapterOpen={agentAdapterOpen}
-                        setAgentAdapterOpen={setAgentAdapterOpen}
-                        agentHistoryOpen={agentHistoryOpen}
-                        setAgentHistoryOpen={setAgentHistoryOpen}
                         wsScaffoldPlan={wsScaffoldPlan}
-                        runCreateWorkspace={runCreateWorkspace}
-                        query={query}
-                        setQuery={setQuery}
                         agentContext={agentContext}
                         setAgentContext={setAgentContext}
-                        inputRef={inputRef}
                         agentLogRef={agentLogRef}
                         applyProposal={applyProposal}
-                        setAgentOriginWorkspace={setAgentOriginWorkspace}
+                        discardProposal={discardProposal}
+                        inputRef={inputRef}
+                        onRetry={runAgent}
                     />
                 )}
 
@@ -3144,7 +3257,7 @@ export function GlobalSpotlight({
                 )}
 
                 {/* Recommendations Section - Shows when query is empty */}
-                {sections.context && !query.trim() && !commandMode && contextItems.length > 0 && (() => {
+                {sections.context && !scopedQuery.trim() && !commandMode && contextItems.length > 0 && (() => {
                     // Grouped/sliced in contextGroups so keyboard nav walks the same visible list
                     const { apps, tabs, visibleApps, visibleTabs } = contextGroups;
                     let flatIndex = pinnedItems.length; // Start after pinned items
@@ -3237,7 +3350,7 @@ export function GlobalSpotlight({
                 })()}
 
                 {/* Pinned Items Section */}
-                {sections.pins && !query.trim() && !commandMode && pinnedItems.length > 0 && (
+                {sections.pins && !scopedQuery.trim() && !commandMode && pinnedItems.length > 0 && (
                     <div className="spotlight-pins">
                         <div className="spotlight-pins-header">
                             <span className="spotlight-pins-title">Pinned</span>
@@ -3261,7 +3374,7 @@ export function GlobalSpotlight({
                 )}
 
                 {/* Workspaces Section */}
-                {sections.workspaces && !query.trim() && !commandMode && (
+                {sections.workspaces && !scopedQuery.trim() && !commandMode && (
                     <div className="spotlight-pins spotlight-pins--workspace">
                         {workspaces.length > 0 && (
                             <div className="spotlight-pins-header">
@@ -3431,8 +3544,13 @@ export function GlobalSpotlight({
                 {sections.footer && commandMode === 'agent' && (
                     <div className="spotlight-footer">
                         <div className="shortcut-hint">
-                            <span className="shortcut-key">↵</span> {aiCli.turns.some(t => t.proposal?.valid.length) ? 'Apply' : 'Run'}
+                            <span className="shortcut-key">↵</span> Send
                         </div>
+                        {aiCli.turns.some(t => t.proposal?.valid.length) && (
+                            <div className="shortcut-hint">
+                                <span className="shortcut-key">⌘↵</span> Apply
+                            </div>
+                        )}
                         <div className="shortcut-hint">
                             <span className="shortcut-key">Esc</span> {aiCli.running ? 'Stop' : 'Close'}
                         </div>
@@ -3466,7 +3584,7 @@ export function GlobalSpotlight({
                     <div className="shortcut-hint"><span className="shortcut-key">↵</span> Open</div>
                     <div className="shortcut-hint"><span className="shortcut-key">↑↓</span> Navigate</div>
                     <div className="shortcut-hint"><span className="shortcut-key">/u /a /f</span> Scope</div>
-                    {query.trim() ? (
+                    {scopedQuery.trim() ? (
                         <div className="shortcut-hint"><span className="shortcut-key">→←</span> Expand</div>
                     ) : (
                         <>

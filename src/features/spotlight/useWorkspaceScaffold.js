@@ -9,11 +9,10 @@ import { announceCooldesk, fetchCooldesk, linkCooldeskProject } from '../../serv
  * need `buildScaffoldPlan`/`runCreateWorkspace`, not how they work.
  *
  * @param {object} deps
- * @param {string|null} deps.expandedWorkspaceId currently selected workspace, for resolveWorkspaceProjects
  * @param {ReturnType<typeof import('./useAiCli').useAiCli>} deps.aiCli
  * @param {(message: string, type?: string) => void} deps.showFeedback
  */
-export function useWorkspaceScaffold({ expandedWorkspaceId, aiCli, showFeedback }) {
+export function useWorkspaceScaffold({ aiCli, showFeedback }) {
     // Which project (app workspace + on-disk folder(s)) a scaffold run
     // targets: { workspace?, hub, members, plain } once resolved, null when
     // resolved with nothing found, undefined before the first resolve.
@@ -22,8 +21,7 @@ export function useWorkspaceScaffold({ expandedWorkspaceId, aiCli, showFeedback 
     // Classify a raw folder list into a scaffold plan: hub (whichever already
     // owns a .cooldesk/, else the first), sibling project folders to link to
     // it as a group, and plain (non-project) folders that just become
-    // resource entries. Shared by resolveWorkspaceProjects below (an existing
-    // workspace's folder apps) and /new-workspace's confirm step (freshly
+    // resource entries. Used by /new-workspace's confirm step (freshly
     // picked folders, no workspace saved yet) — this mirrors what the old
     // cooldesk-plugin split across two commands (`/cd-init` per project,
     // `/cd-link` to join several into a star-topology group) as one plan.
@@ -53,32 +51,6 @@ export function useWorkspaceScaffold({ expandedWorkspaceId, aiCli, showFeedback 
         const members = projectFolders.filter(f => f.path !== hub.path);
         return { hub, members, plain };
     }, []);
-
-    // Which of the selected workspace's folder apps to scaffold, and how.
-    // Reloads workspaces itself rather than trusting a `workspaces` list state
-    // passed in — that state (in GlobalSpotlight) is only populated when the
-    // workspaces *section* is enabled on a given surface, and this needs the
-    // real list regardless.
-    const resolveWorkspaceProjects = useCallback(async () => {
-        try {
-            const { listWorkspaces } = await import('../../db/index.js');
-            const res = await listWorkspaces();
-            const list = res?.success ? res.data : (Array.isArray(res) ? res : []);
-            const ws = list.find(w => w.id === expandedWorkspaceId) || list[0] || null;
-            if (!ws) return null;
-
-            const folders = (ws.apps || [])
-                .filter(a => a.appType === 'folder' && a.path)
-                .map(a => ({ name: a.name || a.path, path: a.path }));
-            if (folders.length === 0) return null;
-
-            const plan = await buildScaffoldPlan(folders);
-            return { workspace: ws, ...plan };
-        } catch (e) {
-            console.warn('[Spotlight] create-workspace: failed to resolve project folders', e);
-            return null;
-        }
-    }, [expandedWorkspaceId, buildScaffoldPlan]);
 
     // Scaffold (and, when a plan holds several project folders, link)
     // .cooldesk/ workspaces. Sequential by design: a member's link depends on
@@ -145,5 +117,5 @@ export function useWorkspaceScaffold({ expandedWorkspaceId, aiCli, showFeedback 
         return { ok: true };
     }, [wsScaffoldPlan, aiCli, showFeedback]);
 
-    return { wsScaffoldPlan, setWsScaffoldPlan, buildScaffoldPlan, resolveWorkspaceProjects, runCreateWorkspace };
+    return { wsScaffoldPlan, setWsScaffoldPlan, buildScaffoldPlan, runCreateWorkspace };
 }

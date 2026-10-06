@@ -1,6 +1,6 @@
-// Keyboard grammar for /agent. Enter is heavily overloaded: confirm a
-// pending proposal, attach a highlighted result as context, run "/name", or
-// send the request to the CLI — in that priority order.
+// Keyboard grammar for /agent. ⌘/Ctrl+Enter applies the pending proposal.
+// Plain Enter attaches a highlighted result as context, runs "/name", or
+// sends the request to the CLI — in that priority order.
 export function handleAgentKeydown(e, {
     aiCli, applyProposal, selectedIndex, setSelectedIndex, flatRows,
     attachToAgentContext, query, runRenameWorkspace, setQuery, runAgent,
@@ -8,10 +8,15 @@ export function handleAgentKeydown(e, {
 }) {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        const pending = aiCli.turns.find(t => t.proposal?.valid.length);
-        // With a proposal on screen Enter is the confirm — the run is
-        // over and the only thing left to do is accept it.
-        if (pending) { applyProposal(pending); return; }
+        // Applying takes ⌘/Ctrl+Enter, never a plain Enter: with a proposal
+        // on screen, Enter used to apply it — so typing a follow-up ("move
+        // reddit to Social") and pressing Enter applied the whole plan
+        // instead of sending the message.
+        if (e.metaKey || e.ctrlKey) {
+            const pending = aiCli.turns.findLast(t => t.proposal?.valid.length);
+            if (pending && !aiCli.running) applyProposal(pending);
+            return;
+        }
         // A highlighted result attaches as context instead of opening
         // — same idea as normal search's Enter, just repurposed:
         // composing a request isn't the moment to launch something.

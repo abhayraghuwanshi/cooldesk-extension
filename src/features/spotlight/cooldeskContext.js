@@ -36,6 +36,20 @@ function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise(resolve => setTimeout(() => resolve(null), ms))]);
 }
 
+/**
+ * Is the request about project work at all? A space being remembered in
+ * Spotlight, or being the only one with a .cooldesk/, says nothing about the
+ * question: "find current time" with the calculatecost.cloud chip selected
+ * used to get that project's whole README/todos attached and a "Using
+ * .cooldesk from …" note. Those soft signals only count when the question
+ * reads like it's about a project.
+ */
+const PROJECT_INTENT = /\b(this|my|the) (project|repo|space|workspace|codebase|app)\b|\b(project|projects|repo|repository|codebase|todos?|to-?dos?|tasks?|backlog|readme|docs?|documentation|architecture|decisions?|roadmap|milestones?|progress|bugs?|issues?|features?|deploy(ment)?|release|build|commands?|scripts?|services?|branch|commits?|pull request|pr)\b|\bwork(ing)? on\b|\bwhat('s| is)? next\b|\bnext (step|steps|thing|task)\b/i;
+
+export function looksLikeProjectQuestion(request) {
+  return PROJECT_INTENT.test(request || '');
+}
+
 /** Does the request mention this workspace by name (whole word, any case)? */
 function mentions(request, name) {
   if (!name || name.length < 2) return false;
@@ -110,12 +124,16 @@ function describeBrief(ws, cd) {
 /**
  * @param {Array} workspaces       every workspace (as passed to buildPrompt)
  * @param {string} request         the user's message
- * @param {string[]} focusIds      workspace ids the run was started from / is about
+ * @param {string[]} focusIds      workspace ids the run was explicitly started from
+ *                                 (always get full detail)
+ * @param {string[]} softFocusIds  workspace ids that are merely selected/remembered
+ *                                 in the UI — full detail only for project questions
  * @returns {Promise<{attachment: object, projects: string[]}|null>}
  *   A 'data' attachment for buildAttachments, plus the names of the projects
- *   sent in full (for the transcript); null if no workspace has a .cooldesk/.
+ *   sent in full (for the transcript); null if no workspace has a .cooldesk/,
+ *   or the question has nothing to do with any of them.
  */
-export async function buildCooldeskAttachment(workspaces, request, focusIds = []) {
+export async function buildCooldeskAttachment(workspaces, request, focusIds = [], softFocusIds = []) {
   const candidates = (workspaces || [])
     .map(ws => ({ ws, root: projectFolderOf(ws) }))
     .filter(c => c.root);
@@ -128,7 +146,13 @@ export async function buildCooldeskAttachment(workspaces, request, focusIds = []
   const projects = loaded.filter(Boolean);
   if (!projects.length) return null;
 
-  const focus = new Set(focusIds.filter(Boolean));
+  const projectQuestion = looksLikeProjectQuestion(request);
+  // Explicit focus always counts; a space that's just selected in the UI only
+  // counts when the question is about project work.
+  const focus = new Set([
+    ...focusIds.filter(Boolean),
+    ...(projectQuestion ? softFocusIds.filter(Boolean) : []),
+  ]);
   const isFocus = (p) => focus.has(p.ws.id) || mentions(request, p.ws.name) || mentions(request, p.cd.project?.name);
   // Explicit focus first, then name mentions; capped so one question can't
   // pull in every project's docs.
@@ -136,8 +160,12 @@ export async function buildCooldeskAttachment(workspaces, request, focusIds = []
     ...projects.filter(p => focus.has(p.ws.id)),
     ...projects.filter(p => !focus.has(p.ws.id) && isFocus(p)),
   ].slice(0, FOCUS_MAX);
-  // With a single .cooldesk project there's no question which one is meant.
-  if (!full.length && projects.length === 1) full.push(projects[0]);
+  // With a single .cooldesk project there's no question which one is meant —
+  // as long as the question is about a project at all.
+  if (!full.length && projects.length === 1 && projectQuestion) full.push(projects[0]);
+  // A general question ("find current time") that names no project and isn't
+  // about project work gets no .cooldesk context at all, not even summaries.
+  if (!full.length && !projectQuestion) return null;
   const rest = projects.filter(p => !full.includes(p));
 
   const sections = full.map(p => describeFull(p.ws, p.cd));

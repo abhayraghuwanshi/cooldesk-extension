@@ -15,5 +15,6 @@ pub mod sampler;
 pub mod sites;
 pub mod cooldesk;
 pub mod local_servers;
+pub mod mcp;
 
 pub use server::start_server;

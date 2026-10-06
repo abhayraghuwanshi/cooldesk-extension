@@ -83,20 +83,6 @@ body.spotlight-window {
   opacity: 0.9;
 }
 
-/* Active /u /a /f search-scope indicator next to the prompt */
-.spotlight-scope-badge {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #a78bfa;
-  background: rgba(139, 92, 246, 0.15);
-  border: 1px solid rgba(139, 92, 246, 0.3);
-  padding: 3px 7px;
-  border-radius: 5px;
-  flex-shrink: 0;
-  user-select: none;
-}
 
 /* Add mode — the search is filing results into a workspace rather than
    launching them. Green, to read as "collecting" against the purple scope
@@ -109,9 +95,9 @@ body.spotlight-window {
   max-width: 40%;
   font-size: 11px;
   font-weight: 600;
-  color: #4ade80;
-  background: rgba(34, 197, 94, 0.15);
-  border: 1px solid rgba(34, 197, 94, 0.35);
+  color: rgba(241, 245, 249, 0.85);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   padding: 3px 5px 3px 8px;
   border-radius: 5px;
   flex-shrink: 0;
@@ -147,11 +133,11 @@ body.spotlight-window {
 
 .spotlight-add-badge-exit:hover {
   opacity: 1;
-  background: rgba(34, 197, 94, 0.25);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .spotlight-search-box.add-mode {
-  border-color: rgba(34, 197, 94, 0.45);
+  border-color: rgba(129, 133, 255, 0.45);
 }
 
 .spotlight-input {
@@ -1633,15 +1619,9 @@ body.spotlight-window {
 }
 
 /* ── Agent mode (/agent) ───────────────────────────────────────────────────
-   A terminal AI CLI proposing workspace changes. Green throughout, matching
-   the add-mode badge, so "this is going to change my workspaces" reads the
-   same wherever it appears. */
-.spotlight-agent-adapters {
-  display: flex;
-  gap: 4px;
-  margin-left: auto;
-}
-
+   Calm and neutral: white text in a few strengths on dark surfaces, with one
+   quiet accent (CoolDesk indigo) for what's active or yours. No green — the
+   chat is a conversation, not a status light. */
 .spotlight-agent-chip {
   padding: 2px 8px;
   font-size: 10px;
@@ -1654,27 +1634,15 @@ body.spotlight-window {
 }
 
 .spotlight-agent-chip.is-active {
-  border-color: rgba(34, 197, 94, 0.5);
-  background: rgba(34, 197, 94, 0.15);
-  color: #4ade80;
+  border-color: rgba(129, 133, 255, 0.45);
+  background: rgba(129, 133, 255, 0.14);
+  color: #a5a8ff;
 }
 
 /* Not on PATH — still clickable, so the tooltip explaining why is reachable. */
 .spotlight-agent-chip.is-missing {
   opacity: 0.4;
   text-decoration: line-through;
-}
-
-.spotlight-agent-cancel {
-  margin-left: 8px;
-  padding: 2px 10px;
-  font-size: 10px;
-  font-weight: 600;
-  border-radius: 4px;
-  border: 1px solid rgba(248, 113, 113, 0.4);
-  background: rgba(248, 113, 113, 0.12);
-  color: #f87171;
-  cursor: pointer;
 }
 
 .spotlight-agent-warn {
@@ -1712,49 +1680,328 @@ body.spotlight-window {
 }
 
 .spotlight-agent-proposal {
-  border: 1px solid rgba(34, 197, 94, 0.35);
-  border-radius: 8px;
-  padding: 10px 12px;
-  background: rgba(34, 197, 94, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .spotlight-agent-proposal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #4ade80;
+  color: rgba(226, 232, 240, 0.5);
   margin-bottom: 8px;
 }
 
-.spotlight-agent-actions {
-  list-style: none;
-  margin: 0 0 10px;
-  padding: 0;
-  font-size: 12px;
-  color: #e2e8f0;
+/* Proposal card (ProposalCard.jsx): changes grouped by workspace. Group
+   headers and rows are both toggles. */
+.spotlight-proposal-group {
+  margin: 0 -6px 8px;
 }
 
-.spotlight-agent-actions li {
-  padding: 3px 0 3px 14px;
-  position: relative;
+.spotlight-proposal-group-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.spotlight-proposal-group-head:hover,
+.spotlight-proposal-items li:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.spotlight-proposal-group-head:focus-visible,
+.spotlight-proposal-items li:focus-visible {
+  outline: 1px solid rgba(165, 168, 255, 0.6);
+  outline-offset: -1px;
+}
+
+.spotlight-proposal-group-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spotlight-proposal-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: rgba(226, 232, 240, 0.6);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.spotlight-proposal-badge.is-new {
+  color: #a5a8ff;
+  background: rgba(165, 168, 255, 0.12);
+}
+
+.spotlight-proposal-count {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.spotlight-proposal-count .is-add { color: #a5a8ff; }
+.spotlight-proposal-count .is-remove { color: #f87171; }
+
+/* Diff sign in place of a checkbox on rows: the header keeps the checkbox. */
+.spotlight-proposal-sign {
+  flex-shrink: 0;
+  width: 12px;
+  text-align: center;
+  font-weight: 700;
+  color: #a5a8ff;
+}
+
+.spotlight-proposal-items li.is-remove .spotlight-proposal-sign { color: #f87171; }
+.spotlight-proposal-items li.is-off .spotlight-proposal-sign { color: rgba(226, 232, 240, 0.4); }
+
+.spotlight-proposal-review {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: rgba(226, 232, 240, 0.75);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.spotlight-proposal-review:hover {
+  color: #f1f5f9;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.spotlight-proposal-existing-toggle {
+  border: 0;
+  background: transparent;
+  padding: 2px 6px 2px 33px;
+  font-size: 11px;
+  color: rgba(226, 232, 240, 0.4);
+  cursor: pointer;
+}
+
+.spotlight-proposal-existing-toggle:hover { color: rgba(226, 232, 240, 0.7); }
+
+.spotlight-proposal-existing {
+  list-style: none;
+  margin: 0;
+  padding: 0 6px 2px 33px;
+  font-size: 11.5px;
+  color: rgba(226, 232, 240, 0.45);
+}
+
+.spotlight-proposal-existing li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  padding: 1px 0;
+}
+
+.spotlight-agent-apply kbd,
+.spotlight-agent-discard kbd {
+  margin-left: 6px;
+  font: inherit;
+  font-size: 10px;
+  opacity: 0.55;
+}
+
+/* Triage: one change at a time (ProposalCard.jsx → Triage). */
+.spotlight-triage:focus {
+  outline: none;
+  border-color: rgba(165, 168, 255, 0.35);
+}
+
+.spotlight-triage-tally {
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.spotlight-triage-item {
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.spotlight-triage-item.is-off { opacity: 0.5; }
+
+.spotlight-triage-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #f1f5f9;
   word-break: break-word;
 }
 
-.spotlight-agent-actions li::before {
+.spotlight-triage-target {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.75);
+}
+
+.spotlight-triage-target b { color: #f1f5f9; font-weight: 600; }
+
+.spotlight-triage-keys {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spotlight-triage-hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: rgba(226, 232, 240, 0.4);
+}
+
+.spotlight-proposal-items {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 14px;
+}
+
+.spotlight-proposal-items li {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #e2e8f0;
+  transition: opacity 0.15s ease;
+}
+
+.spotlight-proposal-items li.is-off,
+.spotlight-proposal-group.is-off .spotlight-proposal-group-name {
+  opacity: 0.4;
+}
+
+.spotlight-proposal-items li.is-off .spotlight-proposal-item-label {
+  text-decoration: line-through;
+}
+
+.spotlight-proposal-items li.is-remove .spotlight-proposal-item-label {
+  color: #fca5a5;
+}
+
+.spotlight-proposal-item-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.spotlight-proposal-item-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.spotlight-proposal-item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spotlight-proposal-item-meta {
+  flex-shrink: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: rgba(226, 232, 240, 0.4);
+}
+
+.spotlight-proposal-item-meta.is-move {
+  max-width: none;
+}
+
+.spotlight-proposal-why {
+  font-size: 11px;
+  color: rgba(226, 232, 240, 0.5);
+}
+
+.spotlight-proposal-why.is-group {
+  padding: 0 6px 2px 27px;
+}
+
+/* Checkbox: filled when on, a dash when a group is partly on. */
+.spotlight-proposal-check {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  margin-top: 2px;
+  border-radius: 3px;
+  border: 1px solid rgba(165, 168, 255, 0.7);
+  background: rgba(165, 168, 255, 0.85);
+  position: relative;
+}
+
+.spotlight-proposal-check::after {
+  content: '';
   position: absolute;
-  left: 0;
-  font-weight: 700;
+  left: 3.5px;
+  top: 1px;
+  width: 3px;
+  height: 6px;
+  border: solid #0b0c10;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
 }
 
-.spotlight-agent-actions li.is-add::before {
-  content: '+';
-  color: #4ade80;
+.spotlight-proposal-items li.is-remove .spotlight-proposal-check {
+  border-color: rgba(248, 113, 113, 0.7);
+  background: rgba(248, 113, 113, 0.85);
 }
 
-.spotlight-agent-actions li.is-remove::before {
-  content: '−';
-  color: #f87171;
+.spotlight-proposal-items li.is-off .spotlight-proposal-check,
+.spotlight-proposal-group.is-off > .spotlight-proposal-group-head .spotlight-proposal-check {
+  background: transparent;
+  border-color: rgba(226, 232, 240, 0.3);
+}
+
+.spotlight-proposal-items li.is-off .spotlight-proposal-check::after,
+.spotlight-proposal-group.is-off > .spotlight-proposal-group-head .spotlight-proposal-check::after {
+  display: none;
+}
+
+.spotlight-proposal-group.is-mixed > .spotlight-proposal-group-head .spotlight-proposal-check::after {
+  left: 2px;
+  top: 4.5px;
+  width: 6px;
+  height: 0;
+  border-width: 0 0 1.5px 0;
+  transform: none;
 }
 
 .spotlight-agent-rejected {
@@ -1782,9 +2029,13 @@ body.spotlight-window {
 }
 
 .spotlight-agent-apply {
-  border: 1px solid #22c55e;
-  background: #22c55e;
-  color: #052e16;
+  border: 1px solid #f1f5f9;
+  background: #f1f5f9;
+  color: #0b0c10;
+}
+
+.spotlight-agent-apply:hover:not(:disabled) {
+  background: #ffffff;
 }
 
 .spotlight-agent-apply:disabled {
@@ -1837,11 +2088,6 @@ body.spotlight-window {
   word-break: break-word;
 }
 
-.spotlight-agent-request-mark {
-  color: #4ade80;
-  font-weight: 700;
-  flex-shrink: 0;
-}
 
 .spotlight-agent-waiting {
   font-size: 12px;
@@ -1862,13 +2108,6 @@ body.spotlight-window {
   margin-bottom: 8px;
 }
 
-.spotlight-agent-reply-who {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #4ade80;
-}
 
 .spotlight-agent-reply-text {
   font-size: 13px;
@@ -1884,13 +2123,35 @@ body.spotlight-window {
 }
 
 .spotlight-agent-raw > summary {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: rgba(148, 163, 184, 0.7);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  font-size: 11.5px;
+  color: rgba(148, 163, 184, 0.6);
   cursor: pointer;
   padding: 2px 0;
+}
+
+.spotlight-agent-raw > summary::-webkit-details-marker {
+  display: none;
+}
+
+.spotlight-agent-raw-gist {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spotlight-agent-raw > summary .spotlight-copy-btn {
+  margin-left: auto;
+  opacity: 0;
+}
+
+.spotlight-agent-raw:hover > summary .spotlight-copy-btn,
+.spotlight-agent-raw > summary .spotlight-copy-btn:focus-visible {
+  opacity: 1;
 }
 
 .spotlight-agent-raw > summary:hover {
@@ -1965,7 +2226,7 @@ body.spotlight-window {
 }
 
 .agent-md-list li::marker {
-  color: #4ade80;
+  color: rgba(129, 133, 255, 0.8);
 }
 
 .agent-md-code {
@@ -1993,7 +2254,7 @@ body.spotlight-window {
 .agent-md-quote {
   margin: 0 0 8px;
   padding-left: 10px;
-  border-left: 2px solid rgba(74, 222, 128, 0.4);
+  border-left: 2px solid rgba(129, 133, 255, 0.4);
   color: #cbd5e1;
 }
 
@@ -2061,7 +2322,7 @@ body.spotlight-window {
 }
 
 .spotlight-agent-history-item:hover {
-  background: rgba(34, 197, 94, 0.14);
+  background: rgba(255, 255, 255, 0.07);
   color: #f1f5f9;
 }
 
@@ -2098,7 +2359,7 @@ body.spotlight-window {
 }
 
 .spotlight-agent-history-row:hover {
-  background: rgba(34, 197, 94, 0.1);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .spotlight-agent-history-item {
@@ -2147,49 +2408,52 @@ body.spotlight-window {
 }
 
 /* ── Turn typography ───────────────────────────────────────────────────────
-   The "COOLDESK" label used to sit on a bare line of its own above the
-   answer, with nothing tying the two together — it read as a stray caption
-   rather than an attribution. The answer is now a contained surface and the
-   label lives inside it. */
+   Terminal-style, like Claude Code: the request after a muted ›, the answer
+   as plain text indented under it. No box, accent border or "CoolDesk"
+   label — the indent already says who's talking. */
 .spotlight-agent-request {
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 600;
   line-height: 1.45;
   gap: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
   color: #f1f5f9;
 }
 
-.spotlight-agent-request-mark {
-  font-size: 15px;
-  line-height: 1.45;
-}
 
+/* Indent = the › mark plus the request's gap, so the answer lines up
+   under the request text. */
 .spotlight-agent-reply {
   display: block;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(74, 222, 128, 0.18);
-  border-left: 2px solid rgba(74, 222, 128, 0.55);
-  background: rgba(34, 197, 94, 0.05);
+  position: relative;
+  padding: 0 0 0 19px;
+  border: 0;
+  background: none;
 }
 
-.spotlight-agent-reply-who {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  opacity: 0.85;
+/* The proposal card and the status lines follow the same indent. */
+.spotlight-agent-turn > .spotlight-agent-proposal,
+.spotlight-agent-turn > .spotlight-agent-stream,
+.spotlight-agent-turn > .spotlight-agent-raw,
+.spotlight-agent-turn > .spotlight-agent-waiting,
+.spotlight-agent-turn > .spotlight-agent-empty {
+  margin-left: 19px;
 }
+
 
 .spotlight-agent-reply-text {
-  font-size: 14px;
-  line-height: 1.62;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #cbd5e1;
 }
 
 .agent-md-p {
-  margin: 0 0 10px;
-  line-height: 1.62;
+  margin: 0 0 6px;
+  line-height: 1.55;
+}
+
+.agent-md-p:last-child {
+  margin-bottom: 0;
 }
 
 .agent-md-list li {
@@ -2220,17 +2484,7 @@ body.spotlight-window {
   cursor: auto;
 }
 
-.spotlight-agent-reply-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
-}
 
-.spotlight-agent-reply-head .spotlight-agent-reply-who {
-  margin-bottom: 0;
-}
 
 .spotlight-copy-btn {
   display: inline-flex;
@@ -2297,7 +2551,7 @@ body.spotlight-window {
 }
 
 .spotlight-agent-chip.is-open {
-  border-color: rgba(34, 197, 94, 0.7);
+  border-color: rgba(129, 133, 255, 0.6);
 }
 
 .spotlight-agent-menu {
@@ -2330,12 +2584,12 @@ body.spotlight-window {
 }
 
 .spotlight-agent-menu-item:hover {
-  background: rgba(34, 197, 94, 0.14);
+  background: rgba(255, 255, 255, 0.07);
   color: #f1f5f9;
 }
 
 .spotlight-agent-menu-item.is-selected {
-  color: #4ade80;
+  color: #a5a8ff;
   font-weight: 600;
 }
 
@@ -2347,16 +2601,6 @@ body.spotlight-window {
   font-size: 10px;
   color: #fbbf24;
   flex-shrink: 0;
-}
-
-/* Pushes New chat / History / Stop to the right edge, now that the header has
-   no title to do it. */
-.spotlight-agent-header-spacer {
-  flex: 1;
-}
-
-.spotlight-agent-adapters {
-  display: none;
 }
 
 /* /edit-workspace's note editor (GlobalSpotlight.jsx) reuses the shared
@@ -2391,4 +2635,328 @@ body.spotlight-window {
   min-height: 60px;
   font-size: var(--font-base, 13px);
   line-height: 1;
+}
+
+/* ── Agent toolbar (in the search row) ─────────────────────────────────────
+   Replaces the agent's own header row: the CLI picker as plain text, the rest
+   as small icon buttons, so the conversation starts right under the search. */
+.spotlight-agent-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.spotlight-agent-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(226, 232, 240, 0.5);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.spotlight-agent-tool:hover,
+.spotlight-agent-tool.is-open {
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(241, 245, 249, 0.9);
+}
+
+.spotlight-agent-tool:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.spotlight-agent-tool.is-text {
+  padding: 0 8px;
+}
+
+.spotlight-agent-tool.is-stop {
+  color: #f87171;
+}
+
+.spotlight-agent-tool.is-stop:hover {
+  background: rgba(248, 113, 113, 0.12);
+}
+
+/* The picker now sits at the right end of the row: open its menu leftwards. */
+.spotlight-agent-menu.is-right {
+  left: auto;
+  right: 0;
+}
+
+/* Agent mode tag: icon (and the origin space, if any) — no "Agent" word. */
+.spotlight-mode-badge.is-compact {
+  gap: 5px;
+  padding-left: 6px;
+  padding-right: 4px;
+}
+
+.spotlight-mode-badge.is-compact > span {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Quiet mode label (agent / edit / new workspace): no pill, just an icon and
+   soft text sitting at the start of the input, like a breadcrumb. The ×
+   only lights up on hover. The add-to-workspace badge keeps its pill — it
+   warns that a click will file something. */
+.spotlight-mode-badge.is-quiet {
+  background: transparent;
+  border-color: transparent;
+  padding-left: 2px;
+  color: rgba(226, 232, 240, 0.6);
+  font-weight: 500;
+}
+
+.spotlight-mode-badge.is-quiet > svg {
+  opacity: 0.8;
+}
+
+.spotlight-mode-badge.is-quiet > span {
+  max-width: 180px;
+  color: rgba(241, 245, 249, 0.82);
+}
+
+.spotlight-mode-badge.is-quiet .spotlight-add-badge-exit {
+  opacity: 0.45;
+}
+
+.spotlight-mode-badge.is-quiet:hover .spotlight-add-badge-exit {
+  opacity: 1;
+}
+
+/* ── Agent mode input row ──────────────────────────────────────────────────
+   A soft pill replaces the ">" prompt; the follow-up box is a notch smaller
+   than the search box, since it's a chat line, not a query. */
+.spotlight-mode-badge.is-agent {
+  gap: 4px;
+  padding: 3px 4px 3px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(165, 168, 255, 0.12);
+  color: #c7c9ff;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.spotlight-mode-badge.is-agent > span {
+  max-width: 160px;
+}
+
+.spotlight-mode-badge.is-agent .spotlight-add-badge-exit {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.spotlight-mode-badge.is-agent:hover .spotlight-add-badge-exit,
+.spotlight-mode-badge.is-agent .spotlight-add-badge-exit:focus-visible {
+  opacity: 0.8;
+}
+
+.spotlight-search-box.agent-mode {
+  gap: 10px;
+}
+
+.spotlight-search-box.agent-mode .spotlight-input {
+  font-size: 14.5px;
+}
+
+.spotlight-search-box.agent-mode .spotlight-input::placeholder {
+  color: rgba(255, 255, 255, 0.28);
+}
+
+/* Older turns scroll up under the input: fade them out instead of a hard cut. */
+.spotlight-agent-log {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 18px);
+  padding-top: 6px;
+}
+
+.spotlight-agent-log ::selection {
+  background: rgba(165, 168, 255, 0.3);
+  color: inherit;
+}
+
+/* ── Chat layout ───────────────────────────────────────────────────────────
+   The usual chat convention (ChatGPT, Claude, Raycast AI): the user's message
+   is a right-aligned bubble, the answer is plain full-width text with no
+   label or avatar, and Copy / Ask again sit under it — on hover, and always
+   on the latest turn. Turns are separated by space, not rules. */
+/* The previous answer's (hidden) action row already reserves space. */
+.spotlight-agent-turn + .spotlight-agent-turn {
+  margin-top: 6px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.spotlight-agent-request {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 10px;
+}
+
+.spotlight-agent-bubble {
+  max-width: 80%;
+  padding: 7px 12px;
+  border-radius: 14px 14px 4px 14px;
+  background: rgba(255, 255, 255, 0.075);
+  color: #f1f5f9;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.spotlight-agent-context-note {
+  margin: -4px 0 8px;
+  text-align: right;
+}
+
+.spotlight-agent-reply {
+  padding-left: 0;
+}
+
+.spotlight-agent-turn > .spotlight-agent-proposal,
+.spotlight-agent-turn > .spotlight-agent-stream,
+.spotlight-agent-turn > .spotlight-agent-raw,
+.spotlight-agent-turn > .spotlight-agent-waiting,
+.spotlight-agent-turn > .spotlight-agent-empty {
+  margin-left: 0;
+}
+
+.spotlight-agent-reply-actions {
+  display: flex;
+  gap: 2px;
+  margin: 4px 0 0 -6px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.spotlight-agent-turn:hover .spotlight-agent-reply-actions,
+.spotlight-agent-turn:last-child .spotlight-agent-reply-actions,
+.spotlight-agent-reply-actions:focus-within {
+  opacity: 1;
+}
+
+.spotlight-agent-reply-actions .spotlight-copy-btn,
+.spotlight-agent-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(148, 163, 184, 0.75);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.spotlight-agent-reply-actions .spotlight-copy-btn > span {
+  display: none;
+}
+
+.spotlight-agent-reply-actions .spotlight-copy-btn:hover,
+.spotlight-agent-action:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+  color: #e2e8f0;
+}
+
+.spotlight-agent-reply-actions .spotlight-copy-btn.is-copied {
+  color: #86efac;
+}
+
+.spotlight-agent-action:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.spotlight-agent-turn > .spotlight-agent-reply {
+  margin-bottom: 2px;
+}
+
+.spotlight-agent-reply-actions {
+  margin-top: 2px;
+}
+
+.spotlight-agent-reply-actions .spotlight-copy-btn,
+.spotlight-agent-action {
+  height: 22px;
+}
+
+/* The answer sits in a soft bubble on the left, mirroring the user's bubble
+   on the right — a faint fill and hairline border, no accent bar. Copy /
+   Ask again stay outside it, underneath. */
+.spotlight-agent-reply-text {
+  display: block;
+  width: fit-content;
+  max-width: 92%;
+  box-sizing: border-box;
+  padding: 9px 13px;
+  border-radius: 14px 14px 14px 4px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.spotlight-agent-reply-actions {
+  margin-left: 2px;
+}
+
+/* Live activity while the agent runs: one line, updated in place. */
+.spotlight-agent-activity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: rgba(203, 213, 225, 0.75);
+  min-width: 0;
+}
+
+.spotlight-agent-activity-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spotlight-agent-activity-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: rgba(148, 163, 184, 0.55);
+}
+
+.spotlight-agent-spinner {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(165, 168, 255, 0.25);
+  border-top-color: #a5a8ff;
+  animation: spotlight-agent-spin 0.8s linear infinite;
+}
+
+@keyframes spotlight-agent-spin {
+  to { transform: rotate(360deg); }
+}
+
+.spotlight-agent-warning {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  color: #fbbf24;
 }

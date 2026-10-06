@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { allAdapters, buildPrompt, buildSpec, createOutputParser, extractReply, parseActions, partialReply } from './aiAdapters';
+import { allAdapters, buildPrompt, cooldeskToolsReachable, buildSpec, createOutputParser, extractReply, parseActions, partialReply } from './aiAdapters';
 import { buildScaffoldPrompt, buildScaffoldSpec, SCAFFOLD_OUTPUT_FORMAT } from './workspaceScaffold';
 import { validateActions } from '../../services/workspaceActions';
 
@@ -189,7 +189,16 @@ export function useAiCli() {
             const raw = out.text;
             const parsed = parseActions(raw);
             const reply = extractReply(raw);
-            const proposal = parsed ? { ...validateActions(parsed), raw } : null;
+            // `excluded`: indices the user unticked on the card. `shownAt`:
+            // when the decision clock starts, for the feedback response time.
+            // `base`: the workspaces the agent planned against, so the card can
+            // show each one as it will look (kept items + the diff).
+            const base = (workspaces || []).map(w => ({
+              name: w.name,
+              urls: (w.urls || []).filter(u => u.status !== 'draft').map(u => ({ url: u.url, title: u.title })),
+              apps: (w.apps || []).map(a => ({ name: a.name, path: a.path, appType: a.appType })),
+            }));
+            const proposal = parsed ? { ...validateActions(parsed), raw, excluded: [], shownAt: Date.now(), base } : null;
             const error = (!reply && !parsed) ? 'The agent returned nothing — see the output below.' : null;
             patchTurn(p.id, { running: false, partial: '', reply, proposal, error });
 
@@ -207,9 +216,13 @@ export function useAiCli() {
 
           unlistenRef.current = [onOutput, onDone];
 
+          const cooldeskTools = !scaffold && !!adapter.cooldeskTools && await cooldeskToolsReachable();
+          if (!scaffold && adapter.cooldeskTools && !cooldeskTools) {
+            patchTurn(id, { lines: [{ stream: 'stderr', text: "CoolDesk's data service isn't running — this answer can't see your tabs or history." }] });
+          }
           const prompt = scaffold
             ? buildScaffoldPrompt(request.trim(), opts.scaffoldContext)
-            : buildPrompt(workspaces, request.trim(), priorTurns, opts.attachments);
+            : buildPrompt(workspaces, request.trim(), priorTurns, opts.attachments, { cooldeskTools, focusWorkspace: opts.focusWorkspace });
           const spec = scaffold ? buildScaffoldSpec(prompt, cwd) : buildSpec(adapter, prompt, cwd);
           await invoke('ai_cli_run', { id, spec });
         } catch (e) {
@@ -249,10 +262,20 @@ export function useAiCli() {
    * is kept so the next prompt can tell the agent what actually happened to
    * it (see buildHistory) — "undo that" means nothing otherwise.
    */
-  const clearProposal = useCallback((id, status = 'discarded') => {
+  const clearProposal = useCallback((id, status = 'discarded', extra = {}) => {
     setTurns(prev => prev.map(t => (t.id === id && t.proposal
-      ? { ...t, proposal: null, outcome: { status, count: t.proposal.valid.length } }
+      ? { ...t, proposal: null, outcome: { status, count: t.proposal.valid.length, ...extra } }
       : t)));
+  }, []);
+
+  /** Tick/untick one proposed action before applying. */
+  /** Tick (`off` false) or untick (`off` true) proposal actions by index. */
+  const setActionsOff = useCallback((id, indices, off) => {
+    setTurns(prev => prev.map(t => {
+      if (t.id !== id || !t.proposal) return t;
+      const rest = (t.proposal.excluded || []).filter(i => !indices.includes(i));
+      return { ...t, proposal: { ...t.proposal, excluded: off ? [...rest, ...indices] : rest } };
+    }));
   }, []);
 
   /** Reopen a past exchange as the transcript, so its answer is readable again. */
@@ -284,6 +307,6 @@ export function useAiCli() {
   return {
     adapters, adapter, adapterId, selectAdapter, available,
     running, turns, history, clearHistory, restoreFromHistory,
-    run, cancel, reset, clearProposal,
+    run, cancel, reset, clearProposal, setActionsOff,
   };
 }

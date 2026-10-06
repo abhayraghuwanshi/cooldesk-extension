@@ -87,9 +87,9 @@ export function EditWorkspacePanel({
                         <button
                             key={title}
                             type="button"
-                            className="spotlight-agent-chip"
-                            style={{ padding: '4px 8px' }}
+                            className="spotlight-agent-tool"
                             title={title}
+                            aria-label={title}
                             onMouseDown={(e) => { e.preventDefault(); runNoteCommand(run); }}
                         >
                             <FontAwesomeIcon icon={icon} />

@@ -218,6 +218,8 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
     let app = Router::new()
         // Health check
         .route("/health", get(health))
+        // Read-only MCP tools for the /agent chat (see mcp.rs)
+        .route("/mcp", post(crate::sidecar::mcp::mcp_post).get(crate::sidecar::mcp::mcp_other).delete(crate::sidecar::mcp::mcp_other))
         // App search (for testing recommendations)
         .route("/search", get(search_apps))
         // GET endpoints
@@ -301,6 +303,8 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/feedback/grouping", post(feedback_record_grouping))
         .route("/feedback/affinity", get(feedback_get_affinity))
         .route("/feedback/url-workspace", post(feedback_record_url_workspace))
+        .route("/feedback/agent-outcome", post(feedback_agent_outcome))
+        .route("/feedback/agent-placements/check", post(feedback_check_agent_placements))
         .route("/feedback/suggest-workspace", post(feedback_suggest_workspace))
         .route("/feedback/events", get(feedback_get_events))
         .route("/feedback/save", post(feedback_save))

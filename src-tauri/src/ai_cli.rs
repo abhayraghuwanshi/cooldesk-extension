@@ -50,37 +50,87 @@ lazy_static::lazy_static! {
 }
 
 /// Ask `$SHELL -ilc` for its PATH and merge it in front of launchd's, so
-/// directories a dotfile adds win over the bare-bones default without losing
-/// anything already present. Run on a side thread with a timeout: an rc file
+/// CLIs installed anywhere the user's shell knows about resolve. A shell rc
 /// that hangs (network mount, slow `nvm`/`conda` init) must not freeze the
 /// whole app on first launch — it just falls back to whatever PATH we started
-/// with.
+/// with, plus the usual per-user install directories.
 #[cfg(not(target_os = "windows"))]
 fn compute_enriched_path() -> String {
     let current = std::env::var("PATH").unwrap_or_default();
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
 
+    // Interactive login first (`.zshrc` is where most installers write), then a
+    // plain login shell in case something interactive-only breaks under -i.
+    let shell_path = shell_path(&shell, "-ilc").or_else(|| shell_path(&shell, "-lc"));
+
+    let merged = match shell_path {
+        Some(shell_path) => merge_paths(&shell_path, &current),
+        None => current,
+    };
+    merge_paths(&merged, &well_known_dirs())
+}
+
+/// Run `shell <flag> 'print PATH'` with a timeout. The PATH is wrapped in
+/// markers because an interactive shell may print a banner, a prompt-theme
+/// warning or anything else from the rc files around it, and the exit status
+/// is ignored for the same reason: a failing last line in `.zshrc` still
+/// leaves a perfectly good PATH.
+#[cfg(not(target_os = "windows"))]
+fn shell_path(shell: &str, flag: &str) -> Option<String> {
+    const MARK: &str = "__COOLDESK_PATH__";
+    let shell = shell.to_string();
+    let flag = flag.to_string();
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let result = std::process::Command::new(&shell)
-            .args(["-ilc", "echo -n \"$PATH\""])
+            .args([flag.as_str(), &format!("printf '{m}%s{m}' \"$PATH\"", m = MARK)])
+            // An interactive shell must never wait on our stdin.
+            .stdin(std::process::Stdio::null())
             .output();
         let _ = tx.send(result);
     });
 
-    let shell_path = rx
-        .recv_timeout(std::time::Duration::from_secs(3))
-        .ok()
-        .and_then(|r| r.ok())
-        .filter(|o| o.status.success())
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
+    let out = rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .ok()?
+        .ok()?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut parts = text.split(MARK);
+    parts.next()?;
+    let path = parts.next()?.trim();
+    (!path.is_empty()).then(|| path.to_string())
+}
 
-    match shell_path {
-        Some(shell_path) => merge_paths(&shell_path, &current),
-        None => current,
+/// Per-user install directories that CLI installers commonly use, appended
+/// last so they never shadow the user's own PATH order. Covers the case where
+/// the shell can't be asked at all (fish without -i support, a broken rc, a
+/// timeout): opencode's installer, for one, only adds `~/.opencode/bin` to
+/// `.zshrc`.
+#[cfg(not(target_os = "windows"))]
+fn well_known_dirs() -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let mut dirs: Vec<std::path::PathBuf> = Vec::new();
+    if !home.is_empty() {
+        for rel in [
+            ".opencode/bin",
+            ".local/bin",
+            ".claude/local",
+            ".bun/bin",
+            ".cargo/bin",
+            ".volta/bin",
+            ".npm-global/bin",
+            ".deno/bin",
+            "bin",
+        ] {
+            dirs.push(std::path::Path::new(&home).join(rel));
+        }
     }
+    dirs.push("/opt/homebrew/bin".into());
+    dirs.push("/usr/local/bin".into());
+    let existing: Vec<_> = dirs.into_iter().filter(|d| d.is_dir()).collect();
+    std::env::join_paths(existing)
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 /// Concatenate two PATHs, keeping first occurrence order (`a` wins ties).
@@ -89,7 +139,8 @@ fn merge_paths(a: &str, b: &str) -> String {
     let mut seen = std::collections::HashSet::new();
     let mut out = Vec::new();
     for dir in std::env::split_paths(a).chain(std::env::split_paths(b)) {
-        if seen.insert(dir.clone()) {
+        // An empty entry means "current directory" to the OS; never add one.
+        if !dir.as_os_str().is_empty() && seen.insert(dir.clone()) {
             out.push(dir);
         }
     }
@@ -127,6 +178,10 @@ pub struct AiCliSpec {
     pub stdin: Option<String>,
     /// Working directory — the project folder, so a repo-aware agent has context.
     pub cwd: Option<String>,
+    /// Extra environment for the child, e.g. opencode's per-run config
+    /// (`OPENCODE_CONFIG_CONTENT`) that hands it CoolDesk's MCP server.
+    #[serde(default)]
+    pub env: HashMap<String, String>,
 }
 
 /// Resolve an executable against PATH, honouring Windows' executable extensions.
@@ -311,6 +366,7 @@ pub async fn ai_cli_run(app: AppHandle, id: String, spec: AiCliSpec) -> Result<(
         c
     };
 
+    cmd.envs(&spec.env);
     cmd.stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .stdin(if spec.stdin.is_some() {

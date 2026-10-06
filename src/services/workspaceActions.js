@@ -110,6 +110,10 @@ export function validateActions(actions) {
         bad = 'unhandled';
     }
 
+    // The agent's one-line reason, shown on the card next to the action.
+    const why = str(raw?.why).slice(0, 140);
+    if (why) a.why = why;
+
     if (bad) rejected.push({ action: raw, reason: bad });
     else valid.push(a);
   }
@@ -151,6 +155,9 @@ export async function applyActions(actions, workspaces) {
   const byName = new Map((workspaces || []).map(w => [w.name, { ...w }]));
   const errors = [];
   let applied = 0;
+  // Per action: did it end up in effect? "Already there" counts — the user
+  // still wanted it — but a failure doesn't, so it isn't learned as kept.
+  const ok = [];
 
   const need = (name) => {
     const w = byName.get(name);
@@ -159,6 +166,7 @@ export async function applyActions(actions, workspaces) {
   };
 
   for (const a of actions) {
+    const errorsBefore = errors.length;
     try {
       switch (a.type) {
         case 'create_workspace': {
@@ -242,9 +250,10 @@ export async function applyActions(actions, workspaces) {
     } catch (e) {
       errors.push(`${describeAction(a)}: ${e.message || e}`);
     }
+    ok.push(errors.length === errorsBefore);
   }
 
-  return { applied, errors };
+  return { applied, errors, ok };
 }
 
 // Re-exported so callers don't need a second import for the rare delete path.

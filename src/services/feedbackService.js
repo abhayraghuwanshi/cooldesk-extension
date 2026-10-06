@@ -185,6 +185,76 @@ export async function recordUrlWorkspace(url, title, workspaceName) {
 }
 
 /**
+ * The user's verdict on an /agent proposal — the reward signal for the
+ * url→workspace learner (see feedback_agent_outcome in the sidecar).
+ * @param {object} o
+ * @param {'applied'|'discarded'} o.outcome
+ * @param {Array<object>} o.accepted   actions kept that applied cleanly
+ * @param {Array<object>} o.rejected   actions unticked, or all of them on discard
+ * @param {string} [o.request]         what the user asked
+ * @param {number} [o.responseTimeMs]  time from proposal shown to decision
+ */
+export async function recordAgentOutcome({ outcome, accepted = [], rejected = [], request, responseTimeMs }) {
+    try {
+        const response = await fetch(`${SIDECAR_URL}/feedback/agent-outcome`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ outcome, accepted, rejected, request, response_time_ms: responseTimeMs }),
+        });
+        return response.ok;
+    } catch (e) {
+        console.debug('[Feedback] Failed to record agent outcome:', e.message);
+        return false;
+    }
+}
+
+/**
+ * Delayed reward for applied agent placements. The sidecar can't see a url
+ * being removed from a workspace (its merge only adds), so whenever the
+ * workspaces change we send it what they hold now; anything the agent filed
+ * in the last week that the user has since taken out counts against it.
+ * Returns a cleanup function.
+ */
+export function watchAgentPlacements() {
+    let timer = null;
+    const check = async () => {
+        try {
+            const takenAt = Date.now();
+            const { listWorkspaces } = await import('../db/index.js');
+            const res = await listWorkspaces();
+            const list = res?.success ? res.data : (Array.isArray(res) ? res : []);
+            // A failed read would look like every placement was removed.
+            if (!list?.length) return;
+            await fetch(`${SIDECAR_URL}/feedback/agent-placements/check`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    taken_at: takenAt,
+                    workspaces: list.map(w => ({ name: w.name, urls: (w.urls || []).map(u => u?.url).filter(Boolean) })),
+                }),
+            });
+        } catch (e) {
+            console.debug('[Feedback] Failed to check agent placements:', e.message);
+        }
+    };
+    const schedule = () => {
+        clearTimeout(timer);
+        timer = setTimeout(check, 3000);
+    };
+
+    let bc = null;
+    try {
+        bc = new BroadcastChannel('ws_db_changes');
+        bc.onmessage = (e) => { if (e.data?.type === 'workspacesChanged') schedule(); };
+    } catch { }
+    schedule();
+    return () => {
+        clearTimeout(timer);
+        try { bc?.close(); } catch { }
+    };
+}
+
+/**
  * Get workspace suggestions for a URL based on learned patterns
  * @param {string} url - The URL to get suggestions for
  * @param {string} title - Page title
@@ -436,6 +506,7 @@ export default {
     recordAppLaunch,
     recordUrlClick,
     recordUrlWorkspace,
+    recordAgentOutcome,
     suggestWorkspaceForUrl,
     recordGroupingFeedback,
     getUrlAffinity,
