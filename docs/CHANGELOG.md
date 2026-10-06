@@ -4,6 +4,28 @@ All notable changes to CoolDesk (desktop app + Chrome extension) are documented 
 
 ## [Unreleased]
 
+### Added
+- **The `/agent` can now look at your tabs, history and apps on its own.** CoolDesk's local server exposes a read-only MCP endpoint (`POST 127.0.0.1:4545/mcp`, `sidecar/mcp.rs`) with seven lookups: `open_tabs`, `visited_sites`, `unfiled_pages`, `site_usage`, `app_usage`, `list_apps` and `suggest_workspace`. Claude Code and opencode are both wired to it, so asking "suggest workspaces from my history" gets an answer built from real usage (time per site, open tabs grouped by window, pages not yet in any workspace) instead of "I can't see your browser". It still can't change anything itself — changes only happen through a proposal you apply.
+- **CoolDesk learns from what you keep.** Every agent proposal you apply, untick or discard trains CoolDesk's own url→workspace model (accept/reject counts per site and keyword, saved to `sync-data/workspace-patterns.json` so it survives restarts — it used to be in-memory only). Applied placements stay on a 7-day probation: removing or moving one counts against it, opening it from spotlight search confirms it. The agent sees the learned guesses, and the placements you've turned down, so it stops re-proposing them.
+- **Proposals as a diff of your workspaces.** The proposal card groups changes by workspace with `+`/`−` counts, a *new* badge, each change's one-line reason, and what the workspace already holds folded under "N already here". A url moved between workspaces shows as one move. Untick single lines or a whole workspace.
+- **Review one by one.** Step through a proposal a change at a time — `Y` keep, `N` skip, `←`/`→` move, `Esc` back to the list.
+- **File manager updates live.** The open folder is watched (FSEvents / ReadDirectoryChanges via `notify`), so a finished download or a file saved from another app appears without a refresh. A download's temp-file-then-rename settles into a single update.
+- **`/u`, `/a`, `/f` become a pill** (URLs / Apps / Files) like `/agent` does, instead of staying in the search text. Backspace on an empty box removes it.
+- **"Ask the agent" from a workspace** now runs like `/agent`, aimed at that workspace: the pill shows the workspace, your message shows only what you typed, and follow-ups stay focused on it.
+
+### Changed
+- **Agent chat redesigned:** your message as a right-aligned bubble, the answer in a soft bubble on the left with Copy / Ask again under it, one live activity line while it works ("Reading which sites you use… · 3 steps") instead of a growing list, and a one-line summary of what it looked at afterwards.
+- **Shorter answers:** with a proposal the agent writes one or two sentences and puts the reasoning on each change, instead of repeating the card in prose. Asking for suggestions now always produces a card you can apply.
+- **Applying a proposal takes ⌘/Ctrl+Enter.** A plain Enter always sends your message.
+- **opencode** runs with `--format json`, so its `> build · <model>` header no longer shows up in the answer.
+
+### Fixed
+- **Typing a follow-up and pressing Enter applied the whole pending proposal** instead of sending the message.
+- **The agent claimed it couldn't see your history when the sidecar was restarting** — it now says when CoolDesk's data tools didn't connect, and isn't promised tools it doesn't have.
+- **The "Create" button in `/agent` kept offering to scaffold the same project** (whichever workspace the dropdown last remembered); it now only appears when `/new-workspace` hands a project off. `/name` and that button no longer fall back to the first workspace in the list when none is picked.
+- **The first question asked from a workspace didn't get that workspace's `.cooldesk` project notes.**
+- With a URLs scope and nothing typed, a workspace whose name starts with "u" showed up as a result.
+
 ## [2.0.14] — 2026-09-24
 
 ### Added
