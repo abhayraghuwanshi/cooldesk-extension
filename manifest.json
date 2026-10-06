@@ -18,9 +18,9 @@
       "128": "logo-2.png"
     }
   },
-  "options_page": "extension.html",
+  "options_page": "pages/extension.html",
   "chrome_url_overrides": {
-    "newtab": "extension.html"
+    "newtab": "pages/extension.html"
   },
   "background": {
     "service_worker": "src/background/background.js",
@@ -53,7 +53,7 @@
   },
   "sandbox": {
     "pages": [
-      "widget-sandbox.html"
+      "pages/widget-sandbox.html"
     ]
   },
   "web_accessible_resources": [
@@ -62,7 +62,7 @@
         "assets/*",
         "dist/*",
         "logo-2.png",
-        "extension.html",
+        "pages/extension.html",
         "widgets/*"
       ],
       "matches": [

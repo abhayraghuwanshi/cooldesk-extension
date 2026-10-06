@@ -22,7 +22,7 @@
         "visible": false,
         "resizable": false,
         "shadow": false,
-        "url": "spotlight.html"
+        "url": "pages/spotlight.html"
       },
       {
         "label": "handle",
@@ -36,7 +36,7 @@
         "visible": false,
         "resizable": false,
         "shadow": false,
-        "url": "handle.html"
+        "url": "pages/handle.html"
       }
     ],
     "security": {

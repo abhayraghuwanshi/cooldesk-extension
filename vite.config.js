@@ -40,14 +40,14 @@ export default defineConfig(({ command }) => {
         chunkSizeWarningLimit: 1000,
         rollupOptions: {
           input: {
-            main: resolve(__dirname, 'index.html'),
-            spotlight: resolve(__dirname, 'spotlight.html'),
-            handle: resolve(__dirname, 'handle.html'),
+            main: resolve(__dirname, 'pages/index.html'),
+            spotlight: resolve(__dirname, 'pages/spotlight.html'),
+            handle: resolve(__dirname, 'pages/handle.html'),
             // Sandboxed host page for user-authored widgets — only ever loaded
             // at runtime via <iframe src="widget-sandbox.html">, so it has no
             // static reference for Rollup to discover; must be a declared
             // entry or it's silently missing from dist-tauri.
-            'widget-sandbox': resolve(__dirname, 'widget-sandbox.html'),
+            'widget-sandbox': resolve(__dirname, 'pages/widget-sandbox.html'),
           },
           output: {
             // Split only libs already on the EAGER path into stable vendor chunks.
@@ -104,9 +104,9 @@ export default defineConfig(({ command }) => {
       rollupOptions: {
         input: {
           // Extension uses lightweight entry point
-          main: resolve(__dirname, 'extension.html'),
+          main: resolve(__dirname, 'pages/extension.html'),
           // Sandboxed host page for user-authored widgets (manifest sandbox.pages)
-          'widget-sandbox': resolve(__dirname, 'widget-sandbox.html'),
+          'widget-sandbox': resolve(__dirname, 'pages/widget-sandbox.html'),
         },
         output: {
           //   manualChunks: (id) => {

@@ -80,8 +80,10 @@ export function getWidget(id) {
 function widgetBase() {
     // Resolve against the running document so it's correct in dev (the Vite
     // server origin), the Tauri build (the app origin), and Electron (file://).
-    try { return new URL('widgets/', document.baseURI); }
-    catch { return new URL('widgets/', location.href); }
+    // Every HTML page lives in pages/, and the widgets are copied to the build
+    // root (public/widgets/), hence one level up.
+    try { return new URL('../widgets/', document.baseURI); }
+    catch { return new URL('../widgets/', location.href); }
 }
 
 export function widgetEmbedUrl(id, theme, tint) {

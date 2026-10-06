@@ -438,7 +438,7 @@ fn ensure_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
         return Some(win);
     }
 
-    let built = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
+    let built = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("pages/index.html".into()))
         .title("CoolDesk")
         .inner_size(1400.0, 900.0)
         .resizable(true)
