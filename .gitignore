@@ -54,3 +54,6 @@ sidecar/models/
 # Loose screenshots dropped in the repo root (keep the one real logo)
 /*.png
 !/logo-2.png
+
+# CoolDesk space data for this repo (kept locally, not published)
+/.cooldesk/
