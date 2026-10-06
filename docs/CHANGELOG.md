@@ -4,6 +4,8 @@ All notable changes to CoolDesk (desktop app + Chrome extension) are documented 
 
 ## [Unreleased]
 
+## [2.0.15] — 2026-10-06
+
 ### Added
 - **The `/agent` can now look at your tabs, history and apps on its own.** CoolDesk's local server exposes a read-only MCP endpoint (`POST 127.0.0.1:4545/mcp`, `sidecar/mcp.rs`) with seven lookups: `open_tabs`, `visited_sites`, `unfiled_pages`, `site_usage`, `app_usage`, `list_apps` and `suggest_workspace`. Claude Code and opencode are both wired to it, so asking "suggest workspaces from my history" gets an answer built from real usage (time per site, open tabs grouped by window, pages not yet in any workspace) instead of "I can't see your browser". It still can't change anything itself — changes only happen through a proposal you apply.
 - **CoolDesk learns from what you keep.** Every agent proposal you apply, untick or discard trains CoolDesk's own url→workspace model (accept/reject counts per site and keyword, saved to `sync-data/workspace-patterns.json` so it survives restarts — it used to be in-memory only). Applied placements stay on a 7-day probation: removing or moving one counts against it, opening it from spotlight search confirms it. The agent sees the learned guesses, and the placements you've turned down, so it stops re-proposing them.
