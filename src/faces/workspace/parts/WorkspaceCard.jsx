@@ -581,7 +581,11 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
         });
       } else {
         // Just one single item for this entire service? Show as single.
-        bucket.urls.forEach(u => finalResult.push({ type: 'url', ...u }));
+        // `_src` keeps the original object: open-state lookup (`resolved`)
+        // and focus-on-click are keyed by identity, and this spread copy
+        // missed both — the detail view never marked single links open and
+        // clicking one opened a duplicate tab instead of focusing it.
+        bucket.urls.forEach(u => finalResult.push({ type: 'url', ...u, _src: u }));
       }
     });
 
@@ -769,11 +773,28 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     return () => ro.disconnect();
   }, [contextPanelVisible, updateRowScroll]);
 
-  const resolved = useMemo(
-    () => (isDesktopApp ? workspaceActivityService.resolveAll([...activeUrls, ...apps]) : new Map()),
+  //
+  // Covers everything the card renders — the project's .cooldesk links,
+  // folders, files and linked projects too, not just the workspace's own
+  // urls/apps (those were drawn but never resolved, so never showed open).
+  // The workspace's own items go first so they win any shared tab/window.
+  // Linked projects carry no appType; they're resolved as folders through a
+  // stand-in and mapped back onto the rendered object.
+  const resolved = useMemo(() => {
+    if (!isDesktopApp) return new Map();
+    const projProxies = cdProjects
+      .filter((p) => p.exists && p.path)
+      .map((p) => [p, { name: p.name, path: p.path, appType: 'folder' }]);
+    const map = workspaceActivityService.resolveAll([
+      ...activeUrls, ...apps, ...cdLinks, ...cdFolders, ...cdFiles,
+      ...projProxies.map(([, proxy]) => proxy),
+    ]);
+    for (const [proj, proxy] of projProxies) {
+      if (map.get(proxy)) map.set(proj, map.get(proxy));
+    }
+    return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeUrls, apps, activity]
-  );
+  }, [activeUrls, apps, cdLinks, cdFolders, cdFiles, cdProjects, activity]);
 
   const activate = useCallback(
     (item) => workspaceActivityService.activate(item, { target: resolved.get(item) ?? null }),
@@ -871,7 +892,10 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                 const faviconUrl = getFaviconUrl(url, 20);
                 const avatar = getLetterAvatar(url);
                 const displayName = isGroup ? null : (item.title || formatDomainName(item.url));
-                const isOpen = !isGroup && !!resolved.get(item);
+                // A grouped cluster is open when any of its links is.
+                const isOpen = isGroup
+                  ? (item.urls || []).some((u) => resolved.get(u))
+                  : !!resolved.get(item._src || item);
                 return (
                   <div
                     key={`link-${idx}`}
@@ -882,7 +906,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                         const rect = e.currentTarget.getBoundingClientRect();
                         setGroupPopoverState({ group: item, rect });
                       } else {
-                        openUrl(item.url, name, item.title, resolved.get(item));
+                        openUrl(item.url, name, item.title, resolved.get(item._src || item));
                       }
                     }}
                     onMouseEnter={showLabel ? undefined : () => setHoverLabel(isGroup

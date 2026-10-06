@@ -154,13 +154,18 @@ export function colorlessTextVars(wallColor, wallOpacity, panelOpacity) {
   return vars;
 }
 
-const wallCache = new Map(); // url -> Promise<hex | null>
+const wallCache = new Map(); // url -> Promise<{ bright, tint } | null>
 
 /**
- * The wallpaper's bright areas as a hex colour — the 85th-percentile pixel by
- * OKLCH lightness, i.e. what light text has to beat in most of the image, not
- * its (much darker) average. null when the image can't be read: canvas pixel
- * access needs CORS, which Unsplash sends but arbitrary custom URLs may not.
+ * Two colours from the wallpaper, as hex:
+ *  - bright: its bright areas — the 85th-percentile pixel by OKLCH lightness,
+ *    i.e. what light text has to beat in most of the image, not its (much
+ *    darker) average.
+ *  - tint: its overall hue for the glass to pick up, like macOS's wallpaper
+ *    tinting in windows — the OKLab average, pushed down to a dark, muted
+ *    tone (L 0.3, chroma ≤ 0.05) so it reads as a hint, never a colour wash.
+ * null when the image can't be read: canvas pixel access needs CORS, which
+ * Unsplash sends but arbitrary custom URLs may not.
  */
 export function sampleWallpaper(url) {
   if (!url) return Promise.resolve(null);
@@ -177,12 +182,19 @@ export function sampleWallpaper(url) {
         ctx.drawImage(img, 0, 0, n, n);
         const d = ctx.getImageData(0, 0, n, n).data;
         const px = [];
+        let A = 0, B = 0;
         for (let i = 0; i < d.length; i += 4) {
           const col = new Color('srgb', [d[i] / 255, d[i + 1] / 255, d[i + 2] / 255]);
-          px.push({ l: col.to('oklch').l, col });
+          const [l, a, b] = col.to('oklab').coords;
+          A += a; B += b;
+          px.push({ l, col });
         }
-        px.sort((a, b) => a.l - b.l);
-        resolve(px[Math.floor(px.length * 0.85)].col.toString({ format: 'hex' }));
+        px.sort((x, y) => x.l - y.l);
+        const bright = px[Math.floor(px.length * 0.85)].col.toString({ format: 'hex' });
+        const avg = new Color('oklab', [0.3, A / px.length, B / px.length]).to('oklch');
+        avg.c = Math.min(avg.c || 0, 0.05);
+        const tint = avg.to('srgb').toGamut().toString({ format: 'hex' });
+        resolve({ bright, tint });
       } catch {
         resolve(null);
       }

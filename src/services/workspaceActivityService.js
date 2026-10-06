@@ -11,6 +11,7 @@
  */
 
 import { runningAppsService } from './runningAppsService';
+import { itemRankingService } from './itemRankingService.js';
 
 const TABS_POLL_MS = 8000;
 
@@ -360,6 +361,9 @@ class WorkspaceActivityService {
      */
     activate(item, { target } = {}) {
         if (!item) return;
+        // Every surface opens items through here, so this one call feeds the
+        // shared activity ranking (itemRankingService) for all of them.
+        itemRankingService.recordLaunch(item);
         const api = typeof window !== 'undefined' ? window.electronAPI : null;
         const live = target !== undefined ? target : this.resolve(item);
 

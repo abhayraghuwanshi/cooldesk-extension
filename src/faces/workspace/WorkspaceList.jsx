@@ -2,8 +2,10 @@ import { faBriefcase, faChevronLeft, faDesktop, faGamepad, faGraduationCap, faRo
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { createPortal } from 'react-dom';
-import { deleteWorkspace, getUrlAnalytics } from '../../db/index.js';
+import { deleteWorkspace } from '../../db/index.js';
 import { clearWorkspaceSuggestions } from '../../services/appCategorizationService.js';
+import { itemRankingService } from '../../services/itemRankingService.js';
+import { workspaceActivityService } from '../../services/workspaceActivityService.js';
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
 import '../../styles/cooldesk.css';
 import { defaultFontFamily } from '../../utils/fontUtils';
@@ -16,19 +18,6 @@ import { AppGrid } from './parts/AppGrid';
 // WebView2 populates chrome.runtime inside the Tauri app.
 const isDesktopApp = typeof window !== 'undefined' &&
     !!(window.__TAURI__ || window.__TAURI_INTERNALS__ || window.electronAPI);
-
-// Debounce utility
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
 
 const modeConfigs = {
     work: {
@@ -177,17 +166,6 @@ export function WorkspaceList({
     const pinned = useMemo(() => savedWorkspaces.filter(ws => pinnedWorkspaces.includes(ws.name) && hasItems(ws)), [savedWorkspaces, pinnedWorkspaces]);
     const unpinned = useMemo(() => savedWorkspaces.filter(ws => !pinnedWorkspaces.includes(ws.name) && hasItems(ws)), [savedWorkspaces, pinnedWorkspaces]);
 
-    // State for workspace activity scores
-    // Load cached scores synchronously to prevent layout shift on refresh
-    const [workspaceScores, setWorkspaceScores] = useState(() => {
-        try {
-            const cachedScores = localStorage.getItem('cooldesk_workspace_scores');
-            if (cachedScores) {
-                return new Map(JSON.parse(cachedScores));
-            }
-        } catch { /* ignore */ }
-        return new Map();
-    });
     const [isSortingByActivity, setIsSortingByActivity] = useState(() => {
         try {
             // Default to true (sort by activity) if not set
@@ -197,130 +175,23 @@ export function WorkspaceList({
             return true;
         }
     });
-    const [isCalculatingScores, setIsCalculatingScores] = useState(false);
 
-
-    // Calculate activity score for a workspace
-    const calculateWorkspaceScore = useCallback(async (workspace) => {
-        if (!workspace.urls || workspace.urls.length === 0) {
-            console.log(`[WorkspaceList] Workspace "${workspace.name}" has no URLs`);
-            return 0;
-        }
-
-        console.log(`[WorkspaceList] Calculating score for "${workspace.name}" with ${workspace.urls.length} URLs`);
-
-        try {
-            // Fetch analytics for all URLs in parallel
-            const analyticsPromises = workspace.urls.map(async (urlObj) => {
-                try {
-                    const response = await getUrlAnalytics(urlObj.url);
-                    const stats = response?.success ? response.data : null;
-                    return stats || { totalVisits: 0, totalTime: 0, lastVisit: 0 };
-                } catch (error) {
-                    console.error(`[WorkspaceList] Error getting stats for "${urlObj.url}":`, error);
-                    return { totalVisits: 0, totalTime: 0, lastVisit: 0 };
-                }
-            });
-
-            const allStats = await Promise.all(analyticsPromises);
-
-            // Aggregate metrics
-            const totalVisits = allStats.reduce((sum, s) => sum + (s.totalVisits || 0), 0);
-            const totalTime = allStats.reduce((sum, s) => sum + (s.totalTime || 0), 0);
-            const mostRecentVisit = Math.max(...allStats.map(s => s.lastVisit || 0), 0);
-
-            // Calculate composite score
-            // Formula: (visits * 10) + (time_in_hours * 50) + (recency_bonus)
-            const timeInHours = totalTime / (1000 * 60 * 60);
-            const recencyBonus = mostRecentVisit > 0
-                ? Math.max(0, 100 - (Date.now() - mostRecentVisit) / (1000 * 60 * 60 * 24)) // Decay over days
-                : 0;
-
-            const score = (totalVisits * 10) + (timeInHours * 50) + recencyBonus;
-
-            return score;
-        } catch (error) {
-            console.error(`[WorkspaceList] Error calculating workspace score for "${workspace.name}":`, error);
-            return 0;
-        }
-    }, []);
-
-
-    // Compute hash for workspaces to detect meaningful changes
-    const workspacesHash = useMemo(() => {
-        return unpinned.map(w => w.id + (w.urls?.length || 0)).join(',');
-    }, [unpinned]);
-
-    // Debounced activity score loader with Cache
-    const loadActivityScores = useMemo(
-        () => debounce(async () => {
-            if (!isSortingByActivity || unpinned.length === 0) return;
-
-            const cacheKey = 'cooldesk_workspace_scores';
-            const cacheHashKey = 'cooldesk_workspace_scores_hash';
-
-            // Check cache
-            const lastHash = localStorage.getItem(cacheHashKey);
-            if (lastHash === workspacesHash) {
-                try {
-                    const cachedScores = JSON.parse(localStorage.getItem(cacheKey));
-                    if (cachedScores) {
-                        setWorkspaceScores(new Map(cachedScores));
-                        return;
-                    }
-                } catch { /* ignore */ }
-            }
-
-            setIsCalculatingScores(true);
-            const scoresMap = new Map();
-            const scoresArray = []; // For serialization
-
-            // Calculate scores for all unpinned workspaces
-            await Promise.all(
-                unpinned.map(async (workspace) => {
-                    const score = await calculateWorkspaceScore(workspace);
-                    scoresMap.set(workspace.id, score);
-                    scoresArray.push([workspace.id, score]);
-                })
-            );
-
-            setWorkspaceScores(scoresMap);
-            setIsCalculatingScores(false);
-
-            // Update Cache
-            try {
-                localStorage.setItem(cacheKey, JSON.stringify(scoresArray));
-                localStorage.setItem(cacheHashKey, workspacesHash);
-            } catch { /* ignore */ }
-
-        }, 500),
-        [unpinned, isSortingByActivity, calculateWorkspaceScore, workspacesHash]
-    );
-
-    // Load activity scores only when sorting is enabled
-    useEffect(() => {
-        if (isSortingByActivity) {
-            // Use requestIdleCallback if available for smoother UI
-            if (window.requestIdleCallback) {
-                window.requestIdleCallback(() => loadActivityScores(), { timeout: 2000 });
-            } else {
-                loadActivityScores();
-            }
-        }
-    }, [isSortingByActivity, workspacesHash, loadActivityScores]);
-
-
-    // Sort unpinned workspaces by activity score (memoized)
-    // Scores are loaded from cache on mount, so sorting happens immediately without layout shift
+    // Activity order from the shared ranking (itemRankingService): the same
+    // usage time + launches + open-now signals the dock ranks items by, so a
+    // workspace's place here matches what's actually being used — apps,
+    // folders and editor time included, not just browser visits to its links.
+    // Synchronous and cheap; `rankTick` re-sorts when scores change.
+    const [rankTick, setRankTick] = useState(0);
+    useEffect(() => itemRankingService.subscribe(setRankTick), []);
+    const [activityTick, setActivityTick] = useState(0);
+    useEffect(() => workspaceActivityService.subscribe(() => setActivityTick(t => t + 1)), []);
     const sortedUnpinned = useMemo(() => {
         if (!isSortingByActivity) return unpinned;
-
-        return [...unpinned].sort((a, b) => {
-            const scoreA = workspaceScores.get(a.id) || 0;
-            const scoreB = workspaceScores.get(b.id) || 0;
-            return scoreB - scoreA; // Descending order
+        return itemRankingService.rankWorkspaces(unpinned, {
+            isLive: (it) => !!workspaceActivityService.resolve(it),
         });
-    }, [unpinned, isSortingByActivity, workspaceScores]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [unpinned, isSortingByActivity, rankTick, activityTick]);
 
     // Filter unpinned workspaces based on active mode
     const filteredUnpinned = useMemo(() => {
@@ -714,18 +585,6 @@ export function WorkspaceList({
                                     }}>
                                         {activeMode === 'all' ? 'All Workspaces' : modeConfigs[activeMode].label}
                                         ({filteredUnpinned.length})
-                                        {isSortingByActivity && isCalculatingScores && (
-                                            <span style={{
-                                                fontSize: '11px',
-                                                color: '#60a5fa',
-                                                fontWeight: 400,
-                                                textTransform: 'none',
-                                                letterSpacing: 'normal',
-                                                opacity: 0.8
-                                            }}>
-                                                sorting...
-                                            </span>
-                                        )}
                                     </h3>
                                 </div>
 

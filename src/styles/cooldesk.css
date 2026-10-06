@@ -1577,14 +1577,16 @@ body.bg-white-cred .wgb-tile.has-accent {
 .compact-url-icon.is-labeled.is-open::before {
   content: '';
   position: absolute;
-  left: -1px;
+  /* Inset inside the pill, not riding its border: at -1px it sat on the
+     border line and the violet glow smeared over it. Flat and neutral, the
+     same mark as the dock's (.dockbar-place.is-active). */
+  left: 3px;
   top: 50%;
   transform: translateY(-50%);
-  width: 3px;
-  height: 60%;
-  border-radius: 0 2px 2px 0;
-  background: #c4b5fd;
-  box-shadow: 0 0 6px rgba(196, 181, 253, 0.8);
+  width: 2.5px;
+  height: 46%;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .workspace-app-chip.is-open,
@@ -3345,17 +3347,21 @@ body.bg-white-cred .wgb-tile.has-accent {
   position: relative;
 }
 
-.compact-url-icon.is-open:not(.is-labeled)::after {
+.compact-url-icon.is-open:not(.is-labeled)::after,
+.compact-url-group.is-open::after {
   content: '';
   position: absolute;
-  bottom: -2px;
+  /* A short bar inside the round tile's foot (the icon leaves ~¼ of the tile
+     free below it). It used to be a glowing dot at -2px, straddling the
+     circle's border — half in, half out, and clipped wherever the row cuts
+     overflow. Same flat mark as the dock. */
+  bottom: 3px;
   left: 50%;
   transform: translateX(-50%);
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: #c4b5fd;
-  box-shadow: 0 0 7px 1.5px rgba(196, 181, 253, 0.9);
+  width: 8px;
+  height: 2.5px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .compact-url-icon img {
@@ -3763,23 +3769,79 @@ body.bg-white-cred .wgb-tile.has-accent {
   width: 100%;
 }
 
+/* Overview frame — every outer space of the two-column layout, in one place.
+   Fluid (clamp) rather than per-breakpoint: the gutter grows with the window
+   but stops at 80px, since the 1680px max-width below already centers the
+   grid on big monitors. --frame-top keeps the cards clear of the floating
+   settings / next-wallpaper buttons (16px inset + 44px tall + 12px).
+   Scoped with :has() so the other faces keep .cooldesk-container's own
+   padding; the wrappers' top/bottom padding is dropped here so the frame
+   alone sets the vertical space (and the page doesn't scroll in two-pane). */
+.popup-wrap:has(.overview-scope) {
+  /* Defined on the page wrapper (not the container) so the fixed corner
+     buttons, which are the container's sibling, line up with it too. */
+  --gutter: clamp(16px, 4vw, 80px);
+  --col-gap: clamp(14px, 1.6vw, 28px);
+  --frame-top: 72px;
+  --frame-bottom: clamp(16px, 2.5vh, 32px);
+  --frame-max: 1680px;
+  /* Column glass — macOS's dark window material: neutral graphite (not
+     purple-ish), heavily blurred and saturated, with three things that make
+     it read as macOS rather than generic glassmorphism:
+       - wallpaper tinting: --wall-tint (the wallpaper's hue, darkened and
+         muted — sampleWallpaper in utils/readableColor.js, set on body by
+         OverviewDashboard) mixed into the fill, like macOS windows pick up
+         the desktop's colour; plain graphite when there's no wallpaper.
+       - a faint grain (SVG noise), so it's frosted, not a flat tint.
+       - a lit top edge fading out over the first ~40%.
+     Unlike the desktop dock, the wallpaper here is page content, so
+     backdrop-filter really blurs it. */
+  --glass-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 .05 0 0 0 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --glass-fill:
+    var(--glass-grain),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 40%),
+    color-mix(in oklab, var(--wall-tint, rgb(30 30 32)) 30%, rgb(30 30 32 / 0.5));
+  --glass-blur: blur(40px) saturate(190%);
+  --glass-edge: 1px solid rgba(255, 255, 255, 0.1);
+  --glass-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2),
+    0 20px 44px -18px rgba(0, 0, 0, 0.55),
+    0 4px 12px rgba(0, 0, 0, 0.22);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.cooldesk-container:has(.overview-scope) {
+  padding: 0 var(--gutter);
+}
+
+/* Settings / next-wallpaper (ExtensionApp.jsx): flush with the right card's
+   edge rather than the window corner — the gutter, or wherever the centered
+   max-width grid ends on wide screens — and sitting in the --frame-top band. */
+.overview-corner-actions {
+  position: fixed;
+  top: 16px;
+  right: max(var(--gutter, 16px), (100vw - var(--frame-max, 1680px)) / 2);
+  z-index: 100;
+  display: flex;
+  gap: 8px;
+}
+
 .overview-dashboard-grid {
   display: grid;
   /* Activity feed is the hero: widgets stay a compact rail on the left.
      260px floor keeps both columns open down to ~600px before we stack. */
   grid-template-columns: minmax(260px, 0.72fr) 1.28fr;
-  gap: 24px;
+  gap: var(--col-gap, 24px);
   /* Two-pane app layout: the grid is a fixed viewport-height frame and each
      column scrolls on its OWN inside it (widget rail + activity feed scroll
-     independently). Below 600px this switches to page-scroll (see @container).
-     Height budget: .popup-wrap's top padding (16–24px) + the 64px margin-top
-     above, leaving ~32px clear at the bottom. (It was 100vh - 96px, which with
-     the wrapper padding left the cards ~8px from the screen edge.) */
-  height: calc(100vh - 120px);
+     independently). Below 600px this switches to page-scroll (see @container). */
+  height: calc(100vh - var(--frame-top, 64px) - var(--frame-bottom, 32px));
   overflow: hidden;
-  margin-top: 64px;
+  margin-top: var(--frame-top, 64px);
   /* Readable line lengths on ultrawide monitors — cap and center. */
-  max-width: 1680px;
+  max-width: var(--frame-max, 1680px);
   margin-inline: auto;
 }
 
@@ -3934,10 +3996,12 @@ body.bg-white-cred .wgb-tile.has-accent {
   overflow-x: hidden;
   /* Quiet translucent slab so the widget rail separates from busy wallpapers.
      Same radius + edge padding as the feed card so both columns share a grid. */
-  background: rgba(11, 11, 14, 0.35);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border-radius: 14px;
+  background: var(--glass-fill, rgba(11, 11, 14, 0.35));
+  backdrop-filter: var(--glass-blur, blur(24px));
+  -webkit-backdrop-filter: var(--glass-blur, blur(24px));
+  border: var(--glass-edge, none);
+  box-shadow: var(--glass-shadow, none);
+  border-radius: 16px;
   padding: 16px;
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.2) transparent;
@@ -3982,11 +4046,13 @@ body.bg-white-cred .wgb-tile.has-accent {
   min-height: 0;
   max-height: none;
   overflow: hidden;
-  /* One widget-style card — no border, separation comes from luminance. */
-  border-radius: 14px;
-  background: rgba(11, 11, 14, 0.55);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  /* Same glass as the left column (see --glass-* on the overview frame). */
+  border-radius: 16px;
+  background: var(--glass-fill, rgba(11, 11, 14, 0.55));
+  backdrop-filter: var(--glass-blur, blur(24px));
+  -webkit-backdrop-filter: var(--glass-blur, blur(24px));
+  border: var(--glass-edge, none);
+  box-shadow: var(--glass-shadow, none);
   min-width: 0;
   width: 100%;
   box-sizing: border-box;
@@ -4016,7 +4082,7 @@ body.bg-white-cred .wgb-tile.has-accent {
     linear-gradient(135deg,
       color-mix(in srgb, var(--card-accent) 20%, transparent),
       color-mix(in srgb, var(--card-accent) 6%, transparent)),
-    rgba(11, 11, 14, 0.35);
+    var(--glass-fill, rgba(11, 11, 14, 0.35));
 }
 
 .overview-activity-column.has-accent {
@@ -4024,7 +4090,7 @@ body.bg-white-cred .wgb-tile.has-accent {
     linear-gradient(135deg,
       color-mix(in srgb, var(--card-accent) 20%, transparent),
       color-mix(in srgb, var(--card-accent) 6%, transparent)),
-    rgba(11, 11, 14, 0.55);
+    var(--glass-fill, rgba(11, 11, 14, 0.55));
 }
 
 /* Colorless card color: no accent hue, no fixed dark-glass look, and no blur
@@ -4134,7 +4200,6 @@ body.bg-white-cred .wgb-tile.has-accent {
 @media (max-width: 900px) {
   .overview-dashboard-grid {
     grid-template-columns: minmax(220px, 0.85fr) 1.15fr;
-    gap: 14px;
   }
 
   .overview-left-column {
@@ -4149,9 +4214,10 @@ body.bg-white-cred .wgb-tile.has-accent {
 @media (max-width: 600px) {
   .overview-dashboard-grid {
     grid-template-columns: 1fr;
-    gap: 14px;
     height: auto;
     overflow: visible;
+    /* Page scroll now — the frame's bottom space goes after the last card. */
+    margin-bottom: var(--frame-bottom, 16px);
   }
 
   .overview-left-column {
@@ -7842,19 +7908,27 @@ body.bg-white-cred .wcp-section-head[data-accent="color"] { color: var(--card-ac
   outline: none;
 }
 
-.local-card-main .suite-tile-icon {
+.media-row-icon {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.local-card-main .suite-tile-icon,
+.media-row-icon .suite-tile-icon {
   width: 36px;
   height: 36px;
   border-radius: 10px;
   flex-shrink: 0;
 }
 
-.local-card-main .suite-tile-img {
+.local-card-main .suite-tile-img,
+.media-row-icon .suite-tile-img {
   width: 20px;
   height: 20px;
 }
 
-.local-card-main .suite-tile-fallback {
+.local-card-main .suite-tile-fallback,
+.media-row-icon .suite-tile-fallback {
   font-size: 15px;
 }
 

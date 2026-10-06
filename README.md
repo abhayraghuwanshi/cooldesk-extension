@@ -1,58 +1,84 @@
 <div align="center">
 
-<img src="./logo-2.png" alt="CoolDesk logo" width="96" />
+<img src="./logo-2.png" alt="CoolDesk logo" width="88" />
 
 # CoolDesk
 
-**Turn scattered browsing into an organized productivity workspace.**
+### Don't open apps. Open spaces.
 
-A desktop app (Tauri + React) paired with a Chrome extension that captures web
-content, organizes it into workspaces, and gives you a fast spotlight search
-across your apps, tabs, notes, history and bookmarks — all stored locally.
+A free, local-first launcher for **Windows, macOS and Linux** that keeps your tabs, apps,
+files and notes in **spaces**, one for each project. Press **Alt+K** anywhere and you're back in.
 
-[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Available-brightgreen?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/new-tab-by-cooldesk/ioggffobciopdddacpclplkeodllhjko)
-[![winget](https://img.shields.io/badge/winget-CoolDesk.CoolDesk-0078D4?logo=windows&logoColor=white)](https://learn.microsoft.com/windows/package-manager/)
-[![Homebrew](https://img.shields.io/badge/Homebrew-cooldesk-FBB040?logo=homebrew&logoColor=white)](https://github.com/abhayraghuwanshi/cooldesk-extension#macos)
+[![GitHub stars](https://img.shields.io/github/stars/abhayraghuwanshi/cooldesk-extension?style=social)](https://github.com/abhayraghuwanshi/cooldesk-extension/stargazers)
+[![Latest release](https://img.shields.io/github/v/release/abhayraghuwanshi/cooldesk-extension?label=release)](https://github.com/abhayraghuwanshi/cooldesk-extension/releases/latest)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Available-brightgreen?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/cooldesk/ioggffobciopdddacpclplkeodllhjko)
+[![winget](https://img.shields.io/badge/winget-CoolDesk.CoolDesk-0078D4?logo=windows&logoColor=white)](#install)
+[![Homebrew](https://img.shields.io/badge/Homebrew-cooldesk-FBB040?logo=homebrew&logoColor=white)](#install)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
-![Tauri](https://img.shields.io/badge/built%20with-Tauri%202-24C8DB)
-![React](https://img.shields.io/badge/UI-React%2019-61DAFB)
 
-**🧩 [Install "New Tab by CoolDesk" from the Chrome Web Store →](https://chromewebstore.google.com/detail/new-tab-by-cooldesk/ioggffobciopdddacpclplkeodllhjko)**
+**[Website](https://cool-desk.com)** · **[Download](https://github.com/abhayraghuwanshi/cooldesk-extension/releases/latest)** · **[Chrome extension](https://chromewebstore.google.com/detail/cooldesk/ioggffobciopdddacpclplkeodllhjko)** · **[r/cooldesk](https://www.reddit.com/r/cooldesk/)**
+
+<br />
+
+<img src="./docs/screenshots/spotlight.jpg" alt="CoolDesk Spotlight open over the desktop, showing apps, browser tabs and spaces in one search" width="860" />
 
 </div>
 
 ---
 
-## ✨ Screenshots
+## Why CoolDesk
 
+Your work for one project is scattered across a browser, an editor, a terminal, a few folders and some notes.
+Launchers open things one at a time and forget what belongs together. Tab managers stop at the browser.
 
+CoolDesk gives each project a **space** that holds all of it, and one shortcut that finds anything, whether it's
+an app, an open tab, a file or a note, and jumps to it if it's already open.
 
+- **Free and open source.** No account, no subscription.
+- **Local-first.** Everything stays on your device.
+- **Works with what you already use:** VS Code, GitHub, Figma, Linear, Notion, Slack. CoolDesk is a layer on top, not a replacement.
 
-
-| Spotlight search | Workspace view |
-| :--------------: | :------------: |
-| ![Spotlight search](./docs/screenshots/spotlight.png) | ![Workspace](./docs/screenshots/workspace.png) |
-
-| New tab dashboard | Note capture |
-| :---------------: | :----------: |
-| ![New tab](./docs/screenshots/newtab.png) | ![Capture](./docs/screenshots/capture.png) |
-
-| Active apps & windows | Share & sync |
-| :-------------------: | :----------: |
-| ![Active](./docs/screenshots/active.png) | ![Share](./docs/screenshots/share.png) |
+> ⭐ **If CoolDesk saves you time, a star helps other people find it.**
 
 ---
 
-## What it does
+## A quick tour
 
-- **Spotlight search** — one keystroke to search across installed apps, open
-  browser tabs, workspaces, history and bookmarks, with fuzzy matching.
-- **Content capture** — select text on any page to save it into daily notes.
-- **Workspaces** — group tabs, notes, todos and status by topic/project.
-- **Tab management** — clean up, restore closed tabs, and track activity.
-- **Local-first** — everything is stored on your device. No external servers
-  required.
+### Spaces: everything for one project
+
+Links, apps and folders in one place. Open items are marked, folders show your **git branch**, **uncommitted
+changes** and any **dev server that's running**, and each space keeps its own notes and to-dos.
+
+<img src="./docs/screenshots/space.jpg" alt="A CoolDesk space with links, apps, and folders showing a dev server on port 8080 and uncommitted changes" width="860" />
+
+<img src="./docs/screenshots/space-notes.jpg" alt="A space's notes: the project's shared README open in CoolDesk's reader" width="860" />
+
+### Spotlight: one shortcut for everything
+
+**Alt+K** searches installed apps, running windows, open browser tabs, history, bookmarks, spaces and files
+together, with fuzzy matching. Picking an open tab or window jumps to it instead of opening a copy.
+Type `/` for commands, or `/a`, `/u`, `/f` to search only apps, tabs or files.
+
+### A bar or sidebar beside your work
+
+**Ctrl+Shift+D** (⌘+Shift+D on Mac) switches between a full window, a sidebar on the edge of your screen,
+and a bar along the bottom that shows the space you're in.
+
+<img src="./docs/screenshots/dock-bar.jpg" alt="CoolDesk's bottom bar showing a space's links, a dev server running on port 3000, and repo folders on the main branch" width="860" />
+
+### A file manager that knows your spaces
+
+Browse any folder without leaving CoolDesk. When it belongs to a space, that space's commands sit on top:
+start the dev server or run the build in one click. Keyboard first: ↑↓, Enter, Backspace, Ctrl+L.
+
+<img src="./docs/screenshots/file-manager.jpg" alt="CoolDesk's file manager with the space's commands as buttons and linked spaces in the sidebar" width="860" />
+
+### Your new tab, organized too
+
+The free Chrome extension turns every new tab into a dashboard: widgets, your favorite sites, each site's
+pages grouped together, and a timeline of where your day went.
+
+<img src="./docs/screenshots/new-tab.jpg" alt="The CoolDesk new tab with clock widgets, today's activity timeline, favorites and Google services grouped by site" width="860" />
 
 ---
 
@@ -60,189 +86,126 @@ across your apps, tabs, notes, history and bookmarks — all stored locally.
 
 ### Desktop app
 
-**Windows** — install via [winget](https://learn.microsoft.com/windows/package-manager/):
+**Windows** (via [winget](https://learn.microsoft.com/windows/package-manager/)):
 
 ```powershell
 winget install CoolDesk.CoolDesk
 ```
 
 <a name="macos"></a>
-**macOS** (Apple Silicon) — install via [Homebrew](https://brew.sh):
+**macOS** (Apple Silicon, via [Homebrew](https://brew.sh)):
 
 ```bash
 brew tap abhayraghuwanshi/cooldesk https://github.com/abhayraghuwanshi/cooldesk-extension
 brew install --cask cooldesk
 ```
 
-To update later: `brew upgrade --cask cooldesk`.
+Update later with `brew upgrade --cask cooldesk`.
 
-**macOS / Linux (manual)** — download the latest installer from the
-[latest GitHub release](https://github.com/abhayraghuwanshi/cooldesk-extension/releases/latest).
+**macOS / Linux (manual):** download the installer from the
+[latest release](https://github.com/abhayraghuwanshi/cooldesk-extension/releases/latest).
 
 ### Browser extension
 
-Install **New Tab by CoolDesk** from the
-[Chrome Web Store](https://chromewebstore.google.com/detail/new-tab-by-cooldesk/ioggffobciopdddacpclplkeodllhjko).
+Install **CoolDesk** from the
+[Chrome Web Store](https://chromewebstore.google.com/detail/cooldesk/ioggffobciopdddacpclplkeodllhjko).
+It also works in Chromium browsers that accept Chrome Web Store extensions, like Edge and Brave.
 
-> 💡 The desktop app and extension work best together — the extension talks to
-> the desktop app over the local port `4545` for app/window search and sync.
+> 💡 The desktop app and the extension work best together: with both installed, Spotlight can find your
+> browser tabs and jump straight to them. They talk over a local port (`4545`) on your machine. Nothing
+> goes through a server.
 
 ---
 
-## Architecture
+## How it works
 
-CoolDesk is two cooperating pieces: a **Tauri desktop app** and a **Chrome
-extension**. They talk to each other over a small local HTTP + WebSocket server
-on **port 4545**.
+CoolDesk is two cooperating pieces: a **Tauri desktop app** (Rust + React) and a **Chrome extension**
+(React, Manifest V3). They talk over a small local HTTP + WebSocket server on **port 4545**.
 
 ```
-┌──────────────────────────┐         ┌───────────────────────────┐
-│      Chrome Extension     │         │     Tauri Desktop App     │
+┌───────────────────────────┐         ┌───────────────────────────┐
+│     Chrome extension      │         │    Tauri desktop app      │
 │  (React, MV3 service      │         │  (React frontend +        │
 │   worker, content scripts)│         │   Rust backend)           │
-│                           │         │                           │
-│  • New-tab dashboard      │  HTTP   │  • Spotlight search UI    │
-│  • Side panel workspace   │◄──────► │  • Win32 window           │
-│  • Text capture           │   +     │    enumeration (Rust)     │
-│  • Tab / history / bmarks │   WS    │  • App search (Rust)      │
-└──────────────────────────┘ :4545   └───────────────────────────┘
-                                 │
-                                 ▼
-                       ┌──────────────────┐
-                       │  axum server     │
-                       │  GET /search?q=  │
-                       │  WebSocket sync  │
-                       └──────────────────┘
+│                           │  HTTP   │                           │
+│  • New-tab dashboard      │◄──────► │  • Spotlight (Alt+K)      │
+│  • Tabs / history / marks │   +     │  • Spaces, dock, sidebar  │
+│  • Text capture           │   WS    │  • App + window search    │
+└───────────────────────────┘  :4545  └───────────────────────────┘
+                                  │
+                                  ▼
+                        ┌──────────────────┐
+                        │  axum sidecar    │
+                        │  GET /search?q=  │
+                        │  WebSocket sync  │
+                        └──────────────────┘
 ```
 
-### Desktop app (Tauri + Rust)
+When you search, the frontend queries the Rust backend (`/search`) **and** the local browser caches
+(tabs, spaces, history, bookmarks) **in parallel**, then merges the ranked results. App search runs in
+Rust for speed: it reads an in-memory app cache, applies a fuzzy score and boosts running windows.
 
-| File | Role |
+| Path | What |
 | ---- | ---- |
-| `src-tauri/src/lib.rs` | Tauri commands; in-memory app cache (`APP_CACHE`) |
-| `src-tauri/src/system.rs` | Native window enumeration (Win32) |
-| `src-tauri/src/focus.rs` | Cross-platform window focusing (Win/macOS/Linux) |
-| `src-tauri/src/sidecar/server.rs` | axum route definitions (port 4545) |
-| `src-tauri/src/sidecar/handlers.rs` | HTTP handlers, incl. `search_apps()` |
-
-App search runs **in Rust** for speed: `GET /search?q=...` reads the app cache,
-applies a fuzzy score, and boosts running/visible windows.
-
-### Chrome extension + frontend (React)
-
-| File | Role |
-| ---- | ---- |
-| `src/services/searchService.js` | Frontend search; calls the Rust `/search` and merges tab/history/bookmark results |
-| `src/components/GlobalSpotlight.jsx` | The spotlight search UI |
-| `src/background/` | MV3 service worker (message routing, storage) |
-| `src/content-scripts/` | Text-selection capture + activity tracking |
-
-When you search, the frontend queries the Rust backend (`/search`) **and** the
-local browser caches (tabs, workspaces, history, bookmarks) **in parallel**,
-then merges the ranked results.
-
----
-
-## Data & storage
-
-CoolDesk is **local-first** — your captured content never leaves your device
-unless you opt into sync.
-
-- **Browser data** (notes, workspaces, settings) → Chrome `storage` API.
-- **App index / search cache** → in-memory in the Rust backend, rebuilt on launch.
-- **Sync** between extension and desktop app → local WebSocket on port 4545.
-- **Validation** → `src/db/validation.js` enforces a strict schema (unknown
-  fields are rejected, never silently dropped).
-
-No data is transmitted to external servers. Authentication/sync is optional and
-user-controlled.
-
----
-
-## Getting started
-
-### Prerequisites
-
-- [Node.js](https://nodejs.org/) 18+
-- [Rust](https://rustup.rs/) (stable) — for the Tauri desktop app
-- Chrome (or any Chromium browser) — for the extension
-
-### Install
-
-```bash
-git clone https://github.com/abhayraghuwanshi/cooldesk-extension.git
-cd cooldesk-extension
-npm install
-```
-
-### Run the desktop app (dev)
-
-```bash
-npm run dev:tauri
-```
-
-### Build the web frontend only
-
-```bash
-npm run dev      # vite dev server
-npm run build    # production build
-```
-
-### Load the Chrome extension
-
-1. Run `npm run build` to produce the `dist/` output.
-2. Open `chrome://extensions`, enable **Developer mode**.
-3. Click **Load unpacked** and select the project root (uses `manifest.json`).
-4. Open a new tab — the CoolDesk dashboard replaces it.
-
-### Build the desktop installer
-
-```bash
-npm run build:tauri
-```
-
----
-
-## Project layout
-
-```
-extension/
-├── src/                  # React frontend + extension code
-│   ├── components/        # UI (GlobalSpotlight, workspaces, …)
-│   ├── services/          # searchService.js and friends
-│   ├── background/        # MV3 service worker
-│   ├── content-scripts/   # text capture, activity tracking
-│   └── db/                # local persistence + validation
-├── src-tauri/            # Rust backend (Tauri)
-│   ├── src/lib.rs         # Tauri commands + app cache
-│   ├── src/system.rs      # window enumeration
-│   └── src/sidecar/       # axum HTTP/WS server (port 4545)
-├── docs/                 # design notes + screenshots
-├── manifest.json         # Chrome extension manifest (MV3)
-└── package.json
-```
+| `src-tauri/src/lib.rs` | Tauri commands, in-memory app cache, dock/sidebar layouts |
+| `src-tauri/src/sidecar/` | axum HTTP/WS server on port 4545 (`server.rs` routes, `handlers.rs` incl. `search_apps()`) |
+| `src-tauri/src/system.rs`, `focus.rs` | Native window enumeration and cross-platform window focusing |
+| `src/features/spotlight/` | The Spotlight UI (`GlobalSpotlight.jsx`) |
+| `src/faces/workspace/` | Spaces (called workspaces in the code) |
+| `src/features/dock/` | The bottom bar and sidebar |
+| `src/features/file-manager/` | The file manager |
+| `src/services/searchService.js` | Frontend search: merges Rust results with tabs, history and bookmarks |
+| `src/background/`, `src/content-scripts/` | MV3 service worker; text capture and activity tracking |
+| `src/db/` | Local persistence and schema validation (`validation.js`) |
 
 ---
 
 ## Privacy
 
-- **Local storage only** — content lives on your device via Chrome's storage API.
-- **No external servers** — nothing is transmitted by default.
-- **User-initiated** — content is captured only when you select text or act.
-- **Minimal permissions** — see [`docs/permissions.md`](./docs/permissions.md)
-  for a full justification of each Chrome permission requested.
+- **Local-first.** Your spaces, notes and settings live on your device. Nothing is sent to external servers by default.
+- **No account needed.** Sync is optional and under your control.
+- **User-initiated capture.** Content is saved only when you select text or act.
+- **Minimal permissions.** Every Chrome permission is justified in [`docs/permissions.md`](./docs/permissions.md).
+
+---
+
+## Development
+
+**Prerequisites:** [Node.js](https://nodejs.org/) 18+, [Rust](https://rustup.rs/) (stable), and Chrome or another Chromium browser.
+
+```bash
+git clone https://github.com/abhayraghuwanshi/cooldesk-extension.git
+cd cooldesk-extension
+npm install
+
+npm run dev:tauri     # full desktop app (Rust + frontend)
+npm run dev           # frontend only (Vite)
+npm run build         # production frontend build
+npm run build:tauri   # desktop installer
+```
+
+**Load the extension:** run `npm run build`, open `chrome://extensions`, turn on **Developer mode**,
+click **Load unpacked** and select the project root (it uses `manifest.json`). Open a new tab to see it.
 
 ---
 
 ## Contributing
 
-Contributions are welcome! Please open an issue to discuss substantial changes
-first. Run `npm run lint` before submitting a PR.
+Contributions are welcome. For anything substantial, please open an issue first so we can talk it through.
+Run `npm run lint` before sending a pull request.
+
+Ideas, bugs and questions: [open an issue](https://github.com/abhayraghuwanshi/cooldesk-extension/issues)
+or post in [r/cooldesk](https://www.reddit.com/r/cooldesk/).
 
 ---
 
 ## License
 
-Licensed under the **Apache License 2.0** — see [LICENSE](./LICENSE).
+Licensed under the **Apache License 2.0**. See [LICENSE](./LICENSE).
 
-Copyright © 2026 CoolDesk Team
+<div align="center">
+<br />
+
+**⭐ Star CoolDesk if it helps you. It's the easiest way to help it grow.**
+
+</div>

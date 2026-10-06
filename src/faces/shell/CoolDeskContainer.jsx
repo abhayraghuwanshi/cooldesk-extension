@@ -16,6 +16,7 @@ import { GlobalSpotlight } from '../../features/spotlight/GlobalSpotlight';
 import { UpdateButton } from '../../features/updates/UpdateButton';
 import { openSpotlightEdit } from '../../services/spotlightEdit';
 import { OverviewDashboard } from '../overview/OverviewDashboard';
+import { itemRankingService } from '../../services/itemRankingService.js';
 import { WorkspaceDockBar } from '../../features/dock/WorkspaceDockBar';
 import { WorkspaceFileDrop } from '../../features/workspace-drop/WorkspaceFileDrop.jsx';
 import { useDockState } from '../../features/dock/useDockState';
@@ -490,6 +491,8 @@ export function CoolDeskContainer({
       setExpandedWorkspace(null);
     } else {
       setExpandedWorkspace(workspace);
+      // Opening one counts toward its activity rank (closing doesn't).
+      itemRankingService.recordWorkspaceOpen(workspace);
     }
     // Only set current workspace if not just closing the menu?
     // User intent might be to just view the menu, or switch. 
@@ -528,6 +531,7 @@ export function CoolDeskContainer({
     // Find the workspace by name
     const workspace = savedWorkspaces.find(ws => ws.name === workspaceName);
     if (workspace) {
+      itemRankingService.recordWorkspaceOpen(workspace);
       setCurrentWorkspace(workspace);
       setActiveFace('workspace'); // Navigate to workspace view
       onOpenWorkspace?.(workspace);

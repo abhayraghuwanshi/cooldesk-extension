@@ -10,6 +10,7 @@ import { isElectronApp } from '../../services/environmentDetector.js';
 import { runningAppsService } from '../../services/runningAppsService.js';
 import { enrichRunningAppsWithIcons, getGroupDomainFromUrl, isLocalhostUrl } from '../../utils/helpers.js';
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
+import { filterUserApps } from '../../utils/userApps.js';
 import { AppCard, FolderCard, TabCard, TabGroupCard, TaskGroupCard } from './parts/TabCard';
 import { DevServersPanel } from './parts/DevServersPanel';
 import { SectionHeader } from './parts/SectionHeader';
@@ -415,68 +416,7 @@ export function TabManagement() {
         // Enrich running apps with icons from installed apps using utility
         const enrichedApps = enrichRunningAppsWithIcons(apps, installedApps);
 
-        // macOS system process filter
-        const systemExactNames = new Set([
-          // Windows system processes
-          'svchost', 'csrss', 'smss', 'wininit', 'winlogon', 'services', 'lsass',
-          'registry', 'system', 'idle', 'dwm', 'conhost', 'ctfmon', 'spoolsv',
-          'taskhostw', 'sihost', 'runtimebroker', 'applicationframehost',
-          'searchindexer', 'searchhost', 'securityhealthsystray',
-          // macOS system UI processes
-          'windowserver', 'dock', 'controlcenter', 'notificationcenter',
-          'spotlight', 'loginwindow', 'textinputswitcher', 'accessibilityuiserver',
-          'cursoruiviewservice', 'nsattributedstringagent', 'webthumbnailextension',
-          'linkednotesuitservice', 'securityprivacyextension',
-        ]);
-        const isMacSystemProcess = (name) =>
-          name.startsWith('com.apple.') ||
-          name.includes('.xpc.') ||
-          (name.endsWith('helper') && !name.includes(' ')) ||
-          (name.endsWith('agent') && !name.includes(' '));
-
-        // Filter out browsers, cooldesk, and system processes
-        const filteredApps = enrichedApps.filter(app => {
-          const appName = (app.name || '').toLowerCase();
-
-          // Skip browsers (tabs are shown separately)
-          const isBrowser = appName.includes('chrome') ||
-            appName === 'msedge' ||
-            appName === 'microsoft edge' ||
-            appName === 'edge' ||
-            appName.includes('brave') ||
-            appName.includes('firefox') ||
-            appName.includes('opera') ||
-            appName.includes('vivaldi') ||
-            appName.includes('arc');
-          if (isBrowser) return false;
-
-          // Skip cooldesk app itself
-          const isCoolDesk = appName.includes('cooldesk') ||
-            appName.includes('cool-desk') ||
-            appName.includes('tauri') ||
-            appName.includes('webview') ||
-            appName.includes('wry');
-          if (isCoolDesk) return false;
-
-          // Skip macOS system processes
-          if (systemExactNames.has(appName)) return false;
-          if (isMacSystemProcess(appName)) return false;
-
-          // Skip tray/background windows on Windows only.
-          // macOS apps (source: applications/system_applications/user_applications) are
-          // pre-filtered by the scanner — all entries here are valid user apps regardless
-          // of isVisible (macOS apps frequently report isVisible=false even when open).
-          const isMacStyle = app.source === 'applications' ||
-            app.source === 'system_applications' ||
-            app.source === 'user_applications' ||
-            app.source === 'macos';
-          if (!isMacStyle) {
-            const isTrayOnly = app.isVisible === false && (app.cloaked || 0) !== 2;
-            if (isTrayOnly) return false;
-          }
-
-          return true;
-        });
+        const filteredApps = filterUserApps(enrichedApps);
 
         // runningAppsService returns per-HWND entries — multi-window apps appear once per window.
         const sortedApps = [...filteredApps].sort((a, b) =>

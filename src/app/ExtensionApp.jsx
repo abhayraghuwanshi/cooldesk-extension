@@ -208,7 +208,7 @@ export default function ExtensionApp() {
         /> */}
 
         {/* Floating top-right buttons: next wallpaper (only when a wallpaper is on) + settings */}
-        <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 100, display: 'flex', gap: 8 }}>
+        <div className="overview-corner-actions">
           {wallpaperEnabled && (
             <button
               className="cooldesk-settings-btn"

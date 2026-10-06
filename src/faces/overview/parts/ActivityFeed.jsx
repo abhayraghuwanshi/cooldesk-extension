@@ -1594,7 +1594,7 @@ export function ActivityFeed() {
                 padding: '10px 16px 6px',
                 fontSize: 'var(--font-xs)',
                 fontWeight: 600,
-                color: '#64748B',
+                color: 'var(--text-muted, #64748B)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.04em'
             }}>
@@ -1621,17 +1621,12 @@ export function ActivityFeed() {
                         onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
-                        <div style={{ borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'var(--accent-blue, #60a5fa)', overflow: 'hidden' }}>
-                            <img
-                                src={item.favIconUrl || getFaviconUrl(item.url, 32)}
-                                alt=""
-                                style={{ width: 'var(--font-5xl)', height: 'var(--font-5xl)', objectFit: 'contain' }}
-                                onError={e => { e.target.style.display = 'none'; if (e.target.nextSibling) e.target.nextSibling.style.display = 'block'; }}
-                            />
-                            <div style={{ display: 'none' }}>
-                                <FontAwesomeIcon icon={faGlobe} style={{ fontSize: '16px' }} />
-                            </div>
-                        </div>
+                        {/* Same tinted tile as Suites: a raw favicon blown up to
+                            ~40px read badly for solid-square icons (Netflix's black
+                            "N" box became a blurry hard-edged block). */}
+                        <span className="media-row-icon">
+                            <TileIcon item={item} label={item.title} />
+                        </span>
 
                         <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{
@@ -1646,7 +1641,7 @@ export function ActivityFeed() {
                             </div>
                             <div style={{
                                 fontSize: 'var(--font-xs)',
-                                color: '#64748B',
+                                color: 'var(--text-secondary, #64748B)',
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis'
@@ -1734,17 +1729,12 @@ export function ActivityFeed() {
                         onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
-                        <div style={{ borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'var(--accent-blue, #60a5fa)', overflow: 'hidden' }}>
-                            <img
-                                src={item.favIconUrl || getFaviconUrl(item.url, 32)}
-                                alt=""
-                                style={{ width: 'var(--font-5xl)', height: 'var(--font-5xl)', objectFit: 'contain' }}
-                                onError={e => { e.target.style.display = 'none'; if (e.target.nextSibling) e.target.nextSibling.style.display = 'block'; }}
-                            />
-                            <div style={{ display: 'none' }}>
-                                <FontAwesomeIcon icon={faGlobe} style={{ fontSize: '16px' }} />
-                            </div>
-                        </div>
+                        {/* Same tinted tile as Suites: a raw favicon blown up to
+                            ~40px read badly for solid-square icons (Netflix's black
+                            "N" box became a blurry hard-edged block). */}
+                        <span className="media-row-icon">
+                            <TileIcon item={item} label={item.title} />
+                        </span>
 
                         <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{
@@ -1759,7 +1749,7 @@ export function ActivityFeed() {
                             </div>
                             <div style={{
                                 fontSize: 'var(--font-xs)',
-                                color: '#64748B',
+                                color: 'var(--text-secondary, #64748B)',
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis'

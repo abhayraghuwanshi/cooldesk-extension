@@ -97,6 +97,43 @@
   transform: translateY(2px);
 }
 
+/* The chip holds two buttons (WorkspaceDockBar): the logo toggles Active ⇄
+   workspace view, the name cycles workspaces. Both are bare — the chip owns
+   the look. */
+.dockbar-ws-logo-btn,
+button.dockbar-ws-name {
+  display: flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dockbar-ws-logo-btn {
+  flex: 0 0 auto;
+  border-radius: 8px;
+  transition: transform 0.18s cubic-bezier(.2, .8, .2, 1);
+}
+
+.dockbar-ws-logo-btn:hover {
+  transform: rotate(-8deg) scale(1.08);
+}
+
+/* Active view: neutral glass with a live green edge instead of the workspace
+   violet, so it's obvious at a glance which view the bar is in. */
+.dockbar-ws-chip.is-active-mode {
+  border-color: rgba(52, 211, 153, 0.35);
+  background: linear-gradient(150deg, rgba(52, 211, 153, 0.2), rgba(255, 255, 255, 0.04));
+}
+
+.dockbar-ws-chip.is-active-mode:hover {
+  border-color: rgba(52, 211, 153, 0.6);
+}
+
 .dockbar-ws-logo {
   width: var(--tile-art);
   height: var(--tile-art);
@@ -454,22 +491,42 @@
   border-color: rgba(74, 222, 128, 0.35);
 }
 
-/* Open in Finder / an editor: same dot as the icon tiles, on the tile's foot. */
+/* Inline workspace picker (WorkspaceDockBar `picking`): one chip per
+   workspace, its initial on a tile in the workspace's own colour. */
+.dockbar-ws-option-tile {
+  background: color-mix(in srgb, var(--ws-color) 30%, rgba(255, 255, 255, 0.06));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ws-color) 45%, transparent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dockbar-ws-option.is-current {
+  border-color: color-mix(in srgb, var(--ws-color) 55%, transparent);
+  background: color-mix(in srgb, var(--ws-color) 14%, rgba(255, 255, 255, 0.045));
+}
+
+/* Open / running: a short bar centered under the icon tile, in the gap
+   between the tile and the chip's edge — macOS's indicator, read as a mark
+   rather than a light. (It used to be a 4px violet glow dot at a fixed 21px,
+   which sat off-center and overlapped the tile's bottom edge.) Center =
+   chip's left padding (6px) + half the tile; the tile is vertically centered,
+   leaving ~6px below it, so bottom: 2px keeps the bar clear of it. */
 .dockbar-place.is-active::after {
   content: '';
   position: absolute;
-  bottom: 3px;
-  left: 21px;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: #c4b5fd;
-  box-shadow: 0 0 5px rgba(196, 181, 253, 0.85);
+  bottom: 2px;
+  left: calc(6px + var(--tile-art) / 2);
+  transform: translateX(-50%);
+  width: 10px;
+  height: 2.5px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .dockbar--top .dockbar-place.is-active::after {
   bottom: auto;
-  top: 3px;
+  top: 2px;
 }
 
 .dockbar-empty {

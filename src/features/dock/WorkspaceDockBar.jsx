@@ -2,10 +2,14 @@ import { faCode, faDesktop, faFileLines, faFolderOpen, faPen, faTableColumns } f
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import logo from '../../../logo-2.png';
+import { runningAppsService } from '../../services/runningAppsService';
+import { itemRankingService } from '../../services/itemRankingService';
 import { isEditorApp, workspaceActivityService } from '../../services/workspaceActivityService';
 import { openSpotlightEdit } from '../../services/spotlightEdit';
 import { useCooldeskItems } from '../../shared/hooks/useCooldeskItems.js';
 import { fileStack, stackLogo, useFolderIdentity } from '../../shared/hooks/useFolderIdentity.js';
+import { enrichRunningAppsWithIcons } from '../../utils/helpers.js';
+import { filterUserApps } from '../../utils/userApps.js';
 import { LayoutSwitchButton } from './LayoutSwitchButton';
 import '../../styles/dockbar.css';
 
@@ -70,6 +74,65 @@ const placeLabel = (app) => {
   return { name, parent };
 };
 
+// Browser chrome that isn't worth a dock slot.
+const isBlankTab = (url = '') => {
+  const u = url.toLowerCase();
+  return !u || u === 'about:blank' || /^(chrome|edge|brave|vivaldi|opera):\/\/newtab/.test(u)
+    || u.startsWith('chrome-extension://') || u.startsWith('devtools://');
+};
+
+/**
+ * What the bar shows for a workspace: its own links/apps, then its project's
+ * committed .cooldesk items (same resolution as the workspace cards — see
+ * useCooldeskItems). Linked projects become folder launchers; ones not on disk
+ * are skipped, since the bar has no room for a "not found locally" state.
+ * Shared by the launcher row and the picker's item counts so they agree.
+ */
+function useDockItems(workspace) {
+  const { cdLinks, cdFolders, cdFiles, cdProjects } = useCooldeskItems(workspace);
+  const urls = useMemo(
+    () => [...(workspace?.urls || []).filter((u) => u.status !== 'draft'), ...cdLinks],
+    [workspace, cdLinks]
+  );
+  const apps = useMemo(() => [
+    ...(workspace?.apps || []),
+    ...cdProjects
+      .filter((p) => p.exists && p.path)
+      .map((p) => ({ name: p.name, path: p.path, appType: 'folder', _cd: true })),
+    ...cdFolders,
+    ...cdFiles,
+  ], [workspace, cdProjects, cdFolders, cdFiles]);
+  return { urls, apps };
+}
+
+// One chip in the inline workspace picker. Its own component so each can
+// resolve its workspace's .cooldesk items for the count (a hook per chip).
+function WorkspaceOption({ ws, idx, isCurrent, onPick }) {
+  const { urls, apps } = useDockItems(ws);
+  const count = urls.length + apps.length;
+  return (
+    <button
+      className={`dockbar-place dockbar-ws-option${isCurrent ? ' is-current' : ''} is-entering`}
+      style={{ animationDelay: `${idx * 16}ms`, '--ws-color': ws.color || '#8b5cf6' }}
+      onClick={() => onPick(ws)}
+      aria-current={isCurrent ? 'true' : undefined}
+    >
+      <span className="dockbar-place-tile dockbar-ws-option-tile">
+        {(ws.name || '?').charAt(0).toUpperCase()}
+      </span>
+      <span className="dockbar-place-text">
+        <span className="dockbar-place-name">{ws.name || 'Untitled'}</span>
+        <span className="dockbar-place-parent">{count} item{count === 1 ? '' : 's'}</span>
+      </span>
+    </button>
+  );
+}
+
+const MODE_KEY = 'cooldesk-dockbar-mode';
+const loadMode = () => {
+  try { return localStorage.getItem(MODE_KEY) === 'workspace' ? 'workspace' : 'active'; } catch { return 'active'; }
+};
+
 const invokeDock = async (cmd, args) => {
   try {
     const { invoke } = await import('@tauri-apps/api/core');
@@ -86,29 +149,77 @@ const invokeDock = async (cmd, args) => {
  * everything must fit one row — no popovers).
  */
 export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWorkspace, side = 'bottom' }) {
+  // Two views, switched from the logo: 'active' (the default) is everything
+  // open right now — running apps and browser tabs, workspace or not, like the
+  // macOS Dock's running section; 'workspace' is the active workspace's own
+  // launchers.
+  const [mode, setMode] = useState(loadMode);
+  const toggleMode = useCallback(() => {
+    setMode((m) => {
+      const next = m === 'active' ? 'workspace' : 'active';
+      try { localStorage.setItem(MODE_KEY, next); } catch { /* not persisted */ }
+      return next;
+    });
+  }, []);
+  const isActiveMode = mode === 'active';
+
   const workspace = activeWorkspace || workspaces[0] || null;
-  // The workspace's own links/apps, then its project's committed .cooldesk
-  // items (same resolution as the workspace cards — see useCooldeskItems).
-  // Linked projects become folder launchers; ones not on disk are skipped,
-  // since the bar has no room for a "not found locally" state.
-  const { cdLinks, cdFolders, cdFiles, cdProjects } = useCooldeskItems(workspace);
-  const urls = useMemo(
-    () => [...(workspace?.urls || []).filter((u) => u.status !== 'draft'), ...cdLinks],
-    [workspace, cdLinks]
-  );
-  const apps = useMemo(() => [
-    ...(workspace?.apps || []),
-    ...cdProjects
-      .filter((p) => p.exists && p.path)
-      .map((p) => ({ name: p.name, path: p.path, appType: 'folder', _cd: true })),
-    ...cdFolders,
-    ...cdFiles,
-  ], [workspace, cdProjects, cdFolders, cdFiles]);
+  const { urls, apps } = useDockItems(workspace);
 
   // Live running-apps + open-tabs state. `activity` is only a re-render tick;
   // the matching itself goes through the shared service.
   const [activity, setActivity] = useState(null);
   useEffect(() => workspaceActivityService.subscribe(setActivity), []);
+
+  // Active view: running apps, one chip per app (the service reports one entry
+  // per window), filtered and icon-enriched the same way as the Tabs page's
+  // Active Apps; then open tabs, deduped by URL. Only subscribed while shown.
+  const [liveApps, setLiveApps] = useState([]);
+  useEffect(() => {
+    if (!isActiveMode) return undefined;
+    return runningAppsService.subscribe(({ runningApps, installedApps }) => {
+      if (!Array.isArray(runningApps)) return;
+      const seen = new Set();
+      const apps = filterUserApps(enrichRunningAppsWithIcons(runningApps, installedApps))
+        .filter((a) => {
+          const k = (a.path || a.name || '').toLowerCase();
+          if (!k || seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        })
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      setLiveApps(apps);
+    });
+  }, [isActiveMode]);
+  const liveTabs = useMemo(() => {
+    const seen = new Set();
+    return (activity?.openTabs || []).filter((t) => {
+      if (isBlankTab(t.url) || seen.has(t.url)) return false;
+      seen.add(t.url);
+      return true;
+    });
+  }, [activity]);
+
+  const focusLiveApp = useCallback((app) => {
+    const api = window.electronAPI;
+    if (!api) return;
+    itemRankingService.recordLaunch(app);
+    if (app.tabIndex != null && app.hwnd && api.focusAppTab) {
+      api.focusAppTab(app.hwnd, app.tabIndex, app.title);
+    } else if (api.focusApp && app.pid) {
+      // Same fallback as the Tabs page: OS window scripting can fail silently
+      // (missing Automation permission); `open` reliably raises the app.
+      api.focusApp(app.pid, app.name, app.hwnd, app.path).catch(() => {
+        if (app.path) api.launchApp?.(app.path);
+      });
+    } else if (app.path) {
+      api.launchApp?.(app.path);
+    }
+  }, []);
+  const focusLiveTab = useCallback(
+    (tab) => workspaceActivityService.activate({ url: tab.url, title: tab.title }, { target: tab }),
+    []
+  );
 
   // One resolution pass for the whole row, so no two items claim the same tab
   // or window — and so each item's dot and its click read the same answer.
@@ -121,6 +232,44 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
     [urls, apps, activity]
   );
 
+  // Shared activity ranking: one order for every kind of item (see
+  // itemRankingService). `rankTick` only re-renders when scores change.
+  const [rankTick, setRankTick] = useState(0);
+  useEffect(() => itemRankingService.subscribe(setRankTick), []);
+  const rankedWorkspaceItems = useMemo(() => {
+    const entries = [
+      ...urls.map((item, idx) => ({ item, kind: 'url', idx })),
+      ...apps.map((item, idx) => ({ item, kind: isPlace(item) ? 'place' : 'app', idx })),
+    ];
+    const byItem = new Map(entries.map((e) => [e.item, e]));
+    return itemRankingService
+      .rank(entries.map((e) => e.item), { isLive: (it) => !!resolved.get(it) })
+      .map((it) => byItem.get(it));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urls, apps, resolved, rankTick]);
+  const rankedLiveItems = useMemo(() => {
+    const entries = [
+      ...liveApps.map((item, idx) => ({ item, kind: 'app', idx })),
+      ...liveTabs.map((item, idx) => ({ item: { ...item, path: undefined }, kind: 'tab', idx })),
+    ];
+    const byItem = new Map(entries.map((e) => [e.item, e]));
+    return itemRankingService.rank(entries.map((e) => e.item)).map((it) => byItem.get(it));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveApps, liveTabs, rankTick]);
+
+  // Picker (and scroll-stepping) order: most active workspace first.
+  const rankedWorkspaces = useMemo(
+    () => itemRankingService.rankWorkspaces(workspaces, {
+      isLive: (it) => !!workspaceActivityService.resolve(it),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [workspaces, rankTick, activity]
+  );
+  const rankedWorkspacesRef = useRef(rankedWorkspaces);
+  rankedWorkspacesRef.current = rankedWorkspaces;
+
+
+
   // Folder chips: stack logo, git branch / dirty, and a dev server running
   // from the folder — same source as the workspace cards' folder tiles.
   const folderPaths = useMemo(
@@ -129,13 +278,43 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
   );
   const folderInfo = useFolderIdentity(folderPaths);
 
-  // The bar is one row tall, so workspace switching is a cycle button rather
-  // than a dropdown (a popover would clip against the window edge).
-  const cycleWorkspace = useCallback(() => {
-    if (workspaces.length < 2 || !workspace) return;
-    const idx = workspaces.findIndex((w) => w.id === workspace.id);
-    onSelectWorkspace?.(workspaces[(idx + 1) % workspaces.length]);
-  }, [workspaces, workspace, onSelectWorkspace]);
+  // Workspace switching. The bar is one row tall, so a dropdown would clip
+  // against the window edge; instead the name opens an inline picker — the
+  // launcher row is swapped for one chip per workspace, pick one and the row
+  // comes back. (A blind click-to-cycle was the old way: every click landed on
+  // a different-sized workspace, the window refit, and the chip slid out from
+  // under the cursor.) Picking always lands in the workspace view.
+  const [picking, setPicking] = useState(false);
+  const pickWorkspace = useCallback((ws) => {
+    setPicking(false);
+    setMode('workspace');
+    try { localStorage.setItem(MODE_KEY, 'workspace'); } catch { /* not persisted */ }
+    if (ws && ws.id !== workspace?.id) {
+      itemRankingService.recordWorkspaceOpen(ws);
+      onSelectWorkspace?.(ws);
+    }
+  }, [workspace, onSelectWorkspace]);
+  useEffect(() => {
+    if (!picking) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setPicking(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [picking]);
+
+  // Quick stepping: scroll over the name chip moves to the previous/next
+  // workspace. One step per gesture burst — a trackpad swipe fires dozens of
+  // wheel events, and without the cooldown one flick would spin through all.
+  const wheelLockRef = useRef(0);
+  const onChipWheel = useCallback((e) => {
+    if (workspaces.length < 2 || Math.abs(e.deltaY) < 4) return;
+    const now = Date.now();
+    if (now < wheelLockRef.current) return;
+    wheelLockRef.current = now + 350;
+    const list = rankedWorkspacesRef.current;
+    const idx = Math.max(0, list.findIndex((w) => w.id === workspace?.id));
+    const step = e.deltaY > 0 ? 1 : -1;
+    pickWorkspace(list[(idx + step + list.length) % list.length]);
+  }, [workspaces, workspace, pickWorkspace]);
 
   // Taskbar behavior — focus what's open, launch what isn't — lives in the
   // service so the dock, the workspace cards and the panels can't drift apart.
@@ -186,8 +365,15 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
   // pill's width (+ the `.dockbar` side padding, which also leaves room for
   // edge icons to magnify) whenever it changes; the backend refits the
   // window in place. A no-op on other platforms.
+  //
+  // While the pointer is on the bar the window only ever grows: shrinking
+  // under the cursor slid the chip it was aiming at out from under it, and
+  // could leave the cursor outside the window, which the backend reads as
+  // "left" and auto-collapses the bar. The real size is reported once the
+  // pointer leaves (onMouseLeave below).
   const shelfRef = useRef(null);
   const reportBarWidthRef = useRef(null);
+  const pointerInsideRef = useRef(false);
   useEffect(() => {
     const shelf = shelfRef.current;
     if (!shelf || typeof ResizeObserver === 'undefined') return;
@@ -203,6 +389,7 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
       const hidden = row ? Math.max(0, row.scrollWidth - row.clientWidth) : 0;
       const width = shelf.offsetWidth + hidden + 36;
       if (width === last) return;
+      if (pointerInsideRef.current && width < last) return;
       last = width;
       invokeDock('dock_set_bar_content_width', { width });
     };
@@ -217,7 +404,7 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
   useEffect(() => {
     const id = requestAnimationFrame(() => reportBarWidthRef.current?.());
     return () => cancelAnimationFrame(id);
-  }, [urls, apps]);
+  }, [urls, apps, mode, liveApps, liveTabs, picking]);
 
   // Entrance is driven by state rather than a classList mutation, so it can't
   // get resurrected by an unrelated re-render — e.g. `is-active` flipping as
@@ -229,7 +416,7 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
     setEntering(true);
     const t = setTimeout(() => setEntering(false), 550);
     return () => clearTimeout(t);
-  }, [workspace?.id]);
+  }, [workspace?.id, mode]);
 
   // Launch bounce on click — same reasoning: state-driven so a same-tick
   // is-active change (clicking an app to focus it is exactly that) can't cut
@@ -259,32 +446,12 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
     }
   }, []);
 
-  return (
-    <div className={`dockbar dockbar--${side}`} role="toolbar" aria-label="Workspace dock">
-      {/* Finder drops onto the bar add to the workspace it's showing (WorkspaceFileDrop). */}
-      <div className="dockbar-shelf" ref={shelfRef} data-workspace-id={workspace?.id}>
-        <button
-          className="dockbar-ws-chip"
-          onClick={cycleWorkspace}
-          title={workspaces.length > 1 ? `${workspace?.name || 'CoolDesk'} — click to switch workspace` : workspace?.name || 'CoolDesk'}
-        >
-          <img src={logo} alt="" className="dockbar-ws-logo" />
-          <span className={`dockbar-ws-name${hoverLabel ? ' is-hover-label' : ''}`}>{hoverLabel || workspace?.name || 'CoolDesk'}</span>
-        </button>
-
-        {(urls.length > 0 || apps.length > 0) && <span className="dockbar-sep" />}
-
-        <div
-          className="dockbar-items"
-          ref={itemsRef}
-          onMouseLeave={handleDockMouseLeave}
-        >
-          {/* Every launcher is the same labeled chip — art tile, name, and a
-              second line (link: its domain; app: running / editor / app;
-              folder: live dev-server port, else git branch; file: its parent
-              folder). Icons alone were only identifiable by hovering and
-              reading the workspace chip at the far left. */}
-          {urls.map((item, idx) => {
+  // Item renderers. The row is one list ordered by activity
+  // (itemRankingService), not grouped by type, so each kind renders through
+  // its own function and the list just dispatches. `idx` is the item's
+  // position in its source list (stable key); `order` is its ranked slot
+  // (entrance stagger).
+  const renderUrl = (item, idx, order) => {
             const sources = faviconSources(item.url);
             const avatar = letterAvatar(item.url);
             const isOpen = !!resolved.get(item);
@@ -295,7 +462,7 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
               <button
                 key={key}
                 className={`dockbar-place${entering ? ' is-entering' : ''}${bouncingKey === key ? ' is-bouncing' : ''}${isOpen ? ' is-active' : ''}`}
-                style={{ animationDelay: `${idx * 16}ms` }}
+                style={{ animationDelay: `${order * 16}ms` }}
                 onClick={() => { bounce(key); open(item); }}
                 onMouseEnter={() => setHoverLabel(item.title || item.url)}
                 title={item.url}
@@ -320,11 +487,9 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
                 </span>
               </button>
             );
-          })}
+  };
 
-          {apps.some((a) => !isPlace(a)) && urls.length > 0 && <span className="dockbar-sep dockbar-sep--inner" />}
-          {apps.map((app, idx) => {
-            if (isPlace(app)) return null;
+  const renderApp = (app, idx, order) => {
             const isRunning = !!resolved.get(app);
             const key = `app-${idx}`;
             const label = app.name || app.path;
@@ -332,7 +497,7 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
               <button
                 key={key}
                 className={`dockbar-place${entering ? ' is-entering' : ''}${bouncingKey === key ? ' is-bouncing' : ''}${isRunning ? ' is-active' : ''}`}
-                style={{ animationDelay: `${(urls.length + idx) * 16}ms` }}
+                style={{ animationDelay: `${order * 16}ms` }}
                 onClick={() => { bounce(key); open(app); }}
                 onMouseEnter={() => setHoverLabel(label)}
                 title={app.path || label}
@@ -353,13 +518,9 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
                 </span>
               </button>
             );
-          })}
+  };
 
-          {apps.some(isPlace) && (urls.length > 0 || apps.some((a) => !isPlace(a))) && (
-            <span className="dockbar-sep dockbar-sep--inner" />
-          )}
-          {apps.map((app, idx) => {
-            if (!isPlace(app)) return null;
+  const renderPlace = (app, idx, order) => {
             const isFile = app.appType === 'file';
             const isOpen = !!resolved.get(app);
             const { name, parent } = placeLabel(app);
@@ -373,7 +534,7 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
               <button
                 key={key}
                 className={`dockbar-place${entering ? ' is-entering' : ''}${bouncingKey === key ? ' is-bouncing' : ''}${isOpen ? ' is-active' : ''}${port ? ' is-live' : ''}`}
-                style={{ animationDelay: `${(urls.length + idx) * 16}ms` }}
+                style={{ animationDelay: `${order * 16}ms` }}
                 onClick={() => { bounce(key); open(app); }}
                 onMouseEnter={() => setHoverLabel(app.path || name)}
                 title={app.path || name}
@@ -423,8 +584,148 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
                 </span>
               </button>
             );
-          })}
-          {urls.length === 0 && apps.length === 0 && (
+  };
+
+  const renderLiveApp = (app, idx, order) => {
+                const key = `live-app-${app.pid || idx}`;
+                const label = app.name || app.title || app.path;
+                return (
+                  <button
+                    key={key}
+                    className={`dockbar-place${entering ? ' is-entering' : ''}${bouncingKey === key ? ' is-bouncing' : ''}`}
+                    style={{ animationDelay: `${order * 16}ms` }}
+                    onClick={() => { bounce(key); focusLiveApp(app); }}
+                    onMouseEnter={() => setHoverLabel(app.title && app.title !== label ? `${label} — ${app.title}` : label)}
+                    title={app.path || label}
+                    aria-label={`${label} — running (click to focus)`}
+                  >
+                    <span className="dockbar-place-tile">
+                      {app.icon ? <img src={app.icon} alt="" /> : <FontAwesomeIcon icon={appFallbackIcon(app)} />}
+                    </span>
+                    <span className="dockbar-place-text">
+                      <span className="dockbar-place-name">{label}</span>
+                      <span className="dockbar-place-parent is-running">Running</span>
+                    </span>
+                  </button>
+                );
+  };
+
+  const renderLiveTab = (tab, idx, order) => {
+                const sources = tab.favIconUrl && /^https?:/.test(tab.favIconUrl)
+                  ? [tab.favIconUrl, ...faviconSources(tab.url)]
+                  : faviconSources(tab.url);
+                const avatar = letterAvatar(tab.url);
+                const host = hostOf(tab.url);
+                const title = tab.title && tab.title !== tab.url ? tab.title : host;
+                const key = `live-tab-${tab.browser || ''}-${tab.id ?? idx}`;
+                return (
+                  <button
+                    key={key}
+                    className={`dockbar-place${entering ? ' is-entering' : ''}${bouncingKey === key ? ' is-bouncing' : ''}`}
+                    style={{ animationDelay: `${order * 16}ms` }}
+                    onClick={() => { bounce(key); focusLiveTab(tab); }}
+                    onMouseEnter={() => setHoverLabel(title)}
+                    title={tab.url}
+                    aria-label={`${title} — open in browser`}
+                  >
+                    <span className="dockbar-place-tile">
+                      {sources.length > 0 ? (
+                        <img src={sources[0]} alt="" data-fallback={sources.slice(1).join('|')} onError={handleFaviconError} />
+                      ) : null}
+                      <span className="dockbar-letter" style={{ display: sources.length > 0 ? 'none' : 'flex', background: avatar.color }}>
+                        {avatar.letter}
+                      </span>
+                    </span>
+                    <span className="dockbar-place-text">
+                      <span className="dockbar-place-name">{title}</span>
+                      {title !== host && <span className="dockbar-place-parent">{host}</span>}
+                    </span>
+                  </button>
+                );
+  };
+
+  return (
+    <div
+      className={`dockbar dockbar--${side}`}
+      role="toolbar"
+      aria-label="Workspace dock"
+      onMouseEnter={() => { pointerInsideRef.current = true; }}
+      onMouseLeave={() => {
+        pointerInsideRef.current = false;
+        setPicking(false);
+        requestAnimationFrame(() => reportBarWidthRef.current?.());
+      }}
+    >
+      {/* Finder drops onto the bar add to the workspace it's showing (WorkspaceFileDrop). */}
+      <div className="dockbar-shelf" ref={shelfRef} data-workspace-id={workspace?.id}>
+        {/* Logo switches the view (Active ⇄ workspace); the name opens the
+            inline workspace picker, and scrolling over it steps through. */}
+        <div className={`dockbar-ws-chip${isActiveMode ? ' is-active-mode' : ''}`} onWheel={onChipWheel}>
+          <button
+            className="dockbar-ws-logo-btn"
+            onClick={toggleMode}
+            title={isActiveMode ? 'Show workspace' : 'Show everything open'}
+            aria-label={isActiveMode ? 'Switch to workspace view' : 'Switch to active view'}
+          >
+            <img src={logo} alt="" className="dockbar-ws-logo" />
+          </button>
+          <button
+            className={`dockbar-ws-name${hoverLabel ? ' is-hover-label' : ''}`}
+            onClick={() => (workspaces.length > 1 ? setPicking((p) => !p) : pickWorkspace(workspace))}
+            title={workspaces.length > 1 ? 'Switch workspace (or scroll here)' : workspace?.name || 'CoolDesk'}
+            aria-expanded={picking}
+          >
+            {picking ? 'Pick a workspace' : hoverLabel || (isActiveMode ? 'Active' : workspace?.name || 'CoolDesk')}
+          </button>
+        </div>
+
+        {picking ? (
+          <span className="dockbar-sep" />
+        ) : isActiveMode ? (
+          (liveApps.length > 0 || liveTabs.length > 0) && <span className="dockbar-sep" />
+        ) : (
+          (urls.length > 0 || apps.length > 0) && <span className="dockbar-sep" />
+        )}
+
+        <div
+          className="dockbar-items"
+          ref={itemsRef}
+          onMouseLeave={handleDockMouseLeave}
+        >
+          {/* Every launcher is the same labeled chip — art tile, name, and a
+              second line (link: its domain; app: running / editor / app;
+              folder: live dev-server port, else git branch; file: its parent
+              folder). Icons alone were only identifiable by hovering and
+              reading the workspace chip at the far left. */}
+          {picking && rankedWorkspaces.map((ws, idx) => (
+            <WorkspaceOption
+              key={ws.id}
+              ws={ws}
+              idx={idx}
+              isCurrent={ws.id === workspace?.id && !isActiveMode}
+              onPick={pickWorkspace}
+            />
+          ))}
+
+          {/* No open-indicator on these: everything in this view is open by
+              definition, so a mark on every chip would just be noise. */}
+          {isActiveMode && !picking && (
+            <>
+              {rankedLiveItems.map(({ item, kind, idx }, order) => (
+                kind === 'tab' ? renderLiveTab(item, idx, order) : renderLiveApp(item, idx, order)
+              ))}
+              {liveApps.length === 0 && liveTabs.length === 0 && (
+                <span className="dockbar-empty">Nothing open right now</span>
+              )}
+            </>
+          )}
+
+          {!isActiveMode && !picking && rankedWorkspaceItems.map(({ item, kind, idx }, order) => (
+            kind === 'url' ? renderUrl(item, idx, order)
+              : kind === 'place' ? renderPlace(item, idx, order)
+                : renderApp(item, idx, order)
+          ))}
+          {!isActiveMode && !picking && urls.length === 0 && apps.length === 0 && (
             <span className="dockbar-empty">This workspace has no links or apps yet</span>
           )}
         </div>
@@ -435,7 +736,7 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
           {/* The bar is one row tall with no room for an editor, so editing —
               renaming, adding links/apps/folders, todos, notes — happens in the
               spotlight window's /edit-workspace mode for this workspace. */}
-          {workspace && (
+          {workspace && !isActiveMode && (
             <button
               className="dockbar-ctrl"
               onClick={() => openSpotlightEdit(workspace)}

@@ -103,10 +103,18 @@ function useWallpaperBacking() {
         if (wall?.url) sampleWallpaper(wall.url).then(c => { if (alive) setColor(c); });
         return () => { alive = false; };
     }, [wall?.url]);
+    // The column glass picks up the wallpaper's hue (--glass-fill in
+    // cooldesk.css). Set on body because --glass-fill is defined on
+    // .popup-wrap and resolves the var there.
+    useEffect(() => {
+        const b = document.body.style;
+        if (color?.tint) b.setProperty('--wall-tint', color.tint);
+        else b.removeProperty('--wall-tint');
+    }, [color?.tint]);
     if (!wall) return null;
     // Unreadable (cross-origin custom URL): assume a fairly bright photo so the
     // text still gets help that scales with the darkness slider.
-    return { color: color || '#b8bcc4', opacity: wall.opacity };
+    return { color: color?.bright || '#b8bcc4', opacity: wall.opacity };
 }
 
 function colorlessStyle(opacity, wall) {
