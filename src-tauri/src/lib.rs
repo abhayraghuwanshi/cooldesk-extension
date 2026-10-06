@@ -20,6 +20,7 @@ mod folder_identity;
 mod ai_cli;
 mod folder_index;
 mod preview;
+mod dir_watch;
 
 use system::RunningApp;
 
@@ -3278,6 +3279,8 @@ pub fn run() {
         get_frequent_folders,
         search_files,
         list_dir,
+        dir_watch::watch_dir,
+        dir_watch::unwatch_dir,
         path_kinds,
         get_user_places,
         get_focused_app,

@@ -383,6 +383,43 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline 
     return () => { cancelled = true; };
   }, [isOpen, path]);
 
+  // Live updates (Tauri): watch the folder on screen, and re-list it when its
+  // contents change — a finished download or a file saved from another app
+  // appears without a manual refresh. The Rust side (dir_watch.rs) waits
+  // for changes to settle, so a download's temp-file-then-rename is one update.
+  useEffect(() => {
+    if (!isOpen || !path || !IS_TAURI) return;
+    let stopped = false;
+    let watching = false;
+    let unlisten = null;
+    (async () => {
+      const [{ invoke }, { listen }] = await Promise.all([
+        import('@tauri-apps/api/core'),
+        import('@tauri-apps/api/event'),
+      ]);
+      const off = await listen('dir-changed', (e) => {
+        if (e.payload?.path !== path) return;
+        dirCache.delete(path);
+        listDir(path)
+          .then(items => { if (!stopped) setEntries(items); })
+          .catch(() => { });
+      });
+      if (stopped) { off(); return; }
+      unlisten = off;
+      watching = true;
+      invoke('watch_dir', { path }).catch(err => console.debug('[FileManager] watch failed:', err));
+    })();
+    return () => {
+      stopped = true;
+      unlisten?.();
+      if (watching) {
+        import('@tauri-apps/api/core')
+          .then(({ invoke }) => invoke('unwatch_dir', { path }))
+          .catch(() => { });
+      }
+    };
+  }, [isOpen, path]);
+
   // Resolve the `.cooldesk/` project that owns the folder being viewed, so its
   // commands travel with you as you browse into subfolders.
   useEffect(() => {

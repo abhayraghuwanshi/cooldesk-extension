@@ -50,6 +50,8 @@ tokio-util = { version = "0.7", features = ["compat"] }
 async-stream = "0.3"
 tracing = "0.1"
 lazy_static = "1.5.0"
+# Live folder updates in the file manager (dir_watch.rs).
+notify = "8"
 image = { version = "0.25", default-features = false, features = ["png"] }
 base64 = "0.22"
 encoding_rs = "0.8.35"
