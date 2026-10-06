@@ -57,3 +57,20 @@ sidecar/models/
 
 # CoolDesk space data for this repo (kept locally, not published)
 /.cooldesk/
+
+# Internal docs and brand files: kept locally, not published
+/docs/brand/
+/docs/SECURITY_REVIEW.md
+/docs/PROJECT_INTERVIEW_BANK.md
+/docs/analytics-plan.md
+/docs/chrome-store-listing.md
+/docs/demo-script.md
+/docs/KNOWLEDGE_GRAPH.md
+/docs/SEARCH_ALGORITHM_IMPROVEMENTS.md
+/docs/CROSS_PLATFORM_FOCUS.md
+/docs/debug-service-worker.md
+/docs/REACT_WEB_DEV_GUIDE.md
+/docs/RUST_WEB_DEV_GUIDE.md
+/docs/DEPLOY.md
+/docs/release-notes-v*.md
+/docs/screenshots/*.png
