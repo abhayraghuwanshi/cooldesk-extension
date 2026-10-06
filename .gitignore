@@ -50,3 +50,7 @@ sync-data/
 sidecar/models/
 # Claude Code worktrees (local scratch checkouts, never committed)
 .claude/worktrees/
+
+# Loose screenshots dropped in the repo root (keep the one real logo)
+/*.png
+!/logo-2.png
