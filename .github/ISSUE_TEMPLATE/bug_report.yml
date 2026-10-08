@@ -1,0 +1,29 @@
+name: Bug report
+description: Something isn't working
+labels: [bug]
+body:
+  - type: dropdown
+    id: app
+    attributes:
+      label: Where
+      options:
+        - Chrome extension
+        - Desktop app (macOS)
+        - Desktop app (Windows)
+        - Desktop app (Linux)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: e.g. 2.0.15
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Steps to reproduce, what you expected, what you got. Screenshots help.
+    validations:
+      required: true
