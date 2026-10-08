@@ -344,10 +344,16 @@
   background: transparent;
 }
 
-/* Firefox scrollbar */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+/* Firefox scrollbar. Only where ::-webkit-scrollbar is unsupported: since
+   Chrome 121, setting the standard scrollbar-width/scrollbar-color on an
+   element makes Chrome ignore its ::-webkit-scrollbar rules entirely, so this
+   blanket `*` rule was replacing the 6px bars above with Chrome's much wider
+   native "thin" scrollbar everywhere. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  }
 }
 
 /* Modal Overlay */

@@ -56,12 +56,17 @@ body {
   overflow: hidden;
 }
 
-/* Host-owned surface (?embed=host). RETAINED ONLY FOR OLD CLIENTS — do not send
-   this from anything new. It relies on the iframe canvas being transparent so a
-   host tile can show through; that holds in plain Chrome (verified, same- and
-   cross-origin) but NOT in the CoolDesk app, where the canvas renders opaque
-   white and the widget becomes white-on-white. Colour the card with ?tint=
-   instead, which works no matter what the canvas does. */
+/* Host-owned surface (?embed=host). Sent by the browser extension's board
+   only (WidgetBoard.jsx clearTiles): it relies on the iframe canvas being
+   transparent so the host tile shows through, which holds in plain Chrome but
+   NOT in the CoolDesk app, where the canvas renders opaque white and the widget
+   becomes white-on-white. The color-scheme must match the host page's
+   (`light dark`, src/shared/styles/base.css) — Chrome gives an iframe whose
+   scheme differs from its embedder an opaque backdrop. */
+html[data-embed="host"] {
+  color-scheme: light dark;
+}
+
 html[data-embed="host"] body {
   background: transparent;
 }
@@ -118,6 +123,22 @@ button, .btn {
 }
 button:hover, .btn:hover { border-color: var(--accent); }
 button.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+
+/* See-through tiles (?embed=host): a solid white primary is the one opaque
+   slab left on a glass card, so it turns glass too — a brighter frosted pane
+   with a lit top edge, still clearly the main action. No backdrop-filter: an
+   iframe can't blur the host's wallpaper (see body above). */
+html[data-embed="host"] button.primary {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.12));
+  color: var(--fg);
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 4px 14px -6px rgba(0, 0, 0, 0.45);
+  font-weight: 600;
+}
+html[data-embed="host"] button.primary:hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.18));
+  border-color: rgba(255, 255, 255, 0.4);
+}
 button.ghost { border-color: transparent; color: var(--muted); }
 button.ghost:hover { color: var(--fg); }
 

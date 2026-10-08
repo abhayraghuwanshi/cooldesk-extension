@@ -214,20 +214,25 @@ function ColumnColorChip({ color, onChange, opacity, onOpacityChange }) {
 // here just staged the mount (board after activity, feed after both) and
 // produced ~0.7 CLS as each arrival re-laid the grid. The bundle loads from
 // disk, so splitting it saved no network.
-const OverviewDashboard = memo(function OverviewDashboard() {
+// Everything visible unless the host says otherwise (only the extension's
+// LayoutPicker hides parts; the desktop app always shows the full page).
+const SHOW_ALL = { widgets: true, summary: true, feed: true, favorites: true, hiddenFeedTabs: [] };
+
+const OverviewDashboard = memo(function OverviewDashboard({ layout = 'classic', visible = SHOW_ALL }) {
     const [leftColor, setLeftColor] = useColumnAccent(LEFT_COLOR_KEY);
     const [activityColor, setActivityColor] = useColumnAccent(ACTIVITY_COLOR_KEY);
     const [leftOpacity, setLeftOpacity] = useColumnOpacity(LEFT_OPACITY_KEY);
     const [activityOpacity, setActivityOpacity] = useColumnOpacity(ACTIVITY_OPACITY_KEY);
     const wall = useWallpaperBacking();
+    const showLeft = visible.widgets || visible.summary;
 
     return (
         // .overview-scope establishes the container-query context; the grid
         // inside responds to this width, not the viewport.
         <div className="overview-scope">
-            <div className="overview-dashboard-grid">
+            <div className="overview-dashboard-grid" data-layout={layout}>
                 {/* Left: widget board + shared activity overview */}
-                <div
+                {showLeft && <div
                     className={`overview-left-column ${leftColor === TRANSPARENT_ACCENT ? 'is-colorless' : leftColor ? 'has-accent' : ''}`}
                     style={
                         leftColor === TRANSPARENT_ACCENT ? colorlessStyle(leftOpacity, wall)
@@ -241,12 +246,12 @@ const OverviewDashboard = memo(function OverviewDashboard() {
                         opacity={leftOpacity}
                         onOpacityChange={setLeftOpacity}
                     />
-                    <WidgetBoard />
-                    <ActivityOverview embedded hideWhenEmpty />
-                </div>
+                    {visible.widgets && <WidgetBoard />}
+                    {visible.summary && <ActivityOverview embedded hideWhenEmpty />}
+                </div>}
 
                 {/* Right: Activity Feed */}
-                <div
+                {visible.feed && <div
                     className={`overview-activity-column ${activityColor === TRANSPARENT_ACCENT ? 'is-colorless' : activityColor ? 'has-accent' : ''}`}
                     style={
                         activityColor === TRANSPARENT_ACCENT ? colorlessStyle(activityOpacity, wall)
@@ -260,8 +265,8 @@ const OverviewDashboard = memo(function OverviewDashboard() {
                         opacity={activityOpacity}
                         onOpacityChange={setActivityOpacity}
                     />
-                    <ActivityFeed />
-                </div>
+                    <ActivityFeed showFavorites={visible.favorites !== false} hiddenTabs={visible.hiddenFeedTabs} />
+                </div>}
             </div>
         </div>
     );

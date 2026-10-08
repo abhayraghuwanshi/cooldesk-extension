@@ -11,7 +11,7 @@
 
 export const WIDGET_STORE_ORIGIN = 'https://cool-desk.com';
 export const WIDGET_STORE_URL = `${WIDGET_STORE_ORIGIN}/widgets`;
-const WIDGET_VERSION = '5';
+const WIDGET_VERSION = '7';
 
 export const WIDGET_CATEGORIES = ['CoolDesk', 'Time & Focus', 'Productivity', 'Data & Life', 'Dev Tools'];
 
@@ -86,10 +86,14 @@ function widgetBase() {
     catch { return new URL('../widgets/', location.href); }
 }
 
-export function widgetEmbedUrl(id, theme, tint) {
+// `clear`: the widget drops its own card (?embed=host) so the host tile — and
+// the wallpaper behind it — shows through. Only safe where the iframe canvas
+// is transparent: plain Chrome yes, the Tauri WebView no (see base.css).
+export function widgetEmbedUrl(id, theme, tint, { clear = false } = {}) {
     const t = typeof tint === 'string' ? tint.replace(/^#/, '') : '';
     const tintParam = /^(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(t) ? `&tint=${t}` : '';
-    const query = `?theme=${theme === 'light' ? 'light' : 'dark'}${tintParam}&v=${WIDGET_VERSION}`;
+    const embedParam = clear ? '&embed=host' : '';
+    const query = `?theme=${theme === 'light' ? 'light' : 'dark'}${tintParam}${embedParam}&v=${WIDGET_VERSION}`;
     return new URL(`${id}.html${query}`, widgetBase()).href;
 }
 

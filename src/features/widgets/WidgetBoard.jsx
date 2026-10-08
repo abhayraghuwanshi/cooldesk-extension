@@ -59,6 +59,13 @@ function CustomWidgetFrame({ widget, theme, className, style }) {
     );
 }
 
+// Board tiles go see-through (widget paints no card, the tile does) in the
+// browser extension. The Tauri WebView renders iframe canvases opaque white,
+// so the desktop app keeps the widgets' own opaque card. Light theme keeps it
+// too: dark-on-light widget text has nothing to sit on over the dark column.
+const IS_TAURI = typeof window !== 'undefined' && !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+const clearTiles = (theme) => !IS_TAURI && theme !== 'light';
+
 const STORAGE_KEY_V1 = 'cooldesk-widget-board';   // single-board era
 const STORAGE_KEY = 'cooldesk-widget-layouts';    // { active, layouts: { name: tiles[] } }
 
@@ -197,7 +204,7 @@ const WidgetTile = memo(function WidgetTile({ tile, widget, theme, dragging, onR
 
     return (
         <div
-            className={`wgb-tile ${dragging ? 'wgb-tile-dragging' : ''} ${tile.color ? 'has-accent' : ''}`}
+            className={`wgb-tile ${clearTiles(theme) && !widget.custom ? 'wgb-tile-clear' : ''} ${dragging ? 'wgb-tile-dragging' : ''} ${tile.color ? 'has-accent' : ''}`}
             style={{
                 gridColumn: `span ${cols}`,
                 gridRow: `span ${rows}`,
@@ -216,7 +223,7 @@ const WidgetTile = memo(function WidgetTile({ tile, widget, theme, dragging, onR
             ) : (
                 <iframe
                     className="wgb-frame"
-                    src={widgetEmbedUrl(widget.id, theme, tile.color)}
+                    src={widgetEmbedUrl(widget.id, theme, tile.color, { clear: clearTiles(theme) })}
                     title={widget.name}
                     onLoad={bridgeOnLoad}
                 />

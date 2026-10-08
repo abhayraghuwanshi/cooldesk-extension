@@ -636,11 +636,22 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 
 .activity-feed-scroll::-webkit-scrollbar-track {
   background: transparent;
+  /* Inset from the card's rounded corners; also shortens the thumb a bit,
+     since its length is a share of the track. */
+  margin-block: 14px;
 }
 
+/* Thumb shows only while the card is hovered (macOS-style) — its length is
+   set by the content ratio and can't be capped in CSS, so a long thumb is
+   kept out of sight the rest of the time. */
 .activity-feed-scroll::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.2);
+  background: transparent;
   border-radius: 4px;
+}
+
+.overview-activity-column:hover .activity-feed-scroll::-webkit-scrollbar-thumb,
+.activity-feed-scroll:hover::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
 }
 
 .activity-feed-scroll::-webkit-scrollbar-thumb:hover {
@@ -3802,10 +3813,16 @@ body.bg-white-cred .wgb-tile.has-accent {
     linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 40%),
     color-mix(in oklab, var(--wall-tint, rgb(30 30 32)) 30%, rgb(30 30 32 / 0.5));
   --glass-blur: blur(40px) saturate(190%);
-  --glass-edge: 1px solid rgba(255, 255, 255, 0.1);
+  /* One even hairline on all four sides. The edge used to be a faint 0.1
+     border plus inset top-highlight / bottom-shade lines, which made the top
+     and bottom crisp while the left and right sides washed out into the
+     wallpaper. The lit-from-above cue now lives only in --glass-fill's
+     gradient, so the outline itself stays uniform. Like a macOS window:
+     a faint light inner edge (0.14 read as a whitish outline) plus a thin
+     dark outer ring that defines the shape against bright wallpaper. */
+  --glass-edge: 1px solid rgba(255, 255, 255, 0.07);
   --glass-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(0, 0, 0, 0.28),
     0 20px 44px -18px rgba(0, 0, 0, 0.55),
     0 4px 12px rgba(0, 0, 0, 0.22);
   padding-top: 0;
@@ -4003,8 +4020,8 @@ body.bg-white-cred .wgb-tile.has-accent {
   box-shadow: var(--glass-shadow, none);
   border-radius: 16px;
   padding: 16px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.2) transparent;
+  /* No scrollbar-width/-color here: in Chrome they'd override the 6px
+     ::-webkit-scrollbar rules below with the wider native bar. */
 }
 
 .overview-left-column::-webkit-scrollbar {
@@ -4013,11 +4030,16 @@ body.bg-white-cred .wgb-tile.has-accent {
 
 .overview-left-column::-webkit-scrollbar-track {
   background: transparent;
+  margin-block: 14px; /* see .activity-feed-scroll's track */
 }
 
 .overview-left-column::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.2);
+  background: transparent;
   border-radius: 3px;
+}
+
+.overview-left-column:hover::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
 }
 
 .overview-left-column::-webkit-scrollbar-thumb:hover {
@@ -4066,6 +4088,11 @@ body.bg-white-cred .wgb-tile.has-accent {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   border: none !important;
+  /* wallpaper-enhancements.css also gives every panel an inset top line, a
+     drop shadow and a 12px radius — inside the 16px column that drew a second,
+     tighter rounded outline just inside the card's own edge. */
+  box-shadow: none !important;
+  border-radius: 0;
   min-height: 0;
 }
 
@@ -4244,6 +4271,286 @@ body.bg-white-cred .wgb-tile.has-accent {
   }
 }
 
+
+/* ── Overview layouts ──
+   Same two columns everywhere; data-layout on the grid (LayoutPicker.jsx +
+   extension new tab) only rearranges them. "classic" is the default rules
+   above. Scoped to >600px so the phone-width stack always wins. */
+.overview-morphing .overview-left-column { view-transition-name: overview-widgets; }
+.overview-morphing .overview-activity-column { view-transition-name: overview-feed; }
+
+@media (min-width: 601px) {
+  /* Every column has a fixed cell, so hiding one from the picker's "Show"
+     toggles leaves the other exactly where it was (same width, same side)
+     with the hidden one's space left empty — no reflow into a full-width or
+     centered column. */
+  .overview-dashboard-grid .overview-left-column { grid-column: 1; grid-row: 1; }
+  .overview-dashboard-grid .overview-activity-column { grid-column: 2; grid-row: 1; }
+
+  /* Mirror: feed takes the left, widget rail moves right. */
+  .overview-dashboard-grid[data-layout="mirror"] {
+    grid-template-columns: 1.28fr minmax(260px, 0.72fr);
+  }
+  .overview-dashboard-grid[data-layout="mirror"] .overview-left-column { grid-column: 2; }
+  .overview-dashboard-grid[data-layout="mirror"] .overview-activity-column { grid-column: 1; }
+
+  /* Split: two equal halves. */
+  .overview-dashboard-grid[data-layout="split"] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  /* Stacked: widgets become a capped band across the top, feed fills the
+     rest of the frame. Both still scroll on their own. */
+  .overview-dashboard-grid[data-layout="stacked"] {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .overview-dashboard-grid[data-layout="stacked"] .overview-left-column,
+  .overview-dashboard-grid[data-layout="focus"] .overview-left-column { grid-column: 1; grid-row: 1; }
+  .overview-dashboard-grid[data-layout="stacked"] .overview-activity-column,
+  .overview-dashboard-grid[data-layout="focus"] .overview-activity-column { grid-column: 1; grid-row: 2; }
+  .overview-dashboard-grid[data-layout="stacked"] .overview-left-column {
+    height: auto;
+    max-height: 42vh;
+  }
+  .overview-dashboard-grid[data-layout="stacked"] .overview-activity-column {
+    height: 100%;
+  }
+  /* The band is the full frame width, so the board's two-up grid would
+     blow each tile up to ~half the screen. Fit more per row instead: small
+     tiles take one cell, medium/large two (tileSpans in WidgetBoard.jsx),
+     and dense flow back-fills the gaps. */
+  .overview-dashboard-grid[data-layout="stacked"] .wgb-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* Focus: one centered column, widgets then feed, page scroll — the same
+     flow as the phone-width stack, just centered. Width tracks the window
+     (a fixed 780px read as a thin strip on wide monitors): ~60% of the
+     viewport, never under 680px or over 1100px. */
+  .overview-dashboard-grid[data-layout="focus"] {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: clamp(680px, 60vw, 1100px);
+    height: auto;
+    overflow: visible;
+    margin-bottom: var(--frame-bottom, 16px);
+  }
+  .overview-dashboard-grid[data-layout="focus"] .overview-left-column,
+  .overview-dashboard-grid[data-layout="focus"] .overview-activity-column {
+    height: auto;
+    overflow: visible;
+  }
+  .overview-dashboard-grid[data-layout="focus"] .activity-feed-panel {
+    height: auto;
+    overflow: visible;
+  }
+  .overview-dashboard-grid[data-layout="focus"] .activity-feed-list {
+    overflow-y: visible;
+  }
+}
+
+@media (min-width: 1400px) {
+  .overview-dashboard-grid[data-layout="stacked"] .wgb-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Layout picker (corner action next to settings). */
+.overview-layout-picker {
+  position: relative;
+}
+
+.cooldesk-settings-btn.active {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #E5E7EB;
+}
+
+.cooldesk-settings-btn svg[viewBox="0 0 40 28"] {
+  width: 22px;
+  height: 16px;
+}
+
+.overview-layout-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  padding: 8px;
+  border-radius: 12px;
+  background: rgba(18, 18, 22, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.6);
+  animation: overview-layout-pop 0.14s ease-out;
+}
+
+@keyframes overview-layout-pop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+.overview-layout-menu {
+  min-width: 250px;
+}
+
+.overview-layout-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.overview-layout-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px 8px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  color: rgba(226, 232, 240, 0.65);
+  font-size: var(--font-xs, 11px);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.overview-layout-option svg {
+  width: 56px;
+  height: 39px;
+}
+
+.overview-layout-option:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.overview-layout-option.active {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.overview-layout-toggles {
+  display: flex;
+  flex-direction: column;
+}
+
+.overview-layout-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  font-size: var(--font-sm, 12px);
+  color: rgba(226, 232, 240, 0.85);
+  cursor: pointer;
+}
+
+.overview-layout-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.overview-layout-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.overview-layout-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 28px;
+  height: 16px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.15);
+  transition: background 0.15s;
+}
+
+.overview-layout-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+
+.overview-layout-toggle input:checked + .overview-layout-switch {
+  background: rgba(96, 165, 250, 0.85);
+}
+
+.overview-layout-toggle input:checked + .overview-layout-switch::after {
+  transform: translateX(12px);
+}
+
+.overview-layout-toggle input:focus-visible + .overview-layout-switch {
+  outline: 2px solid rgba(147, 197, 253, 0.8);
+  outline-offset: 2px;
+}
+
+.overview-layout-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 4px 6px 2px;
+}
+
+.overview-layout-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: rgba(226, 232, 240, 0.45);
+  font-size: var(--font-xs, 11px);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: line-through;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.overview-layout-pill:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+
+.overview-layout-pill.active {
+  background: rgba(96, 165, 250, 0.18);
+  border-color: rgba(96, 165, 250, 0.45);
+  color: #e0ecff;
+  text-decoration: none;
+}
+
+.overview-layout-pill:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.overview-layout-zen {
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  background: transparent;
+  color: rgba(226, 232, 240, 0.7);
+  font-size: var(--font-xs, 11px);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.overview-layout-zen:hover,
+.overview-layout-zen.active {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
 
 /* Corner control bar for sidebar widths — hidden while the full header shows.
    Holds the update badge and the layout switch (see CoolDeskContainer). */
@@ -7779,14 +8086,14 @@ body.bg-white-cred .wcp-section-head[data-accent="color"] { color: var(--card-ac
 }
 
 /* ── Activity feed: tab switcher ───────────────────────────────────────────
-   Neutral segmented control — same white-on-glass language as the rest of
-   the overview (widget chips, tiles), not a lone blue accent. Transparent at
+   Plain tabs, not chips: text on the card with a thin underline marking the
+   active one, over a hairline that runs under the whole row. Transparent at
    rest; a light blur only once content scrolls beneath it (.is-stuck). */
 .activity-feed-sticky-tabs {
   position: sticky;
   top: 0;
   z-index: 10;
-  padding: 4px 16px 10px;
+  padding: 0 16px;
   transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -7794,17 +8101,13 @@ body.bg-white-cred .wcp-section-head[data-accent="color"] { color: var(--card-ac
   background: rgba(10, 10, 12, 0.45);
   backdrop-filter: blur(16px) saturate(140%);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .feed-tabs {
-  display: inline-flex;
+  display: flex;
   max-width: 100%;
-  gap: 2px;
-  padding: 3px;
-  border-radius: 11px;
-  background: rgba(255, 255, 255, 0.04);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  gap: 18px;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08);
   /* Eight tabs don't fit a narrow column — scroll sideways, no scrollbar. */
   overflow-x: auto;
   scrollbar-width: none;
@@ -7817,36 +8120,110 @@ body.bg-white-cred .wcp-section-head[data-accent="color"] { color: var(--card-ac
 .feed-tab {
   appearance: none;
   -webkit-appearance: none;
+  position: relative;
   flex-shrink: 0;
   border: 0;
-  border-radius: 8px;
-  padding: 7px 12px;
+  padding: 10px 0 11px;
   background: transparent;
-  color: rgba(226, 232, 240, 0.6);
+  color: rgba(226, 232, 240, 0.55);
   font: inherit;
   font-size: 12px;
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  transition: color 0.15s ease;
+}
+
+/* Active marker: a 2px bar sitting on the row's hairline. */
+.feed-tab::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: currentColor;
+  transform: scaleX(0);
+  transition: transform 0.18s ease;
 }
 
 .feed-tab:hover {
-  color: rgba(241, 245, 249, 0.92);
-  background: rgba(255, 255, 255, 0.05);
+  color: rgba(241, 245, 249, 0.9);
 }
 
 .feed-tab.is-active {
   color: #F8FAFC;
   font-weight: 600;
-  background: rgba(255, 255, 255, 0.11);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.feed-tab.is-active::after {
+  transform: scaleX(1);
 }
 
 .feed-tab:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.35);
-  outline-offset: 1px;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Activity feed: row type badge (Tab / Chat / App / Event / Recent /
+   Running / Installed). A soft tinted pill in the UI sans font — the old
+   inline boxes were uppercase, bordered and picked up the page's monospace
+   font, so they read as heavy blocks. Each row sets its hue via --badge. */
+.feed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-family: var(--font-family-base, -apple-system, system-ui, sans-serif);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--badge, #94a3b8) 75%, white);
+  background: color-mix(in srgb, var(--badge, #94a3b8) 16%, transparent);
+}
+
+/* Grouped rows' count chip ("2 tabs", "3 chats", "40s total") — same pill,
+   as a button that expands the group. */
+.feed-badge-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.feed-badge-toggle:hover,
+.feed-badge-toggle.is-expanded {
+  color: color-mix(in srgb, var(--badge, #94a3b8) 55%, white);
+  background: color-mix(in srgb, var(--badge, #94a3b8) 26%, transparent);
+}
+
+.feed-badge-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--badge, #94a3b8) 60%, transparent);
+  outline-offset: 2px;
+}
+
+.feed-badge-chevron {
+  font-size: 8px;
+  opacity: 0.8;
+  transition: transform 0.2s ease;
+}
+
+.feed-badge-toggle.is-expanded .feed-badge-chevron {
+  transform: rotate(180deg);
+}
+
+.feed-badge-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 /* ── Activity feed: Favorites — the same tinted icon box as suite tiles,

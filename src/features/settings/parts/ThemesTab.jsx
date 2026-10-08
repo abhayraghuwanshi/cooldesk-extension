@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { fontFamilies } from '../../../utils/fontUtils';
 import FontFamilyDropdown from './FontFamilyDropdown';
 import FontSizeDropdown from './FontSizeDropdown';
-import { WALLPAPER_CATALOG } from '../../../shared/data/wallpapers';
+import { GRADIENT_WALLPAPERS, WALLPAPER_CATALOG } from '../../../shared/data/wallpapers';
 const ThemesTab = ({
   selectedTheme,
   fontSize,
@@ -222,6 +222,79 @@ const ThemesTab = ({
 
 
   const curatedWallpapers = WALLPAPER_CATALOG;
+
+  // One tile grid, used for both the Gradients and Photos sections.
+  const renderWallpaperGrid = (list) => (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(5, 1fr)',
+      gap: '10px',
+      marginBottom: '8px'
+    }}>
+      {list.map(wallpaper => (
+        <div
+          key={wallpaper.id}
+          onClick={() => onWallpaperUrlChange(wallpaper.url)}
+          style={{
+            position: 'relative',
+            aspectRatio: '16/9',
+            borderRadius: '8px',
+            overflow: 'hidden',
+            cursor: 'pointer',
+            border: wallpaperUrl === wallpaper.url ? '3px solid #34C759' : '2px solid rgba(255, 255, 255, 0.1)',
+            transition: 'all 0.2s ease',
+            backgroundImage: `url(${wallpaper.thumbnail})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center'
+          }}
+          onMouseEnter={(e) => {
+            if (wallpaperUrl !== wallpaper.url) {
+              e.currentTarget.style.borderColor = 'rgba(52, 199, 89, 0.5)';
+              e.currentTarget.style.transform = 'scale(1.05)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (wallpaperUrl !== wallpaper.url) {
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+              e.currentTarget.style.transform = 'scale(1)';
+            }
+          }}
+        >
+          {wallpaperUrl === wallpaper.url && (
+            <div style={{
+              position: 'absolute',
+              top: '4px',
+              right: '4px',
+              background: '#34C759',
+              borderRadius: '50%',
+              width: '20px',
+              height: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 'var(--font-sm)',
+              color: '#fff'
+            }}>
+              ✓
+            </div>
+          )}
+          <div style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
+            padding: '6px 8px',
+            fontSize: 'var(--font-xs)',
+            color: '#fff',
+            fontWeight: '500'
+          }}>
+            {wallpaper.name}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
 
 
@@ -487,75 +560,14 @@ const ThemesTab = ({
               }}>
                 Choose a Wallpaper
               </label>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(5, 1fr)',
-                gap: '10px',
-                marginBottom: '8px'
-              }}>
-                {curatedWallpapers.map(wallpaper => (
-                  <div
-                    key={wallpaper.id}
-                    onClick={() => onWallpaperUrlChange(wallpaper.url)}
-                    style={{
-                      position: 'relative',
-                      aspectRatio: '16/9',
-                      borderRadius: '8px',
-                      overflow: 'hidden',
-                      cursor: 'pointer',
-                      border: wallpaperUrl === wallpaper.url ? '3px solid #34C759' : '2px solid rgba(255, 255, 255, 0.1)',
-                      transition: 'all 0.2s ease',
-                      backgroundImage: `url(${wallpaper.thumbnail})`,
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (wallpaperUrl !== wallpaper.url) {
-                        e.currentTarget.style.borderColor = 'rgba(52, 199, 89, 0.5)';
-                        e.currentTarget.style.transform = 'scale(1.05)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (wallpaperUrl !== wallpaper.url) {
-                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                        e.currentTarget.style.transform = 'scale(1)';
-                      }
-                    }}
-                  >
-                    {wallpaperUrl === wallpaper.url && (
-                      <div style={{
-                        position: 'absolute',
-                        top: '4px',
-                        right: '4px',
-                        background: '#34C759',
-                        borderRadius: '50%',
-                        width: '20px',
-                        height: '20px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 'var(--font-sm)',
-                        color: '#fff'
-                      }}>
-                        ✓
-                      </div>
-                    )}
-                    <div style={{
-                      position: 'absolute',
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
-                      padding: '6px 8px',
-                      fontSize: 'var(--font-xs)',
-                      color: '#fff',
-                      fontWeight: '500'
-                    }}>
-                      {wallpaper.name}
-                    </div>
-                  </div>
-                ))}
+              <div style={{ color: '#9ca3af', fontSize: 'var(--font-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>
+                Gradients
               </div>
+              {renderWallpaperGrid(GRADIENT_WALLPAPERS)}
+              <div style={{ color: '#9ca3af', fontSize: 'var(--font-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '16px 0 8px' }}>
+                Photos
+              </div>
+              {renderWallpaperGrid(curatedWallpapers)}
               <div style={{
                 fontSize: 'var(--font-xs)',
                 color: 'rgba(255, 255, 255, 0.4)',

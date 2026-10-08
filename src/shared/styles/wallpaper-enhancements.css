@@ -450,11 +450,15 @@
    Explorer window with its own toolbar, sidebar and row controls, and turning
    every one of them into a glass pill destroys its layout — the icon buttons
    grow, the rows stop lining up with their column headers, and its own theme
-   vars get overridden by !important. */
+   vars get overridden by !important.
+   feed-tab (activity feed's tab bar), feed-badge (feed rows' count chips)
+   and overview-* (layout picker options,
+   column color chip) are excluded too: as glass pills every tab became its
+   own boxed chip instead of reading as one tab bar. */
 .wallpaper-enabled .cooldesk-settings-btn,
 .wallpaper-enabled .cooldesk-voice-btn,
 .wallpaper-enabled .workspace-add-url-btn,
-.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):not([class*="spotlight-"]):not([class*="ws-dropdown"]):not([class*="tree-chevron"]):not([class*="dockbar-"]):not([class*="card-swatch"]):not([class*="wcp-color-trigger"]):not([class*="ob-"]):not([class*="upd-"]):not([class*="fm-"]) {
+.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):not([class*="spotlight-"]):not([class*="ws-dropdown"]):not([class*="tree-chevron"]):not([class*="dockbar-"]):not([class*="card-swatch"]):not([class*="wcp-color-trigger"]):not([class*="ob-"]):not([class*="upd-"]):not([class*="fm-"]):not([class*="feed-tab"]):not([class*="feed-badge"]):not([class*="overview-"]) {
     background: linear-gradient(135deg,
             rgba(25, 25, 30, 0.76) 0%,
             rgba(20, 20, 25, 0.7) 100%) !important;
@@ -475,7 +479,7 @@
 .wallpaper-enabled .cooldesk-settings-btn:hover,
 .wallpaper-enabled .cooldesk-voice-btn:hover,
 .wallpaper-enabled .workspace-add-url-btn:hover,
-.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):not([class*="spotlight-"]):not([class*="ws-dropdown"]):not([class*="tree-chevron"]):not([class*="dockbar-"]):not([class*="card-swatch"]):not([class*="wcp-color-trigger"]):not([class*="ob-"]):not([class*="upd-"]):hover {
+.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):not([class*="spotlight-"]):not([class*="ws-dropdown"]):not([class*="tree-chevron"]):not([class*="dockbar-"]):not([class*="card-swatch"]):not([class*="wcp-color-trigger"]):not([class*="ob-"]):not([class*="upd-"]):not([class*="fm-"]):not([class*="feed-tab"]):not([class*="feed-badge"]):not([class*="overview-"]):hover {
     background: linear-gradient(135deg,
             rgba(40, 40, 45, 0.84) 0%,
             rgba(30, 30, 35, 0.78) 100%) !important;

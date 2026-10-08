@@ -179,8 +179,6 @@
   overflow: auto;
   width: 100%;
   height: 100%;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-primary, rgba(255, 255, 255, 0.2)) transparent;
 }
 
 .bento-item-content::-webkit-scrollbar {
@@ -226,10 +224,7 @@
   background: var(--border-hover, rgba(255, 255, 255, 0.3));
 }
 
-.bento-item-content * {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-primary, rgba(255, 255, 255, 0.2)) transparent;
-}
+
 
 /* Animation for initial load */
 @keyframes bentoFadeIn {

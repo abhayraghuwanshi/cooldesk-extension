@@ -11,6 +11,10 @@
  * first run and get browser-cached after the first load.
  */
 
+import { GRADIENT_WALLPAPERS } from './gradientWallpapers.js';
+
+export { GRADIENT_WALLPAPERS };
+
 /**
  * The full picker catalogue: 40 entries with display metadata.
  * `url` is the 4K image; `thumbnail` is the small preview.
@@ -316,6 +320,8 @@ export const CURATED_WALLPAPER_URLS = [
   'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=3840&q=90&fm=jpg',
   'https://images.unsplash.com/photo-1557683316-973673baf926?w=3840&q=90&fm=jpg',
   'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?w=3840&q=90&fm=jpg',
+  // Local gradients (gradientWallpapers.js) — inline SVG, no download.
+  ...GRADIENT_WALLPAPERS.map(w => w.url),
 ];
 
 /** Default wallpaper shown before the user picks one. */

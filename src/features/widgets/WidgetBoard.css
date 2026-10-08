@@ -221,6 +221,18 @@
         0 12px 36px -14px color-mix(in srgb, var(--tile-accent) 70%, transparent);
 }
 
+/* See-through tiles (extension, dark theme): the widget page paints no card
+   (?embed=host), so this plate IS the card — a light frosted layer over the
+   column, with a hairline so tile edges still read on a colorless column. */
+.wgb-tile.wgb-tile-clear {
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.wgb-tile.wgb-tile-clear.has-accent {
+    background: color-mix(in srgb, var(--tile-accent) 20%, rgba(255, 255, 255, 0.05));
+}
+
 .wgb-frame {
     display: block;
     width: 100%;

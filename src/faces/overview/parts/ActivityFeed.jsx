@@ -238,7 +238,11 @@ function SuiteTile({ service, label, onOpen, onClose }) {
 // "Media" tab: how many recently-played entries to keep in localStorage.
 const RECENT_MEDIA_LIMIT = 20;
 
-export function ActivityFeed() {
+// showFavorites / hiddenTabs: view options from the extension's layout menu
+// (LayoutPicker). Defaults show everything, which is all the desktop app uses.
+const NO_HIDDEN_TABS = [];
+
+export function ActivityFeed({ showFavorites = true, hiddenTabs = NO_HIDDEN_TABS }) {
     // Detect if running in Tauri/Electron app
     const isDesktopApp = isElectronApp();
 
@@ -286,7 +290,15 @@ export function ActivityFeed() {
         } catch { return []; }
     });
     const [calendarEvents, setCalendarEvents] = useState([]);
-    const [activeTab, setActiveTabState] = useState(loadActiveTab);
+    const [chosenTab, setActiveTabState] = useState(loadActiveTab);
+    const visibleTabs = useMemo(() => {
+        const all = isDesktopApp ? ['all', 'chats', 'tabs', 'apps', 'local', 'suites', 'search', 'media'] : ['all', 'tabs', 'local', 'suites', 'search', 'media'];
+        const shown = all.filter(t => !hiddenTabs.includes(t));
+        return shown.length ? shown : ['all'];
+    }, [isDesktopApp, hiddenTabs]);
+    // A hidden tab falls back to the first visible one without overwriting the
+    // saved choice, so un-hiding it brings the user back where they were.
+    const activeTab = visibleTabs.includes(chosenTab) ? chosenTab : visibleTabs[0];
     const setActiveTab = useCallback((next) => {
         setActiveTabState(next);
         try { localStorage.setItem(ACTIVE_TAB_KEY, next); } catch { /* storage unavailable — won't persist */ }
@@ -2201,7 +2213,7 @@ export function ActivityFeed() {
     return (
         <div className="cooldesk-panel activity-feed-panel" style={{ padding: 0, display: 'flex', flexDirection: 'column' }}>
             {/* Header: Favorites */}
-            <div>
+            {showFavorites && <div>
                 <div style={{
                     padding: '16px 16px 12px 16px',
                     fontSize: 'var(--font-sm)',
@@ -2242,16 +2254,17 @@ export function ActivityFeed() {
                         <div style={{ color: '#64748B', fontSize: '12px' }}>No favorites yet</div>
                     )}
                 </div>
-            </div>
+            </div>}
 
             {/* Feed Tabs & List. Behavior is class-driven (.activity-feed-list):
                 wide two-pane = scrolls inside the fixed-height card; stacked
                 (≤600px) = grows and flows into the single page scroll. */}
             <div className="activity-feed-list" style={{ padding: '0', display: 'flex', flexDirection: 'column' }}>
                 <div ref={tabsSentinelRef} aria-hidden="true" style={{ height: 1, marginBottom: -1 }} />
-                <div className={`activity-feed-sticky-tabs${tabsStuck ? ' is-stuck' : ''}`}>
+                {/* A single visible tab needs no switcher. */}
+                {visibleTabs.length > 1 && <div className={`activity-feed-sticky-tabs${tabsStuck ? ' is-stuck' : ''}`}>
                     <div className="feed-tabs" role="tablist">
-                        {(isDesktopApp ? ['all', 'chats', 'tabs', 'apps', 'local', 'suites', 'search', 'media'] : ['all', 'tabs', 'local', 'suites', 'search', 'media']).map(tab => {
+                        {visibleTabs.map(tab => {
                             const isActive = activeTab === tab;
                             return (
                                 <button
@@ -2267,7 +2280,7 @@ export function ActivityFeed() {
                             );
                         })}
                     </div>
-                </div>
+                </div>}
 
                 <div
                     className="activity-feed-scroll"
@@ -2528,33 +2541,19 @@ export function ActivityFeed() {
 
                                                 {/* Count Badge + Expand Button */}
                                                 <button
+                                                    type="button"
+                                                    className={`feed-badge feed-badge-toggle${isExpanded ? ' is-expanded' : ''}`}
+                                                    style={{ '--badge': color }}
+                                                    aria-expanded={isExpanded}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         toggleDomainExpand(`chat-${item.platform}`);
-                                                    }}
-                                                    style={{
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '6px',
-                                                        padding: '4px 10px',
-                                                        borderRadius: '8px',
-                                                        border: `1px solid ${color}50`,
-                                                        background: isExpanded ? `${color}25` : `${color}15`,
-                                                        color: color,
-                                                        fontSize: 'var(--font-xs)',
-                                                        fontWeight: 600,
-                                                        cursor: 'pointer',
-                                                        transition: 'all 0.2s'
                                                     }}
                                                 >
                                                     <span>{item.count} chats</span>
                                                     <FontAwesomeIcon
                                                         icon={faChevronDown}
-                                                        style={{
-                                                            fontSize: '10px',
-                                                            transition: 'transform 0.2s',
-                                                            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
-                                                        }}
+                                                        className="feed-badge-chevron"
                                                     />
                                                 </button>
                                                 {/* Empty action slot keeps chat-group pills aligned with tab rows */}
@@ -2753,33 +2752,19 @@ export function ActivityFeed() {
 
                                                 {/* Count Badge + Expand Button */}
                                                 <button
+                                                    type="button"
+                                                    className={`feed-badge feed-badge-toggle${isExpanded ? ' is-expanded' : ''}`}
+                                                    style={{ '--badge': '#60A5FA' }}
+                                                    aria-expanded={isExpanded}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         toggleDomainExpand(item.domain);
-                                                    }}
-                                                    style={{
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '6px',
-                                                        padding: '4px 10px',
-                                                        borderRadius: '8px',
-                                                        border: '1px solid rgba(59, 130, 246, 0.3)',
-                                                        background: isExpanded ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.08)',
-                                                        color: '#60A5FA',
-                                                        fontSize: 'var(--font-xs)',
-                                                        fontWeight: 600,
-                                                        cursor: 'pointer',
-                                                        transition: 'all 0.2s'
                                                     }}
                                                 >
                                                     <span>{item.count} tabs</span>
                                                     <FontAwesomeIcon
                                                         icon={faChevronDown}
-                                                        style={{
-                                                            fontSize: '10px',
-                                                            transition: 'transform 0.2s',
-                                                            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
-                                                        }}
+                                                        className="feed-badge-chevron"
                                                     />
                                                 </button>
 
@@ -2913,33 +2898,19 @@ export function ActivityFeed() {
 
                                                 {/* Count Badge + Expand Button */}
                                                 <button
+                                                    type="button"
+                                                    className={`feed-badge feed-badge-toggle${isExpanded ? ' is-expanded' : ''}`}
+                                                    style={{ '--badge': '#EC4899' }}
+                                                    aria-expanded={isExpanded}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         toggleDomainExpand(item.appName);
-                                                    }}
-                                                    style={{
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '6px',
-                                                        padding: '4px 10px',
-                                                        borderRadius: '8px',
-                                                        border: '1px solid rgba(236, 72, 153, 0.3)',
-                                                        background: isExpanded ? 'rgba(236, 72, 153, 0.15)' : 'rgba(236, 72, 153, 0.08)',
-                                                        color: '#EC4899',
-                                                        fontSize: 'var(--font-xs)',
-                                                        fontWeight: 600,
-                                                        cursor: 'pointer',
-                                                        transition: 'all 0.2s'
                                                     }}
                                                 >
                                                     <span>{Math.round(item.totalDuration / 1000)}s total</span>
                                                     <FontAwesomeIcon
                                                         icon={faChevronDown}
-                                                        style={{
-                                                            fontSize: '10px',
-                                                            transition: 'transform 0.2s',
-                                                            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
-                                                        }}
+                                                        className="feed-badge-chevron"
                                                     />
                                                 </button>
                                             </div>
@@ -3066,22 +3037,10 @@ export function ActivityFeed() {
                                             </div>
 
                                             {/* Badge */}
-                                            <div style={{
-                                                fontSize: 'var(--font-xs)',
-                                                fontWeight: 600,
-                                                color: '#22C55E',
-                                                background: 'rgba(34, 197, 94, 0.1)',
-                                                border: '1px solid rgba(34, 197, 94, 0.2)',
-                                                padding: '2px 6px',
-                                                borderRadius: '4px',
-                                                textTransform: 'uppercase',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '4px'
-                                            }}>
-                                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22C55E' }}></div>
+                                            <span className="feed-badge" style={{ '--badge': '#22C55E' }}>
+                                                <span className="feed-badge-dot" />
                                                 Running
-                                            </div>
+                                            </span>
                                         </div>
                                     );
                                 }
@@ -3184,18 +3143,9 @@ export function ActivityFeed() {
                                             </div>
 
                                             {/* Badge */}
-                                            <div style={{
-                                                fontSize: 'var(--font-xs)',
-                                                fontWeight: 600,
-                                                color: '#64748B',
-                                                background: 'rgba(100, 116, 139, 0.1)',
-                                                border: '1px solid rgba(100, 116, 139, 0.2)',
-                                                padding: '2px 6px',
-                                                borderRadius: '4px',
-                                                textTransform: 'uppercase'
-                                            }}>
+                                            <span className="feed-badge" style={{ '--badge': '#64748B' }}>
                                                 Installed
-                                            </div>
+                                            </span>
                                         </div>
                                     );
                                 }
@@ -3287,74 +3237,26 @@ export function ActivityFeed() {
                                         {/* Badge */}
                                         <div style={{ flexShrink: 0, marginLeft: '8px' }}>
                                             {isChat ? (
-                                                <div style={{
-                                                    fontSize: 'var(--font-xs)',
-                                                    fontWeight: 600,
-                                                    color: 'var(--accent-purple, #8B5CF6)',
-                                                    background: 'var(--accent-purple-soft, rgba(139, 92, 246, 0.1))',
-                                                    border: '1px solid var(--accent-purple-border, rgba(139, 92, 246, 0.2))',
-                                                    padding: '2px 6px',
-                                                    borderRadius: '4px',
-                                                    textTransform: 'uppercase'
-                                                }}>
+                                                <span className="feed-badge" style={{ '--badge': 'var(--accent-purple, #8B5CF6)' }}>
                                                     Chat
-                                                </div>
+                                                </span>
                                             ) : isCalendar ? (
-                                                <div style={{
-                                                    fontSize: 'var(--font-xs)',
-                                                    fontWeight: 600,
-                                                    color: '#10B981',
-                                                    background: 'rgba(16, 185, 129, 0.1)',
-                                                    border: '1px solid rgba(16, 185, 129, 0.2)',
-                                                    padding: '2px 6px',
-                                                    borderRadius: '4px',
-                                                    textTransform: 'uppercase'
-                                                }}>
+                                                <span className="feed-badge" style={{ '--badge': '#10B981' }}>
                                                     Event
-                                                </div>
+                                                </span>
                                             ) : isApp ? (
-                                                <div style={{
-                                                    fontSize: 'var(--font-xs)',
-                                                    fontWeight: 600,
-                                                    color: '#EC4899',
-                                                    background: 'rgba(236, 72, 153, 0.1)',
-                                                    border: '1px solid rgba(236, 72, 153, 0.2)',
-                                                    padding: '2px 6px',
-                                                    borderRadius: '4px',
-                                                    textTransform: 'uppercase'
-                                                }}>
+                                                <span className="feed-badge" style={{ '--badge': '#EC4899' }}>
                                                     App
-                                                </div>
+                                                </span>
                                             ) : isRecent ? (
-                                                <div style={{
-                                                    fontSize: 'var(--font-xs)',
-                                                    fontWeight: 600,
-                                                    color: '#64748B',
-                                                    background: 'rgba(100, 116, 139, 0.1)',
-                                                    border: '1px solid rgba(100, 116, 139, 0.2)',
-                                                    padding: '2px 6px',
-                                                    borderRadius: '4px',
-                                                    textTransform: 'uppercase',
-                                                }}>
+                                                <span className="feed-badge" style={{ '--badge': '#64748B' }}>
                                                     Recent
-                                                </div>
+                                                </span>
                                             ) : (
-                                                <div style={{
-                                                    fontSize: 'var(--font-xs)',
-                                                    fontWeight: 600,
-                                                    color: 'var(--accent-blue, #3B82F6)',
-                                                    background: 'var(--accent-blue-soft, rgba(59, 130, 246, 0.1))',
-                                                    border: '1px solid var(--accent-blue-border, rgba(59, 130, 246, 0.2))',
-                                                    padding: '2px 6px',
-                                                    borderRadius: '4px',
-                                                    textTransform: 'uppercase',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '4px'
-                                                }}>
-                                                    <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'currentColor' }}></div>
+                                                <span className="feed-badge" style={{ '--badge': 'var(--accent-blue, #3B82F6)' }}>
+                                                    <span className="feed-badge-dot" />
                                                     Tab
-                                                </div>
+                                                </span>
                                             )}
                                         </div>
 

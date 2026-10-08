@@ -27,6 +27,8 @@ import { useOnboarding } from '../shared/hooks/useOnboarding';
 
 // Extension-only components
 import { OverviewDashboard } from '../faces/overview/OverviewDashboard';
+import { LayoutPicker } from '../faces/overview/LayoutPicker';
+import { useOverviewLayout, useOverviewVisibility } from '../faces/overview/overviewLayouts';
 import { CURATED_WALLPAPER_URLS } from '../shared/data/wallpapers';
 
 // Lazy load heavy components
@@ -70,6 +72,8 @@ export default function ExtensionApp() {
   const { shouldShowOnboarding, isManualStart, completeOnboarding, skipOnboarding, startOnboarding } = useOnboarding();
   const [settings, setSettings] = useState({ geminiApiKey: '', modelName: '', visitCountThreshold: '', historyDays: '' });
   const [showSettings, setShowSettings] = useState(false);
+  const [layout, setLayout] = useOverviewLayout();
+  const [visibleParts, setVisibleParts] = useOverviewVisibility();
   const [themeClass, setThemeClass] = useState(() => {
     try {
       const savedTheme = localStorage.getItem('cooldesk-theme');
@@ -197,7 +201,7 @@ export default function ExtensionApp() {
       }}>
         <div className="cooldesk-container">
           {/* Main Content - Overview Only */}
-          <OverviewDashboard />
+          <OverviewDashboard layout={layout} visible={visibleParts} />
         </div>
 
         {/* Global Add Button */}
@@ -209,6 +213,12 @@ export default function ExtensionApp() {
 
         {/* Floating top-right buttons: next wallpaper (only when a wallpaper is on) + settings */}
         <div className="overview-corner-actions">
+          <LayoutPicker
+            layout={layout}
+            onChange={setLayout}
+            visible={visibleParts}
+            onVisibleChange={setVisibleParts}
+          />
           {wallpaperEnabled && (
             <button
               className="cooldesk-settings-btn"
