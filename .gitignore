@@ -48,8 +48,8 @@ src-tauri/Wix/
 sync-data/
 *.gguf
 sidecar/models/
-# Claude Code worktrees (local scratch checkouts, never committed)
-.claude/worktrees/
+# Claude Code local files (notes, settings, worktrees), never committed
+.claude/
 
 # Loose screenshots dropped in the repo root (keep the one real logo)
 /*.png
