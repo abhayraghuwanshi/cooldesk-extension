@@ -446,14 +446,27 @@ fn ensure_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
         .resizable(true)
         .fullscreen(false)
         .visible(false)
-        // Deliberately NOT `.transparent(true)`: it was added to let the
-        // docked sidebar's rounded corners reveal real desktop, but WebKit
+        // Transparent on Windows only, and the asymmetry is deliberate.
+        //
+        // This was once transparent everywhere, to let the docked sidebar's
+        // rounded corners reveal real desktop, and was reverted because WebKit
         // renders `backdrop-filter: blur()` unreliably inside a transparent
-        // NSWindow (undefined content behind the blur) — and this app uses
-        // blur in ~170 places (header, modals, dropdowns...), so it showed up
-        // as random blur glitches across the whole app, not just the
-        // sidebar. Traded the sidebar's rounded corners for square ones
-        // instead of shipping that regression app-wide.
+        // NSWindow (undefined content behind the blur) — with blur in ~170
+        // places (header, modals, dropdowns…) that showed up as glitches across
+        // the whole app, not just the sidebar.
+        //
+        // That objection is WebKit's, not Chromium's: WebView2 composites blur
+        // in a transparent window correctly, so Windows can have the
+        // see-through dock that macOS gets. macOS still must not — it keeps its
+        // opaque window and flips `setOpaque(false)` only while docked
+        // (`dock::set_see_through`), which is the one thing Win32/WebView2
+        // cannot do, since it fixes transparency at window creation.
+        //
+        // Consequence worth knowing: on Windows the window is transparent for
+        // the whole session, so the full-size app is opaque only because the
+        // theme's `.bg-*` gradient paints over it. Anything that makes `body`
+        // transparent outside the dock reveals the desktop there too.
+        .transparent(cfg!(windows))
         .build();
 
     match built {
@@ -649,10 +662,11 @@ const BAR_MAX_HEIGHT: u32 = 220;
 
 /// Gap (logical px) between the vertical sidebar panel and its left/right
 /// edges (inner edge and outer/docked edge alike) — a floating panel, not a
-/// flush-docked strip. Relies on the main window being `.transparent(true)`
-/// (see `ensure_main_window`) plus the `sidebar-docked` body class
-/// (`CoolDeskContainer.jsx`) so the gap and rounded corners reveal real
-/// desktop instead of window-colored margin.
+/// flush-docked strip. Needs a non-opaque window plus the `sidebar-docked`
+/// body class (`CoolDeskContainer.jsx`) for the gap and rounded corners to
+/// reveal real desktop instead of window-colored margin — on Windows via
+/// `.transparent(true)` at creation (`ensure_main_window`), on macOS via
+/// `dock::set_see_through` flipping the live window while docked.
 const SIDEBAR_MARGIN: i32 = 16;
 
 /// Gap (logical px) between the vertical sidebar panel and the screen's
@@ -904,6 +918,17 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
                     .unwrap_or((mx, mw));
                 #[cfg(not(windows))]
                 let (bx, bw) = (mx, mw);
+                // Hug the pill instead of spanning the edge, same as macOS
+                // (see `BAR_CONTENT_WIDTH`). Needed as soon as the bar is
+                // see-through: a transparent full-width strip is invisible but
+                // still swallows clicks meant for windows behind it. 0 = the
+                // frontend has not reported a width yet -> span, as before.
+                let content = logical_to_physical(BAR_CONTENT_WIDTH.load(Ordering::Relaxed) as i32, scale);
+                let (bx, bw) = if content > 0 && content < bw {
+                    (bx + (bw - content) / 2, content)
+                } else {
+                    (bx, bw)
+                };
                 (bx, y, bw, h)
             } else {
                 // Floating panel: gap on every edge, including the outer/docked
@@ -1342,7 +1367,7 @@ fn dock_set_width(app: tauri::AppHandle, width: u32) -> Result<DockState, String
 /// full-width bar.
 #[tauri::command(rename_all = "snake_case")]
 fn dock_set_bar_content_width(app: tauri::AppHandle, width: u32) {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     {
         if BAR_CONTENT_WIDTH.swap(width, Ordering::Relaxed) == width {
             return;
@@ -1353,14 +1378,21 @@ fn dock_set_bar_content_width(app: tauri::AppHandle, width: u32) {
         {
             return;
         }
-        let Some(main) = app.get_webview_window("main") else { return };
-        let _ = app.run_on_main_thread(move || {
-            if let Some(frame) = mac_drawer_frame(&st, false) {
-                *MAIN_SCREEN_FRAME.lock().unwrap() = dock::set_window_frame(&main, frame);
-            }
-        });
+        #[cfg(target_os = "macos")]
+        {
+            let Some(main) = app.get_webview_window("main") else { return };
+            let _ = app.run_on_main_thread(move || {
+                if let Some(frame) = mac_drawer_frame(&st, false) {
+                    *MAIN_SCREEN_FRAME.lock().unwrap() = dock::set_window_frame(&main, frame);
+                }
+            });
+        }
+        #[cfg(windows)]
+        // Re-place the window at the new pill width. `expand_drawer` reads
+        // BAR_CONTENT_WIDTH itself, so this just re-runs the normal path.
+        expand_drawer(&app, &st);
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", windows)))]
     let _ = (app, width);
 }
 
