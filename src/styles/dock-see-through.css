@@ -21,13 +21,15 @@
               therefore reveal the desktop there too.
 
    The transparency was long assumed impossible off macOS; it is not. The
-   earlier objection was WebKit-specific — see `ensure_main_window`. */
+   earlier objection was WebKit-specific — see `ensure_main_window`.
 
-   `backdrop-filter` is dropped entirely here: WebKit renders it unreliably
-   in a transparent window (the reason the main window is opaque everywhere
-   else — see `ensure_main_window` in src-tauri/src/lib.rs), so the cards get
-   a near-solid fill instead of glass. Doubled class for specificity: theme
-   and wallpaper rules already use `html body.<theme>` with !important. */
+   `backdrop-filter` is dropped entirely while docked: WebKit renders it
+   unreliably in a transparent window, so the cards get a near-solid fill
+   instead of glass. Kept for Windows too — the fill is what makes the tiles
+   readable over arbitrary desktop content, with or without blur support.
+
+   Doubled class for specificity: theme and wallpaper rules already use
+   `html body.<theme>` with !important. */
 
 html.dock-see-through.dock-see-through,
 html.dock-see-through.dock-see-through body[class],
