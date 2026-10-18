@@ -4,7 +4,10 @@ All notable changes to CoolDesk (desktop app + Chrome extension) are documented 
 
 ## [Unreleased]
 
+## [2.0.16] — 2026-10-18
+
 ### Changed
+- **Windows: the docked sidebar and bar are now see-through, like macOS.** Cards (sidebar) and the pill (bar) float over the real desktop instead of a panel. The window is built `.transparent(true)` on Windows; macOS keeps its opaque window and flips `setOpaque(false)` only while docked, which is the one thing Win32/WebView2 cannot do since it fixes transparency at window creation. This was long assumed impossible off macOS — the objection on record was that `backdrop-filter` glitches inside a transparent window, which is WebKit’s problem and not Chromium/WebView2’s. The bar window now also hugs its pill (`BAR_CONTENT_WIDTH` and `dock_set_bar_content_width` are no longer macOS-only): a transparent full-width strip is invisible but still swallows clicks meant for windows behind it.
 - **Windows/Linux: the dock and sidebar no longer show the wallpaper.** Wallpaper mode makes `body` transparent so the desktop shows through the window — right at full size, wrong in a narrow strip where what shows through is mostly other windows and cards become hard to read against them. macOS already handled this with its see-through dock (`dock-see-through.css`), which needs the native `set_see_through` it alone has; everywhere else the docked panel now goes solid instead. Dropping the `wallpaper-enabled` class lets each theme's own `.bg-*` gradient reassert itself, so no colour is hardcoded and light themes stay light. The saved preference is untouched — undocking brings the wallpaper straight back.
 
 ### Fixed
