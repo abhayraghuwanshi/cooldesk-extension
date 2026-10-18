@@ -4,6 +4,9 @@ All notable changes to CoolDesk (desktop app + Chrome extension) are documented 
 
 ## [Unreleased]
 
+### Fixed
+- **Windows: dozens of terminal windows opened on launch (regression in 2.0.15).** The folder tiles' git badge ran `git status` as a child process per folder, without `CREATE_NO_WINDOW`. A GUI app spawning a console program makes Windows allocate a console for it, and with "Default terminal application" set to Windows Terminal each allocation became a real terminal window — about 30 at startup and another ~20 every two minutes, since the badge is computed for the folders of *every* workspace and refreshed on a timer. The same flag was missing on the `.cooldesk` project-link and local-resource git calls. All git invocations now go through `proc::command`, which sets the flag on Windows and is a plain `Command` elsewhere. Unaffected on macOS and Linux, which have no console to allocate.
+
 ## [2.0.15] — 2026-10-06
 
 ### Added

@@ -129,7 +129,7 @@ fn read_branch(root: &Path) -> Option<String> {
 /// Tracked-file changes under `dir` only (`-- .`), untracked ignored — a fresh
 /// build output shouldn't light the badge.
 fn is_dirty(dir: &Path) -> bool {
-    std::process::Command::new("git")
+    crate::proc::command("git")
         .args(["status", "--porcelain", "--untracked-files=no", "--", "."])
         .current_dir(dir)
         .output()
