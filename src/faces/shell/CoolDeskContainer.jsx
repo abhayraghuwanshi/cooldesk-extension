@@ -221,25 +221,43 @@ export function CoolDeskContainer({
   // Backend dock state — drives the horizontal-bar render mode below.
   const dockState = useDockState();
 
-  // macOS Dock look: while docked (sidebar or bar), the Rust side makes the
-  // window non-opaque and `dock-see-through.css` drops the panel/wallpaper
-  // background so only the cards (sidebar) or the pill (bar) float over the
-  // desktop. macOS only — other platforms keep an opaque window, where
-  // transparent CSS would just show black.
-  const isSeeThroughDock = isDesktopApp
-    && /Mac/.test(navigator.platform)
-    && dockState?.enabled
-    && dockState.mode === 'drawer';
-  // Sidebar (left/right) additionally sits on a native frosted panel
-  // (`set_effects` in `expand_drawer`), so its cards switch to translucent
-  // widget tiles — see `dock-sidebar` in dock-see-through.css.
-  const isSidebarDock = isSeeThroughDock && (dockState.side === 'left' || dockState.side === 'right');
+  const isDockedDrawer = isDesktopApp && !!dockState?.enabled && dockState.mode === 'drawer';
+  const isMacPlatform = /Mac/.test(navigator.platform);
+
+  // Transparency stays macOS-only, and not as a preference. `ensure_main_window`
+  // builds the window *without* `.transparent(true)` on every platform, because
+  // `backdrop-filter` glitches app-wide inside a transparent webview. macOS gets
+  // the see-through dock anyway because AppKit can flip `setOpaque(false)` at
+  // runtime on an already-created window — that is all `dock::set_see_through`
+  // does. Win32/WebView2 has no runtime equivalent: transparency is fixed at
+  // window creation, so it could not be scoped to the dock even if we wanted it.
+  const isSeeThroughDock = isDockedDrawer && isMacPlatform;
+
+  // The *look* ports regardless, because the two halves of
+  // `dock-see-through.css` are separable: `dock-see-through` blanks the panel
+  // (transparency), while `dock-sidebar` carries the floating-tile treatment —
+  // card border/radius/shadow, hidden scrollbars, lifted text — and assumes
+  // nothing about what sits behind it. Windows/Linux take the second only, so
+  // the tiles read like the macOS dock while resting on a solid panel instead
+  // of on the desktop.
+  const isSidebarDock = isDockedDrawer
+    && (dockState.side === 'left' || dockState.side === 'right');
+
+  // Bar mode's chrome fixes (doubled focus ring, nested chip border) live under
+  // `dock-see-through` for macOS. Non-mac needs those too, but must not take
+  // that block's transparent fill or its `width: max-content` — the latter
+  // pairs with `dock_set_bar_content_width`, a no-op off macOS, so the window
+  // never hugs the pill and the pill would just shrink inside a full-width
+  // window. Hence a separate class rather than reusing that rule.
+  const isSolidBarDock = isDockedDrawer && !isMacPlatform && !isSidebarDock;
+
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle('dock-see-through', !!isSeeThroughDock);
     root.classList.toggle('dock-sidebar', !!isSidebarDock);
-    return () => root.classList.remove('dock-see-through', 'dock-sidebar');
-  }, [isSeeThroughDock, isSidebarDock]);
+    root.classList.toggle('dock-bar-solid', !!isSolidBarDock);
+    return () => root.classList.remove('dock-see-through', 'dock-sidebar', 'dock-bar-solid');
+  }, [isSeeThroughDock, isSidebarDock, isSolidBarDock]);
 
   // Activate a workspace as a taskbar-style bottom bar: make it current, then
   // dock the main window to the bottom edge and slide it in.

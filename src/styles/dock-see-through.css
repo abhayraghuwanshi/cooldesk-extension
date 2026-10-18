@@ -1,8 +1,23 @@
-/* Experimental "macOS Dock" look for the vertical sidebar drawer (macOS only).
-   `html.dock-see-through` is toggled by CoolDeskContainer.jsx while the drawer
-   is docked left/right; the Rust side makes the window itself non-opaque at
-   the same time (`dock::set_see_through`). Every panel/wallpaper layer goes
-   transparent so only the cards paint, floating over whatever is behind.
+/* "macOS Dock" look for the docked drawer. Read this file as two separable
+   halves, because they are gated differently:
+
+     `html.dock-see-through`  transparency — **macOS only**. The Rust side makes
+                              the window non-opaque at the same time
+                              (`dock::set_see_through`), and every panel layer
+                              goes transparent so only the cards paint, floating
+                              over whatever is behind.
+     `html.dock-sidebar`      the floating-tile treatment — card border/radius/
+                              shadow, hidden scrollbars, lifted text. Assumes
+                              nothing about what is behind it, so **every
+                              platform** gets it.
+     `html.dock-bar-solid`    bar-mode chrome fixes for the opaque platforms
+                              (see the end of this file).
+
+   Windows/Linux therefore get the look without the see-through: the same tiles
+   and spacing, resting on the theme's own panel instead of on the desktop.
+   They cannot get transparency at all — it is fixed at window creation there
+   and `ensure_main_window` deliberately builds an opaque window, whereas AppKit
+   can flip `setOpaque(false)` on a live one.
 
    `backdrop-filter` is dropped entirely here: WebKit renders it unreliably
    in a transparent window (the reason the main window is opaque everywhere
@@ -46,6 +61,12 @@ html.dock-see-through *::after {
    desktop" feel comes from the gaps between cards, not from the cards
    themselves being transparent. Only `html.dock-sidebar`: the full app and the bar are
    unaffected.
+
+   Everything from here down is shared with Windows/Linux, where the panel is
+   still painted — so there the gaps between tiles show the theme background
+   rather than the desktop. The tile fills are already near-solid, so they read
+   correctly either way; the one rule that did assume a desktop behind it (the
+   `h3` section titles) is called out and mac-scoped below.
 
    Anything reaching the window edge is hard-clipped in a transparent window,
    so the card shadow stays tight (≈4px) — within the container's own 8px
@@ -117,8 +138,14 @@ html.dock-sidebar.dock-sidebar .sidebar-control-bar {
    A tight dark outline plus a wider soft halo keeps them legible over light
    wallpapers and busy windows alike (one soft shadow alone washed out on
    bright backgrounds). Font family/case are left to the user's settings —
-   this is contrast only. */
-html.dock-sidebar h3 {
+   this is contrast only.
+
+   Scoped to `dock-see-through` rather than `dock-sidebar`, because it is the
+   only rule in this section that paints text *outside* a tile. Windows/Linux
+   share the tile treatment but keep an opaque panel behind it, where forcing
+   white would be invisible on a light theme — there the theme's own heading
+   colour already has the right contrast. */
+html.dock-see-through.dock-sidebar h3 {
   color: #fff !important;
   opacity: 1 !important;
   text-shadow:
@@ -126,7 +153,7 @@ html.dock-sidebar h3 {
     0 0 10px rgba(0, 0, 0, 0.55);
 }
 
-html.dock-sidebar h3 svg {
+html.dock-see-through.dock-sidebar h3 svg {
   opacity: 0.9 !important;
 }
 
@@ -196,5 +223,35 @@ html.dock-see-through .dockbar-ws-chip:hover {
 }
 
 html.dock-see-through .dockbar-ws-chip:focus-visible {
+  filter: brightness(1.15);
+}
+
+/* ---- Horizontal bar on opaque platforms (`html.dock-bar-solid`) ----
+   Windows/Linux cannot have a see-through window at all — transparency is
+   fixed at window creation there and `ensure_main_window` deliberately builds
+   an opaque one (see `isSeeThroughDock` in CoolDeskContainer.jsx). So the pill
+   keeps dockbar.css's own fill and its window-width sizing; in particular it
+   must NOT take the `width: max-content` above, which pairs with
+   `dock_set_bar_content_width` — a no-op off macOS, so the window never hugs
+   the pill and `max-content` would just shrink the pill inside a full-width
+   window.
+
+   What does port are the two chrome collisions that have nothing to do with
+   transparency, so the bar reads like the macOS one: the dock window takes
+   focus when shown and the global `button:focus-visible` outline then paints a
+   second ring outside the workspace chip's own border, and the chip's border
+   draws a rounded line nested just inside the shelf's at the left end, which
+   makes the edge look doubled. Focus brightens the chip instead of bringing a
+   ring back. */
+html.dock-bar-solid .dockbar button:focus-visible {
+  outline: none;
+}
+
+html.dock-bar-solid .dockbar-ws-chip,
+html.dock-bar-solid .dockbar-ws-chip:hover {
+  border-color: transparent !important;
+}
+
+html.dock-bar-solid .dockbar-ws-chip:focus-visible {
   filter: brightness(1.15);
 }
