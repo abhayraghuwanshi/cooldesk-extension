@@ -1448,8 +1448,8 @@ fn parse_update_info(current: String, release: &serde_json::Value) -> UpdateInfo
 }
 
 /// Detection only: compares the running version against the latest GitHub
-/// release tag. The actual update is performed by `run_winget_upgrade` so we
-/// never silently overwrite a winget-managed install.
+/// release tag. The install itself is `install_native_update`, with
+/// `run_winget_upgrade` as a Windows fallback.
 ///
 /// Doubles as the anonymous usage heartbeat: unless `analytics_enabled` is
 /// `Some(false)`, the version check is routed through our own endpoint, which
@@ -1499,17 +1499,53 @@ async fn check_winget_update(
     Ok(parse_update_info(current, &release))
 }
 
-/// Launches `winget upgrade` for this package in a new console window so the
-/// user can see progress. winget replaces the app and relaunches it.
+/// The winget package identifier, which must match the `identifier:` komac
+/// submits in `.github/workflows/release.yml`. It is *not* derived from the
+/// bundle `publisher` ("CN=cool-products") — using that produced
+/// `cool-products.CoolDesk`, which matches nothing, so `winget upgrade` failed
+/// with "No installed package found matching input criteria" on every machine.
+#[cfg(windows)]
+const WINGET_PACKAGE_ID: &str = "CoolDesk.CoolDesk";
+
+/// Last-resort Windows updater: hand off to `winget upgrade` in a visible
+/// console so the user can watch it, since winget replaces the app underneath
+/// us and relaunches it.
+///
+/// Only reached when the bundled updater could not install (see
+/// `install_native_update`, which `updateService.js` tries first). winget is
+/// not a reliable primary: it only knows installs it can match to an
+/// Add/Remove-Programs entry, so a user who ran the downloaded `.exe` may be
+/// invisible to it, and a machine carrying both the MSI and the NSIS install
+/// has *two* entries for one id, which makes `-e` ambiguous.
+///
+/// Verifies the package is actually known before spawning. The old version
+/// returned `Ok` as soon as `spawn()` succeeded, so a winget that failed a
+/// moment later still reported success — the UI claimed the update was done
+/// and the caller's fallback never ran.
 #[tauri::command]
 fn run_winget_upgrade() -> Result<(), String> {
     #[cfg(windows)]
     {
+        // Headless pre-flight: `winget list` exits non-zero when nothing
+        // matches, which is the failure the user used to see flash past in a
+        // console. Doing it here keeps the error in `Result` where the
+        // frontend can act on it.
+        let listed = proc::command("winget")
+            .args(["list", "--id", WINGET_PACKAGE_ID, "-e"])
+            .output()
+            .map_err(|e| format!("winget not available: {e}"))?;
+        if !listed.status.success() {
+            return Err(format!(
+                "winget does not know this install (package {WINGET_PACKAGE_ID} not found)"
+            ));
+        }
+
+        // Visible on purpose: this one the user should see.
         std::process::Command::new("winget")
             .args([
                 "upgrade",
                 "--id",
-                "cool-products.CoolDesk",
+                WINGET_PACKAGE_ID,
                 "-e",
                 "--accept-package-agreements",
                 "--accept-source-agreements",
@@ -1524,32 +1560,29 @@ fn run_winget_upgrade() -> Result<(), String> {
     }
 }
 
-/// macOS/Linux counterpart to `run_winget_upgrade`: downloads the signed
-/// update artifact via `tauri-plugin-updater` and replaces the app in place,
-/// then relaunches. Not used on Windows — that stays on winget, which is
-/// already the OS-native package manager there.
+/// Download the signed update artifact via `tauri-plugin-updater`, replace the
+/// app in place and relaunch. The primary path on every platform, Windows
+/// included.
+///
+/// Windows used to be excluded here and sent to winget instead. That was the
+/// wrong default: the updater works regardless of how the app was installed,
+/// `latest.json` already publishes signed `windows-x86_64`, `-nsis` and `-msi`
+/// entries, and the plugin is registered unconditionally — the startup check
+/// has always run on Windows, only the install was stubbed out.
 #[tauri::command]
 async fn install_native_update(app: tauri::AppHandle) -> Result<(), String> {
-    #[cfg(windows)]
-    {
-        let _ = &app;
-        Err("use run_winget_upgrade on Windows".to_string())
-    }
-    #[cfg(not(windows))]
-    {
-        use tauri_plugin_updater::UpdaterExt;
-        let updater = app.updater().map_err(|e| e.to_string())?;
-        let update = updater
-            .check()
-            .await
-            .map_err(|e| e.to_string())?
-            .ok_or_else(|| "no update available".to_string())?;
-        update
-            .download_and_install(|_chunk, _total| {}, || {})
-            .await
-            .map_err(|e| e.to_string())?;
-        app.restart();
-    }
+    use tauri_plugin_updater::UpdaterExt;
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "no update available".to_string())?;
+    update
+        .download_and_install(|_chunk, _total| {}, || {})
+        .await
+        .map_err(|e| e.to_string())?;
+    app.restart();
 }
 
 #[tauri::command]

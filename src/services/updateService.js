@@ -132,12 +132,18 @@ export function checkForUpdate({ force = false } = {}) {
 }
 
 /**
- * Apply the pending update. On Windows this hands off to winget (which
- * replaces the app and relaunches it); on macOS/Linux it falls back to the
- * Tauri updater plugin, which downloads the signed artifact, replaces the
- * app in place, and relaunches — no manual DMG download/reinstall. The
- * extension just reloads itself. All three tear down this page, so the
- * resolved value only matters when every handoff failed.
+ * Apply the pending update: the bundled Tauri updater first on every platform,
+ * which downloads the signed artifact, replaces the app in place and relaunches
+ * — no manual download/reinstall, and nothing depending on how the app was
+ * installed. winget is a Windows-only fallback for the case where the updater
+ * can't install, and the release page is the last resort. The extension just
+ * reloads itself. Every handoff tears down this page, so the resolved value
+ * only matters when all of them failed.
+ *
+ * Windows used to try winget *first*, which never worked: it asked for a
+ * package id that matches nothing, and `run_winget_upgrade` reported success as
+ * soon as the process spawned. So this function returned true while the update
+ * had actually failed, and the updater below it was unreachable on Windows.
  */
 export async function installUpdate() {
   const info = state.info;
@@ -149,21 +155,25 @@ export async function installUpdate() {
       return true;
     }
     const { invoke } = await import('@tauri-apps/api/core');
+    const errors = [];
+    try {
+      await invoke('install_native_update');
+      return true;
+    } catch (e) {
+      errors.push(`updater: ${e}`);
+    }
+    // Windows only, and only if the updater couldn't do it. Rejects when winget
+    // doesn't recognise this install rather than claiming to have upgraded it.
     try {
       await invoke('run_winget_upgrade');
       return true;
-    } catch {
-      // Not on Windows (or winget missing) — use the native updater instead.
-      try {
-        await invoke('install_native_update');
-        return true;
-      } catch {
-        // No updater artifact for this build — send the user to the release page.
-        try { await invoke('open_url', { url: info.notesUrl }); }
-        catch { window.open(info.notesUrl, '_blank'); }
-        return false;
-      }
+    } catch (e) {
+      errors.push(`winget: ${e}`);
     }
+    console.error('[Update] every install path failed:', errors.join(' · '));
+    try { await invoke('open_url', { url: info.notesUrl }); }
+    catch { window.open(info.notesUrl, '_blank'); }
+    return false;
   } finally {
     setState({ installing: false });
   }
