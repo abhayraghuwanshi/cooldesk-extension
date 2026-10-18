@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::tray::TrayIconBuilder;
 use tauri::menu::{Menu, MenuItem};
 
+mod proc;
 mod sidecar;
 mod system;
 mod focus;
