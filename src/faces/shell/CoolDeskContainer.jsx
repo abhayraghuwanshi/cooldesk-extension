@@ -807,6 +807,22 @@ export function CoolDeskContainer({
                   savedWorkspaces={savedWorkspaces}
                   activeWorkspaceId={currentWorkspace?.id}
                   isActive={activeFace === 'browse'}
+                  // Home: a blank tab shows the dashboard (the same
+                  // workspace cards as Collections), so new tabs and launch
+                  // land on it. Step one of folding the faces into Browse.
+                  home={(
+                    <WorkspaceList
+                      savedWorkspaces={savedWorkspaces}
+                      onWorkspaceClick={handleWorkspaceClick}
+                      activeWorkspaceId={currentWorkspace?.id}
+                      expandedWorkspaceId={expandedWorkspace?.id}
+                      pinnedWorkspaces={pinnedWorkspaces}
+                      onTogglePin={onTogglePin}
+                      onEditWorkspace={handleOpenEditModal}
+                      appSuggestions={appSuggestions}
+                      onAddAppsToWorkspace={handleAddAppsToWorkspace}
+                    />
+                  )}
                 />
               </Suspense>
             )}

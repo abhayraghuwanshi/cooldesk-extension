@@ -1,10 +1,11 @@
-import { faCompass, faPlus, faCompress, faExpand, faChevronDown, faSearch, faServer, faTableCellsLarge, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faArrowUpRightFromSquare, faCompass, faDesktop, faHouse, faPlus, faCompress, faExpand, faChevronDown, faSearch, faServer, faTableCellsLarge, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserPane } from '../../features/browser/BrowserPane';
 import { FilesView } from './FilesView';
 import { FileIcon, FileTab } from './FileTab';
 import { useShelf } from '../../features/shelf/useShelf';
+import { useExternalTabs } from '../../features/browser/useExternalTabs';
 import { CanvasView } from './CanvasView';
 import { addTile, compact, loadTiles, saveTiles } from './canvasLayout';
 import { tabPaneId, useBrowseTabs } from './useBrowseTabs';
@@ -98,7 +99,11 @@ function SidePanelIcon() {
 
 const isWebUrl = (url) => typeof url === 'string' && /^https?:\/\//i.test(url);
 
-export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive }) {
+/**
+ * @param home  the dashboard, shown in any blank tab (new tab, launch) —
+ *              CoolDeskContainer passes the workspace cards
+ */
+export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, home = null }) {
   const isSidebarWidth = useIsSidebarWidth();
   // Tabs (useBrowseTabs): each is its own live page; the single page Browse
   // used to show becomes the first tab.
@@ -184,6 +189,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive }
   }, [browseTabs]);
 
 
+
   // Browse (one pane) or Canvas (tiles). The canvas stays mounted once
   // visited so its pages survive switching back and forth.
   const [mode, setModeState] = useState(() => {
@@ -198,6 +204,15 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive }
   }, []);
   const canvasMode = mode === 'canvas' && !isSidebarWidth;
   const browseMode = !canvasMode;
+
+  // 🏠: back to the dashboard — an existing blank tab if there is one, else
+  // a new one (without stealing focus into its address bar).
+  const goHome = useCallback(() => {
+    if (mode !== 'browse') setMode('browse');
+    const blank = browseTabs.tabs.find(t => !t.url && !t.file);
+    if (blank) browseTabs.activate(blank.id);
+    else browseTabs.openInNew(null);
+  }, [browseTabs, mode, setMode]);
 
   // Browser shortcuts. Keys typed while the page itself has focus never reach
   // this document; the page tools (tools.js, isolated world) forward these
@@ -498,9 +513,13 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive }
 
 
 
-  // The toolbar keeps navigation only: everything else lives in the side
-  // panel on the right, opened by the button at the toolbar's right end.
-  const toolbarStart = null;
+  // The toolbar keeps navigation only (and Home): everything else lives in
+  // the side panel on the right, opened by the button at the toolbar's end.
+  const toolbarStart = home ? (
+    <button className={`bp-btn ${!activeTab.url && !activeTab.file ? 'on' : ''}`} onClick={goHome} title="Home: your workspaces">
+      <FontAwesomeIcon icon={faHouse} />
+    </button>
+  ) : null;
   const toolbarEnd = (
     <>
     <button
@@ -624,6 +643,58 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive }
     );
   }
 
+  // Outside CoolDesk: tabs in your browsers + running apps (the Tabs face,
+  // folded in). Only listened to while the Tabs list is on screen.
+  const navVisible = isActive && (isSidebarWidth || (filesShown && filesTab === 'tabs'));
+  const external = useExternalTabs(navVisible);
+  const [showAllExternal, setShowAllExternal] = useState(false);
+  const EXTERNAL_PREVIEW = 6;
+  const shownExternal = showAllExternal ? external.tabs : external.tabs.slice(0, EXTERNAL_PREVIEW);
+
+  function renderExternalTab(tab) {
+    const here = tabForUrl(tab.url);
+    return (
+      <div
+        key={`${tab.browser}-${tab.id}-${tab.url}`}
+        role="button"
+        tabIndex={0}
+        className={`browse-tab-row ${here ? 'is-open' : ''} ${here?.id === browseTabs.activeId ? 'active' : ''}`}
+        onClick={(e) => (e.metaKey || e.ctrlKey ? external.jumpToTab(tab) : pickLink(tab.url))}
+        onKeyDown={(e) => { if (e.key === 'Enter') pickLink(tab.url); }}
+        title={`${tab.url}\nClick: open here · ⌘-click or ↗: switch to it in ${tab.browser === 'other' ? 'your browser' : tab.browser}`}
+      >
+        <ItemIcon item={{ url: tab.url, title: tab.title, sub: hostOf(tab.url), favicon: tab.favIconUrl || tab.favicon }} />
+        <span className="browse-tab-title">{tab.title || hostOf(tab.url)}</span>
+        <button
+          className="bp-btn browse-tab-close"
+          onClick={(e) => { e.stopPropagation(); external.jumpToTab(tab); }}
+          title={`Switch to it in ${tab.browser === 'other' ? 'your browser' : tab.browser}`}
+        >
+          <FontAwesomeIcon icon={faArrowUpRightFromSquare} />
+        </button>
+      </div>
+    );
+  }
+
+  function renderApp(app) {
+    return (
+      <div
+        key={`${app.pid}-${app.hwnd || ''}-${app.tabIndex ?? ''}`}
+        role="button"
+        tabIndex={0}
+        className="browse-tab-row is-open"
+        onClick={() => external.focusApp(app)}
+        onKeyDown={(e) => { if (e.key === 'Enter') external.focusApp(app); }}
+        title={`${app.title || app.name}\nClick to bring it to the front`}
+      >
+        <span className="browse-tile">
+          {app.icon ? <img src={app.icon} alt="" /> : <FontAwesomeIcon icon={faDesktop} />}
+        </span>
+        <span className="browse-tab-title">{app.name || app.title}</span>
+      </div>
+    );
+  }
+
   // Tabs tab of the side panel (or the whole view at docked-sidebar width):
   // view switch, workspace selector, filter, open tabs, links.
   const navContent = (
@@ -734,6 +805,29 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive }
                   {looseTabs.map(renderTabRow)}
                 </section>
               )}
+              {external.tabs.length > 0 && (
+                <section className="nav-section">
+                  <div className="nav-section-head">
+                    <span>In your browsers</span>
+                    <span className="browse-count">{external.tabs.length}</span>
+                  </div>
+                  {shownExternal.map(renderExternalTab)}
+                  {external.tabs.length > EXTERNAL_PREVIEW && (
+                    <button className="nav-more" onClick={() => setShowAllExternal(v => !v)}>
+                      {showAllExternal ? 'Show fewer' : `Show all ${external.tabs.length}`}
+                    </button>
+                  )}
+                </section>
+              )}
+              {external.apps.length > 0 && (
+                <section className="nav-section">
+                  <div className="nav-section-head">
+                    <span>Apps</span>
+                    <span className="browse-count">{external.apps.length}</span>
+                  </div>
+                  {external.apps.map(renderApp)}
+                </section>
+              )}
             </>
           )}
         </div>
@@ -779,7 +873,9 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive }
                     findKey={isCurrent ? findKey : 0}
                     toolbarStart={toolbarStart}
                     toolbarEnd={toolbarEnd}
-                    emptyState={(
+                    emptyState={home ? (
+                      <div className="home-pane">{home}</div>
+                    ) : (
                       <div className="browse-hero">
                         <div className="browse-hero-orb"><FontAwesomeIcon icon={faCompass} /></div>
                         <h2>Browse without leaving CoolDesk</h2>

@@ -2514,3 +2514,34 @@ html.browse-focus .browse-view.browse-peek .browse-list {
 .browse-tab-row:hover .browse-row-sub {
   opacity: 1;
 }
+
+/* Home: the dashboard in a blank tab (fills the slot, scrolls like a page;
+   no native page exists in a blank tab, so nothing has to hide). */
+.home-pane {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: 16px 12px 24px;
+  text-align: left;
+  scrollbar-width: thin;
+}
+
+.nav-more {
+  display: block;
+  width: 100%;
+  margin-top: 2px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  color: var(--bv-dim);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nav-more:hover {
+  background: var(--bv-hover);
+  color: var(--bv-text);
+}
