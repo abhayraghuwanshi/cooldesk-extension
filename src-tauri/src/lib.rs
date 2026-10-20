@@ -17,6 +17,8 @@ mod tab_uia;
 mod webapp_embed;
 mod browser_pane;
 mod shelf;
+mod terminal;
+mod archive;
 mod annotations;
 mod dock;
 mod folder_identity;
@@ -3363,6 +3365,14 @@ pub fn run() {
         browser_pane::browser_pane_set_adblock,
         browser_pane::browser_pane_set_zoom,
         browser_pane::stats::browser_pane_stats,
+        archive::archive_list,
+        archive::archive_extract,
+        archive::archive_extract_entry,
+        archive::archive_compress,
+        terminal::terminal_open,
+        terminal::terminal_write,
+        terminal::terminal_resize,
+        terminal::terminal_close,
         shelf::shelf_list,
         shelf::shelf_add_text,
         shelf::shelf_add_bytes,
@@ -3379,6 +3389,7 @@ pub fn run() {
         browser_pane::tools::page_dark_hosts,
         browser_pane::tools::browser_pane_set_dark,
         browser_pane::tools::browser_pane_screenshot,
+        browser_pane::tools::browser_pane_clip,
         browser_pane::browser_pane_adblock_supported,
         browser_pane::browser_pane_close
     ]))
@@ -3959,6 +3970,8 @@ pub fn run() {
             // Glued --app browser windows aren't our children — close them
             // explicitly so quitting CoolDesk doesn't orphan them.
             webapp_embed::close_all();
+            // End the built-in terminal's shells with the app.
+            terminal::close_all();
             // Release any AppBar reservation so we don't leave a reserved strip
             // behind (no-op if reserve mode was never active this run).
             dock::remove_dock();

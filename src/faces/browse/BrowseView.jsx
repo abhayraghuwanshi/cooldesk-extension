@@ -1,9 +1,12 @@
-import { faArrowUpRightFromSquare, faCompass, faDesktop, faHouse, faPlus, faCompress, faExpand, faChevronDown, faSearch, faServer, faTableCellsLarge, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faArrowUpRightFromSquare, faCompass, faDesktop, faHouse, faPlus, faTerminal, faCompress, faExpand, faChevronDown, faSearch, faServer, faTableCellsLarge, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserPane } from '../../features/browser/BrowserPane';
 import { FilesView } from './FilesView';
 import { FileIcon, FileTab } from './FileTab';
+import { TerminalTab } from '../../features/terminal/TerminalTab';
+import { WorkspaceContextPanel } from '../workspace/WorkspaceList';
+import { clipSummary, saveClipToWorkspace } from '../../features/browser/clipToNote';
 import { useShelf } from '../../features/shelf/useShelf';
 import { useExternalTabs } from '../../features/browser/useExternalTabs';
 import { CanvasView } from './CanvasView';
@@ -23,9 +26,16 @@ const MODES = ['browse', 'canvas'];
 const FILES_OPEN_KEY = 'cooldesk.browse.filesOpen';
 const FILES_TAB_KEY = 'cooldesk.browse.filesTab';
 const FILES_WIDTH_KEY = 'cooldesk.browse.filesWidth';
+const DRAWER_KEY = 'cooldesk.browse.drawer';
+const DRAWER_H_KEY = 'cooldesk.browse.drawerHeight';
+const DRAWER_H_DEFAULT = 260;
+const DRAWER_H_MIN = 120;
 const FILES_WIDTH_DEFAULT = 380;
 const FILES_WIDTH_MIN = 300;
 const FILES_WIDTH_MAX = 1200;
+// The main view keeps at least this much when the panel is dragged wider
+// (CSS caps it the same way when the window shrinks: .browse-files).
+const MAIN_MIN = 380;
 
 function parentDir(p) {
   const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
@@ -33,6 +43,7 @@ function parentDir(p) {
 }
 const STATS_POLL_MS = 3000;
 const LIST_WS_KEY = 'cooldesk.browse.workspace';
+const WS_CONTEXT_KEY = 'cooldesk.browse.workspaceContext';
 // list_listening_ports runs netstat and samples every process's CPU (with a
 // deliberate sleep), so it's refreshed rarely rather than every few seconds.
 const PORTS_POLL_MS = 30000;
@@ -98,12 +109,19 @@ function SidePanelIcon() {
 }
 
 const isWebUrl = (url) => typeof url === 'string' && /^https?:\/\//i.test(url);
+// A blank tab: a new tab's start screen (not a page, file or terminal).
+const isBlank = (t) => !t.url && !t.file && !t.term;
 
 /**
- * @param home  the dashboard, shown in any blank tab (new tab, launch) —
- *              CoolDeskContainer passes the workspace cards
+ * Left: only what you're looking at (a page, file or terminal). Right: the
+ * side panel, where you find things — Home (workspace, tabs, apps, folders,
+ * widgets), Files, Shelf, Notes, Page.
+ *
+ * @param onSelectWorkspace (id) → make a workspace current (picked in the panel)
+ * @param homeExtras  bottom of the panel's Home tab (CoolDeskContainer passes
+ *                    widgets, Popular Folders and dev servers)
  */
-export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, home = null }) {
+export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWorkspace, isActive, homeExtras = null }) {
   const isSidebarWidth = useIsSidebarWidth();
   // Tabs (useBrowseTabs): each is its own live page; the single page Browse
   // used to show becomes the first tab.
@@ -205,30 +223,33 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
   const canvasMode = mode === 'canvas' && !isSidebarWidth;
   const browseMode = !canvasMode;
 
-  // 🏠: back to the dashboard — an existing blank tab if there is one, else
-  // a new one (without stealing focus into its address bar).
-  const goHome = useCallback(() => {
+
+  // A terminal in the folder you're looking at (a folder tab, or a file
+  // tab's folder), else in your home folder. From Home it takes that tab.
+  const openTerminal = useCallback((cwd) => {
     if (mode !== 'browse') setMode('browse');
-    const blank = browseTabs.tabs.find(t => !t.url && !t.file);
-    if (blank) browseTabs.activate(blank.id);
-    else browseTabs.openInNew(null);
+    const here = browseTabs.active;
+    const dir = cwd || (here.file ? (here.file.isDir ? here.file.path : parentDir(here.file.path)) : here.term?.cwd) || null;
+    browseTabs.openTerminalTab(dir, isBlank(here));
   }, [browseTabs, mode, setMode]);
-  const goHomeRef = useRef(goHome);
-  goHomeRef.current = goHome;
 
   // Browser shortcuts. Keys typed while the page itself has focus never reach
   // this document; the page tools (tools.js, isolated world) forward these
   // same combos as `browser-pane-shortcut` events. Not ⌘W: the macOS menu's
   // Close Window owns it and would close CoolDesk first.
+  const drawerToggleRef = useRef(null); // set once the drawer is defined below
   const shortcutRef = useRef(null);
   shortcutRef.current = (key) => {
     const pane = tabPaneId(browseTabs.activeId);
     const nav = (action) => import('@tauri-apps/api/core').then(({ invoke }) => invoke('browser_pane_nav', { id: pane, action })).catch(() => { });
     switch (key) {
       case 'mod+t': newTab(); return true;
+      case 'toggle-terminal': drawerToggleRef.current?.(); return true;
       case 'mod+l': setFocusAddress(k => k + 1); return true;
-      case 'mod+[': nav('back'); return true;
-      case 'mod+]': nav('forward'); return true;
+      // A file tab steps through the tab's own Back / Forward; a page
+      // through its own history.
+      case 'mod+[': if (!browseTabs.active.file || !browseTabs.step(-1)) nav('back'); return true;
+      case 'mod+]': if (!browseTabs.active.file || !browseTabs.step(1)) nav('forward'); return true;
       case 'mod+r': nav('reload'); return true;
       case 'mod+f': setFindKey(k => k + 1); return true;
       case 'next-tab': browseTabs.cycle(1); return true;
@@ -251,6 +272,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
       const k = e.key.toLowerCase();
       let key = null;
       if (e.ctrlKey && k === 'tab') key = e.shiftKey ? 'prev-tab' : 'next-tab';
+      else if (e.ctrlKey && !e.metaKey && e.key === '`') key = 'toggle-terminal';
       else if (mod && e.shiftKey && (k === ']' || k === '}')) key = 'next-tab';
       else if (mod && e.shiftKey && (k === '[' || k === '{')) key = 'prev-tab';
       else if (mod && !e.shiftKey && !e.altKey && ['t', 'l', '[', ']', 'r', 'f'].includes(k)) key = `mod+${k}`;
@@ -310,21 +332,21 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
   }, []);
   const downloading = shelf.downloads.some(d => d.state === 'started');
 
-  // Navigation from elsewhere in CoolDesk (slash commands, workspace jumps,
-  // onboarding) — what used to switch faces: Home, or the panel's Tabs tab.
+  // 🏠: Home lives in the side panel, so it never covers what's on the left.
+  const goHome = useCallback(() => {
+    setFilesTab('tabs');
+    setFilesOpen(true);
+  }, [setFilesTab, setFilesOpen]);
+  const goHomeRef = useRef(goHome);
+  goHomeRef.current = goHome;
+  const homeShown = filesShown && filesTab === 'tabs';
+
+  // A new (blank) tab brings Home up beside its start screen.
+  const blankActive = isBlank(activeTab);
   useEffect(() => {
-    const onNavigate = (e) => {
-      const to = e.detail?.to;
-      if (to === 'home') goHomeRef.current?.();
-      else if (to === 'folder' && e.detail.path) browseTabs.openFileTab(e.detail.path, true, true);
-      else if (to === 'tabs') {
-        setFilesTab('tabs');
-        setFilesOpen(true);
-      }
-    };
-    window.addEventListener('cooldesk-browse', onNavigate);
-    return () => window.removeEventListener('cooldesk-browse', onNavigate);
-  }, [setFilesTab, setFilesOpen, browseTabs]);
+    if (blankActive && isActive) goHomeRef.current();
+  }, [browseTabs.activeId, blankActive, isActive]);
+
   const [filesWidth, setFilesWidth] = useState(() => {
     const w = Number(localStorage.getItem(FILES_WIDTH_KEY));
     return w >= FILES_WIDTH_MIN && w <= FILES_WIDTH_MAX ? w : FILES_WIDTH_DEFAULT;
@@ -335,8 +357,11 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
     e.preventDefault();
     const startX = e.clientX;
     const start = filesWidthRef.current;
+    // Never wider than leaves the main view MAIN_MIN to work with.
+    const room = (e.currentTarget.parentElement?.clientWidth || window.innerWidth) - MAIN_MIN;
+    const max = Math.max(FILES_WIDTH_MIN, Math.min(FILES_WIDTH_MAX, room));
     // Panel is on the right: dragging left widens it.
-    const onMove = (ev) => setFilesWidth(Math.min(FILES_WIDTH_MAX, Math.max(FILES_WIDTH_MIN, start - (ev.clientX - startX))));
+    const onMove = (ev) => setFilesWidth(Math.min(max, Math.max(FILES_WIDTH_MIN, start - (ev.clientX - startX))));
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
@@ -361,6 +386,48 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
     setFilesPath(dir);
     persist(FILES_PATH_KEY, dir);
   }, []);
+  // Terminal drawer: under whatever is on the left, full width, like an
+  // editor's bottom panel. Ctrl+` shows / hides it; hiding keeps the shell
+  // running. It starts (once) in the folder you're looking at.
+  const [drawerOpen, setDrawerOpenState] = useState(() => localStorage.getItem(DRAWER_KEY) === 'true');
+  const [drawerCwd, setDrawerCwd] = useState(null); // null until first shown
+  const [drawerH, setDrawerH] = useState(() => {
+    const h = Number(localStorage.getItem(DRAWER_H_KEY));
+    return h >= DRAWER_H_MIN ? h : DRAWER_H_DEFAULT;
+  });
+  const drawerHRef = useRef(drawerH);
+  drawerHRef.current = drawerH;
+  const contextDir = () => {
+    const here = browseTabs.active;
+    if (here.file) return here.file.isDir ? here.file.path : parentDir(here.file.path);
+    return here.term?.cwd || filesPath || '';
+  };
+  const setDrawerOpen = (open) => {
+    if (open && drawerCwd === null) setDrawerCwd(contextDir());
+    setDrawerOpenState(open);
+    persist(DRAWER_KEY, String(open));
+  };
+  drawerToggleRef.current = () => setDrawerOpen(!drawerOpen);
+  // Open at launch (remembered): start it in the home folder.
+  useEffect(() => {
+    if (drawerOpen && drawerCwd === null) setDrawerCwd('');
+  }, [drawerOpen, drawerCwd]);
+  const startDrawerResize = (e) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const start = drawerHRef.current;
+    const max = Math.max(DRAWER_H_MIN, window.innerHeight * 0.75);
+    // Drawer is at the bottom: dragging up makes it taller.
+    const onMove = (ev) => setDrawerH(Math.round(Math.min(max, Math.max(DRAWER_H_MIN, start - (ev.clientY - startY)))));
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      persist(DRAWER_H_KEY, String(drawerHRef.current));
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
   // From a file tab: reveal it in the side panel's Files tab.
   const showInFiles = useCallback((path) => {
     showFolder(parentDir(path));
@@ -370,10 +437,40 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
 
   // A file or folder (address bar, Files tab, Shelf, workspace): open it as
   // a tab in the main view — the one place things are previewed.
+  // Folders open in the panel's Files tab instead — one file manager, on
+  // the right; the left only previews.
   const openPath = useCallback((path, isDir) => {
+    if (isDir) {
+      showFolder(path);
+      setFilesTab('files');
+      setFilesOpen(true);
+      return;
+    }
     if (mode !== 'browse') setMode('browse');
-    browseTabs.openFileTab(path, !!isDir);
-  }, [mode, setMode, browseTabs]);
+    // In the current tab, like following a link: Back returns to it.
+    browseTabs.openFileTab(path, false, true);
+  }, [mode, setMode, browseTabs, showFolder, setFilesTab, setFilesOpen]);
+
+  // Navigation from elsewhere in CoolDesk (slash commands, workspace jumps,
+  // onboarding) — what used to switch faces: Home, or the panel's Tabs tab.
+  useEffect(() => {
+    const onNavigate = (e) => {
+      const to = e.detail?.to;
+      if (to === 'home') goHomeRef.current?.();
+      else if (to === 'folder' && e.detail.path) {
+        // Folders are browsed in the panel; only files open on the left.
+        showFolder(e.detail.path);
+        setFilesTab('files');
+        setFilesOpen(true);
+      }
+      else if (to === 'tabs') {
+        setFilesTab('tabs');
+        setFilesOpen(true);
+      }
+    };
+    window.addEventListener('cooldesk-browse', onNavigate);
+    return () => window.removeEventListener('cooldesk-browse', onNavigate);
+  }, [showFolder, setFilesTab, setFilesOpen]);
 
   const [tiles, setTiles] = useState(loadTiles);
   const changeTiles = useCallback((next, { transient } = {}) => {
@@ -400,13 +497,13 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
   // In Canvas it joins the canvas.
   const pickLink = useCallback((url, replaceCurrent = false) => {
     if (canvasMode) addToCanvas(url);
-    else if (replaceCurrent || (!activeTab.url && !activeTab.file)) openUrl(url);
+    else if (replaceCurrent || isBlank(activeTab)) openUrl(url);
     else {
       const open = browseTabs.findByUrl(url);
       if (open) browseTabs.activate(open.id);
       else openUrl(url, { newTab: true });
     }
-  }, [canvasMode, addToCanvas, openUrl, activeTab.url, activeTab.file, browseTabs]);
+  }, [canvasMode, addToCanvas, openUrl, activeTab, browseTabs]);
   const onCanvas = useMemo(() => new Set(tiles.map(t => t.url)), [tiles]);
 
   // Live memory/CPU of every in-app page (browser_pane/stats.rs), shown in
@@ -483,10 +580,18 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
   // Typing in the filter always searches every workspace.
   const [listWs, setListWsState] = useState(() => localStorage.getItem(LIST_WS_KEY) || activeWorkspaceId || '');
   const [wsPickerOpen, setWsPickerOpen] = useState(false);
+  const [wsContextOpen, setWsContextOpenState] = useState(() => localStorage.getItem(WS_CONTEXT_KEY) !== 'false');
+  const setWsContextOpen = (open) => {
+    setWsContextOpenState(open);
+    persist(WS_CONTEXT_KEY, String(open));
+  };
   const setListWs = (id) => {
     setListWsState(id);
     persist(LIST_WS_KEY, id);
     setWsPickerOpen(false);
+    // The panel's pick is the app's current workspace too — otherwise the
+    // next launch (which restores that one) would switch the panel back.
+    onSelectWorkspace?.(id);
   };
   useEffect(() => { if (activeWorkspaceId) setListWsState(activeWorkspaceId); }, [activeWorkspaceId]);
   const isFileItem = (a) => (a?.appType === 'file' || a?.appType === 'folder') && a.path;
@@ -498,6 +603,38 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
     .filter(x => x.count > 0), [savedWorkspaces]);
   // One workspace at a time (the rest stay out of the way, one pick away).
   const shownWs = wsWithLinks.find(x => x.ws.id === listWs) || wsWithLinks[0] || null;
+
+  // Clips from a page (Page → Clip): saved as a note in the workspace shown
+  // here, with a toast that leads to it.
+  const clipWsRef = useRef(null);
+  clipWsRef.current = shownWs?.ws || savedWorkspaces.find(w => w.id === activeWorkspaceId) || null;
+  const [clipToast, setClipToast] = useState(null); // { text, error? }
+  useEffect(() => {
+    if (!clipToast) return undefined;
+    const t = setTimeout(() => setClipToast(null), 5000);
+    return () => clearTimeout(t);
+  }, [clipToast]);
+  useEffect(() => {
+    let off = null;
+    let cancelled = false;
+    import('@tauri-apps/api/event')
+      .then(({ listen }) => listen('browser-pane-clip', async ({ payload }) => {
+        const ws = clipWsRef.current;
+        if (!payload) return;
+        if (!ws) {
+          setClipToast({ error: true, text: 'Pick a workspace in Home first — clips are saved to its notes.' });
+          return;
+        }
+        try {
+          await saveClipToWorkspace(payload, ws);
+          setClipToast({ text: `${clipSummary(payload)} saved to ${ws.name} › Notes` });
+        } catch (err) {
+          setClipToast({ error: true, text: `Couldn’t save the clip — ${err?.message || err}` });
+        }
+      }))
+      .then(fn => { if (cancelled) fn(); else off = fn; });
+    return () => { cancelled = true; off?.(); };
+  }, []);
 
   const groups = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -543,11 +680,11 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
 
   // The toolbar keeps navigation only (and Home): everything else lives in
   // the side panel on the right, opened by the button at the toolbar's end.
-  const toolbarStart = home ? (
-    <button className={`bp-btn ${!activeTab.url && !activeTab.file ? 'on' : ''}`} onClick={goHome} title="Home: your workspaces">
+  const toolbarStart = (
+    <button className={`bp-btn ${homeShown ? 'on' : ''}`} onClick={goHome} title="Home: workspace, tabs, apps and folders (in the side panel)">
       <FontAwesomeIcon icon={faHouse} />
     </button>
-  ) : null;
+  );
   const toolbarEnd = (
     <>
     <button
@@ -589,7 +726,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
     ? (shownWs.ws.apps || []).filter(isFileItem).map(a => ({ path: a.path, isDir: a.appType === 'folder', title: a.name || a.path.split(/[/\\]/).pop(), sub: a.path }))
     : [];
   const serverLinks = groups.find(g => g.id === 'servers')?.items || [];
-  const tabForUrl = (url) => browseTabs.tabs.find(t => !t.file && (t.url === url || t.req.url === url));
+  const tabForUrl = (url) => browseTabs.tabs.find(t => !t.file && !t.term && (t.url === url || t.req.url === url));
   const tabForPath = (path) => browseTabs.tabs.find(t => t.file?.path === path);
   const claimed = new Set([
     ...pinnedLinks.map(l => tabForUrl(l.url)?.id),
@@ -649,7 +786,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
 
   function renderTabRow(tab) {
     const host = tab.url ? hostOf(tab.url) : '';
-    const asleep = !tab.file && !browseTabs.live.has(tab.id);
+    const asleep = !tab.file && !tab.term && !browseTabs.live.has(tab.id);
     return (
       <div
         key={tab.id}
@@ -658,10 +795,12 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
         className={`browse-tab-row is-open ${tab.id === browseTabs.activeId ? 'active' : ''} ${asleep ? 'asleep' : ''}`}
         onClick={() => browseTabs.activate(tab.id)}
         onAuxClick={(e) => { if (e.button === 1) browseTabs.close(tab.id); }}
-        title={tab.file ? tab.file.path : asleep ? `${tab.url || 'New tab'}\nAsleep (reloads when opened)` : (tab.url || 'New tab')}
+        title={tab.file ? tab.file.path : tab.term ? `Terminal — ${tab.term.cwd || '~'}` : asleep ? `${tab.url || 'New tab'}\nAsleep (reloads when opened)` : (tab.url || 'New tab')}
       >
         {tab.file
           ? <span className="browse-tile"><FileIcon path={tab.file.path} isDir={tab.file.isDir} /></span>
+          : tab.term
+            ? <span className="browse-tile term-tile"><FontAwesomeIcon icon={faTerminal} /></span>
           : tab.url
             ? <ItemIcon item={{ url: tab.url, title: tab.title, sub: host }} />
             : <span className="browse-tile"><FontAwesomeIcon icon={faPlus} /></span>}
@@ -814,6 +953,23 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
                 {pinnedLinks.map(renderPinnedLink)}
                 {pinnedFiles.map(renderPinnedFile)}
               </section>
+              {/* The workspace's own context — notes, to-dos, status and the
+                  .cooldesk project's run commands — as on its old detail view.
+                  Wrapped in .workspace-detail-view for that view's one-column
+                  layout rules. */}
+              {shownWs && (
+                <section className="nav-section">
+                  <button className="nav-section-head nav-section-toggle" onClick={() => setWsContextOpen(!wsContextOpen)} aria-expanded={wsContextOpen}>
+                    <FontAwesomeIcon icon={faChevronDown} className={`nav-caret ${wsContextOpen ? '' : 'is-closed'}`} />
+                    <span>Notes, to-dos &amp; commands</span>
+                  </button>
+                  {wsContextOpen && (
+                    <div className="workspace-detail-view nav-ws-context">
+                      <WorkspaceContextPanel key={shownWs.ws.id} workspace={shownWs.ws} />
+                    </div>
+                  )}
+                </section>
+              )}
               {serverLinks.length > 0 && (
                 <section className="nav-section is-servers">
                   <div className="nav-section-head"><span>Local servers</span><span className="browse-count">{serverLinks.length}</span></div>
@@ -826,6 +982,9 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
                     <span>Open tabs</span>
                     <span className="browse-count">{looseTabs.length}</span>
                     <span className="nt-grow" />
+                    <button className="bp-btn browse-tabs-new" onClick={() => openTerminal()} title="New terminal tab (Ctrl+` opens the terminal drawer)">
+                      <FontAwesomeIcon icon={faTerminal} />
+                    </button>
                     <button className="bp-btn browse-tabs-new" onClick={newTab} title="New tab (⌘T)">
                       <FontAwesomeIcon icon={faPlus} />
                     </button>
@@ -856,6 +1015,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
                   {external.apps.map(renderApp)}
                 </section>
               )}
+              {homeExtras && <div className="nav-home-extras">{homeExtras}</div>}
             </>
           )}
         </div>
@@ -871,16 +1031,37 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
         <main className="browse-pane">
           <div className={`browse-mode ${browseMode ? '' : 'is-hidden'}`}>
             {/* One live page per awake tab; inactive ones stay loaded but hidden. */}
-            {browseTabs.tabs.filter(tab => tab.file || browseTabs.live.has(tab.id)).map(tab => {
+            {browseTabs.tabs.filter(tab => tab.file || tab.term || browseTabs.live.has(tab.id)).map(tab => {
               const isCurrent = tab.id === browseTabs.activeId;
+              if (tab.term) {
+                return (
+                  <div key={tab.id} className={`browse-tabpane ${isCurrent ? '' : 'is-hidden'}`}>
+                    <TerminalTab
+                      tabId={tab.id}
+                      cwd={tab.term.cwd}
+                      active={isActive && browseMode && isCurrent}
+                      onTitle={(title) => browseTabs.noteTitle(tab.id, title)}
+                      onOpenUrl={(url) => browseTabs.openInNew(url, { position: 'after' })}
+                      onShowInFiles={(dir) => { showFolder(dir); setFilesTab('files'); setFilesOpen(true); }}
+                      toolbarStart={toolbarStart}
+                      toolbarEnd={toolbarEnd}
+                    />
+                  </div>
+                );
+              }
               if (tab.file) {
                 return (
                   <div key={tab.id} className={`browse-tabpane ${isCurrent ? '' : 'is-hidden'}`}>
                     <FileTab
                       file={tab.file}
                       active={isActive && browseMode && isCurrent}
-                      onOpenFile={(path) => browseTabs.openFileTab(path, false)}
+                      onOpenFile={(path) => browseTabs.openFileTab(path, false, true)}
+                      onOpenUrl={(url) => browseTabs.openInNew(url, { position: 'after' })}
+                      onShowFolder={(dir) => { showFolder(dir); setFilesTab('files'); setFilesOpen(true); }}
+                      onBack={tab.back?.length ? () => browseTabs.step(-1) : null}
+                      onForward={tab.fwd?.length ? () => browseTabs.step(1) : null}
                       onShowInFiles={showInFiles}
+                      onOpenTerminal={openTerminal}
                       toolbarStart={toolbarStart}
                       toolbarEnd={toolbarEnd}
                     />
@@ -902,9 +1083,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
                     findKey={isCurrent ? findKey : 0}
                     toolbarStart={toolbarStart}
                     toolbarEnd={toolbarEnd}
-                    emptyState={home ? (
-                      <div className="home-pane">{home}</div>
-                    ) : (
+                    emptyState={(
                       <div className="browse-hero">
                         <div className="browse-hero-orb"><FontAwesomeIcon icon={faCompass} /></div>
                         <h2>Browse without leaving CoolDesk</h2>
@@ -940,9 +1119,39 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
               />
             </div>
           )}
+          {drawerCwd !== null && (
+            <>
+              {drawerOpen && <div className="drawer-divider" onPointerDown={startDrawerResize} title="Drag to resize" />}
+              <section className={`browse-drawer ${drawerOpen ? '' : 'is-hidden'}`} style={{ height: drawerH }}>
+                <TerminalTab
+                  variant="panel"
+                  tabId="drawer"
+                  cwd={drawerCwd || null}
+                  active={isActive && drawerOpen}
+                  filesPath={contextDir() || null}
+                  onPopOut={(cwd) => openTerminal(cwd)}
+                  onHide={() => setDrawerOpen(false)}
+                  onOpenUrl={(url) => browseTabs.openInNew(url, { position: 'after' })}
+                />
+              </section>
+            </>
+          )}
         </main>
       )}
 
+      {clipToast && (
+        <div className={`clip-toast ${clipToast.error ? 'is-error' : ''}`} role="status">
+          <span>{clipToast.text}</span>
+          {!clipToast.error && (
+            <button
+              className="fm-status-link"
+              onClick={() => { setWsContextOpen(true); goHome(); setClipToast(null); }}
+            >
+              Show
+            </button>
+          )}
+        </div>
+      )}
       {filesVisited && !isSidebarWidth && (
         <>
           {filesShown && <div className="browse-divider files-divider" onPointerDown={startFilesResize} />}
@@ -954,15 +1163,13 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
               onClose={() => setFilesOpen(false)}
               tab={filesTab}
               onTab={setFilesTab}
-              onHome={home ? goHome : null}
-              homeShown={!activeTab.url && !activeTab.file}
               shelf={shelf}
               nav={navContent}
               notesUrl={pageUrl}
               notesPaneId={tabPaneId(browseTabs.activeId)}
               onOpen={openPath}
               page={{
-                tools: browseMode && !activeTab.file ? pageTools : null,
+                tools: browseMode && !activeTab.file && !activeTab.term ? pageTools : null,
                 pages: openPages,
                 totals: { memory: pagesMemory, cpu: pagesCpu, app: stats?.app_memory },
                 onClosePage: (p) => (p.tabId ? browseTabs.close(p.tabId) : changeTiles(compact(tiles.filter(t => t.id !== p.tileId)))),

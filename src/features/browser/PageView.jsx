@@ -1,4 +1,4 @@
-import { faArrowUpRightFromSquare, faCamera, faCheck, faExpand, faMagnifyingGlass, faMemory, faMoon, faShieldHalved, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faArrowUpRightFromSquare, faCamera, faCropSimple, faCheck, faExpand, faMagnifyingGlass, faMemory, faMoon, faShieldHalved, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useState } from 'react';
 import '../../styles/browse.css';
@@ -20,6 +20,7 @@ const TOOL_COLORS = {
   dark: '#818cf8',
   fit: '#fbbf24',
   find: '#60a5fa',
+  clip: '#2dd4bf',
   shot: '#f472b6',
   open: '#94a3b8',
 };
@@ -114,6 +115,7 @@ export function PageView({ tools, pages = [], totals, onClosePage }) {
             onToggle={tools?.toggleAutoFit}
           />
           <Action tool="find" icon={faMagnifyingGlass} label="Find" state="⌘F" disabled={!hasPage} onRun={() => tools.find()} />
+          <Action tool="clip" icon={faCropSimple} label="Clip" state="Table, chart… → Notes" disabled={!hasPage} onRun={() => tools.clip()} />
           <Action tool="shot" icon={faCamera} label="Screenshot" state="To Shelf" disabled={!hasPage} onRun={() => tools.screenshot()} />
           <Action tool="open" icon={faArrowUpRightFromSquare} label="Open outside" state="Your browser" disabled={!hasPage} onRun={() => tools.openExternal()} />
         </div>

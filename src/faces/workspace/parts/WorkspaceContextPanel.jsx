@@ -319,10 +319,17 @@ function NotesSection({ workspaceId, workspaceName, sharedDocs }) {
   useEffect(() => {
     if (!workspaceId) return;
     let cancelled = false;
-    listWorkspaceNotes(workspaceId)
+    const load = () => listWorkspaceNotes(workspaceId)
       .then(data => { if (!cancelled) setNotes(data?.data || data || []); })
       .catch(() => {});
-    return () => { cancelled = true; };
+    load();
+    // Notes added elsewhere (a page clip from Browse) show up here too.
+    const onChanged = (e) => { if (e.detail?.workspaceId === workspaceId) load(); };
+    window.addEventListener('cooldesk-notes-changed', onChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('cooldesk-notes-changed', onChanged);
+    };
   }, [workspaceId]);
 
   const readmeHtml = useMemo(

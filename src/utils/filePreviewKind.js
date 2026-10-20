@@ -16,6 +16,7 @@ const PREVIEW_CODE_LANGUAGES = {
   yaml: 'yaml', yml: 'yaml', toml: 'toml',
   sh: 'bash', bash: 'bash', zsh: 'bash',
   txt: 'markup', log: 'markup', env: 'bash', gitignore: 'bash',
+  csv: 'markup', tsv: 'markup',
   // NSIS installer scripts (e.g. src-tauri/nsis/*.nsh) — Prism has no NSIS
   // grammar, so this is plain unhighlighted text, same as .txt/.log.
   nsh: 'markup', nsi: 'markup',

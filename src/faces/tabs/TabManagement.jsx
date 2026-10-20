@@ -66,9 +66,12 @@ function debounce(func, wait) {
   };
 }
 
-/** @param onOpenFolder  open a folder in the main view (Home inside Browse);
- *                      without it folders open in the file manager here. */
-export function TabManagement({ onOpenFolder } = {}) {
+/** @param onOpenFolder  open a folder elsewhere (Browse's Files panel);
+ *                      without it folders open in the file manager here.
+ *  @param panel         inside Browse's side panel (Home tab): only the parts
+ *                      the panel's own lists don't already show — widgets,
+ *                      Popular Folders, dev servers — laid out narrow. */
+export function TabManagement({ onOpenFolder, panel = false } = {}) {
   const [tabs, setTabs] = useState([]);
   const [tabsLoading, setTabsLoading] = useState(true);
   const [expandedDomain, setExpandedDomain] = useState(null);
@@ -796,15 +799,15 @@ export function TabManagement({ onOpenFolder } = {}) {
   }, [taskViewEnabled, tasks, filteredTabs]);
 
   return (
-    <div className="tab-management" style={{
+    <div className={`tab-management${panel ? ' tab-management--panel' : ''}`} style={{
       display: 'flex',
       flexDirection: 'column',
-      height: '100%',
+      height: panel ? 'auto' : '100%',
       borderRadius: 16,
       overflow: 'hidden',
       border: '1px solid transparent'
     }}>
-      {!isSidebarWidth && (
+      {!isSidebarWidth && !panel && (
       <div className="tab-management__toolbar" style={{
         display: 'flex',
         alignItems: 'center',
@@ -870,7 +873,7 @@ export function TabManagement({ onOpenFolder } = {}) {
       <div
         style={{
           flex: 1,
-          overflowY: 'auto',
+          overflowY: panel ? 'visible' : 'auto',
           display: 'flex',
           flexDirection: 'column',
           gap: '12px',
@@ -882,7 +885,7 @@ export function TabManagement({ onOpenFolder } = {}) {
         {/* Reserved widget area — same store as the overview board, its own layout. */}
         <WidgetBoard storageArea="tabs" compact defaultBoard={TABS_WIDGET_DEFAULT} />
 
-        {tabsLoading ? (
+        {tabsLoading && !panel ? (
           <div style={{
             display: 'flex',
             flexDirection: 'column',
@@ -899,6 +902,7 @@ export function TabManagement({ onOpenFolder } = {}) {
           </div>
         ) : (
           <>
+            {!panel && (<>
             {/* 1. Active Apps Section (desktop only) */}
             {runningApps.length > 0 && (
               <div>
@@ -1109,6 +1113,8 @@ export function TabManagement({ onOpenFolder } = {}) {
               </div>
             )}
 
+            </>)}
+
             {/* 9. Popular Folders (ranked from Recent Items activity, Tauri only) */}
             {frequentFolders.length > 0 && (
               <div>
@@ -1118,7 +1124,7 @@ export function TabManagement({ onOpenFolder } = {}) {
                     the full app keeps the wrapping grid. */}
                 <div
                   ref={folderRowRef}
-                  className={isSidebarWidth ? 'folders-chip-row' : 'folders-chip-grid'}
+                  className={isSidebarWidth || panel ? 'folders-chip-row' : 'folders-chip-grid'}
                 >
                   {frequentFolders.slice(0, 8).map(folder => (
                     <FolderCard
@@ -1155,7 +1161,7 @@ export function TabManagement({ onOpenFolder } = {}) {
             )}
 
             {/* Empty State */}
-            {filteredTabs.length === 0 && (
+            {!panel && filteredTabs.length === 0 && (
               <EmptyTabsState
                 wsConnected={wsConnected}
                 requestingTabs={requestingTabs}

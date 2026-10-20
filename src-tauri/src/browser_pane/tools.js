@@ -477,6 +477,160 @@
   }, true);
 
   // ── API for the app (called via evaluateJavaScript in this world) ────
+
+  // ── Clip: pick an element, send it to CoolDesk ───────────────────────
+  // Hover highlights what would be clipped (a table / chart as a whole, not
+  // the cell or bar under the cursor); ↑ widens to the parent, ↓ back, click
+  // or Enter clips, Esc cancels. Tables go out as rows, SVG charts as SVG
+  // (computed styles inlined so they survive without the page's CSS), text as
+  // Markdown; the app also captures an image of the element's box.
+  let clipping = null;
+  const MAX_ROWS = 1000;
+  const SVG_PROPS = ['fill', 'stroke', 'stroke-width', 'stroke-dasharray', 'stroke-linecap', 'opacity', 'fill-opacity',
+    'stroke-opacity', 'font-family', 'font-size', 'font-weight', 'text-anchor', 'dominant-baseline', 'visibility', 'display'];
+
+  const isTable = (el) => el.tagName === 'TABLE' || /^(table|grid|treegrid)$/.test(el.getAttribute('role') || '');
+  const isSvg = (el) => el.tagName.toLowerCase() === 'svg';
+  // What hovering `el` should select.
+  function pickable(el) {
+    const svg = el.closest('svg');
+    if (svg && svg.getBoundingClientRect().width > 60) {
+      // Outermost big svg (charts nest svgs).
+      let top = svg;
+      while (top.parentElement?.closest('svg')) top = top.parentElement.closest('svg');
+      return top;
+    }
+    const table = el.closest('table, [role="table"], [role="grid"], [role="treegrid"]');
+    if (table) return table;
+    return el;
+  }
+  function kindOf(el) {
+    if (isTable(el)) return 'table';
+    if (isSvg(el)) return 'chart';
+    if (['CANVAS', 'IMG', 'VIDEO', 'PICTURE'].includes(el.tagName)) return 'image';
+    const tables = el.querySelectorAll('table, [role="table"], [role="grid"]');
+    if (tables.length === 1 && tables[0].getBoundingClientRect().height > el.getBoundingClientRect().height * 0.6) return 'table';
+    const svgs = [...el.querySelectorAll('svg')].filter(s => s.getBoundingClientRect().width > 120);
+    if (svgs.length === 1 && (el.innerText || '').trim().length < 400) return 'chart';
+    return (el.innerText || '').trim() ? 'text' : 'image';
+  }
+  const LABELS = { table: 'Table', chart: 'Chart', image: 'Image', text: 'Text' };
+
+  function tableRows(el) {
+    const table = isTable(el) ? el : el.querySelector('table, [role="table"], [role="grid"]');
+    const cellText = (c) => (c.innerText || c.textContent || '').trim().replace(/\s+/g, ' ');
+    if (table.tagName === 'TABLE') {
+      return [...table.rows].slice(0, MAX_ROWS).map(r => [...r.cells].map(cellText));
+    }
+    return [...table.querySelectorAll('[role="row"]')].slice(0, MAX_ROWS).map(r =>
+      [...r.querySelectorAll('[role="cell"], [role="gridcell"], [role="columnheader"], [role="rowheader"]')].map(cellText));
+  }
+
+  function svgMarkup(el) {
+    const svg = isSvg(el) ? el : [...el.querySelectorAll('svg')].find(s => s.getBoundingClientRect().width > 120);
+    const clone = svg.cloneNode(true);
+    const src = [svg, ...svg.querySelectorAll('*')];
+    const dst = [clone, ...clone.querySelectorAll('*')];
+    for (let i = 0; i < src.length && i < 20000; i++) {
+      const cs = getComputedStyle(src[i]);
+      dst[i].setAttribute('style', SVG_PROPS.map(p => `${p}:${cs.getPropertyValue(p)}`).join(';') + ';' + (dst[i].getAttribute('style') || ''));
+    }
+    const r = svg.getBoundingClientRect();
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    if (!clone.getAttribute('width')) clone.setAttribute('width', Math.round(r.width));
+    if (!clone.getAttribute('height')) clone.setAttribute('height', Math.round(r.height));
+    if (!clone.getAttribute('viewBox')) clone.setAttribute('viewBox', `0 0 ${Math.round(r.width)} ${Math.round(r.height)}`);
+    const bg = getComputedStyle(document.body).backgroundColor;
+    clone.style.background = bg && bg !== 'rgba(0, 0, 0, 0)' ? bg : '#fff';
+    return new XMLSerializer().serializeToString(clone);
+  }
+
+  function finishClip(el) {
+    const kind = kindOf(el);
+    stopClip();
+    el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    // Next frame, so the rect is the scrolled-to one.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const r = el.getBoundingClientRect();
+      const vw = document.documentElement.clientWidth;
+      const vh = document.documentElement.clientHeight;
+      const rect = { x: Math.max(0, r.left), y: Math.max(0, r.top), width: Math.min(r.right, vw) - Math.max(0, r.left), height: Math.min(r.bottom, vh) - Math.max(0, r.top) };
+      const msg = { type: 'clip', kind, title: document.title, rect };
+      try {
+        if (kind === 'table') msg.rows = tableRows(el);
+        else if (kind === 'chart') {
+          const svg = svgMarkup(el);
+          if (svg.length < 6_000_000) msg.svg = svg;
+        } else if (kind === 'text') {
+          msg.markdown = toMarkdown(el).slice(0, 200_000);
+          msg.withImage = !!el.querySelector('img, canvas, svg, video');
+        }
+      } catch { /* the image still goes */ }
+      post(msg);
+    }));
+  }
+
+  function stopClip() {
+    if (!clipping) return;
+    clipping.off();
+    clipping = null;
+  }
+
+  function startClip() {
+    if (clipping) return;
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483647';
+    const root = host.attachShadow({ mode: 'closed' });
+    root.innerHTML = `<style>
+      .box{position:fixed;border:2px solid #60a5fa;background:rgba(96,165,250,.12);border-radius:4px;pointer-events:none;transition:all 70ms ease-out}
+      .lbl{position:fixed;background:#2563eb;color:#fff;font:600 11px -apple-system,system-ui,sans-serif;padding:2px 7px;border-radius:5px;white-space:nowrap}
+      .tip{position:fixed;left:50%;top:12px;transform:translateX(-50%);background:rgba(17,24,39,.94);color:#e5e7eb;font:12px -apple-system,system-ui,sans-serif;padding:7px 12px;border-radius:9px;box-shadow:0 6px 20px rgba(0,0,0,.35)}
+      .tip b{color:#93c5fd;font-weight:600}
+    </style><div class="box"></div><div class="lbl"></div><div class="tip"><b>Clip</b> — click a table, chart or block · ↑ bigger · ↓ smaller · Esc cancel</div>`;
+    document.documentElement.appendChild(host);
+    const box = root.querySelector('.box');
+    const lbl = root.querySelector('.lbl');
+    let target = null;
+    let trail = []; // ↑ history, for ↓
+    const show = (el) => {
+      if (!el || el === document.documentElement) return;
+      target = el;
+      const r = el.getBoundingClientRect();
+      Object.assign(box.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+      lbl.textContent = LABELS[kindOf(el)];
+      Object.assign(lbl.style, { left: `${Math.max(4, r.left)}px`, top: `${Math.max(4, r.top - 22)}px` });
+    };
+    const swallow = (e) => { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); };
+    const onMove = (e) => {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      if (el && el !== host) { trail = []; show(pickable(el)); }
+    };
+    const onClick = (e) => { swallow(e); if (target) finishClip(target); };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { swallow(e); stopClip(); }
+      else if (e.key === 'Enter' && target) { swallow(e); finishClip(target); }
+      else if (e.key === 'ArrowUp' && target?.parentElement && target.parentElement !== document.documentElement) {
+        swallow(e); trail.push(target); show(target.parentElement);
+      } else if (e.key === 'ArrowDown' && trail.length) { swallow(e); show(trail.pop()); }
+    };
+    const blockers = ['mousedown', 'mouseup', 'pointerdown', 'pointerup', 'dblclick', 'contextmenu'];
+    addEventListener('mousemove', onMove, true);
+    addEventListener('click', onClick, true);
+    addEventListener('keydown', onKey, true);
+    blockers.forEach(t => addEventListener(t, swallow, true));
+    document.documentElement.style.cursor = 'crosshair';
+    clipping = {
+      off() {
+        removeEventListener('mousemove', onMove, true);
+        removeEventListener('click', onClick, true);
+        removeEventListener('keydown', onKey, true);
+        blockers.forEach(t => removeEventListener(t, swallow, true));
+        document.documentElement.style.cursor = '';
+        host.remove();
+      },
+    };
+  }
+
   window.__cdTools = {
     /** Replace all highlights with the stored list for this page. */
     apply(list) {
@@ -502,6 +656,8 @@
     find(query, step) { return JSON.stringify(find(String(query || ''), step)); },
     clearFind() { clearFind(); return true; },
     setDark(on) { return setDark(!!on); },
+    /** Start (or cancel) picking an element to clip. */
+    clip() { if (clipping) stopClip(); else startClip(); return true; },
   };
 
   // Ask for this page's saved highlights — now, and again when an SPA

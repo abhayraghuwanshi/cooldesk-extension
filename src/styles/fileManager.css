@@ -1399,3 +1399,31 @@
 .fm-sidebar--row .fm-side-unpin {
   margin-left: 0;
 }
+
+/* Right-click menu on an item. */
+.fm-entry-menu {
+  width: 240px;
+}
+
+.fm-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border-secondary, rgba(255, 255, 255, 0.08));
+}
+
+.fm-menu-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Extract / compress progress and result in the status bar. */
+.fm-status-op {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary, #9ca3af);
+}
+
+.fm-status-op.is-error {
+  color: #f87171;
+}

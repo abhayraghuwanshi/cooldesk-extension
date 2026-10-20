@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 // Tabs for Browse mode. A tab is a web page (its own native page, BrowserPane
-// with paneId `bt-<id>`) or a file / folder from disk (`file: { path, isDir }`,
-// previewed in the main area). Web tabs stay loaded while you switch away —
+// with paneId `bt-<id>`), a file / folder from disk (`file: { path, isDir }`,
+// previewed in the main area) or a terminal (`term: { cwd }`, a shell that
+// runs as long as the tab is open — never put to sleep). Web tabs stay loaded while you switch away —
 // up to MAX_LIVE of them; older ones "sleep" (their page is closed) and
 // reload when you come back, since every live page is a WebKit process of
 // 100–300 MB.
@@ -26,6 +27,40 @@ function normalizePath(p) {
   return out.join(sep) || p;
 }
 
+// Per-tab Back / Forward entries: what the tab showed — a page or a file —
+// before the current thing. Saved with the tabs, so a restart (an app
+// update, a dev rebuild) doesn't strand you on a file with no way back.
+const HISTORY = 30;
+const entryOf = (t) => ({ url: t.url || null, file: t.file || null, title: t.title || '' });
+// Show `entry` in tab `t`; a page reloads (its pane closed while the file
+// was up).
+const restore = (t, entry) => ({
+  url: entry.url,
+  file: entry.file,
+  title: entry.title,
+  req: entry.url ? { url: entry.url, key: t.req.key + 1 } : t.req,
+});
+// Navigate tab `t` to `entry`, remembering where it was.
+const goTo = (t, entry) => ({
+  ...t,
+  ...restore(t, entry),
+  back: [...(t.back || []), entryOf(t)].slice(-HISTORY),
+  fwd: [],
+});
+
+// Saved entries, checked the way the tabs themselves are.
+function cleanEntries(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter(e => e && (isWebUrl(e.url) || typeof e.file?.path === 'string' || (!e.url && !e.file)))
+    .map(e => ({
+      url: isWebUrl(e.url) ? e.url : null,
+      file: typeof e.file?.path === 'string' ? { path: e.file.path, isDir: !!e.file.isDir } : null,
+      title: typeof e.title === 'string' ? e.title : '',
+    }))
+    .slice(-HISTORY);
+}
+
 function load(fallbackUrl) {
   try {
     const saved = JSON.parse(localStorage.getItem(TABS_KEY) || 'null');
@@ -38,6 +73,9 @@ function load(fallbackUrl) {
           title: t.title || '',
           req: { url: isWebUrl(t.url) ? t.url : null, key: 0 },
           file: t.file && typeof t.file.path === 'string' ? { path: t.file.path, isDir: !!t.file.isDir } : null,
+          term: t.term ? { cwd: typeof t.term.cwd === 'string' ? t.term.cwd : null } : null,
+          back: cleanEntries(t.back),
+          fwd: cleanEntries(t.fwd),
         }));
       if (tabs.length) return { tabs, activeId: tabs.some(t => t.id === saved.activeId) ? saved.activeId : tabs[0].id };
     }
@@ -62,7 +100,7 @@ export function useBrowseTabs(initialUrl) {
       try {
         localStorage.setItem(TABS_KEY, JSON.stringify({
           activeId,
-          tabs: tabs.map(({ id, url, title, file }) => ({ id, url, title, file })),
+          tabs: tabs.map(({ id, url, title, file, term, back, fwd }) => ({ id, url, title, file, term, back, fwd })),
         }));
       } catch { /* keep in memory */ }
     }, 300);
@@ -83,7 +121,13 @@ export function useBrowseTabs(initialUrl) {
     if (!isWebUrl(url)) return;
     setState(s => ({
       ...s,
-      tabs: s.tabs.map(t => (t.id === s.activeId ? { ...t, url, file: null, req: { url, key: t.req.key + 1 } } : t)),
+      tabs: s.tabs.map(t => {
+        if (t.id !== s.activeId) return t;
+        // Leaving a file for a page: the file goes on Back (page-to-page
+        // history is the page's own).
+        const next = { ...t, url, file: null, term: null, req: { url, key: t.req.key + 1 } };
+        return t.file ? { ...next, back: [...(t.back || []), entryOf(t)].slice(-HISTORY), fwd: [] } : next;
+      }),
     }));
   }, []);
 
@@ -156,7 +200,7 @@ export function useBrowseTabs(initialUrl) {
   if (!mru.current.includes(activeId)) touch(activeId);
   // Only web tabs count toward MAX_LIVE (file tabs have no web process).
   const live = useMemo(
-    () => new Set([activeId, ...mru.current.filter(id => tabs.some(t => t.id === id && !t.file))].slice(0, MAX_LIVE)),
+    () => new Set([activeId, ...mru.current.filter(id => tabs.some(t => t.id === id && !t.file && !t.term))].slice(0, MAX_LIVE)),
     // mru is a ref; recompute when the active tab or the tab set changes.
     [activeId, tabs],
   );
@@ -164,8 +208,10 @@ export function useBrowseTabs(initialUrl) {
   /** Tab already showing `url` (its current page or what was asked for). */
   const findByUrl = useCallback((url) => tabs.find(t => t.url === url || t.req.url === url) || null, [tabs]);
 
-  /** A file or folder as a tab (switches to it if it's already open).
-   *  inPlace: opened from Home, so it takes over that blank tab. */
+  /** A file or folder (switches to its tab if it's already open).
+   *  inPlace: show it in the current tab, as following a link would — the
+   *  page or file it replaces goes on the tab's Back list. A terminal tab is
+   *  never replaced (its shell would end), so then it gets a new tab. */
   const openFileTab = useCallback((rawPath, isDir = false, inPlace = false) => {
     if (!rawPath) return;
     const path = normalizePath(rawPath);
@@ -177,9 +223,9 @@ export function useBrowseTabs(initialUrl) {
     }
     const title = path.split(/[/\\]/).filter(Boolean).pop() || path;
     const here = tabs.find(t => t.id === activeId);
-    if (inPlace && here && !here.url && !here.file) {
+    if (inPlace && here && !here.term) {
       touch(here.id);
-      setState(s => ({ ...s, tabs: s.tabs.map(t => (t.id === here.id ? { ...t, title, file: { path, isDir } } : t)) }));
+      setState(s => ({ ...s, tabs: s.tabs.map(t => (t.id === here.id ? goTo(t, { url: null, file: { path, isDir }, title }) : t)) }));
       return;
     }
     const id = newId();
@@ -190,6 +236,48 @@ export function useBrowseTabs(initialUrl) {
     }));
   }, [tabs, activeId]);
 
+  /** A terminal in `cwd` (home when empty), as a new tab — or in place of
+   *  the blank Home tab it was opened from. */
+  const openTerminalTab = useCallback((rawCwd = null, inPlace = false) => {
+    const cwd = rawCwd ? normalizePath(rawCwd) : null;
+    const title = cwd ? cwd.split(/[/\\]/).filter(Boolean).pop() || cwd : 'Terminal';
+    const here = tabs.find(t => t.id === activeId);
+    if (inPlace && here && !here.url && !here.file && !here.term) {
+      touch(here.id);
+      setState(s => ({ ...s, tabs: s.tabs.map(t => (t.id === here.id ? { ...t, title, term: { cwd } } : t)) }));
+      return;
+    }
+    const id = newId();
+    touch(id);
+    setState(s => (s.tabs.length >= MAX_TABS ? s : {
+      tabs: [...s.tabs, { id, url: null, title, req: { url: null, key: 0 }, term: { cwd } }],
+      activeId: id,
+    }));
+  }, [tabs, activeId]);
+
+  /** Back / Forward across what the tab showed (files, and the page before
+   *  a file). Returns false when there's nothing to go to. */
+  const step = useCallback((dir) => {
+    const here = tabs.find(t => t.id === activeId);
+    const from = dir < 0 ? 'back' : 'fwd';
+    const to = dir < 0 ? 'fwd' : 'back';
+    if (!here?.[from]?.length) return false;
+    setState(s => ({
+      ...s,
+      tabs: s.tabs.map(t => {
+        if (t.id !== s.activeId || !t[from]?.length) return t;
+        const entry = t[from][t[from].length - 1];
+        return {
+          ...t,
+          ...restore(t, entry),
+          [from]: t[from].slice(0, -1),
+          [to]: [...(t[to] || []), entryOf(t)].slice(-HISTORY),
+        };
+      }),
+    }));
+    return true;
+  }, [tabs, activeId]);
+
   const active = tabs.find(t => t.id === activeId) || tabs[0];
-  return { tabs, active, activeId: active.id, live, activate, openInActive, openInNew, openFileTab, close, cycle, noteUrl, noteTitle, move, findByUrl };
+  return { tabs, active, activeId: active.id, live, activate, openInActive, openInNew, openFileTab, openTerminalTab, step, close, cycle, noteUrl, noteTitle, move, findByUrl };
 }

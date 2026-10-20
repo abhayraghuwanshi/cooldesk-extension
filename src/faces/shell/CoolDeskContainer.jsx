@@ -30,6 +30,8 @@ const WorkspaceList = lazy(() => import('../workspace/WorkspaceList').then(m => 
 // Lazy load heavy components
 const ChatContext = lazy(() => import('../workspace/ChatContext').then(m => ({ default: m.ChatContext })));
 const TabManagement = lazy(() => import('../tabs/TabManagement').then(m => ({ default: m.TabManagement })));
+// Last current workspace, restored on launch.
+const CURRENT_WS_KEY = 'cooldesk.currentWorkspaceId';
 const BrowseView = lazy(() => import('../browse/BrowseView').then(m => ({ default: m.BrowseView })));
 // Heavy: react-force-graph-2d (d3-force + canvas). Only load when the graph opens.
 const KnowledgeGraph = lazy(() => import('../../features/knowledge-graph/KnowledgeGraph').then(m => ({ default: m.KnowledgeGraph })));
@@ -294,12 +296,19 @@ export function CoolDeskContainer({
   const [pinnedTabs, setPinnedTabs] = useState(new Set());
   const [expandedDomain, setExpandedDomain] = useState(null);
 
-  // Auto-select first workspace on mount
+  // On launch / reload: the workspace you were last in (else the first).
+  // Remembered, so a refresh doesn't drop you back on workspace #1.
   useEffect(() => {
     if (savedWorkspaces.length > 0 && !currentWorkspace) {
-      setCurrentWorkspace(savedWorkspaces[0]);
+      let lastId = null;
+      try { lastId = localStorage.getItem(CURRENT_WS_KEY); } catch { /* none */ }
+      setCurrentWorkspace(savedWorkspaces.find(w => w.id === lastId) || savedWorkspaces[0]);
     }
   }, [savedWorkspaces, currentWorkspace]);
+  useEffect(() => {
+    if (!currentWorkspace?.id) return;
+    try { localStorage.setItem(CURRENT_WS_KEY, currentWorkspace.id); } catch { /* per session then */ }
+  }, [currentWorkspace?.id]);
 
   const WORKSPACES_PER_PAGE = 2; // Show 3 workspaces in overview
   const totalPages = Math.ceil(savedWorkspaces.length / WORKSPACES_PER_PAGE);
@@ -567,15 +576,14 @@ export function CoolDeskContainer({
     );
   }
 
-  // Home (desktop): your workspaces on top, then everything open right now —
-  // apps, tabs, folders, widgets, dev servers. The old Collections and Active
-  // screens, merged into one scrolling page. Blank tabs show it; at sidebar
-  // widths it is the whole app.
-  // Popular Folders on Home open as a folder tab, in place of Home.
+  // Docked sidebar (desktop): your workspaces on top, then everything open
+  // right now — apps, tabs, folders, widgets, dev servers. At full width
+  // Browse shows the same in its side panel's Home tab instead.
+  // Popular Folders open in Browse's Files panel.
   const openFolderInBrowse = (path) => {
     window.dispatchEvent(new CustomEvent('cooldesk-browse', { detail: { to: 'folder', path } }));
   };
-  const homePage = isDesktopApp ? (
+  const homePage = isDesktopApp && isSidebarWidth ? (
     <div className="home-stack">
       <section className="home-stack-workspaces">
         <Suspense fallback={null}>
@@ -589,13 +597,12 @@ export function CoolDeskContainer({
             onEditWorkspace={handleOpenEditModal}
             appSuggestions={appSuggestions}
             onAddAppsToWorkspace={handleAddAppsToWorkspace}
-            initialLimit={4}
           />
         </Suspense>
       </section>
       <section className="home-stack-active">
         <Suspense fallback={null}>
-          <TabManagement onOpenFolder={isSidebarWidth ? undefined : openFolderInBrowse} />
+          <TabManagement />
         </Suspense>
       </section>
     </div>
@@ -715,8 +722,16 @@ export function CoolDeskContainer({
             <BrowseView
               savedWorkspaces={savedWorkspaces}
               activeWorkspaceId={currentWorkspace?.id}
+              onSelectWorkspace={(id) => {
+                const ws = savedWorkspaces.find(w => w.id === id);
+                if (ws) setCurrentWorkspace(ws);
+              }}
               isActive
-              home={homePage}
+              homeExtras={(
+                <Suspense fallback={null}>
+                  <TabManagement panel onOpenFolder={openFolderInBrowse} />
+                </Suspense>
+              )}
             />
           </Suspense>
         </div>

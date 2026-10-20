@@ -30,6 +30,8 @@ const HANDLER: &str = "cooldesk";
 const TOOLS_JS: &str = include_str!("tools.js");
 /// Bigger messages are dropped outright (a quote is capped at 4 KB anyway).
 const MAX_MESSAGE: usize = 64 * 1024;
+/// Except a clip, which can carry a table or a chart's SVG.
+const MAX_CLIP: usize = 8 * 1024 * 1024;
 
 static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
 
@@ -157,10 +159,14 @@ fn on_message(label: &str, message: &WKScriptMessage) {
     let (body, view) = unsafe { (message.body(), message.webView()) };
     let Some(view) = view else { return };
     let Some(text) = body.downcast_ref::<NSString>().map(|s| s.to_string()) else { return };
-    if text.len() > MAX_MESSAGE {
+    if text.len() > MAX_CLIP {
         return;
     }
     let Ok(msg) = serde_json::from_str::<serde_json::Value>(&text) else { return };
+    let is_clip = msg.get("type").and_then(|t| t.as_str()) == Some("clip");
+    if text.len() > MAX_MESSAGE && !is_clip {
+        return;
+    }
     let Some(url) = (unsafe { page_url(&view) }) else { return };
     let str_field = |k: &str| msg.get(k).and_then(|v| v.as_str()).map(str::to_string);
 
@@ -195,6 +201,10 @@ fn on_message(label: &str, message: &WKScriptMessage) {
             }
             _ => Err("unknown shortcut".into()),
         },
+        Some("clip") => {
+            unsafe { clip(app, label, &view, msg, url) };
+            return;
+        }
         _ => Err("unknown message".into()),
     };
     match result {
@@ -323,6 +333,75 @@ pub async fn browser_pane_screenshot(app: tauri::AppHandle, id: String) -> Resul
     let host = url.as_deref().and_then(host_of).unwrap_or_else(|| "page".into());
     let name = format!("Screenshot {host} {}.png", chrono::Local::now().format("%Y-%m-%d %H.%M.%S"));
     crate::shelf::add_file_bytes(&app, &name, &png, url)
+}
+
+/// Start (or cancel) the element picker in a pane: the user clicks a table,
+/// chart or block on the page and it arrives as a `browser-pane-clip` event.
+#[tauri::command]
+pub async fn browser_pane_clip(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    let wv = pane(&app, &id)?;
+    with_view(&wv, |view, tx| unsafe {
+        eval_in_world(view, "window.__cdTools && window.__cdTools.clip()");
+        let _ = tx.send(());
+    })
+}
+
+/// A clip from tools.js: keep the SVG / an image of the element's box as
+/// files in app data (clips/, permanent — notes link to them), then hand the
+/// rest to the app window. Only the main window gets it: page content never
+/// goes to the other (web) panes.
+unsafe fn clip(app: &tauri::AppHandle, label: &str, view: &WKWebView, mut msg: serde_json::Value, url: String) {
+    use objc2_foundation::{NSPoint, NSRect, NSSize};
+    use serde_json::json;
+    use tauri::Emitter;
+
+    let Ok(dir) = app.path().app_data_dir().map(|d| d.join("clips")) else { return };
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S-%3f").to_string();
+    if let Some(svg) = msg.get("svg").and_then(|v| v.as_str()) {
+        let path = dir.join(format!("clip-{stamp}.svg"));
+        if std::fs::write(&path, svg).is_ok() {
+            msg["svgPath"] = json!(path.to_string_lossy());
+        }
+    }
+    if let Some(o) = msg.as_object_mut() {
+        o.remove("svg");
+    }
+    msg["url"] = json!(url);
+    msg["label"] = json!(label);
+
+    let kind = msg.get("kind").and_then(|k| k.as_str()).unwrap_or("");
+    let with_image = matches!(kind, "image" | "chart") || msg.get("withImage").and_then(|v| v.as_bool()) == Some(true);
+    let num = |k: &str| msg.pointer(&format!("/rect/{k}")).and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let (x, y, w, h) = (num("x"), num("y"), num("width"), num("height"));
+    let emit = |app: &tauri::AppHandle, msg: serde_json::Value| {
+        let _ = app.emit_to("main", "browser-pane-clip", msg);
+    };
+    if !with_image || w < 4.0 || h < 4.0 {
+        emit(app, msg);
+        return;
+    }
+
+    // The rect is in CSS px of the viewport; the view's points include page zoom.
+    let zoom: f64 = msg_send![view, pageZoom];
+    let config: Retained<AnyObject> = msg_send![objc2::class!(WKSnapshotConfiguration), new];
+    let rect = NSRect::new(NSPoint::new(x * zoom, y * zoom), NSSize::new(w * zoom, h * zoom));
+    let _: () = msg_send![&*config, setRect: rect];
+    let app = app.clone();
+    let pending = Mutex::new(Some(msg));
+    let block = block2::RcBlock::new(move |image: *mut AnyObject, _err: *mut AnyObject| {
+        let Some(mut msg) = pending.lock().unwrap().take() else { return };
+        if let Some(png) = png_bytes(image) {
+            let path = dir.join(format!("clip-{stamp}.png"));
+            if std::fs::write(&path, png).is_ok() {
+                msg["imagePath"] = json!(path.to_string_lossy());
+            }
+        }
+        emit(&app, msg);
+    });
+    let _: () = msg_send![view, takeSnapshotWithConfiguration: &*config, completionHandler: &*block];
 }
 
 /// NSImage → PNG bytes (via its bitmap representation).

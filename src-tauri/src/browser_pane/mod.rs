@@ -41,6 +41,10 @@ pub mod tools {
     pub fn browser_pane_screenshot(_id: String) -> Result<crate::shelf::ShelfItem, String> {
         Err("Screenshots aren't available on this platform yet".into())
     }
+    #[tauri::command]
+    pub fn browser_pane_clip(_id: String) -> Result<(), String> {
+        Err("Clipping isn't available on this platform yet".into())
+    }
 }
 #[cfg(target_os = "macos")]
 pub mod attachments;

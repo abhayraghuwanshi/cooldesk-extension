@@ -3,7 +3,7 @@ import {
   faExternalLinkAlt, faFile, faFileAudio, faFileCode, faFileExcel, faFileImage, faFilePdf,
   faEye, faEyeSlash, faFileVideo, faFileZipper, faFolder, faHardDrive, faHouse, faList, faSearch,
   faTableCellsLarge, faThumbtack, faTimes, faPlay, faDiagramProject, faCheckDouble, faLink,
-  faLinkSlash, faPlus, faSpinner, faPowerOff, faSync, faEllipsis
+  faLinkSlash, faPlus, faSpinner, faPowerOff, faSync, faEllipsis, faBoxArchive, faBoxOpen
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -27,6 +27,14 @@ async function listDirRaw(path) {
 
 /** Hand a path to the OS (opens a file with its default app, a folder in Explorer). */
 // Native drag-out lives in utils/nativeDrag.js (shared with the Shelf).
+
+// Archives Extract here can unpack (archive.rs, via the system tar).
+const ARCHIVE_RE = /\.(zip|tar|tgz|tbz2|txz|7z|rar|tar\.gz|tar\.bz2|tar\.xz)$/i;
+
+async function archiveOp(cmd, args) {
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke(cmd, args);
+}
 
 async function openWithSystem(path) {
   if (window.electronAPI?.openFolder) return window.electronAPI.openFolder(path);
@@ -286,6 +294,38 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline:
   const [placesOpen, setPlacesOpen] = useState(false);
   // Inline (sidebar) compact toolbar: which of its dropdowns is open.
   const [compactMenu, setCompactMenu] = useState(null); // 'more' | 'ancestors' | null
+  // Right-click on an item: { entry, left, top }. opStatus: the last
+  // extract / compress, shown in the status bar for a few seconds.
+  const [entryMenu, setEntryMenu] = useState(null);
+  const [opStatus, setOpStatus] = useState(null);
+  useEffect(() => {
+    if (!opStatus || opStatus.busy) return undefined;
+    const t = setTimeout(() => setOpStatus(null), 5000);
+    return () => clearTimeout(t);
+  }, [opStatus]);
+  useEffect(() => {
+    if (!entryMenu) return undefined;
+    const close = (e) => { if (!e.target?.closest?.('.fm-menu')) setEntryMenu(null); };
+    window.addEventListener('mousedown', close, true);
+    window.addEventListener('blur', close);
+    return () => {
+      window.removeEventListener('mousedown', close, true);
+      window.removeEventListener('blur', close);
+    };
+  }, [entryMenu]);
+  // Extract / compress next to the item; the folder watcher shows the result.
+  const runArchive = useCallback(async (kind, entry) => {
+    const name = entry.path.split(/[/\\]/).pop();
+    setOpStatus({ busy: true, text: kind === 'extract' ? `Extracting ${name}…` : `Compressing ${name}…` });
+    try {
+      const out = kind === 'extract'
+        ? await archiveOp('archive_extract', { path: entry.path })
+        : await archiveOp('archive_compress', { paths: [entry.path] });
+      setOpStatus({ text: `${kind === 'extract' ? 'Extracted to' : 'Created'} ${out.split(/[/\\]/).pop()}` });
+    } catch (err) {
+      setOpStatus({ error: true, text: `Couldn’t ${kind === 'extract' ? 'extract' : 'compress'} ${name} — ${err}` });
+    }
+  }, []);
   // Screen coords for whichever popup is open. The bars that host the triggers
   // scroll horizontally (`overflow-x: auto`), which clips any absolutely
   // positioned child — so menus are rendered fixed, anchored to the trigger.
@@ -862,8 +902,8 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline:
       };
       if (e.key === 'Escape') {
         take();
-        if (crumbMenu || showRecent || showLinkMenu || compactMenu) {
-          setCrumbMenu(null); setShowRecent(false); setShowLinkMenu(false); setCompactMenu(null); return;
+        if (crumbMenu || showRecent || showLinkMenu || compactMenu || entryMenu) {
+          setCrumbMenu(null); setShowRecent(false); setShowLinkMenu(false); setCompactMenu(null); setEntryMenu(null); return;
         }
         if (editingPath !== null) { setEditingPath(null); return; }
         if (filter) { setFilter(''); return; }
@@ -916,7 +956,7 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline:
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [isOpen, filter, visible, cursor, view, editingPath, crumbMenu, showRecent, showLinkMenu,
-      path, onClose, goBack, goForward, goUp, openEntry, inline, compactMenu]);
+      path, onClose, goBack, goForward, goUp, openEntry, inline, compactMenu, entryMenu]);
 
   // Inline has no backdrop, and its menus are portaled outside the window —
   // so close them on any press that lands in neither the window nor a menu
@@ -1618,6 +1658,15 @@ ${c.path}`}
                 const common = {
                   className: `fm-item ${view === 'grid' ? 'fm-tile' : 'fm-row'} ${active ? 'active' : ''} ${entry.hidden ? 'hidden-entry' : ''}`,
                   onClick: () => { setCursor(i); openEntry(entry); },
+                  onContextMenu: (e) => {
+                    e.preventDefault();
+                    setCursor(i);
+                    setEntryMenu({
+                      entry,
+                      left: Math.min(e.clientX, window.innerWidth - 248),
+                      top: Math.min(e.clientY, window.innerHeight - 220),
+                    });
+                  },
                   onMouseEnter: (e) => { if (isRealHover(e)) { setCursor(i); prefetch(entry); } },
                   title: IS_TAURI ? `${entry.path}\nDrag out to copy it into a folder or an upload box` : entry.path,
                   // Drag out → copy into Finder/Explorer or a web upload field.
@@ -1663,11 +1712,51 @@ ${c.path}`}
                   +{hiddenCount} hidden
                 </button>
               )}
-              {current && <span className="fm-status-sel">{baseName(current.path)}</span>}
+              {opStatus ? (
+                <span className={`fm-status-op ${opStatus.error ? 'is-error' : ''}`}>
+                  {opStatus.busy && <FontAwesomeIcon icon={faSpinner} spin />} {opStatus.text}
+                </span>
+              ) : current && <span className="fm-status-sel">{baseName(current.path)}</span>}
               <span className="fm-status-hint">
                 <kbd>↑↓</kbd> move <kbd>↵</kbd> open <kbd>⌫</kbd> up <kbd>Ctrl+L</kbd> path
               </span>
             </div>
+
+            {entryMenu && floatMenu(
+              <div className="fm-menu fm-entry-menu" style={{ left: entryMenu.left, top: entryMenu.top }} onClick={(e) => e.stopPropagation()}>
+                {(() => {
+                  const { entry } = entryMenu;
+                  const act = (fn) => () => { setEntryMenu(null); fn(); };
+                  return (
+                    <>
+                      <button className="fm-menu-item" onClick={act(() => openEntry(entry))}>
+                        <FontAwesomeIcon icon={entry.is_dir ? faFolder : faFile} className="fm-menu-icon" />
+                        <span className="fm-menu-label">Open</span>
+                      </button>
+                      <button className="fm-menu-item" onClick={act(() => openWithSystem(entry.path).catch(() => { }))}>
+                        <FontAwesomeIcon icon={faExternalLinkAlt} className="fm-menu-icon" />
+                        <span className="fm-menu-label">{entry.is_dir ? 'Open in system file manager' : 'Open with default app'}</span>
+                      </button>
+                      <div className="fm-menu-sep" />
+                      {!entry.is_dir && ARCHIVE_RE.test(entry.path) && (
+                        <button className="fm-menu-item" onClick={act(() => runArchive('extract', entry))} disabled={opStatus?.busy}>
+                          <FontAwesomeIcon icon={faBoxOpen} className="fm-menu-icon" />
+                          <span className="fm-menu-label">Extract here</span>
+                        </button>
+                      )}
+                      <button className="fm-menu-item" onClick={act(() => runArchive('compress', entry))} disabled={opStatus?.busy}>
+                        <FontAwesomeIcon icon={faBoxArchive} className="fm-menu-icon" />
+                        <span className="fm-menu-label">Compress “{baseName(entry.path)}”</span>
+                      </button>
+                      <button className="fm-menu-item" onClick={act(() => navigator.clipboard.writeText(entry.path).catch(() => { }))}>
+                        <FontAwesomeIcon icon={faCopy} className="fm-menu-icon" />
+                        <span className="fm-menu-label">Copy path</span>
+                      </button>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
           </div>
 
           {/* Quick Look-style preview, wide widths only (see fileManager.css

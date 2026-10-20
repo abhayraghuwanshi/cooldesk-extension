@@ -13,6 +13,9 @@ import { WorkspaceCard } from './parts/WorkspaceCard';
 import { WorkspaceContextPanel } from './parts/WorkspaceContextPanel.jsx';
 import { AppGrid } from './parts/AppGrid';
 
+// Shared with Browse's side panel (Home → Notes, to-dos & commands).
+export { WorkspaceContextPanel };
+
 // Same desktop-app detection as WorkspaceCard: positive signal only, since
 // WebView2 populates chrome.runtime inside the Tauri app.
 const isDesktopApp = typeof window !== 'undefined' &&

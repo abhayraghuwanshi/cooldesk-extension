@@ -149,6 +149,8 @@ export function BrowserPane({ paneId, url, requestKey = 0, active, onNavigate, o
   // Their buttons live in the side panel's Page tab (via onTools), keeping
   // the toolbar to navigation and the address.
   const screenshot = () => invoke('browser_pane_screenshot', { id: paneId });
+  // Pick a table / chart / block on the page; it arrives as browser-pane-clip.
+  const clip = () => invoke('browser_pane_clip', { id: paneId });
   const [darkHosts, setDarkHosts] = useState(() => new Set());
   useEffect(() => {
     invoke('page_dark_hosts').then(list => setDarkHosts(new Set(list || []))).catch(() => { });
@@ -174,6 +176,7 @@ export function BrowserPane({ paneId, url, requestKey = 0, active, onNavigate, o
     toggleAdblock,
     toggleDark,
     screenshot,
+    clip,
     find: () => {
       setFindOpen(true);
       setTimeout(() => { findRef.current?.focus(); findRef.current?.select(); }, 0);
@@ -181,7 +184,7 @@ export function BrowserPane({ paneId, url, requestKey = 0, active, onNavigate, o
     openExternal: () => (pageUrl || url) && invoke('open_url', { url: pageUrl || url }),
   };
   const actions = useMemo(() => Object.fromEntries(
-    ['toggleAutoFit', 'toggleAdblock', 'toggleDark', 'screenshot', 'find', 'openExternal']
+    ['toggleAutoFit', 'toggleAdblock', 'toggleDark', 'screenshot', 'clip', 'find', 'openExternal']
       .map(name => [name, (...args) => actionsRef.current[name](...args)]),
   ), []);
   useEffect(() => {

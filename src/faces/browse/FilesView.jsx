@@ -1,4 +1,4 @@
-import { faBoxArchive, faFolderOpen, faGauge, faHighlighter, faHouse, faMagnifyingGlass, faTableList, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faBoxArchive, faFolderOpen, faGauge, faHighlighter, faHouse, faMagnifyingGlass, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useRef, useState } from 'react';
 import { AddressSuggestions } from '../../features/browser/AddressSuggestions';
@@ -8,14 +8,15 @@ import { ShelfView } from '../../features/shelf/ShelfView';
 import { NotesView } from '../../features/browser/NotesView';
 import { PageView } from '../../features/browser/PageView';
 
-// Browse's side panel (right): Tabs (workspace + open tabs), Files, Shelf,
+// Browse's side panel (right): Home (workspace, open tabs, apps, folders,
+// widgets), Files, Shelf,
 // Notes, Page. Nothing is previewed in here — files opened from the Files or
 // Shelf tab open as tabs in the main view, where there's room to read them.
 // Rows in the file manager start a real OS file drag (tauri-plugin-drag), so
 // dropping one on a site's upload field or drop zone uploads it.
 
 const PANEL_TABS = [
-  { id: 'tabs', label: 'Tabs', icon: faTableList, title: 'Tabs: workspace and open tabs' },
+  { id: 'tabs', label: 'Home', icon: faHouse, title: 'Home: workspace, open tabs, apps, folders and widgets' },
   { id: 'files', label: 'Files', icon: faFolderOpen, title: 'Files' },
   { id: 'shelf', label: 'Shelf', icon: faBoxArchive, title: 'Shelf: downloads, pasted clips and dropped files, kept for 7 days' },
   { id: 'notes', label: 'Notes', icon: faHighlighter, title: 'Notes: highlights and notes on this page' },
@@ -30,19 +31,19 @@ const PANEL_TABS = [
  * @param onClose       hide the panel
  * @param tab / onTab   which panel tab (BrowseView owns it, so its badge can
  *                      open the Shelf)
- * @param onHome / homeShown  🏠 back to Home (and whether it's showing)
  * @param nav           Tabs tab content (view switch, workspace, tabs)
  * @param shelf         from useShelf
  * @param notesUrl / notesPaneId  page in the active tab, for the Notes tab
  * @param page          props for the Page tab (PageView)
  */
-export function FilesView({ path, onPathChange, onOpen, active, onClose, tab = 'tabs', onTab, onHome, homeShown, shelf, nav, notesUrl, notesPaneId, page }) {
+export function FilesView({ path, onPathChange, onOpen, active, onClose, tab = 'tabs', onTab, shelf, nav, notesUrl, notesPaneId, page }) {
   // Disk-wide file search (the spotlight's "/f": the Spotlight index over the
   // home folder). The manager's own filter box only narrows the current folder.
   const searchRef = useRef(null);
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [selected, setSelected] = useState(-1);
+
   const { items } = useAddressSuggestions(query.trim() ? `/f ${query}` : '/f', { enabled: searching, withFiles: true });
   useEffect(() => { setSelected(-1); }, [items]);
   const endSearch = () => {
@@ -76,13 +77,6 @@ export function FilesView({ path, onPathChange, onOpen, active, onClose, tab = '
   return (
     <div className="fp-root">
       <div className="fp-head">
-        {/* Home from anywhere: the main view's toolbar can be a page, a file
-            or a folder, and the panel is always beside it. */}
-        {onHome && (
-          <button className={`bp-btn ${homeShown ? 'on' : ''}`} onClick={onHome} title="Home: your workspaces and what's open">
-            <FontAwesomeIcon icon={faHouse} />
-          </button>
-        )}
         <div className="bp-capsule fp-tabs" role="tablist" aria-label="Side panel">
           {PANEL_TABS.map(t => (
             <button
