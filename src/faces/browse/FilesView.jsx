@@ -1,4 +1,4 @@
-import { faBoxArchive, faFolderOpen, faGauge, faHighlighter, faMagnifyingGlass, faTableList, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faBoxArchive, faFolderOpen, faGauge, faHighlighter, faHouse, faMagnifyingGlass, faTableList, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useRef, useState } from 'react';
 import { AddressSuggestions } from '../../features/browser/AddressSuggestions';
@@ -30,12 +30,13 @@ const PANEL_TABS = [
  * @param onClose       hide the panel
  * @param tab / onTab   which panel tab (BrowseView owns it, so its badge can
  *                      open the Shelf)
+ * @param onHome / homeShown  🏠 back to Home (and whether it's showing)
  * @param nav           Tabs tab content (view switch, workspace, tabs)
  * @param shelf         from useShelf
  * @param notesUrl / notesPaneId  page in the active tab, for the Notes tab
  * @param page          props for the Page tab (PageView)
  */
-export function FilesView({ path, onPathChange, onOpen, active, onClose, tab = 'tabs', onTab, shelf, nav, notesUrl, notesPaneId, page }) {
+export function FilesView({ path, onPathChange, onOpen, active, onClose, tab = 'tabs', onTab, onHome, homeShown, shelf, nav, notesUrl, notesPaneId, page }) {
   // Disk-wide file search (the spotlight's "/f": the Spotlight index over the
   // home folder). The manager's own filter box only narrows the current folder.
   const searchRef = useRef(null);
@@ -75,6 +76,13 @@ export function FilesView({ path, onPathChange, onOpen, active, onClose, tab = '
   return (
     <div className="fp-root">
       <div className="fp-head">
+        {/* Home from anywhere: the main view's toolbar can be a page, a file
+            or a folder, and the panel is always beside it. */}
+        {onHome && (
+          <button className={`bp-btn ${homeShown ? 'on' : ''}`} onClick={onHome} title="Home: your workspaces and what's open">
+            <FontAwesomeIcon icon={faHouse} />
+          </button>
+        )}
         <div className="bp-capsule fp-tabs" role="tablist" aria-label="Side panel">
           {PANEL_TABS.map(t => (
             <button

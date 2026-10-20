@@ -187,7 +187,8 @@ fn on_message(label: &str, message: &WKScriptMessage) {
         // Browser shortcuts pressed while the page had focus (the keys never
         // reach CoolDesk's own document). Only these combos are forwarded.
         Some("shortcut") => match str_field("key").as_deref() {
-            Some(key @ ("mod+t" | "mod+l" | "mod+[" | "mod+]" | "mod+r" | "mod+f" | "next-tab" | "prev-tab")) => {
+            Some(key @ ("mod+t" | "mod+l" | "mod+[" | "mod+]" | "mod+r" | "mod+f" | "next-tab" | "prev-tab"
+                | "tab-1" | "tab-2" | "tab-3" | "tab-4" | "tab-5" | "tab-6" | "tab-7" | "tab-8" | "tab-9")) => {
                 use tauri::Emitter;
                 let _ = app.emit("browser-pane-shortcut", serde_json::json!({ "label": label, "key": key }));
                 return;

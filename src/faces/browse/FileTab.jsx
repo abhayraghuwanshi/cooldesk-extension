@@ -57,13 +57,14 @@ export function FileIcon({ path, isDir, className = '' }) {
  * @param onOpenFile  (path) → open a file from the folder view as a tab
  * @param onShowInFiles(path) → reveal in the side panel's Files tab
  */
-export function FileTab({ file, active, onOpenFile, onShowInFiles, toolbarEnd = null }) {
+export function FileTab({ file, active, onOpenFile, onShowInFiles, toolbarStart = null, toolbarEnd = null }) {
   const preview = file.isDir ? null : getPreviewItem(file.path);
   const isText = preview?.previewKind === 'code';
 
   return (
     <div className="bp-root ft-root">
       <div className="bp-toolbar">
+        {toolbarStart}
         <div className="bp-address ft-address" title={file.path}>
           <FileIcon path={file.path} isDir={file.isDir} className="ft-address-icon" />
           <span className="bp-host">{baseName(file.path)}</span>

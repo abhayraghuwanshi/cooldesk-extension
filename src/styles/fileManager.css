@@ -283,10 +283,12 @@
   padding: 0 8px;
   height: 28px;
   width: 180px;
+  min-width: 110px;
   border-radius: 7px;
   background: var(--surface-3, #242430);
   border: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.06));
-  flex-shrink: 0;
+  /* Gives way before the breadcrumb does in a narrow window. */
+  flex-shrink: 1;
 }
 
 .fm-search:focus-within {

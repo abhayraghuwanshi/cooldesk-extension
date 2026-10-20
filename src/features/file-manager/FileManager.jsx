@@ -305,6 +305,13 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline:
   const filterRef = useRef(null);
   const listRef = useRef(null);
   const pathInputRef = useRef(null);
+  // The breadcrumb scrolls sideways when it doesn't fit; keep the current
+  // folder (the end) in view rather than the root.
+  const crumbsRef = useRef(null);
+  useEffect(() => {
+    const el = crumbsRef.current;
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [path, editingPath]);
   const hoverTimer = useRef(null);
 
   // Re-anchor whenever the modal is opened on a different folder.
@@ -1219,6 +1226,7 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline:
             />
           ) : (
             <div
+              ref={crumbsRef}
               className="fm-crumbs"
               onDoubleClick={() => { setEditingPath(path); setTimeout(() => pathInputRef.current?.select(), 0); }}
               title="Double-click (or Ctrl+L) to type a path"

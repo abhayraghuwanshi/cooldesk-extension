@@ -14,6 +14,18 @@ const MAX_TABS = 40;
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 const isWebUrl = (url) => typeof url === 'string' && /^https?:\/\//i.test(url);
 
+// "/a/b/../c" → "/a/c" (project links can be relative), so the tab's title,
+// breadcrumb and duplicate check all see the real folder.
+function normalizePath(p) {
+  const sep = p.includes('\\') && !p.includes('/') ? '\\' : '/';
+  const out = [];
+  for (const part of p.split(/[/\\]/)) {
+    if (part === '..') { if (out.length > 1) out.pop(); }
+    else if (part !== '.') out.push(part);
+  }
+  return out.join(sep) || p;
+}
+
 function load(fallbackUrl) {
   try {
     const saved = JSON.parse(localStorage.getItem(TABS_KEY) || 'null');
@@ -152,23 +164,31 @@ export function useBrowseTabs(initialUrl) {
   /** Tab already showing `url` (its current page or what was asked for). */
   const findByUrl = useCallback((url) => tabs.find(t => t.url === url || t.req.url === url) || null, [tabs]);
 
-  /** A file or folder as a tab (switches to it if it's already open). */
-  const openFileTab = useCallback((path, isDir = false) => {
-    if (!path) return;
+  /** A file or folder as a tab (switches to it if it's already open).
+   *  inPlace: opened from Home, so it takes over that blank tab. */
+  const openFileTab = useCallback((rawPath, isDir = false, inPlace = false) => {
+    if (!rawPath) return;
+    const path = normalizePath(rawPath);
     const existing = tabs.find(t => t.file?.path === path);
     if (existing) {
       touch(existing.id);
       setState(s => ({ ...s, activeId: existing.id }));
       return;
     }
-    const id = newId();
     const title = path.split(/[/\\]/).filter(Boolean).pop() || path;
+    const here = tabs.find(t => t.id === activeId);
+    if (inPlace && here && !here.url && !here.file) {
+      touch(here.id);
+      setState(s => ({ ...s, tabs: s.tabs.map(t => (t.id === here.id ? { ...t, title, file: { path, isDir } } : t)) }));
+      return;
+    }
+    const id = newId();
     touch(id);
     setState(s => (s.tabs.length >= MAX_TABS ? s : {
       tabs: [...s.tabs, { id, url: null, title, req: { url: null, key: 0 }, file: { path, isDir } }],
       activeId: id,
     }));
-  }, [tabs]);
+  }, [tabs, activeId]);
 
   const active = tabs.find(t => t.id === activeId) || tabs[0];
   return { tabs, active, activeId: active.id, live, activate, openInActive, openInNew, openFileTab, close, cycle, noteUrl, noteTitle, move, findByUrl };

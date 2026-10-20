@@ -66,7 +66,9 @@ function debounce(func, wait) {
   };
 }
 
-export function TabManagement() {
+/** @param onOpenFolder  open a folder in the main view (Home inside Browse);
+ *                      without it folders open in the file manager here. */
+export function TabManagement({ onOpenFolder } = {}) {
   const [tabs, setTabs] = useState([]);
   const [tabsLoading, setTabsLoading] = useState(true);
   const [expandedDomain, setExpandedDomain] = useState(null);
@@ -593,8 +595,9 @@ export function TabManagement() {
   // Clicking the chip of the folder that's already open closes it again.
   const handleFolderClick = useCallback((folder) => {
     if (!folder?.path) return;
+    if (onOpenFolder) { onOpenFolder(folder.path); return; }
     setBrowsingFolder(prev => (prev === folder.path ? null : folder.path));
-  }, []);
+  }, [onOpenFolder]);
 
   // Sidebar: keep the open folder's chip visible in the one-row strip
   // (it may be scrolled off to the side when picked from the browser's Places).

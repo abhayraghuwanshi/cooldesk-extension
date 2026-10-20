@@ -213,6 +213,8 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
     if (blank) browseTabs.activate(blank.id);
     else browseTabs.openInNew(null);
   }, [browseTabs, mode, setMode]);
+  const goHomeRef = useRef(goHome);
+  goHomeRef.current = goHome;
 
   // Browser shortcuts. Keys typed while the page itself has focus never reach
   // this document; the page tools (tools.js, isolated world) forward these
@@ -231,7 +233,15 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
       case 'mod+f': setFindKey(k => k + 1); return true;
       case 'next-tab': browseTabs.cycle(1); return true;
       case 'prev-tab': browseTabs.cycle(-1); return true;
-      default: return false;
+      default: {
+        // tab-1 … tab-8 by position, tab-9 the last tab (as browsers do).
+        const m = /^tab-([1-9])$/.exec(key);
+        if (!m) return false;
+        const list = browseTabs.tabs;
+        const target = m[1] === '9' ? list[list.length - 1] : list[Number(m[1]) - 1];
+        if (target) browseTabs.activate(target.id);
+        return true;
+      }
     }
   };
   useEffect(() => {
@@ -244,6 +254,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
       else if (mod && e.shiftKey && (k === ']' || k === '}')) key = 'next-tab';
       else if (mod && e.shiftKey && (k === '[' || k === '{')) key = 'prev-tab';
       else if (mod && !e.shiftKey && !e.altKey && ['t', 'l', '[', ']', 'r', 'f'].includes(k)) key = `mod+${k}`;
+      else if (mod && !e.shiftKey && !e.altKey && /^[1-9]$/.test(k)) key = `tab-${k}`;
       if (key && shortcutRef.current(key)) e.preventDefault();
     };
     window.addEventListener('keydown', onKey);
@@ -260,6 +271,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
       off?.();
     };
   }, [isActive, isSidebarWidth, mode]);
+
 
   // Pop-ups and target=_blank links from a tab open as a new tab beside it.
   useEffect(() => {
@@ -297,6 +309,22 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
     persist(FILES_TAB_KEY, tab);
   }, []);
   const downloading = shelf.downloads.some(d => d.state === 'started');
+
+  // Navigation from elsewhere in CoolDesk (slash commands, workspace jumps,
+  // onboarding) — what used to switch faces: Home, or the panel's Tabs tab.
+  useEffect(() => {
+    const onNavigate = (e) => {
+      const to = e.detail?.to;
+      if (to === 'home') goHomeRef.current?.();
+      else if (to === 'folder' && e.detail.path) browseTabs.openFileTab(e.detail.path, true, true);
+      else if (to === 'tabs') {
+        setFilesTab('tabs');
+        setFilesOpen(true);
+      }
+    };
+    window.addEventListener('cooldesk-browse', onNavigate);
+    return () => window.removeEventListener('cooldesk-browse', onNavigate);
+  }, [setFilesTab, setFilesOpen, browseTabs]);
   const [filesWidth, setFilesWidth] = useState(() => {
     const w = Number(localStorage.getItem(FILES_WIDTH_KEY));
     return w >= FILES_WIDTH_MIN && w <= FILES_WIDTH_MAX ? w : FILES_WIDTH_DEFAULT;
@@ -853,6 +881,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
                       active={isActive && browseMode && isCurrent}
                       onOpenFile={(path) => browseTabs.openFileTab(path, false)}
                       onShowInFiles={showInFiles}
+                      toolbarStart={toolbarStart}
                       toolbarEnd={toolbarEnd}
                     />
                   </div>
@@ -925,6 +954,8 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, isActive, 
               onClose={() => setFilesOpen(false)}
               tab={filesTab}
               onTab={setFilesTab}
+              onHome={home ? goHome : null}
+              homeShown={!activeTab.url && !activeTab.file}
               shelf={shelf}
               nav={navContent}
               notesUrl={pageUrl}

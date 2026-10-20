@@ -469,6 +469,7 @@
     else if (e.shiftKey && (k === '[' || k === '{')) key = 'prev-tab';
     else if (!e.shiftKey && !e.altKey && ['t', 'l', 'r', 'f'].includes(k)) key = `mod+${k}`;
     else if (!e.shiftKey && !e.altKey && !editable && (k === '[' || k === ']')) key = `mod+${k}`;
+    else if (!e.shiftKey && !e.altKey && /^[1-9]$/.test(k)) key = `tab-${k}`;
     if (!key) return;
     e.preventDefault();
     e.stopPropagation();
