@@ -15,6 +15,9 @@ mod scanner;
 mod matcher;
 mod tab_uia;
 mod webapp_embed;
+mod browser_pane;
+mod shelf;
+mod annotations;
 mod dock;
 mod folder_identity;
 mod ai_cli;
@@ -427,6 +430,16 @@ fn quit_requested(args: &[String]) -> bool {
 
 /// Get the main window, creating it if it doesn't exist yet.
 ///
+/// The main window, as a `Window`. Never `get_webview_window("main")`: once a
+/// browser pane (a second webview, see `browser_pane`) lives in the main
+/// window, Tauri stops counting it as a webview window and that lookup returns
+/// None — which silently broke hiding/showing/docking while a pane was open.
+/// Window-level calls (show, hide, frame, decorations, events) all live on
+/// `Window`; page-level ones go through `app.get_webview("main")`.
+fn main_window(app: &tauri::AppHandle) -> Option<tauri::Window> {
+    app.get_window("main")
+}
+
 /// The main window is *not* declared in tauri.conf.json — declaring it there
 /// makes Tauri build the webview and load the whole React dashboard at process
 /// start, which is exactly the login-time cost we're avoiding. It's built here
@@ -434,8 +447,8 @@ fn quit_requested(args: &[String]) -> bool {
 /// and pre-warmed in the background well after login has settled.
 ///
 /// Always returns the window hidden; callers decide when to show it.
-fn ensure_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
-    if let Some(win) = app.get_webview_window("main") {
+fn ensure_main_window(app: &tauri::AppHandle) -> Option<tauri::Window> {
+    if let Some(win) = main_window(app) {
         return Some(win);
     }
 
@@ -456,8 +469,14 @@ fn ensure_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
         .build();
 
     match built {
-        Ok(win) => {
+        Ok(built) => {
+            let win = built.as_ref().window();
             attach_main_window_events(&win);
+            #[cfg(target_os = "macos")]
+            {
+                browser_pane::permissions::install(built.as_ref());
+                browser_pane::webcrypto::install(built.as_ref());
+            }
             Some(win)
         }
         Err(e) => {
@@ -478,7 +497,7 @@ fn focus_left_the_app(app: &tauri::AppHandle) -> bool {
             return false;
         }
         let ours = app
-            .webview_windows()
+            .windows() // not webview_windows(): main stops being one once a browser pane lives in it
             .values()
             .any(|w| w.hwnd().ok().map(|h| h.0 as isize) == Some(fg));
         !ours
@@ -490,7 +509,7 @@ fn focus_left_the_app(app: &tauri::AppHandle) -> bool {
     #[cfg(not(windows))]
     {
         !app
-            .webview_windows()
+            .windows() // not webview_windows(): main stops being one once a browser pane lives in it
             .values()
             .any(|w| w.is_focused().unwrap_or(false))
     }
@@ -498,7 +517,7 @@ fn focus_left_the_app(app: &tauri::AppHandle) -> bool {
 
 /// Hide-on-close, and (in drawer mode) collapse to the handle when the panel
 /// loses focus — the "click away to hide" behavior.
-fn attach_main_window_events(window: &tauri::WebviewWindow) {
+fn attach_main_window_events(window: &tauri::Window) {
     let win = window.clone();
     window.on_window_event(move |event| match event {
         tauri::WindowEvent::CloseRequested { api, .. } => {
@@ -859,7 +878,7 @@ fn clear_of_mac_dock(st: &DockState, (x, y, w, h): (f64, f64, f64, f64)) -> (f64
 /// Geometry the drawer lays out against. Horizontal (top/bottom) docks use the
 /// monitor *work area* so the bar sits above the Windows taskbar instead of
 /// covering it; vertical docks keep the historical full-monitor strip.
-fn drawer_geom(app: &tauri::AppHandle, win: &tauri::WebviewWindow, horizontal: bool) -> Option<(i32, i32, i32, i32)> {
+fn drawer_geom(app: &tauri::AppHandle, win: &tauri::Window, horizontal: bool) -> Option<(i32, i32, i32, i32)> {
     #[cfg(windows)]
     if horizontal {
         if let Ok(hwnd) = win.hwnd() {
@@ -1014,14 +1033,14 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
 /// Collapse to the handle: hide the panel, show the slim edge tab (vertical tab
 /// on left/right, horizontal tab on top/bottom).
 fn collapse_drawer(app: &tauri::AppHandle, st: &DockState) {
-    if let Some(main) = app.get_webview_window("main") {
+    if let Some(main) = main_window(&app) {
         let _ = main.hide();
     }
     let horizontal = dock_is_horizontal(&st.side);
     if let Some(handle) = app.get_webview_window("handle") {
         let scale = handle.scale_factor().unwrap_or(1.0);
         let (handle_w, handle_h) = (logical_to_physical(HANDLE_W, scale), logical_to_physical(HANDLE_H, scale));
-        if let Some((mx, my, mw, mh)) = drawer_geom(app, &handle, horizontal) {
+        if let Some((mx, my, mw, mh)) = drawer_geom(app, &handle.as_ref().window(), horizontal) {
             let (x, y, w, h) = if horizontal {
                 // Rotated tab: the long side runs along the edge.
                 let (w, h) = (handle_h, handle_w);
@@ -1078,7 +1097,7 @@ fn collapse_drawer(app: &tauri::AppHandle, st: &DockState) {
             // previous screen first (same as `expand_drawer`).
             #[cfg(target_os = "macos")]
             {
-                let handle_for_appkit = handle.clone();
+                let handle_for_appkit = handle.as_ref().window();
                 let st_for_appkit = st.clone();
                 let _ = app.run_on_main_thread(move || {
                     dock::allow_over_fullscreen_spaces(&handle_for_appkit);
@@ -1133,7 +1152,7 @@ fn enable_drawer(app: &tauri::AppHandle, side: String, thickness: u32, force_vis
     // dock" used to end up with no panel at all — just the edge tab.
     let visible = force_visible
         || app
-            .get_webview_window("main")
+            .get_window("main")
             .and_then(|w| w.is_visible().ok())
             .unwrap_or(false);
     if visible {
@@ -1325,7 +1344,7 @@ fn dock_set_width(app: tauri::AppHandle, width: u32) -> Result<DockState, String
             return Ok(state);
         }
         // Drawer: if the panel is currently open, re-lay it out at the new size.
-        if let Some(main) = app.get_webview_window("main") {
+        if let Some(main) = main_window(&app) {
             if main.is_visible().unwrap_or(false) {
                 expand_drawer(&app, &state);
             }
@@ -1352,7 +1371,7 @@ fn dock_set_bar_content_width(app: tauri::AppHandle, width: u32) {
         {
             return;
         }
-        let Some(main) = app.get_webview_window("main") else { return };
+        let Some(main) = main_window(&app) else { return };
         let _ = app.run_on_main_thread(move || {
             if let Some(frame) = mac_drawer_frame(&st, false) {
                 *MAIN_SCREEN_FRAME.lock().unwrap() = dock::set_window_frame(&main, frame);
@@ -1887,7 +1906,7 @@ fn toggle_spotlight(app: tauri::AppHandle) {
             // comment.
             #[cfg(target_os = "macos")]
             {
-                let window_for_appkit = window.clone();
+                let window_for_appkit = window.as_ref().window();
                 let _ = app.run_on_main_thread(move || {
                     dock::promote_spotlight_over_fullscreen_spaces(&window_for_appkit);
                     dock::show_over_fullscreen_spaces(&window_for_appkit);
@@ -3229,6 +3248,24 @@ async fn list_listening_ports() -> Result<Vec<ListeningPort>, String> {
     }
 }
 
+/// App commands aren't ACL-checked (there's no app permission manifest), so any
+/// page that can reach IPC could call them — `run_project_command` included.
+/// Webviews that host remote sites (`webapp-*` windows, the in-app browser
+/// pane) therefore get no app commands at all. Plugin commands are unaffected:
+/// Tauri's ACL already denies those to remote origins.
+fn guard_remote_webviews<R: tauri::Runtime>(
+    handler: impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static,
+) -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static {
+    move |invoke| {
+        let label = invoke.message.webview_ref().label();
+        if label.starts_with("webapp-") || label.starts_with(browser_pane::LABEL_PREFIX) {
+            invoke.resolver.reject("Command not available to web content");
+            return true;
+        }
+        handler(invoke)
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -3252,7 +3289,7 @@ pub fn run() {
         tauri_plugin_autostart::MacosLauncher::LaunchAgent,
         Some(vec![ARG_AUTOSTART]),
     ))
-    .invoke_handler(tauri::generate_handler![
+    .invoke_handler(guard_remote_webviews(tauri::generate_handler![
         get_running_apps,
         get_installed_apps,
         categorize_app,
@@ -3319,9 +3356,34 @@ pub fn run() {
         folder_index::folder_index_reindex_all,
         preview::preview_text_file,
         preview::preview_image_file,
-        preview::preview_pdf_file
-    ])
+        preview::preview_pdf_file,
+        browser_pane::browser_pane_open,
+        browser_pane::browser_pane_set_bounds,
+        browser_pane::browser_pane_nav,
+        browser_pane::browser_pane_set_adblock,
+        browser_pane::browser_pane_set_zoom,
+        browser_pane::stats::browser_pane_stats,
+        shelf::shelf_list,
+        shelf::shelf_add_text,
+        shelf::shelf_add_bytes,
+        shelf::shelf_import,
+        shelf::shelf_remove,
+        shelf::shelf_pin,
+        shelf::shelf_clear,
+        shelf::shelf_save_to,
+        annotations::highlights_list,
+        annotations::highlights_update,
+        annotations::highlights_delete,
+        browser_pane::tools::browser_pane_highlight_focus,
+        browser_pane::tools::browser_pane_find,
+        browser_pane::tools::page_dark_hosts,
+        browser_pane::tools::browser_pane_set_dark,
+        browser_pane::tools::browser_pane_screenshot,
+        browser_pane::browser_pane_adblock_supported,
+        browser_pane::browser_pane_close
+    ]))
     .setup(|app| {
+      browser_pane::adblock::prepare(app.handle());
       // No instance was running, so `--quit` reached us as the primary. Exit
       // before spawning the sidecar or a window — otherwise the uninstaller's
       // shutdown request would leave a brand-new process running.
@@ -3514,7 +3576,9 @@ pub fn run() {
                   continue;
               }
               let label = if DRAWER_COLLAPSED.load(Ordering::Relaxed) { "handle" } else { "main" };
-              let Some(window) = app_handle.get_webview_window(label) else { continue };
+              // get_window, not get_webview_window: "main" stops being a webview
+              // window while a browser pane lives in it.
+              let Some(window) = app_handle.get_window(label) else { continue };
               let _ = app_handle.run_on_main_thread(move || {
                   dock::join_fullscreen_space(&window);
               });
@@ -3805,7 +3869,7 @@ pub fn run() {
                   // `is_visible` on a not-yet-created window is treated as
                   // hidden, so a headless autostart falls through to "open it".
                   let visible = app
-                      .get_webview_window("main")
+                      .get_window("main")
                       .and_then(|w| w.is_visible().ok())
                       .unwrap_or(false);
                   if st.enabled && st.mode == "drawer" {
@@ -3816,7 +3880,7 @@ pub fn run() {
                           expand_drawer(app, &st);
                       }
                   } else if visible {
-                      if let Some(window) = app.get_webview_window("main") {
+                      if let Some(window) = main_window(&app) {
                           let _ = window.hide();
                       }
                   } else {
@@ -3881,7 +3945,7 @@ pub fn run() {
       // fullscreen app until a second, later toggle happened to win the race.
       #[cfg(target_os = "macos")]
       if let Some(spotlight) = app.get_webview_window("spotlight") {
-          dock::promote_spotlight_over_fullscreen_spaces(&spotlight);
+          dock::promote_spotlight_over_fullscreen_spaces(&spotlight.as_ref().window());
       }
 
       Ok(())

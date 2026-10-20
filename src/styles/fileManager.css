@@ -1303,3 +1303,97 @@
   .fm-col-size { display: none; }
   .fm-list.fm-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* Embedded (Browse view's Files mode): fills the pane, full toolbar. */
+.fm-window.fm-window--inline.fm-window--embedded {
+  height: 100%;
+  max-height: none;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+}
+
+/* ── Places as a chip row (placesRow: Browse's Files panel) ───────────
+   The sidebar's sections laid out across the top instead of a 176px left
+   column, scrolling sideways. Shown at every width (the <720px rule hides
+   the column version), so its drawer toggle isn't needed. */
+.fm-window--places-row .fm-body {
+  flex-direction: column;
+}
+
+/* In the column layout .fm-main must be allowed to shrink below its content
+   (flex items default to min-height: auto), or it grows to fit every row and
+   the list never scrolls — it just gets clipped by the window. */
+.fm-window--places-row .fm-main,
+.fm-window--places-row .fm-list {
+  min-height: 0;
+}
+
+.fm-window--places-row .fm-places-toggle {
+  display: none !important;
+}
+
+.fm-sidebar.fm-sidebar--row {
+  display: flex !important;
+  position: static !important;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  flex: 0 0 auto;
+  padding: 6px 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-right: none;
+  border-bottom: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.06));
+  background: transparent;
+  box-shadow: none;
+  scrollbar-width: none;
+}
+
+.fm-sidebar--row::-webkit-scrollbar {
+  display: none;
+}
+
+.fm-sidebar--row .fm-side-section {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Sections are separated by a hairline instead of a heading. */
+.fm-sidebar--row .fm-side-section + .fm-side-section {
+  margin-top: 0;
+  padding-left: 6px;
+  border-left: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.08));
+}
+
+.fm-sidebar--row .fm-side-title {
+  display: none;
+}
+
+.fm-sidebar--row .fm-side-item {
+  width: auto;
+  flex-shrink: 0;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface-1, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.06));
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.fm-sidebar--row .fm-side-item.active {
+  border-color: color-mix(in srgb, var(--accent-primary, #8b5cf6) 55%, transparent);
+  background: color-mix(in srgb, var(--accent-primary, #8b5cf6) 18%, transparent);
+}
+
+.fm-sidebar--row .fm-side-label {
+  max-width: 120px;
+}
+
+.fm-sidebar--row .fm-side-unpin {
+  margin-left: 0;
+}

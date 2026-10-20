@@ -8,7 +8,7 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { startDrag } from '@crabnebula/tauri-plugin-drag';
+import { IS_TAURI, startNativeDrag } from '../../utils/nativeDrag.js';
 import { fetchCooldesk, linkCooldeskProject } from '../../services/cooldeskService.js';
 import { getPreviewItem } from '../../utils/filePreviewKind.js';
 import { isRealPointerMove } from '../../utils/helpers.js';
@@ -26,42 +26,7 @@ async function listDirRaw(path) {
 }
 
 /** Hand a path to the OS (opens a file with its default app, a folder in Explorer). */
-// Native drag-out (Tauri only): a row dragged out of the file manager becomes
-// a real OS file drag, so dropping it on Finder/Explorer copies the file there
-// and dropping it on a web page's upload field uploads it — what a plain HTML5
-// drag can't do, since it carries no actual file. Mode is "copy": the source
-// is never moved. Statically imported because the native drag must start
-// while the button is still held — awaiting a dynamic import first can miss it.
-const IS_TAURI = typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__;
-
-// The plugin needs a PNG (as a data URL) for the image under the cursor.
-// Drawn once per kind and cached — a folder/file glyph on a rounded tile.
-const dragIconCache = {};
-function dragIconFor(isDir) {
-  const key = isDir ? 'dir' : 'file';
-  if (dragIconCache[key]) return dragIconCache[key];
-  const size = 64;
-  const c = document.createElement('canvas');
-  c.width = size; c.height = size;
-  const g = c.getContext('2d');
-  g.fillStyle = 'rgba(30, 30, 40, 0.85)';
-  g.beginPath();
-  g.roundRect?.(4, 4, size - 8, size - 8, 12);
-  g.fill();
-  g.font = '34px -apple-system, "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillText(isDir ? '📁' : '📄', size / 2, size / 2 + 2);
-  dragIconCache[key] = c.toDataURL('image/png');
-  return dragIconCache[key];
-}
-
-function startNativeDrag(e, entry) {
-  // Cancel the webview's own HTML5 drag — the OS drag replaces it.
-  e.preventDefault();
-  startDrag({ item: [entry.path], icon: dragIconFor(entry.is_dir), mode: 'copy' })
-    .catch(err => console.warn('[FileManager] native drag failed:', err));
-}
+// Native drag-out lives in utils/nativeDrag.js (shared with the Shelf).
 
 async function openWithSystem(path) {
   if (window.electronAPI?.openFolder) return window.electronAPI.openFolder(path);
@@ -276,8 +241,22 @@ function loadJSON(key, fallback) {
  *   sidebar-width Tabs page, where a full-screen modal covered everything.
  *   Inline it only takes the keyboard while focus is inside it, since the rest
  *   of the page is still right there and usable.
+ * @param {boolean} [embedded] in place like `inline`, but with the full
+ *   toolbar and filling its container — the Browse view's Files mode, which
+ *   has a whole pane's width rather than a sidebar's.
+ * @param {boolean} [compact] with `embedded`, keep the two-row sidebar toolbar
+ *   (Files mode docks the manager to the side once file tabs are open).
+ * @param {(path: string) => void} [onOpenFile] open files here instead of
+ *   handing them to the OS default app (Files mode shows them as tabs).
+ * @param {boolean} [projectBar] show the .cooldesk project bar / setup offer
+ *   (off in Browse's narrow Files panel, where it crowds out the file list).
+ * @param {boolean} [placesRow] Places / Pinned / linked projects as a chip row
+ *   across the top instead of a 176px left column (Browse's Files panel).
+ * @param {boolean} [quickLook] the hover-preview column beside the list (off
+ *   where the host shows opened files itself).
  */
-export function FileManager({ isOpen, initialPath, places = [], onClose, inline = false }) {
+export function FileManager({ isOpen, initialPath, places = [], onClose, inline: inlineProp = false, embedded = false, compact = false, onOpenFile, projectBar = true, placesRow = false, quickLook = true }) {
+  const inline = inlineProp || embedded;
   const windowRef = useRef(null);
   const [path, setPath] = useState(initialPath || '');
   // Navigation history — index points at the current entry, so back/forward
@@ -646,8 +625,9 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline 
   const openEntry = useCallback((entry) => {
     if (!entry) return;
     if (entry.is_dir) navigate(entry.path);
+    else if (onOpenFile) onOpenFile(entry.path);
     else openWithSystem(entry.path).catch(err => console.error('[FileManager] open failed:', err));
-  }, [navigate]);
+  }, [navigate, onOpenFile]);
 
   // Warm a folder's contents (and its item count) shortly after hover, so the
   // click that follows renders instantly.
@@ -1165,14 +1145,14 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline 
   const windowEl = (
       <div
         ref={windowRef}
-        className={`fm-window${inline ? ' fm-window--inline' : ''}`}
+        className={`fm-window${inline ? ' fm-window--inline' : ''}${embedded ? ' fm-window--embedded' : ''}${placesRow ? ' fm-window--places-row' : ''}`}
         // Inline has no backdrop to give focus to, so make the window itself
         // focusable — clicking anywhere in it then routes keys to it.
         tabIndex={inline ? -1 : undefined}
         onClick={(e) => { e.stopPropagation(); setCrumbMenu(null); setShowRecent(false); setPlacesOpen(false); setCompactMenu(null); }}
       >
         {/* Toolbar: history + address bar + filter */}
-        {inline ? compactToolbar : (
+        {inline && (!embedded || compact) ? compactToolbar : (
         <div className="fm-toolbar">
           <div className="fm-nav">
             {/* Only visible below the 720px breakpoint (see fileManager.css) —
@@ -1326,7 +1306,7 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline 
             folders and open todo count, available from anywhere inside it. */}
         {/* No workspace here yet, but this looks like a project root — offer to
             run the plugin's /cd-init in this folder. */}
-        {looksLikeProjectRoot && (
+        {projectBar && looksLikeProjectRoot && (
           <div className="fm-project-bar fm-project-bar--setup">
             <span className="fm-setup-text">
               No CoolDesk workspace in <strong>{baseName(path)}</strong>
@@ -1353,7 +1333,7 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline 
           </div>
         )}
 
-        {project && (
+        {projectBar && project && (
           <div className="fm-project-bar">
             <button
               className="fm-project-name"
@@ -1539,7 +1519,15 @@ ${c.path}`}
 
         <div className="fm-body">
           {sidebar.length > 0 && (
-            <div className={`fm-sidebar ${placesOpen ? 'fm-sidebar--open' : ''}`} onClick={(e) => e.stopPropagation()}>
+            <div
+              className={`fm-sidebar ${placesOpen ? 'fm-sidebar--open' : ''} ${placesRow ? 'fm-sidebar--row' : ''}`}
+              onClick={(e) => e.stopPropagation()}
+              // The chip row only scrolls sideways; let a plain (vertical)
+              // mouse wheel drive it too. Trackpad sideways swipes already do.
+              onWheel={placesRow ? (e) => {
+                if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) e.currentTarget.scrollLeft += e.deltaY;
+              } : undefined}
+            >
               {sidebar.map(section => (
                 <div key={section.title} className={`fm-side-section ${section.kind === 'linked' ? 'fm-side-linked' : ''}`}>
                   <div className="fm-side-title">
@@ -1626,7 +1614,7 @@ ${c.path}`}
                   title: IS_TAURI ? `${entry.path}\nDrag out to copy it into a folder or an upload box` : entry.path,
                   // Drag out → copy into Finder/Explorer or a web upload field.
                   draggable: IS_TAURI,
-                  onDragStart: IS_TAURI ? (e) => startNativeDrag(e, entry) : undefined,
+                  onDragStart: IS_TAURI ? (e) => startNativeDrag(e, entry.path, entry.is_dir) : undefined,
                 };
                 if (view === 'grid') {
                   return (
@@ -1677,7 +1665,7 @@ ${c.path}`}
           {/* Quick Look-style preview, wide widths only (see fileManager.css
               — there's no room for a third column once the sidebar has
               already been dropped for space). */}
-          {previewItem && (
+          {quickLook && previewItem && (
             <>
               <div className="fm-preview-resize" onPointerDown={startPreviewResize} title="Drag to resize" />
               <div className="fm-preview" style={{ width: previewWidth }}>

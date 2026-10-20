@@ -68,6 +68,9 @@
     "longDescription": "CoolDesk is an AI-powered workspace manager that helps you organize browser tabs, running apps, and workspaces across all your devices.",
     "copyright": "© 2025 CoolDesk",
     "category": "Productivity",
+    "resources": {
+      "resources/adblock-rules.json": "adblock-rules.json"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

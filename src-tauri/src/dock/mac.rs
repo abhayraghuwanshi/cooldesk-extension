@@ -87,7 +87,7 @@ pub fn cursor_screen_rects() -> Option<((f64, f64, f64, f64), (f64, f64, f64, f6
 /// Must run on the main thread. Returns the frame in place afterward, for
 /// the hover/leave-intent watcher snapshots.
 pub fn set_window_frame(
-    window: &tauri::WebviewWindow,
+    window: &tauri::Window,
     (x, y, w, h): (f64, f64, f64, f64),
 ) -> Option<(f64, f64, f64, f64)> {
     let ptr = window.ns_window().ok()?;
@@ -121,7 +121,7 @@ pub fn set_window_frame(
 /// is on for the same reason.
 ///
 /// Must run on the main thread.
-pub fn set_see_through(window: &tauri::WebviewWindow, on: bool) {
+pub fn set_see_through(window: &tauri::Window, on: bool) {
     let Ok(ptr) = window.ns_window() else { return };
     let ns_window: &NSWindow = unsafe { &*(ptr as *mut NSWindow) };
     ns_window.setOpaque(!on);
@@ -137,7 +137,7 @@ pub fn set_see_through(window: &tauri::WebviewWindow, on: bool) {
 /// for why those are dangerous outside the spotlight overlay: applying them
 /// to the main window previously left it pinned above normal window
 /// management, unreachable from the in-app "back to full window" control.
-pub fn allow_over_fullscreen_spaces(window: &tauri::WebviewWindow) {
+pub fn allow_over_fullscreen_spaces(window: &tauri::Window) {
     let Ok(ptr) = window.ns_window() else { return };
     let ns_window: &NSWindow = unsafe { &*(ptr as *mut NSWindow) };
     let behavior = ns_window.collectionBehavior()
@@ -154,7 +154,7 @@ pub fn allow_over_fullscreen_spaces(window: &tauri::WebviewWindow) {
 /// transient search overlay the user dismisses, wrong for anything the user
 /// needs to keep interacting with (the sidebar/handle drawer). Do not call
 /// this on `main` or `handle`.
-pub fn promote_spotlight_over_fullscreen_spaces(window: &tauri::WebviewWindow) {
+pub fn promote_spotlight_over_fullscreen_spaces(window: &tauri::Window) {
     let Ok(ptr) = window.ns_window() else { return };
     let ns_window: &NSWindow = unsafe { &*(ptr as *mut NSWindow) };
     let behavior = ns_window.collectionBehavior()
@@ -186,7 +186,7 @@ pub fn promote_spotlight_over_fullscreen_spaces(window: &tauri::WebviewWindow) {
 /// actually routing keyboard input to it: the OS keeps delivering keystrokes
 /// to the still-frontmost other app, so the search input never receives
 /// focus even though `makeKeyWindow()` succeeded at the window level.
-pub fn show_over_fullscreen_spaces(window: &tauri::WebviewWindow) {
+pub fn show_over_fullscreen_spaces(window: &tauri::Window) {
     let Ok(ptr) = window.ns_window() else { return };
     let ns_window: &NSWindow = unsafe { &*(ptr as *mut NSWindow) };
     // The public collectionBehavior route (set in `allow_over_fullscreen_spaces`)
@@ -224,7 +224,7 @@ pub fn show_over_fullscreen_spaces(window: &tauri::WebviewWindow) {
 /// regression above) means the dock/sidebar joins the fullscreen Space but
 /// may still render behind that app's own content — this needs verifying
 /// against a real fullscreen app before relying on it.
-pub fn join_fullscreen_space(window: &tauri::WebviewWindow) {
+pub fn join_fullscreen_space(window: &tauri::Window) {
     let Ok(ptr) = window.ns_window() else { return };
     let ns_window: &NSWindow = unsafe { &*(ptr as *mut NSWindow) };
     super::cgs::join_active_spaces(ns_window.windowNumber() as i64);
@@ -255,7 +255,7 @@ pub fn cursor_location() -> (f64, f64) {
 /// `cursor_location()` polls, rather than re-read on every poll tick (which
 /// would need a `run_on_main_thread` round-trip per tick, since — unlike
 /// `cursor_location` — this does touch the NSWindow).
-pub fn window_frame(window: &tauri::WebviewWindow) -> Option<(f64, f64, f64, f64)> {
+pub fn window_frame(window: &tauri::Window) -> Option<(f64, f64, f64, f64)> {
     let ptr = window.ns_window().ok()?;
     let ns_window: &NSWindow = unsafe { &*(ptr as *mut NSWindow) };
     let frame = ns_window.frame();
@@ -264,7 +264,7 @@ pub fn window_frame(window: &tauri::WebviewWindow) -> Option<(f64, f64, f64, f64
 
 /// Reverses `allow_over_fullscreen_spaces` — used when a window goes back to
 /// being a normal, single-Space document window (e.g. dock disabled).
-pub fn restrict_to_current_space(window: &tauri::WebviewWindow) {
+pub fn restrict_to_current_space(window: &tauri::Window) {
     let Ok(ptr) = window.ns_window() else { return };
     let ns_window: &NSWindow = unsafe { &*(ptr as *mut NSWindow) };
     let behavior = ns_window.collectionBehavior()

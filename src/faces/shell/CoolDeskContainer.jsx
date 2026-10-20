@@ -30,6 +30,7 @@ const WorkspaceList = lazy(() => import('../workspace/WorkspaceList').then(m => 
 // Lazy load heavy components
 const ChatContext = lazy(() => import('../workspace/ChatContext').then(m => ({ default: m.ChatContext })));
 const TeamView = lazy(() => import('../team/TeamView')); // Default export
+const BrowseView = lazy(() => import('../browse/BrowseView').then(m => ({ default: m.BrowseView })));
 const TabManagement = lazy(() => import('../tabs/TabManagement').then(m => ({ default: m.TabManagement })));
 // Heavy: react-force-graph-2d (d3-force + canvas). Only load when the graph opens.
 const KnowledgeGraph = lazy(() => import('../../features/knowledge-graph/KnowledgeGraph').then(m => ({ default: m.KnowledgeGraph })));
@@ -548,6 +549,7 @@ export function CoolDeskContainer({
     const faceMap = {
       'workspace': 'workspace',
       'tabs': 'tabs',
+      'browse': 'browse',
       ...(TEAM_FEATURE_ENABLED ? { 'team': 'team' } : {}),
       'overview': 'overview'
     };
@@ -791,6 +793,21 @@ export function CoolDeskContainer({
             {shouldRenderFace('tabs') && (
               <Suspense fallback={null}>
                 <TabManagement />
+              </Suspense>
+            )}
+          </Face>
+        )}
+
+        {/* Browse: workspace links beside the in-app browser pane - Desktop App Only */}
+        {isDesktopApp && (
+          <Face index="browse">
+            {shouldRenderFace('browse') && (
+              <Suspense fallback={null}>
+                <BrowseView
+                  savedWorkspaces={savedWorkspaces}
+                  activeWorkspaceId={currentWorkspace?.id}
+                  isActive={activeFace === 'browse'}
+                />
               </Suspense>
             )}
           </Face>

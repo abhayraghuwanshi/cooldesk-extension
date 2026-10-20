@@ -2,7 +2,7 @@ import { faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { getFaviconUrl, isRealPointerMove } from '../../../utils/helpers';
-import { getFileVisual, getIcon } from './fileIcons';
+import { getFileVisual, getIcon } from '../../../utils/fileIcons';
 import { lastPointerPos } from './hoverGuard';
 
 // The recommended leader commands (/new-workspace, /agent, /u, /a, /f) all

@@ -34,7 +34,7 @@ export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavi
     // Keyed on *whether* a navigate handler exists (not its identity — hosts
     // recreate the callback every render; the ref above tracks the latest).
     // No '/chat' or '/c' here: WorkspaceShell's actual face list is
-    // ['workspace', 'tabs', 'team'] (see DESKTOP_FACES) — there's no chat
+    // ['workspace', 'tabs', 'browse', 'team'] (see DESKTOP_FACES) — there's no chat
     // face to land on, so navigating there used to leave the shell on a
     // currentFace nothing renders for.
     const hasNavigate = !!onNavigate;
@@ -46,12 +46,14 @@ export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavi
                 '/workspace': 'workspace',
                 '/workspaces': 'workspace',
                 '/tabs': 'tabs',
+                '/browse': 'browse',
                 ...(TEAM_FEATURE_ENABLED ? { '/team': 'team' } : {}),
             },
             alias: {
                 '/o': 'overview',
                 '/w': 'workspace',
                 '/t': 'tabs',
+                '/b': 'browse',
                 ...(TEAM_FEATURE_ENABLED ? { '/tm': 'team' } : {}),
             },
         };

@@ -40,7 +40,7 @@ import { useNewWorkspaceMode } from './useNewWorkspaceMode';
 import { useEditWorkspaceMode } from './useEditWorkspaceMode';
 import { VOICE_SEARCH_ENABLED } from '../../config/features';
 import { getRunningAppContext } from './parts/appContext';
-import { getWorkspaceIcon } from './parts/fileIcons';
+import { getWorkspaceIcon } from '../../utils/fileIcons';
 import { PinItem } from './parts/PinItem';
 import { ContextItem } from './parts/ContextItem';
 import { ResultItem } from './parts/ResultItem';

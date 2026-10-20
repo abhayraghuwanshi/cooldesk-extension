@@ -198,15 +198,10 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
 
     // Allowed origins for security - only our extension and Tauri webview
     // TODO: Replace YOUR_EXTENSION_ID with your actual Chrome extension ID
-    let allowed_origins: Vec<HeaderValue> = vec![
-        "chrome-extension://kbgfibnflipndmhofhoocjjmljjkkjop".parse().unwrap(),
-        "tauri://localhost".parse().unwrap(),
-        "http://tauri.localhost".parse().unwrap(),
-        "http://localhost:5173".parse().unwrap(),  // Vite dev server
-        "http://127.0.0.1:5173".parse().unwrap(),
-        "http://localhost:1420".parse().unwrap(),  // Tauri dev
-        "http://127.0.0.1:1420".parse().unwrap(),
-    ];
+    let allowed_origins: Vec<HeaderValue> = trusted_origins()
+        .into_iter()
+        .map(|o| o.parse().unwrap())
+        .collect();
 
     // CORS configuration - restrict to allowed origins
     let cors = CorsLayer::new()
@@ -326,18 +321,38 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
     Ok(())
 }
 
-/// Check if origin is allowed for WebSocket connections
-fn is_allowed_origin(headers: &HeaderMap) -> bool {
-    const ALLOWED_PREFIXES: &[&str] = &[
-        "chrome-extension://",
-        "tauri://",
+/// Origins allowed to talk to the sidecar, over HTTP (CORS) and WebSocket
+/// alike. Exact matches only: the server has no other auth, so a prefix like
+/// `http://localhost:` would admit any local dev server's page — opened in the
+/// in-app browser pane or a normal browser.
+fn trusted_origins() -> Vec<&'static str> {
+    #[allow(unused_mut)]
+    let mut origins = vec![
+        "chrome-extension://kbgfibnflipndmhofhoocjjmljjkkjop",
+        "tauri://localhost",
         "http://tauri.localhost",
-        "http://localhost:",
-        "http://127.0.0.1:",
     ];
+    // Dev-server origins in dev builds only (5173 is every Vite project's
+    // default port).
+    #[cfg(debug_assertions)]
+    origins.extend([
+        "http://localhost:5173", // Vite dev server
+        "http://127.0.0.1:5173",
+        "http://localhost:1420", // Tauri dev
+        "http://127.0.0.1:1420",
+    ]);
+    origins
+}
 
+/// Check if origin is allowed for WebSocket connections. Browsers don't apply
+/// CORS to WebSockets, so this check is the only gate against web pages.
+/// Any extension origin is still accepted: the extension's id differs between
+/// stores and unpacked dev builds, and an extension with host permissions can
+/// reach 127.0.0.1 over HTTP regardless, so pinning one id would only break
+/// sync without keeping other extensions out.
+fn is_allowed_origin(headers: &HeaderMap) -> bool {
     match headers.get("origin").and_then(|v| v.to_str().ok()) {
-        Some(origin) => ALLOWED_PREFIXES.iter().any(|prefix| origin.starts_with(prefix)),
+        Some(origin) => origin.starts_with("chrome-extension://") || trusted_origins().contains(&origin),
         None => true, // Allow requests with no Origin (internal/native calls)
     }
 }
