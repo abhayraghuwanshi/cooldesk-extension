@@ -442,6 +442,18 @@ fn main_window(app: &tauri::AppHandle) -> Option<tauri::Window> {
     app.get_window("main")
 }
 
+/// Background color of the main window *and* its page webview. A `Window`'s
+/// own `set_background_color` only reaches the NSWindow — the
+/// `WebviewWindow` version used to cover both — so on its own the WKWebView
+/// kept drawing its opaque background and the see-through dock painted as a
+/// solid black panel. Browser panes in the same window are left alone.
+fn set_main_background(window: &tauri::Window, color: Option<tauri::window::Color>) {
+    let _ = window.set_background_color(color);
+    if let Some(page) = window.get_webview("main") {
+        let _ = page.set_background_color(color);
+    }
+}
+
 /// The main window is *not* declared in tauri.conf.json — declaring it there
 /// makes Tauri build the webview and load the whole React dashboard at process
 /// start, which is exactly the login-time cost we're avoiding. It's built here
@@ -990,7 +1002,7 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
                     // Cards (sidebar) or the pill (bar) float over the desktop
                     // with no panel behind them — see `dock::set_see_through`.
                     dock::set_see_through(&main_for_appkit, true);
-                    let _ = main_for_appkit.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
+                    set_main_background(&main_for_appkit, Some(tauri::window::Color(0, 0, 0, 0)));
                     match mac_drawer_frame(&st_for_appkit, false) {
                         Some(frame) => {
                             dock::set_window_frame(&main_for_appkit, frame);
@@ -1238,7 +1250,7 @@ fn disable_dock(app: &tauri::AppHandle) -> DockState {
             let _ = app.run_on_main_thread(move || {
                 dock::restrict_to_current_space(&window_for_appkit);
                 dock::set_see_through(&window_for_appkit, false);
-                let _ = window_for_appkit.set_background_color(None);
+                set_main_background(&window_for_appkit, None);
             });
         }
         let _ = window.set_decorations(true);

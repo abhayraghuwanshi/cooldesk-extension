@@ -576,8 +576,9 @@ export function CoolDeskContainer({
     );
   }
 
-  // Docked sidebar (desktop): your workspaces on top, then everything open
-  // right now — apps, tabs, folders, widgets, dev servers. At full width
+  // Docked sidebar (desktop): the Active card (everything open right now),
+  // your two most active workspaces, then widgets, Popular Folders and dev
+  // servers — open apps/tabs aren't listed twice. At full width
   // Browse shows the same in its side panel's Home tab instead.
   // Popular Folders open in Browse's Files panel.
   const openFolderInBrowse = (path) => {
@@ -597,12 +598,17 @@ export function CoolDeskContainer({
             onEditWorkspace={handleOpenEditModal}
             appSuggestions={appSuggestions}
             onAddAppsToWorkspace={handleAddAppsToWorkspace}
+            showActive
+            // Only the two most active; the rest stay behind "Show all".
+            initialLimit={2}
           />
         </Suspense>
       </section>
       <section className="home-stack-active">
         <Suspense fallback={null}>
-          <TabManagement />
+          {/* Open apps/tabs are in WorkspaceList's Active card; this keeps
+              widgets, Popular Folders and dev servers. */}
+          <TabManagement hideOpen />
         </Suspense>
       </section>
     </div>

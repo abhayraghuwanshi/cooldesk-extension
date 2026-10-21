@@ -6,6 +6,7 @@ import { deleteWorkspace } from '../../db/index.js';
 import { clearWorkspaceSuggestions } from '../../services/appCategorizationService.js';
 import { itemRankingService } from '../../services/itemRankingService.js';
 import { workspaceActivityService } from '../../services/workspaceActivityService.js';
+import { useLiveItems } from '../../features/dock/useLiveItems.js';
 import '../../styles/cooldesk.css';
 import { defaultFontFamily } from '../../utils/fontUtils';
 import { ShareToTeamModal } from '../team/ShareToTeamModal';
@@ -79,7 +80,8 @@ export function WorkspaceList({
     onEditWorkspace,
     appSuggestions = {},        // { [workspaceName]: [{ name, path, icon }] }
     onAddAppsToWorkspace,       // (workspaceName, apps[]) => void
-    initialLimit = 100          // unpinned workspaces shown before "Show all"
+    initialLimit = 100,         // unpinned workspaces shown before "Show all"
+    showActive = false          // desktop sidebar: the Active card on top
 }) {
     // Load view mode from localStorage, default to 'list'
     const [viewMode, setViewMode] = useState(() => {
@@ -117,6 +119,25 @@ export function WorkspaceList({
         if (!expandedWorkspaceId) return null;
         return savedWorkspaces.find(w => w.id === expandedWorkspaceId) || null;
     }, [expandedWorkspaceId, savedWorkspaces]);
+
+    // Active: everything open right now (running apps, open tabs) as one more
+    // workspace card, always on top — the dock bar's Active view, sidebar
+    // shaped. Not a saved workspace: read-only card (nothing to remove, edit,
+    // pin or drop onto), and its detail view has no notes/tasks panel. Opened
+    // here rather than through onWorkspaceClick, which would make it the
+    // current workspace.
+    const { liveApps, liveTabs } = useLiveItems(showActive);
+    const activeWorkspace = useMemo(() => showActive ? {
+        id: '__active__',
+        name: 'Active',
+        icon: 'folder-open',
+        urls: liveTabs.map(t => ({ url: t.url, title: t.title })),
+        apps: liveApps,
+    } : null, [showActive, liveApps, liveTabs]);
+    const [activeOpen, setActiveOpen] = useState(false);
+    useEffect(() => {
+        if (expandedWorkspaceId) setActiveOpen(false);
+    }, [expandedWorkspaceId]);
     // Track which workspace app banners have been dismissed in this session
     const [dismissedBanners, setDismissedBanners] = useState(new Set());
 
@@ -319,7 +340,28 @@ export function WorkspaceList({
                 paddingRight: '4px',
                 minHeight: 0
             }}>
-                {expandedDetailWorkspace ? (
+                {activeWorkspace && activeOpen ? (
+                    <div
+                        className="workspace-detail-view"
+                        onMouseDown={(e) => e.stopPropagation()}
+                    >
+                        <button
+                            className="workspace-detail-back"
+                            onClick={() => setActiveOpen(false)}
+                        >
+                            <FontAwesomeIcon icon={faChevronLeft} />
+                            All Workspaces
+                        </button>
+                        <WorkspaceCard
+                            workspace={activeWorkspace}
+                            onClick={() => setActiveOpen(false)}
+                            isExpanded={true}
+                            compact={true}
+                            fullView={true}
+                            readOnly
+                        />
+                    </div>
+                ) : expandedDetailWorkspace ? (
                     /* Sidebar width: single workspace opened in full, in-depth view.
                        stopPropagation keeps the container's outside-click-close from
                        firing for clicks inside the detail view (e.g. the back button). */
@@ -428,6 +470,17 @@ export function WorkspaceList({
                 )}
 
                 {/* Workspace Modes */}
+                {activeWorkspace && (
+                    <div className={viewMode === 'list' ? 'cooldesk-list-view' : ''}>
+                        <WorkspaceCard
+                            workspace={activeWorkspace}
+                            onClick={() => setActiveOpen(true)}
+                            compact={viewMode === 'list'}
+                            readOnly
+                        />
+                    </div>
+                )}
+
                 {activeMode !== 'apps' && (savedWorkspaces.length > 0 ? (
                     <>
                         {/* Pinned Workspaces Section */}
@@ -531,9 +584,13 @@ export function WorkspaceList({
                                         />
                                     ))}
                                 </div>
-                                {filteredUnpinned.length > workspaceLimit && (
+                                {filteredUnpinned.length > workspaceLimit ? (
                                     <button className="ws-show-all" onClick={() => setWorkspaceLimit(Infinity)}>
                                         Show all {filteredUnpinned.length} workspaces
+                                    </button>
+                                ) : filteredUnpinned.length > initialLimit && (
+                                    <button className="ws-show-all" onClick={() => setWorkspaceLimit(initialLimit)}>
+                                        Show fewer
                                     </button>
                                 )}
 
