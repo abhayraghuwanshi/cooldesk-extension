@@ -3109,3 +3109,52 @@ body.bg-white-cred .js-null { color: #8250df; }
 .clip-toast.is-error {
   border-color: rgba(248, 113, 113, 0.5);
 }
+
+/* Home's top strip: frequent folders and running apps as chips. */
+.nav-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 4px 8px 6px;
+}
+
+.nav-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 170px;
+  height: 28px;
+  padding: 0 10px 0 7px;
+  border-radius: 9px;
+  border: 1px solid var(--bv-line);
+  background: var(--bv-field);
+  color: var(--bv-text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.nav-chip:hover {
+  background: var(--bv-hover);
+  border-color: color-mix(in srgb, var(--bv-accent) 35%, var(--bv-line));
+}
+
+.nav-chip img,
+.nav-chip svg {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  object-fit: contain;
+  border-radius: 3px;
+}
+
+.nav-chip-folder {
+  color: #fbbf24;
+}
+
+.nav-chip span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

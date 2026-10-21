@@ -100,7 +100,9 @@ export function useBrowseTabs(initialUrl) {
       try {
         localStorage.setItem(TABS_KEY, JSON.stringify({
           activeId,
-          tabs: tabs.map(({ id, url, title, file, term, back, fwd }) => ({ id, url, title, file, term, back, fwd })),
+          // A terminal's start command isn't saved: after a restart the tab
+          // is a plain shell, so a dev server doesn't start on its own.
+          tabs: tabs.map(({ id, url, title, file, term, back, fwd }) => ({ id, url, title, file, term: term ? { cwd: term.cwd } : term, back, fwd })),
         }));
       } catch { /* keep in memory */ }
     }, 300);
@@ -237,20 +239,30 @@ export function useBrowseTabs(initialUrl) {
   }, [tabs, activeId]);
 
   /** A terminal in `cwd` (home when empty), as a new tab — or in place of
-   *  the blank Home tab it was opened from. */
-  const openTerminalTab = useCallback((rawCwd = null, inPlace = false) => {
+   *  the blank Home tab it was opened from. `run`: a command it starts with
+   *  (a project's dev server, build…); running the same one again switches
+   *  to its tab instead of starting a second copy. */
+  const openTerminalTab = useCallback((rawCwd = null, inPlace = false, { run = null, title: name = null } = {}) => {
     const cwd = rawCwd ? normalizePath(rawCwd) : null;
-    const title = cwd ? cwd.split(/[/\\]/).filter(Boolean).pop() || cwd : 'Terminal';
+    if (run) {
+      const same = tabs.find(t => t.term?.run === run && t.term?.cwd === cwd);
+      if (same) {
+        touch(same.id);
+        setState(s => ({ ...s, activeId: same.id }));
+        return;
+      }
+    }
+    const title = name || (cwd ? cwd.split(/[/\\]/).filter(Boolean).pop() || cwd : 'Terminal');
     const here = tabs.find(t => t.id === activeId);
     if (inPlace && here && !here.url && !here.file && !here.term) {
       touch(here.id);
-      setState(s => ({ ...s, tabs: s.tabs.map(t => (t.id === here.id ? { ...t, title, term: { cwd } } : t)) }));
+      setState(s => ({ ...s, tabs: s.tabs.map(t => (t.id === here.id ? { ...t, title, term: { cwd, run } } : t)) }));
       return;
     }
     const id = newId();
     touch(id);
     setState(s => (s.tabs.length >= MAX_TABS ? s : {
-      tabs: [...s.tabs, { id, url: null, title, req: { url: null, key: 0 }, term: { cwd } }],
+      tabs: [...s.tabs, { id, url: null, title, req: { url: null, key: 0 }, term: { cwd, run } }],
       activeId: id,
     }));
   }, [tabs, activeId]);

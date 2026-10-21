@@ -20,10 +20,15 @@ export function UpdateButton({ compact = false, className = '' }) {
 
   if (!info) return null;
 
-  const label = info.latest ? `Update ${info.latest}` : 'Update';
-  const title = info.current
-    ? `CoolDesk ${info.current} → ${info.latest} — click to install`
-    : `Update to ${info.latest} — click to install`;
+  // The extension has already downloaded the update; it only needs a restart.
+  const isExtension = info.target === 'extension';
+  const label = isExtension ? 'Restart to update' : info.latest ? `Update ${info.latest}` : 'Update';
+  const next = info.latest || 'the new version';
+  const title = isExtension
+    ? `CoolDesk ${next} is ready — restart to switch (a fresh new tab opens)`
+    : info.current
+      ? `CoolDesk ${info.current} → ${next} — click to install`
+      : `Update to ${next} — click to install`;
 
   return (
     <button

@@ -49,8 +49,10 @@ function themeFor(el) {
  * @param filesPath   panel: that folder, for the cd button
  * @param onPopOut    panel: (cwd) → open a terminal tab in the main view
  * @param onHide      panel: hide the drawer (the shell keeps running)
+ * @param run         a command typed in once the shell starts (and again on
+ *                    Restart) — a project's dev server, build, tests…
  */
-export function TerminalTab({ tabId, cwd, active, onTitle, onOpenUrl, onShowInFiles, variant = 'tab', filesPath = null, onPopOut, onHide, toolbarStart = null, toolbarEnd = null }) {
+export function TerminalTab({ tabId, cwd, run = null, active, onTitle, onOpenUrl, onShowInFiles, variant = 'tab', filesPath = null, onPopOut, onHide, toolbarStart = null, toolbarEnd = null }) {
   const hostRef = useRef(null);
   const termRef = useRef(null);
   const fitRef = useRef(null);
@@ -160,6 +162,8 @@ export function TerminalTab({ tabId, cwd, active, onTitle, onOpenUrl, onShowInFi
       }
       if (!alive) { invoke('terminal_close', { id }).catch(() => { }); return; }
       shellIdRef.current = id;
+      // Typed ahead: the shell reads it once its startup files have run.
+      if (run) invoke('terminal_write', { id, data: `${run}\r` }).catch(() => { });
       subs.push(term.onData(data => invoke('terminal_write', { id, data }).catch(() => { })));
       subs.push(term.onResize(({ cols, rows }) => invoke('terminal_resize', { id, cols, rows }).catch(() => { })));
     })();
@@ -168,7 +172,7 @@ export function TerminalTab({ tabId, cwd, active, onTitle, onOpenUrl, onShowInFi
       subs.forEach(s => s.dispose());
       invoke('terminal_close', { id }).catch(() => { });
     };
-  }, [generation, tabId, cwd]);
+  }, [generation, tabId, cwd, run]);
 
   // After the shell ends, Enter starts a new one.
   useEffect(() => {
@@ -256,13 +260,13 @@ export function TerminalTab({ tabId, cwd, active, onTitle, onOpenUrl, onShowInFi
         <div className="bp-address ft-address" title={folder}>
           <FontAwesomeIcon icon={faTerminal} className="ft-address-icon term-address-icon" />
           <span className="bp-host">{cwd ? baseName(cwd) : 'Terminal'}</span>
-          <span className="bp-path ft-dir">{folder}</span>
+          <span className="bp-path ft-dir">{run ? `$ ${run}` : folder}</span>
         </div>
         <div className="bp-capsule">
           <button className="bp-btn" onClick={clear} title={IS_MAC ? 'Clear (⌘K)' : 'Clear'}>
             <FontAwesomeIcon icon={faBroom} />
           </button>
-          <button className="bp-btn" onClick={() => setGeneration(g => g + 1)} title="Restart the shell">
+          <button className="bp-btn" onClick={() => setGeneration(g => g + 1)} title={run ? `Restart — runs “${run}” again` : 'Restart the shell'}>
             <FontAwesomeIcon icon={faRotateRight} />
           </button>
           {cwd && onShowInFiles && (

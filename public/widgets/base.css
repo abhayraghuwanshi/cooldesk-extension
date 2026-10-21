@@ -79,6 +79,18 @@ html[data-embed="host"] body {
   gap: 10px;
 }
 
+/* Fit mode (?fitw=&fith=, set by cooldesk.js): the widget lays out at its
+   designed size and is scaled to fill the frame, so a clock in a big card
+   grows with the card instead of floating small in empty space. The box is
+   sized 1/--fit of the viewport, then scaled back up by --fit, so it still
+   covers the whole frame. */
+html[data-fit] .widget {
+  width: calc(100vw / var(--fit, 1));
+  height: calc(100vh / var(--fit, 1));
+  transform: scale(var(--fit, 1));
+  transform-origin: 0 0;
+}
+
 .label {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 10px;

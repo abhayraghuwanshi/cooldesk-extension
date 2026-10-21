@@ -4,6 +4,25 @@ All notable changes to CoolDesk (desktop app + Chrome extension) are documented 
 
 ## [Unreleased]
 
+## [2.0.16] — 2026-10-08
+
+### Added
+- **New tab layouts.** A layout button next to settings switches the extension's new tab between Classic, Mirror, Split, Stacked and Focus, and shows or hides the widgets, activity summary, feed, Favorites and individual feed tabs — or everything (Zen, wallpaper only). Hiding one side keeps the other where it was.
+- **Custom layout — build your own.** Every piece of the page becomes a card on a macOS-widget grid (small square cells; small 2×2, medium 4×2, large 4×4): each widget on its own, Favorites, the activity summary, the feed, or the feed pinned to one section (Browsing, Local, Suites, Search, Media). Customize mode: drag a card anywhere (it stays where you drop it; cards it lands on move down), resize it from 1×1 to 6×6, add from a searchable list, remove with ⊖, Esc or Done to finish. A section with its own card leaves the main feed's tabs.
+- **25 Featured wallpapers** at the top of the picker and in rotation — abstract art and landscapes, each checked for a high-resolution landscape original and served as a 4K crop in AVIF/WebP. Wallpapers get a soft vignette and a touch more colour.
+- **Glanceable widgets scale to their card** (clock, weather, timers, countdowns…), up in big cards and down to fit small ones; list widgets get more rows instead.
+- Security policy and issue templates for the repo.
+
+### Changed
+- **See-through widgets** in the extension: widgets drop their own dark card and sit on the board's glass; primary buttons (Start, Save…) are glass instead of solid white.
+- **No scrollbars on the new tab panels** — content fades out at the edge that has more to scroll to. Other scrollbars are 6px again (a global Firefox rule had switched Chrome to its wider native bar).
+- Cards have no outline (the glass and its shadow define the edge); the feed's tabs are an underline tab bar; feed row labels and "2 tabs" counts are soft pills; the Favorites strip scrolls inside small cards instead of clipping.
+
+### Fixed
+- Custom layout: the page could sit 1px taller than the window and snap the feed's scroll back to the top; the board now fits the screen without a page scrollbar.
+- A square-cornered blur showing behind cards after a layout switch.
+- A second rounded outline inside the feed card.
+
 ## [2.0.15] — 2026-10-06
 
 ### Added

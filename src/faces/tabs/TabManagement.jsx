@@ -69,9 +69,12 @@ function debounce(func, wait) {
 /** @param onOpenFolder  open a folder elsewhere (Browse's Files panel);
  *                      without it folders open in the file manager here.
  *  @param panel         inside Browse's side panel (Home tab): only the parts
- *                      the panel's own lists don't already show — widgets,
- *                      Popular Folders, dev servers — laid out narrow. */
-export function TabManagement({ onOpenFolder, panel = false } = {}) {
+ *                      the panel's own lists don't already show — widgets
+ *                      and dev servers — laid out narrow.
+ *  @param hideOpen      leave out the open apps and tabs (sections 1–8) —
+ *                      the docked sidebar's Active card already lists them. */
+export function TabManagement({ onOpenFolder, panel = false, hideOpen = false } = {}) {
+  const skipOpen = panel || hideOpen;
   const [tabs, setTabs] = useState([]);
   const [tabsLoading, setTabsLoading] = useState(true);
   const [expandedDomain, setExpandedDomain] = useState(null);
@@ -885,7 +888,7 @@ export function TabManagement({ onOpenFolder, panel = false } = {}) {
         {/* Reserved widget area — same store as the overview board, its own layout. */}
         <WidgetBoard storageArea="tabs" compact defaultBoard={TABS_WIDGET_DEFAULT} />
 
-        {tabsLoading && !panel ? (
+        {tabsLoading && !skipOpen ? (
           <div style={{
             display: 'flex',
             flexDirection: 'column',
@@ -902,7 +905,7 @@ export function TabManagement({ onOpenFolder, panel = false } = {}) {
           </div>
         ) : (
           <>
-            {!panel && (<>
+            {!skipOpen && (<>
             {/* 1. Active Apps Section (desktop only) */}
             {runningApps.length > 0 && (
               <div>
@@ -1116,7 +1119,8 @@ export function TabManagement({ onOpenFolder, panel = false } = {}) {
             </>)}
 
             {/* 9. Popular Folders (ranked from Recent Items activity, Tauri only) */}
-            {frequentFolders.length > 0 && (
+            {/* In the panel, Browse shows these as chips at the top of Home. */}
+            {frequentFolders.length > 0 && !panel && (
               <div>
                 <SectionHeader icon={faFolderOpen}>Popular Folders ({Math.min(frequentFolders.length, 8)})</SectionHeader>
                 {/* Sidebar: one horizontally-scrolling row (like a workspace
@@ -1161,7 +1165,7 @@ export function TabManagement({ onOpenFolder, panel = false } = {}) {
             )}
 
             {/* Empty State */}
-            {!panel && filteredTabs.length === 0 && (
+            {!skipOpen && filteredTabs.length === 0 && (
               <EmptyTabsState
                 wsConnected={wsConnected}
                 requestingTabs={requestingTabs}

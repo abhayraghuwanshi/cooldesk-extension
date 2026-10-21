@@ -238,11 +238,13 @@ function SuiteTile({ service, label, onOpen, onClose }) {
 // "Media" tab: how many recently-played entries to keep in localStorage.
 const RECENT_MEDIA_LIMIT = 20;
 
-// showFavorites / hiddenTabs: view options from the extension's layout menu
-// (LayoutPicker). Defaults show everything, which is all the desktop app uses.
+// showFavorites / hiddenTabs / showList: view options from the extension's
+// layout menu and Custom-layout cards (LayoutPicker, CardBoard). showList=false
+// renders the Favorites strip alone (the Favorites card). Defaults show
+// everything, which is all the desktop app uses.
 const NO_HIDDEN_TABS = [];
 
-export function ActivityFeed({ showFavorites = true, hiddenTabs = NO_HIDDEN_TABS }) {
+export function ActivityFeed({ showFavorites = true, hiddenTabs = NO_HIDDEN_TABS, showList = true }) {
     // Detect if running in Tauri/Electron app
     const isDesktopApp = isElectronApp();
 
@@ -2213,8 +2215,8 @@ export function ActivityFeed({ showFavorites = true, hiddenTabs = NO_HIDDEN_TABS
     return (
         <div className="cooldesk-panel activity-feed-panel" style={{ padding: 0, display: 'flex', flexDirection: 'column' }}>
             {/* Header: Favorites */}
-            {showFavorites && <div>
-                <div style={{
+            {showFavorites && <div className="feed-favorites">
+                <div className="feed-favorites-header" style={{
                     padding: '16px 16px 12px 16px',
                     fontSize: 'var(--font-sm)',
                     fontWeight: 600,
@@ -2259,7 +2261,7 @@ export function ActivityFeed({ showFavorites = true, hiddenTabs = NO_HIDDEN_TABS
             {/* Feed Tabs & List. Behavior is class-driven (.activity-feed-list):
                 wide two-pane = scrolls inside the fixed-height card; stacked
                 (≤600px) = grows and flows into the single page scroll. */}
-            <div className="activity-feed-list" style={{ padding: '0', display: 'flex', flexDirection: 'column' }}>
+            {showList && <div className="activity-feed-list" style={{ padding: '0', display: 'flex', flexDirection: 'column' }}>
                 <div ref={tabsSentinelRef} aria-hidden="true" style={{ height: 1, marginBottom: -1 }} />
                 {/* A single visible tab needs no switcher. */}
                 {visibleTabs.length > 1 && <div className={`activity-feed-sticky-tabs${tabsStuck ? ' is-stuck' : ''}`}>
@@ -3273,7 +3275,7 @@ export function ActivityFeed({ showFavorites = true, hiddenTabs = NO_HIDDEN_TABS
                         </div>
                     )}
                 </div>
-            </div>
+            </div>}
 
             {/* Custom scrollbar for favorites */}
             <style>{`

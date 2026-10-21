@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { collectCommands, collectDocs } from '../../../services/cooldeskService.js';
+import { commandCwd, runInTerminal } from '../../../features/terminal/runInTerminal.js';
 
 function groupByProject(items) {
   const map = new Map();
@@ -11,20 +12,11 @@ function groupByProject(items) {
   return [...map.entries()].map(([project, list]) => ({ project, list }));
 }
 
-// Working directory for a command: its project root, plus the command's own relative cwd.
-function commandCwd(c) {
-  if (!c.projectPath) return undefined;
-  if (!c.cwd || c.cwd === '.') return c.projectPath;
-  // Use the project path's own separator — a hardcoded '\\' broke cwd on macOS/Linux.
-  const sep = c.projectPath.includes('\\') && !c.projectPath.includes('/') ? '\\' : '/';
-  const base = c.projectPath.replace(/[\\/]+$/, '');
-  const rel = String(c.cwd).replace(/^\.[\\/]/, '').replace(/[/\\]+/g, sep).replace(/^[\\/]+/, '');
-  return `${base}${sep}${rel}`;
-}
-
+// In a CoolDesk terminal tab (falls back to the system terminal).
 function runCommand(c) {
-  if (!c.run || !window.electronAPI?.runCommand) return;
-  window.electronAPI.runCommand(c.run, commandCwd(c));
+  if (!c.run) return;
+  runInTerminal({ command: c.run, cwd: commandCwd(c.projectPath, c.cwd), label: c.label || c.id })
+    .catch(err => console.error('[CooldeskSection] command failed:', c.run, err));
 }
 
 /**

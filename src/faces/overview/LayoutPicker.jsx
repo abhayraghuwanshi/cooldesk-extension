@@ -3,17 +3,20 @@ import { DEFAULT_VISIBLE, FEED_TABS, OVERVIEW_LAYOUTS, OVERVIEW_PARTS } from './
 
 // `show` dims the cells for hidden columns, so the corner button's icon
 // reflects what's actually on the page.
-function LayoutPreview({ cells, show = { w: true, f: true } }) {
+function LayoutPreview({ cells, extra, show = { w: true, f: true } }) {
     return (
         <svg width="40" height="28" viewBox="0 0 40 28" aria-hidden="true">
             <rect x="0.5" y="0.5" width="39" height="27" rx="4" fill="none" stroke="currentColor" strokeOpacity="0.25" />
             <rect x={cells.w[0]} y={cells.w[1]} width={cells.w[2]} height={cells.w[3]} rx="2" fill="currentColor" fillOpacity={show.w ? 0.35 : 0.06} />
             <rect x={cells.f[0]} y={cells.f[1]} width={cells.f[2]} height={cells.f[3]} rx="2" fill="currentColor" fillOpacity={show.f ? 0.75 : 0.06} />
+            {extra?.map(([x, y, w, h], i) => (
+                <rect key={i} x={x} y={y} width={w} height={h} rx="2" fill="currentColor" fillOpacity={i % 2 ? 0.35 : 0.55} />
+            ))}
         </svg>
     );
 }
 
-export function LayoutPicker({ layout, onChange, visible = DEFAULT_VISIBLE, onVisibleChange }) {
+export function LayoutPicker({ layout, onChange, visible = DEFAULT_VISIBLE, onVisibleChange, onCustomize }) {
     const [open, setOpen] = useState(false);
     const rootRef = useRef(null);
 
@@ -51,7 +54,7 @@ export function LayoutPicker({ layout, onChange, visible = DEFAULT_VISIBLE, onVi
                 aria-label="Change layout"
                 aria-expanded={open}
             >
-                <LayoutPreview cells={current.cells} show={show} />
+                <LayoutPreview cells={current.cells} extra={current.extra} show={current.key === 'custom' ? undefined : show} />
             </button>
             {open && (
                 <div className="overview-layout-menu" role="menu">
@@ -66,13 +69,29 @@ export function LayoutPicker({ layout, onChange, visible = DEFAULT_VISIBLE, onVi
                                 title={l.hint}
                                 onClick={() => onChange(l.key)}
                             >
-                                <LayoutPreview cells={l.cells} show={show} />
+                                <LayoutPreview cells={l.cells} extra={l.extra} show={l.key === 'custom' ? undefined : show} />
                                 <span>{l.label}</span>
                             </button>
                         ))}
                     </div>
 
-                    {onVisibleChange && (
+                    {/* Custom has no fixed parts to show/hide — it's edited as cards. */}
+                    {layout === 'custom' && onCustomize && (
+                        <>
+                            <div className="context-menu-divider" />
+                            <button
+                                className="overview-layout-zen overview-layout-customize"
+                                onClick={() => {
+                                    onCustomize();
+                                    setOpen(false);
+                                }}
+                            >
+                                Customize cards — move, resize, add
+                            </button>
+                        </>
+                    )}
+
+                    {onVisibleChange && layout !== 'custom' && (
                         <>
                             <div className="context-menu-divider" />
                             <div className="context-menu-label">Show</div>

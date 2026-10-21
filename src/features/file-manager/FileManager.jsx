@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom';
 import { IS_TAURI, startNativeDrag } from '../../utils/nativeDrag.js';
 import { fetchCooldesk, linkCooldeskProject } from '../../services/cooldeskService.js';
 import { getPreviewItem } from '../../utils/filePreviewKind.js';
+import { commandCwd, runInTerminal } from '../terminal/runInTerminal.js';
 import { isRealPointerMove } from '../../utils/helpers.js';
 import '../../styles/fileManager.css';
 
@@ -699,19 +700,15 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline:
     }).catch(() => { });
   }, [path]);
 
-  // Run a project command in its own console, rooted at the project folder
-  // (not the folder you happen to be browsing).
+  // Run a project command in a CoolDesk terminal tab (else the system
+  // terminal), rooted at the project folder — not the folder you happen to
+  // be browsing — plus the command's own relative cwd.
   const runCommand = useCallback(async (cmd) => {
     if (!cmd?.run || !project?.path) return;
     setRanCommand(cmd.id || cmd.run);
     setTimeout(() => setRanCommand(null), 1600);
     try {
-      if (window.electronAPI?.runCommand) {
-        await window.electronAPI.runCommand(cmd.run, project.path);
-      } else {
-        const { invoke } = await import('@tauri-apps/api/core');
-        await invoke('run_project_command', { command: cmd.run, cwd: project.path });
-      }
+      await runInTerminal({ command: cmd.run, cwd: commandCwd(project.path, cmd.cwd), label: cmd.label || cmd.id });
     } catch (err) {
       console.error('[FileManager] command failed:', cmd.run, err);
     }

@@ -1,10 +1,11 @@
-import { faArrowUpRightFromSquare, faCompass, faDesktop, faHouse, faPlus, faTerminal, faCompress, faExpand, faChevronDown, faSearch, faServer, faTableCellsLarge, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faArrowUpRightFromSquare, faCompass, faDesktop, faFolder, faHouse, faPlus, faTerminal, faCompress, faExpand, faChevronDown, faSearch, faServer, faTableCellsLarge, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserPane } from '../../features/browser/BrowserPane';
 import { FilesView } from './FilesView';
 import { FileIcon, FileTab } from './FileTab';
 import { TerminalTab } from '../../features/terminal/TerminalTab';
+import { registerTerminalHost } from '../../features/terminal/runInTerminal';
 import { WorkspaceContextPanel } from '../workspace/WorkspaceList';
 import { clipSummary, saveClipToWorkspace } from '../../features/browser/clipToNote';
 import { useShelf } from '../../features/shelf/useShelf';
@@ -232,6 +233,13 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
     const dir = cwd || (here.file ? (here.file.isDir ? here.file.path : parentDir(here.file.path)) : here.term?.cwd) || null;
     browseTabs.openTerminalTab(dir, isBlank(here));
   }, [browseTabs, mode, setMode]);
+
+  // Project commands (.cooldesk commands, the file manager's run buttons)
+  // open here as terminal tabs while Browse is up (runInTerminal.js).
+  useEffect(() => registerTerminalHost(({ command, cwd, label }) => {
+    if (mode !== 'browse') setMode('browse');
+    browseTabs.openTerminalTab(cwd || null, false, { run: command, title: label || command });
+  }), [browseTabs, mode, setMode]);
 
   // Browser shortcuts. Keys typed while the page itself has focus never reach
   // this document; the page tools (tools.js, isolated world) forward these
@@ -813,6 +821,18 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   // Outside CoolDesk: tabs in your browsers + running apps (the Tabs face,
   // folded in). Only listened to while the Tabs list is on screen.
   const navVisible = isActive && (isSidebarWidth || (filesShown && filesTab === 'tabs'));
+  // Folders you use most (the OS's recent/frequent list), as chips at the
+  // top of Home — they take little room. Fetched once Home is first shown.
+  const [frequentFolders, setFrequentFolders] = useState([]);
+  const foldersAsked = useRef(false);
+  useEffect(() => {
+    if (!navVisible || foldersAsked.current) return;
+    foldersAsked.current = true;
+    import('@tauri-apps/api/core')
+      .then(({ invoke }) => invoke('get_frequent_folders'))
+      .then(list => { if (Array.isArray(list)) setFrequentFolders(list.slice(0, 10)); })
+      .catch(() => { });
+  }, [navVisible]);
   const external = useExternalTabs(navVisible);
   const [showAllExternal, setShowAllExternal] = useState(false);
   const EXTERNAL_PREVIEW = 6;
@@ -843,22 +863,27 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
     );
   }
 
+  // Running apps and frequent folders: short names, so chips, not rows.
   function renderApp(app) {
     return (
-      <div
+      <button
         key={`${app.pid}-${app.hwnd || ''}-${app.tabIndex ?? ''}`}
-        role="button"
-        tabIndex={0}
-        className="browse-tab-row is-open"
+        className="nav-chip"
         onClick={() => external.focusApp(app)}
-        onKeyDown={(e) => { if (e.key === 'Enter') external.focusApp(app); }}
         title={`${app.title || app.name}\nClick to bring it to the front`}
       >
-        <span className="browse-tile">
-          {app.icon ? <img src={app.icon} alt="" /> : <FontAwesomeIcon icon={faDesktop} />}
-        </span>
-        <span className="browse-tab-title">{app.name || app.title}</span>
-      </div>
+        {app.icon ? <img src={app.icon} alt="" /> : <FontAwesomeIcon icon={faDesktop} />}
+        <span>{app.name || app.title}</span>
+      </button>
+    );
+  }
+  function renderFolderChip(folder) {
+    const name = folder.name || folder.path.split(/[/\\]/).filter(Boolean).pop() || folder.path;
+    return (
+      <button key={folder.path} className="nav-chip" onClick={() => openPath(folder.path, true)} title={`${folder.path}\nOpen in Files`}>
+        <FontAwesomeIcon icon={faFolder} className="nav-chip-folder" />
+        <span>{name}</span>
+      </button>
     );
   }
 
@@ -942,6 +967,25 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
             </>
           ) : (
             <>
+              {(frequentFolders.length > 0 || external.apps.length > 0) && (
+                <section className="nav-section nav-quick">
+                  {frequentFolders.length > 0 && (
+                    <>
+                      <div className="nav-section-head"><span>Folders</span></div>
+                      <div className="nav-chips">{frequentFolders.map(renderFolderChip)}</div>
+                    </>
+                  )}
+                  {external.apps.length > 0 && (
+                    <>
+                      <div className="nav-section-head">
+                        <span>Apps</span>
+                        <span className="browse-count">{external.apps.length}</span>
+                      </div>
+                      <div className="nav-chips">{external.apps.map(renderApp)}</div>
+                    </>
+                  )}
+                </section>
+              )}
               <section className="nav-section">
                 <div className="nav-section-head">
                   <span>Pinned</span>
@@ -1006,15 +1050,6 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                   )}
                 </section>
               )}
-              {external.apps.length > 0 && (
-                <section className="nav-section">
-                  <div className="nav-section-head">
-                    <span>Apps</span>
-                    <span className="browse-count">{external.apps.length}</span>
-                  </div>
-                  {external.apps.map(renderApp)}
-                </section>
-              )}
               {homeExtras && <div className="nav-home-extras">{homeExtras}</div>}
             </>
           )}
@@ -1039,6 +1074,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                     <TerminalTab
                       tabId={tab.id}
                       cwd={tab.term.cwd}
+                      run={tab.term.run || null}
                       active={isActive && browseMode && isCurrent}
                       onTitle={(title) => browseTabs.noteTitle(tab.id, title)}
                       onOpenUrl={(url) => browseTabs.openInNew(url, { position: 'after' })}
