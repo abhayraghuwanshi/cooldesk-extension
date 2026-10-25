@@ -29,8 +29,10 @@ const WorkspaceList = lazy(() => import('../workspace/WorkspaceList').then(m => 
 
 // Lazy load heavy components
 const ChatContext = lazy(() => import('../workspace/ChatContext').then(m => ({ default: m.ChatContext })));
-const TeamView = lazy(() => import('../team/TeamView')); // Default export
 const TabManagement = lazy(() => import('../tabs/TabManagement').then(m => ({ default: m.TabManagement })));
+// Last current workspace, restored on launch.
+const CURRENT_WS_KEY = 'cooldesk.currentWorkspaceId';
+const BrowseView = lazy(() => import('../browse/BrowseView').then(m => ({ default: m.BrowseView })));
 // Heavy: react-force-graph-2d (d3-force + canvas). Only load when the graph opens.
 const KnowledgeGraph = lazy(() => import('../../features/knowledge-graph/KnowledgeGraph').then(m => ({ default: m.KnowledgeGraph })));
 
@@ -173,19 +175,6 @@ export function CoolDeskContainer({
   const [expandedWorkspace, setExpandedWorkspace] = useState(null);
   const [currentWorkspace, setCurrentWorkspace] = useState(null);
   const [workspacePage, setWorkspacePage] = useState(0);
-  const [activeFace, setActiveFace] = useState(() => {
-    const stored = localStorage.getItem('cooldesk-active-face');
-    const fallback = isDesktopApp ? 'workspace' : 'overview';
-    // 'notes' face was removed (notes are now embedded in workspace cards) — migrate any
-    // leftover persisted value so the app doesn't boot into an empty/broken state.
-    if (stored === 'notes') return fallback;
-    // 'chat' was never a real WorkspaceShell face (see DESKTOP_FACES) — a
-    // stale persisted value from when /chat still navigated there would
-    // otherwise boot straight into that broken, nothing-renders state.
-    if (stored === 'chat') return fallback;
-    if (stored === 'team' && !TEAM_FEATURE_ENABLED) return fallback;
-    return stored || fallback;
-  });
 
   // ── Edit mode ────────────────────────────────────────────────────────────
   // The card's right-click "Edit" opens the same /edit-workspace mode on the
@@ -196,7 +185,15 @@ export function CoolDeskContainer({
   // reports the mode closed (Esc, its chip's ×, or picking another workspace),
   // so the next right-click "Edit" — even on the same workspace — re-triggers.
   const [editTarget, setEditTarget] = useState(null);
-  const isSidebarWidth = useIsSidebarWidth();
+  // Backend dock state — drives the sidebar / horizontal-bar render modes below.
+  const dockState = useDockState();
+  // Docked left/right always gets the sidebar layout, whatever width the page
+  // reports: if the page view ever lags the window (it did — see
+  // `autoresize_main_page` in src-tauri/src/lib.rs), Browse stayed mounted and its
+  // native page showed over the 360pt panel.
+  const isVerticalDock = isDesktopApp && !!dockState?.enabled
+    && (dockState.side === 'left' || dockState.side === 'right');
+  const isSidebarWidth = useIsSidebarWidth() || isVerticalDock;
 
   // At sidebar widths the header (and its embedded spotlight) isn't mounted,
   // so hand the edit to the standalone spotlight window instead.
@@ -218,10 +215,7 @@ export function CoolDeskContainer({
   // below) — gate WorkspaceShell's own settings nav dot on the same check so
   // it isn't reachable from a width where it can't actually open correctly.
 
-  // Backend dock state — drives the horizontal-bar render mode below.
-  const dockState = useDockState();
-
-  const isDockedDrawer = isDesktopApp && !!dockState?.enabled && dockState.mode === 'drawer';
+  const isDockedDrawer = isDesktopApp && !!dockState?.enabled && dockState.mode === 'drawer';
 
   // See-through on every platform now. How the window gets there differs —
   // macOS flips `setOpaque(false)` on the live window (`dock::set_see_through`),
@@ -238,8 +232,6 @@ export function CoolDeskContainer({
   // dock-see-through.css). The bar has its own pill styling instead.
   const isSidebarDock = isDockedDrawer
     && (dockState.side === 'left' || dockState.side === 'right');
-
-
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle('dock-see-through', !!isSeeThroughDock);
@@ -313,12 +305,19 @@ export function CoolDeskContainer({
   const [pinnedTabs, setPinnedTabs] = useState(new Set());
   const [expandedDomain, setExpandedDomain] = useState(null);
 
-  // Auto-select first workspace on mount
+  // On launch / reload: the workspace you were last in (else the first).
+  // Remembered, so a refresh doesn't drop you back on workspace #1.
   useEffect(() => {
     if (savedWorkspaces.length > 0 && !currentWorkspace) {
-      setCurrentWorkspace(savedWorkspaces[0]);
+      let lastId = null;
+      try { lastId = localStorage.getItem(CURRENT_WS_KEY); } catch { /* none */ }
+      setCurrentWorkspace(savedWorkspaces.find(w => w.id === lastId) || savedWorkspaces[0]);
     }
   }, [savedWorkspaces, currentWorkspace]);
+  useEffect(() => {
+    if (!currentWorkspace?.id) return;
+    try { localStorage.setItem(CURRENT_WS_KEY, currentWorkspace.id); } catch { /* per session then */ }
+  }, [currentWorkspace?.id]);
 
   const WORKSPACES_PER_PAGE = 2; // Show 3 workspaces in overview
   const totalPages = Math.ceil(savedWorkspaces.length / WORKSPACES_PER_PAGE);
@@ -527,10 +526,12 @@ export function CoolDeskContainer({
     onCreateWorkspace?.();
   };
 
+  // There are no faces any more: old face names (slash commands, workspace
+  // jumps, the onboarding event) map onto Browse — Home for the workspace
+  // views, the side panel's Tabs tab for the tab views. BrowseView listens.
   const handleFaceChange = (face) => {
-    setActiveFace(face);
-    localStorage.setItem('cooldesk-active-face', face);
-    console.log('[CoolDesk] Navigated to face:', face);
+    const to = face === 'tabs' || face === 'browse' || face === 'team' ? 'tabs' : 'home';
+    window.dispatchEvent(new CustomEvent('cooldesk-browse', { detail: { to } }));
   };
 
   const handleWorkspaceNavigate = (workspaceName) => {
@@ -539,7 +540,7 @@ export function CoolDeskContainer({
     if (workspace) {
       itemRankingService.recordWorkspaceOpen(workspace);
       setCurrentWorkspace(workspace);
-      setActiveFace('workspace'); // Navigate to workspace view
+      handleFaceChange('workspace'); // Home, now showing this workspace
       onOpenWorkspace?.(workspace);
       console.log('[CoolDesk] Navigated to workspace:', workspaceName);
     }
@@ -554,71 +555,19 @@ export function CoolDeskContainer({
     const faceMap = {
       'workspace': 'workspace',
       'tabs': 'tabs',
+      'browse': 'browse',
       ...(TEAM_FEATURE_ENABLED ? { 'team': 'team' } : {}),
       'overview': 'overview'
     };
 
     const face = faceMap[destination];
     if (face) {
-      console.log('[CoolDesk] Navigating from', activeFace, 'to', face);
-      setActiveFace(face);
-      localStorage.setItem('cooldesk-active-face', face);
+      handleFaceChange(face);
     } else {
       console.warn('[CoolDesk] Unknown destination:', destination);
     }
   };
 
-  // Track visited faces to lazy load heavy components
-  const [visitedFaces, setVisitedFaces] = useState(() => {
-    // Initialize with current face (usually 'overview')
-    const initial = new Set(['overview']);
-    try {
-      const active = localStorage.getItem('cooldesk-active-face') || 'overview';
-      // 'notes' and 'chat' faces were removed — don't treat either as a
-      // visited face anymore. 'team' is feature-flagged off — visiting it
-      // would lazy-init P2P for nothing.
-      if (active !== 'notes' && active !== 'chat' && (active !== 'team' || TEAM_FEATURE_ENABLED)) initial.add(active);
-    } catch { }
-    return initial;
-  });
-
-  // Helper to check if a face should be rendered
-  const shouldRenderFace = (faceName) => {
-    return visitedFaces.has(faceName) || activeFace === faceName;
-  };
-
-  // Update visited faces when navigation occurs
-  useEffect(() => {
-    if (!visitedFaces.has(activeFace)) {
-      setVisitedFaces(prev => {
-        const next = new Set(prev);
-        next.add(activeFace);
-        return next;
-      });
-    }
-  }, [activeFace, visitedFaces]);
-
-  // Lazy Initialize P2P Sync (only if Team is visited)
-  const [p2pInitialized, setP2pInitialized] = useState(false);
-  useEffect(() => {
-    if (p2pInitialized) return;
-
-    // Check if we need P2P
-    const needsP2P = visitedFaces.has('team');
-
-    if (needsP2P) {
-      console.log('[CoolDesk] Initializing P2P Service (Lazy)...');
-      // Dynamic import to avoid loading the module on startup
-      import('../../services/p2p/syncService').then(({ p2pSyncService }) => {
-        p2pSyncService.init().catch(err => {
-          console.warn('Failed to initialize P2P Sync:', err);
-        });
-      }).catch(err => {
-        console.warn('Failed to load P2P Sync service:', err);
-      });
-      setP2pInitialized(true);
-    }
-  }, [visitedFaces, p2pInitialized]);
 
   // Horizontal dock mode: while docked to the top/bottom edge, the main window
   // is a ~96px-tall strip — render only the taskbar-style workspace bar.
@@ -635,6 +584,44 @@ export function CoolDeskContainer({
       </>
     );
   }
+
+  // Docked sidebar (desktop): the Active card (everything open right now),
+  // your two most active workspaces, then widgets, Popular Folders and dev
+  // servers — open apps/tabs aren't listed twice. At full width
+  // Browse shows the same in its side panel's Home tab instead.
+  // Popular Folders open in Browse's Files panel.
+  const openFolderInBrowse = (path) => {
+    window.dispatchEvent(new CustomEvent('cooldesk-browse', { detail: { to: 'folder', path } }));
+  };
+  const homePage = isDesktopApp && isSidebarWidth ? (
+    <div className="home-stack">
+      <section className="home-stack-workspaces">
+        <Suspense fallback={null}>
+          <WorkspaceList
+            savedWorkspaces={savedWorkspaces}
+            onWorkspaceClick={handleWorkspaceClick}
+            activeWorkspaceId={currentWorkspace?.id}
+            expandedWorkspaceId={expandedWorkspace?.id}
+            pinnedWorkspaces={pinnedWorkspaces}
+            onTogglePin={onTogglePin}
+            onEditWorkspace={handleOpenEditModal}
+            appSuggestions={appSuggestions}
+            onAddAppsToWorkspace={handleAddAppsToWorkspace}
+            showActive
+            // Only the two most active; the rest stay behind "Show all".
+            initialLimit={2}
+          />
+        </Suspense>
+      </section>
+      <section className="home-stack-active">
+        <Suspense fallback={null}>
+          {/* Open apps/tabs are in WorkspaceList's Active card; this keeps
+              widgets, Popular Folders and dev servers. */}
+          <TabManagement hideOpen />
+        </Suspense>
+      </section>
+    </div>
+  ) : null;
 
   return (
     <div className={`cooldesk-container ${themeClass}`}>
@@ -737,47 +724,35 @@ export function CoolDeskContainer({
             reachable from the full-width header. */}
       </div>
 
-      {/* Spatial Workspace Shell - Takes remaining height */}
-      {/* In extension mode: Only show OverviewDashboard */}
-      {/* In desktop app (Tauri/Electron): Show all faces with navigation */}
-      <WorkspaceShell activeFace={activeFace} onFaceChange={handleFaceChange} onOpenSettings={isDesktopApp && !isSidebarWidth ? onOpenSettings : undefined} isDesktopApp={isDesktopApp}>
-        {/* Face 1: Workspace Details + ChatContext (Left) - Desktop App Only */}
-        {isDesktopApp && (
-          <Face index="workspace">
-            {shouldRenderFace('workspace') && (
-              <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '16px', overflow: 'hidden', padding: '16px 0' }}>
-                {/* WorkspaceList - takes 55% of space */}
-                <div style={{ flex: '0 0 100%', minHeight: 0, overflow: 'auto' }}>
-                  <Suspense fallback={<div style={{ padding: 20, color: '#64748B', textAlign: 'center' }}>Loading...</div>}>
-                    <WorkspaceList
-                      savedWorkspaces={savedWorkspaces}
-                      onWorkspaceClick={handleWorkspaceClick}
-                      activeWorkspaceId={currentWorkspace?.id}
-                      expandedWorkspaceId={expandedWorkspace?.id}
-                      pinnedWorkspaces={pinnedWorkspaces}
-                      onTogglePin={onTogglePin}
-                      onEditWorkspace={handleOpenEditModal}
-                      appSuggestions={appSuggestions}
-                      onAddAppsToWorkspace={handleAddAppsToWorkspace}
-                    />
-                  </Suspense>
-                </div>
-                {/* ChatContext - takes 45% of space */}
-                {/* <div style={{ flex: '0 0 45%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                  <Suspense fallback={null}>
-                    <ChatContext
-                      workspaceId={currentWorkspace?.id}
-                      workspaceName={currentWorkspace?.name || 'All Workspaces'}
-                    />
-                  </Suspense>
-                </div> */}
-              </div>
-            )}
-          </Face>
-        )}
-
-        {/* Face 3: Overview (Center) - Extension Only */}
-        {!isDesktopApp && (
+      {/* Desktop app: one screen. Browse is the whole app — Home (the
+          workspace cards) in blank tabs, pages / files / folders as tabs, and
+          the side panel for everything else. The old faces (Collections,
+          Tabs, Browse) and their sliding shell are gone. */}
+      {isDesktopApp && isSidebarWidth ? (
+        // Docked sidebar: too narrow for a browser, so just the Home page.
+        <div className="cooldesk-sidebar-page">{homePage}</div>
+      ) : isDesktopApp ? (
+        <div className="cooldesk-one-screen">
+          <Suspense fallback={null}>
+            <BrowseView
+              savedWorkspaces={savedWorkspaces}
+              activeWorkspaceId={currentWorkspace?.id}
+              onSelectWorkspace={(id) => {
+                const ws = savedWorkspaces.find(w => w.id === id);
+                if (ws) setCurrentWorkspace(ws);
+              }}
+              isActive
+              homeExtras={(
+                <Suspense fallback={null}>
+                  <TabManagement panel onOpenFolder={openFolderInBrowse} />
+                </Suspense>
+              )}
+            />
+          </Suspense>
+        </div>
+      ) : (
+        // Extension: the single Overview face, as before.
+        <WorkspaceShell activeFace="overview" isDesktopApp={false}>
           <Face index="overview">
             <OverviewDashboard
               savedWorkspaces={savedWorkspaces}
@@ -789,30 +764,8 @@ export function CoolDeskContainer({
               onEditWorkspace={handleOpenEditModal}
             />
           </Face>
-        )}
-
-        {/* Face 4: Tabs (Right) - Desktop App Only */}
-        {isDesktopApp && (
-          <Face index="tabs">
-            {shouldRenderFace('tabs') && (
-              <Suspense fallback={null}>
-                <TabManagement />
-              </Suspense>
-            )}
-          </Face>
-        )}
-
-        {/* Face 3: Team (Right-most) - Desktop App Only, behind feature flag */}
-        {isDesktopApp && TEAM_FEATURE_ENABLED && (
-          <Face index="team">
-            {shouldRenderFace('team') && (
-              <Suspense fallback={null}>
-                <TeamView />
-              </Suspense>
-            )}
-          </Face>
-        )}
-      </WorkspaceShell>
+        </WorkspaceShell>
+      )}
 
       {/* The floating "Quick Add" button used to live here. Adding to a
           workspace is now right-click → Add item, which arms the header

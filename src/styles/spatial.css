@@ -20,8 +20,8 @@
 
 .workspace-faces {
   display: flex;
-  width: 300%;
-  /* 3 faces: workspace · tabs · team */
+  /* One 100% slot per face; WorkspaceShell sets --face-count */
+  width: calc(var(--face-count, 3) * 100%);
   flex: 1;
   height: 100%;
   min-height: 0;
@@ -38,8 +38,8 @@
 }
 
 .workspace-face {
-  flex: 0 0 33.3333%;
-  width: 33.3333%;
+  flex: 0 0 calc(100% / var(--face-count, 3));
+  width: calc(100% / var(--face-count, 3));
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
@@ -58,6 +58,7 @@
 .workspace-face[data-face="workspace"],
 .workspace-face[data-face="overview"],
 .workspace-face[data-face="tabs"],
+.workspace-face[data-face="browse"],
 .workspace-face[data-face="team"] {
   padding: 0;
   /* No default padding for these complex views */
@@ -142,6 +143,11 @@
 }
 
 /* Cyan */
+.face-indicator[data-face='browse'] {
+  --face-hue: 268;
+}
+
+/* Violet (matches --bv-hue in browse.css) */
 .face-indicator[data-face='team'] {
   --face-hue: 330;
 }

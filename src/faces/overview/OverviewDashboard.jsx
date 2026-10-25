@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import '../../styles/cooldesk.css';
 import { ActivityFeed } from './parts/ActivityFeed';
+import { CardBoard } from './CardBoard';
 import { ActivityOverview } from '../../features/activity/ActivityOverview';
 import { WidgetBoard } from '../../features/widgets/WidgetBoard';
 import { AccentColorPicker, TRANSPARENT_ACCENT } from '../../shared/components/AccentColorPicker.jsx';
@@ -218,13 +219,22 @@ function ColumnColorChip({ color, onChange, opacity, onOpacityChange }) {
 // LayoutPicker hides parts; the desktop app always shows the full page).
 const SHOW_ALL = { widgets: true, summary: true, feed: true, favorites: true, hiddenFeedTabs: [] };
 
-const OverviewDashboard = memo(function OverviewDashboard({ layout = 'classic', visible = SHOW_ALL }) {
+const OverviewDashboard = memo(function OverviewDashboard({ layout = 'classic', visible = SHOW_ALL, cardEditing = false, onCardEditingDone }) {
     const [leftColor, setLeftColor] = useColumnAccent(LEFT_COLOR_KEY);
     const [activityColor, setActivityColor] = useColumnAccent(ACTIVITY_COLOR_KEY);
     const [leftOpacity, setLeftOpacity] = useColumnOpacity(LEFT_OPACITY_KEY);
     const [activityOpacity, setActivityOpacity] = useColumnOpacity(ACTIVITY_OPACITY_KEY);
     const wall = useWallpaperBacking();
     const showLeft = visible.widgets || visible.summary;
+
+    // Custom layout: the user's own card grid instead of the two columns.
+    if (layout === 'custom') {
+        return (
+            <div className="overview-scope">
+                <CardBoard editing={cardEditing} onDone={onCardEditingDone} />
+            </div>
+        );
+    }
 
     return (
         // .overview-scope establishes the container-query context; the grid
@@ -246,8 +256,12 @@ const OverviewDashboard = memo(function OverviewDashboard({ layout = 'classic', 
                         opacity={leftOpacity}
                         onOpacityChange={setLeftOpacity}
                     />
-                    {visible.widgets && <WidgetBoard />}
-                    {visible.summary && <ActivityOverview embedded hideWhenEmpty />}
+                    {/* Inner scroller, so the scroll-edge fade masks only the
+                        content — not the column's own glass. */}
+                    <div className="overview-left-scroll">
+                        {visible.widgets && <WidgetBoard />}
+                        {visible.summary && <ActivityOverview embedded hideWhenEmpty />}
+                    </div>
                 </div>}
 
                 {/* Right: Activity Feed */}

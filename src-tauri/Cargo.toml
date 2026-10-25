@@ -28,7 +28,7 @@ log = "0.4"
 # `devtools` is deliberately on for release builds as well: without it the
 # packaged app has no console, so console-only failures (CSP violations in
 # particular) are invisible in exactly the build where they occur.
-tauri = { version = "2.10.0", features = ["protocol-asset", "macos-private-api", "tray-icon", "devtools"] }
+tauri = { version = "2.10.0", features = ["protocol-asset", "macos-private-api", "tray-icon", "devtools", "unstable"] }
 tauri-plugin-log = "2"
 
 sysinfo = "0.30"
@@ -68,6 +68,8 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-drag = "2.1.1"
+portable-pty = "0.9"
+zip = { version = "4.2.0", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 tempfile = "3.10"
@@ -90,6 +92,11 @@ objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["NSW
 # Already resolved transitively via objc2-app-kit at this exact version —
 # declared directly only so dock/mac.rs can name MainThreadMarker itself.
 objc2 = "0.6.3"
+# Also already in the tree via wry — typed WebKit access for the browser
+# pane's native content blocker (WKContentRuleListStore, browser_pane/adblock.rs).
+objc2-web-kit = { version = "=0.3.2", default-features = false, features = ["std", "block2", "objc2-app-kit", "WKContentRuleList", "WKContentRuleListStore", "WKUserContentController", "WKWebView", "WKWebViewConfiguration", "WKContentWorld", "WKUserScript", "WKScriptMessage", "WKScriptMessageHandler", "WKFrameInfo"] }
+objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSString", "NSError", "NSGeometry", "NSData"] }
+block2 = "0.6.2"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [

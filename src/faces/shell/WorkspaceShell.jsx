@@ -1,4 +1,4 @@
-import { faFolder, faGear, faTh, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faFolder, faGear, faGlobe, faTh, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { teamManager } from '../../services/p2p/teamManager';
@@ -6,7 +6,7 @@ import { TEAM_FEATURE_ENABLED } from '../../config/features';
 import '../../styles/spatial.css';
 
 // Faces available in the desktop app, in spatial (left→right) order.
-const DESKTOP_FACES = TEAM_FEATURE_ENABLED ? ['workspace', 'tabs', 'team'] : ['workspace', 'tabs'];
+const DESKTOP_FACES = TEAM_FEATURE_ENABLED ? ['workspace', 'tabs', 'browse', 'team'] : ['workspace', 'tabs', 'browse'];
 
 
 /**
@@ -16,6 +16,7 @@ const DESKTOP_FACES = TEAM_FEATURE_ENABLED ? ['workspace', 'tabs', 'team'] : ['w
  * - Workspace (left) - workspace details, management, and ChatContext
  * - Overview (center) - main workspace grid
  * - Tabs (right) - tab management
+ * - Browse - workspace links beside an in-app browser pane
  * - Team (right-most) - P2P shared items
  *
  * Workspace notes are embedded in each WorkspaceCard's context panel,
@@ -160,13 +161,11 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
         }
       }
 
-      if (modifierPressed && ['1', '2', '3'].includes(e.key)) {
+      // Ctrl/Cmd + 1..N jumps straight to the Nth face.
+      const faceByDigit = DESKTOP_FACES[Number(e.key) - 1];
+      if (modifierPressed && /^[1-9]$/.test(e.key) && faceByDigit) {
         e.preventDefault();
-        const faceMap = {
-          '1': 'workspace', '2': 'tabs',
-          ...(TEAM_FEATURE_ENABLED ? { '3': 'team' } : {})
-        };
-        if (faceMap[e.key]) navigateToFace(faceMap[e.key]);
+        navigateToFace(faceByDigit);
       }
 
       if (e.key === 'Escape') {
@@ -298,13 +297,10 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
       return 'translateX(0)';
     }
 
-    // Desktop app: 3 faces, each taking 33.3333% of the 300% container
-    const transforms = {
-      'workspace': 'translateX(0)',
-      'tabs': 'translateX(-33.3333%)',
-      'team': 'translateX(-66.6667%)'
-    };
-    return transforms[currentFace] || transforms.workspace;
+    // Desktop app: N faces side by side in an N×100% container (spatial.css
+    // reads --face-count), so face i sits at -i/N of the container's width.
+    const index = Math.max(0, DESKTOP_FACES.indexOf(currentFace));
+    return `translateX(-${(index * 100) / DESKTOP_FACES.length}%)`;
   }, [currentFace, isDesktopApp]);
 
   return (
@@ -340,12 +336,20 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
             >
               <FontAwesomeIcon icon={faTh} className="face-icon" />
             </button>
+            <button
+              className={`face-dot ${currentFace === 'browse' ? 'active' : ''}`}
+              onClick={() => navigateToFace('browse')}
+              onMouseEnter={() => setHoveredFace('browse')}
+              title="Browse (Ctrl + 3)"
+            >
+              <FontAwesomeIcon icon={faGlobe} className="face-icon" />
+            </button>
             {TEAM_FEATURE_ENABLED && (
               <button
                 className={`face-dot ${currentFace === 'team' ? 'active' : ''}`}
                 onClick={() => navigateToFace('team')}
                 onMouseEnter={() => setHoveredFace('team')}
-                title="Spaces (Ctrl + 3)"
+                title="Spaces (Ctrl + 4)"
                 data-onboarding="nav-team"
               >
                 <FontAwesomeIcon icon={faUsers} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
@@ -372,8 +376,8 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
             transform,
             willChange: 'transform',
             // In extension mode: single face takes 100% width
-            // In desktop mode: 3 faces at 300% total width (handled by CSS)
-            ...(isDesktopApp ? {} : { width: '100%' })
+            // In desktop mode: one 100% slot per face (handled by CSS)
+            ...(isDesktopApp ? { '--face-count': DESKTOP_FACES.length } : { width: '100%' })
           }}
         >
           {children}

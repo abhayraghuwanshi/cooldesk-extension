@@ -257,6 +257,7 @@ import { cleanupOldTimeSeriesData, getTimeSeriesStorageStats, getUIState, listWo
 import { DB_CONFIG, getUnifiedDB } from '../db/unified-db.js';
 import { storageGetWithTTL } from '../services/extensionApi.js';
 import { populateAndStore } from './data.js';
+import './autoUpdate.js';
 
 // Modular background pieces - these initialize their own message handlers
 // NOTE: realTimeCategorizor is lazy-loaded to avoid window reference errors in service worker

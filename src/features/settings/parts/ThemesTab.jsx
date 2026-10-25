@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { fontFamilies } from '../../../utils/fontUtils';
 import FontFamilyDropdown from './FontFamilyDropdown';
 import FontSizeDropdown from './FontSizeDropdown';
-import { GRADIENT_WALLPAPERS, WALLPAPER_CATALOG } from '../../../shared/data/wallpapers';
+import { FEATURED_WALLPAPERS, moreWallpapers } from '../../../shared/data/wallpapers';
 const ThemesTab = ({
   selectedTheme,
   fontSize,
@@ -221,7 +221,7 @@ const ThemesTab = ({
 
 
 
-  const curatedWallpapers = WALLPAPER_CATALOG;
+  const curatedWallpapers = moreWallpapers();
 
   // One tile grid, used for both the Gradients and Photos sections.
   const renderWallpaperGrid = (list) => (
@@ -561,11 +561,11 @@ const ThemesTab = ({
                 Choose a Wallpaper
               </label>
               <div style={{ color: '#9ca3af', fontSize: 'var(--font-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>
-                Gradients
+                Featured
               </div>
-              {renderWallpaperGrid(GRADIENT_WALLPAPERS)}
+              {renderWallpaperGrid(FEATURED_WALLPAPERS)}
               <div style={{ color: '#9ca3af', fontSize: 'var(--font-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '16px 0 8px' }}>
-                Photos
+                More photos
               </div>
               {renderWallpaperGrid(curatedWallpapers)}
               <div style={{

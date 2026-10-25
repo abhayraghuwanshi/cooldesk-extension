@@ -189,7 +189,7 @@ pub fn webapp_embed_set_bounds(
             return Ok(());
         }
         let main_hwnd = app
-            .get_webview_window("main")
+            .get_window("main") // not get_webview_window: see main_window() in lib.rs
             .and_then(|w| w.hwnd().ok())
             .map(|h| h.0 as isize)
             .ok_or_else(|| "main window unavailable".to_string())?;

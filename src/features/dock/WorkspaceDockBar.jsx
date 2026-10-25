@@ -2,15 +2,13 @@ import { faCode, faDesktop, faFileLines, faFolderOpen, faPen, faTableColumns } f
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import logo from '../../../logo-2.png';
-import { runningAppsService } from '../../services/runningAppsService';
 import { itemRankingService } from '../../services/itemRankingService';
 import { isEditorApp, workspaceActivityService } from '../../services/workspaceActivityService';
 import { openSpotlightEdit } from '../../services/spotlightEdit';
 import { useCooldeskItems } from '../../shared/hooks/useCooldeskItems.js';
 import { fileStack, stackLogo, useFolderIdentity } from '../../shared/hooks/useFolderIdentity.js';
-import { enrichRunningAppsWithIcons } from '../../utils/helpers.js';
-import { filterUserApps } from '../../utils/userApps.js';
 import { LayoutSwitchButton } from './LayoutSwitchButton';
+import { useLiveItems } from './useLiveItems';
 import '../../styles/dockbar.css';
 
 // Favicon resolution as an ordered fallback chain rather than a single source:
@@ -72,13 +70,6 @@ const placeLabel = (app) => {
   const name = app.name || parts[parts.length - 1] || app.path || '';
   const parent = parts.length > 1 ? parts[parts.length - 2] : '';
   return { name, parent };
-};
-
-// Browser chrome that isn't worth a dock slot.
-const isBlankTab = (url = '') => {
-  const u = url.toLowerCase();
-  return !u || u === 'about:blank' || /^(chrome|edge|brave|vivaldi|opera):\/\/newtab/.test(u)
-    || u.startsWith('chrome-extension://') || u.startsWith('devtools://');
 };
 
 /**
@@ -166,39 +157,10 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
   const workspace = activeWorkspace || workspaces[0] || null;
   const { urls, apps } = useDockItems(workspace);
 
-  // Live running-apps + open-tabs state. `activity` is only a re-render tick;
-  // the matching itself goes through the shared service.
-  const [activity, setActivity] = useState(null);
-  useEffect(() => workspaceActivityService.subscribe(setActivity), []);
-
-  // Active view: running apps, one chip per app (the service reports one entry
-  // per window), filtered and icon-enriched the same way as the Tabs page's
-  // Active Apps; then open tabs, deduped by URL. Only subscribed while shown.
-  const [liveApps, setLiveApps] = useState([]);
-  useEffect(() => {
-    if (!isActiveMode) return undefined;
-    return runningAppsService.subscribe(({ runningApps, installedApps }) => {
-      if (!Array.isArray(runningApps)) return;
-      const seen = new Set();
-      const apps = filterUserApps(enrichRunningAppsWithIcons(runningApps, installedApps))
-        .filter((a) => {
-          const k = (a.path || a.name || '').toLowerCase();
-          if (!k || seen.has(k)) return false;
-          seen.add(k);
-          return true;
-        })
-        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      setLiveApps(apps);
-    });
-  }, [isActiveMode]);
-  const liveTabs = useMemo(() => {
-    const seen = new Set();
-    return (activity?.openTabs || []).filter((t) => {
-      if (isBlankTab(t.url) || seen.has(t.url)) return false;
-      seen.add(t.url);
-      return true;
-    });
-  }, [activity]);
+  // Live running-apps + open-tabs state (shared with the sidebar's Active
+  // card). `activity` is only a re-render tick; the matching itself goes
+  // through the shared service. Running apps are only polled while shown.
+  const { activity, liveApps, liveTabs } = useLiveItems(isActiveMode);
 
   const focusLiveApp = useCallback((app) => {
     const api = window.electronAPI;

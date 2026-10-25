@@ -3,14 +3,15 @@ import {
   faExternalLinkAlt, faFile, faFileAudio, faFileCode, faFileExcel, faFileImage, faFilePdf,
   faEye, faEyeSlash, faFileVideo, faFileZipper, faFolder, faHardDrive, faHouse, faList, faSearch,
   faTableCellsLarge, faThumbtack, faTimes, faPlay, faDiagramProject, faCheckDouble, faLink,
-  faLinkSlash, faPlus, faSpinner, faPowerOff, faSync, faEllipsis
+  faLinkSlash, faPlus, faSpinner, faPowerOff, faSync, faEllipsis, faBoxArchive, faBoxOpen
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { startDrag } from '@crabnebula/tauri-plugin-drag';
+import { IS_TAURI, startNativeDrag } from '../../utils/nativeDrag.js';
 import { fetchCooldesk, linkCooldeskProject } from '../../services/cooldeskService.js';
 import { getPreviewItem } from '../../utils/filePreviewKind.js';
+import { commandCwd, runInTerminal } from '../terminal/runInTerminal.js';
 import { isRealPointerMove } from '../../utils/helpers.js';
 import '../../styles/fileManager.css';
 
@@ -26,41 +27,14 @@ async function listDirRaw(path) {
 }
 
 /** Hand a path to the OS (opens a file with its default app, a folder in Explorer). */
-// Native drag-out (Tauri only): a row dragged out of the file manager becomes
-// a real OS file drag, so dropping it on Finder/Explorer copies the file there
-// and dropping it on a web page's upload field uploads it — what a plain HTML5
-// drag can't do, since it carries no actual file. Mode is "copy": the source
-// is never moved. Statically imported because the native drag must start
-// while the button is still held — awaiting a dynamic import first can miss it.
-const IS_TAURI = typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__;
+// Native drag-out lives in utils/nativeDrag.js (shared with the Shelf).
 
-// The plugin needs a PNG (as a data URL) for the image under the cursor.
-// Drawn once per kind and cached — a folder/file glyph on a rounded tile.
-const dragIconCache = {};
-function dragIconFor(isDir) {
-  const key = isDir ? 'dir' : 'file';
-  if (dragIconCache[key]) return dragIconCache[key];
-  const size = 64;
-  const c = document.createElement('canvas');
-  c.width = size; c.height = size;
-  const g = c.getContext('2d');
-  g.fillStyle = 'rgba(30, 30, 40, 0.85)';
-  g.beginPath();
-  g.roundRect?.(4, 4, size - 8, size - 8, 12);
-  g.fill();
-  g.font = '34px -apple-system, "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillText(isDir ? '📁' : '📄', size / 2, size / 2 + 2);
-  dragIconCache[key] = c.toDataURL('image/png');
-  return dragIconCache[key];
-}
+// Archives Extract here can unpack (archive.rs, via the system tar).
+const ARCHIVE_RE = /\.(zip|tar|tgz|tbz2|txz|7z|rar|tar\.gz|tar\.bz2|tar\.xz)$/i;
 
-function startNativeDrag(e, entry) {
-  // Cancel the webview's own HTML5 drag — the OS drag replaces it.
-  e.preventDefault();
-  startDrag({ item: [entry.path], icon: dragIconFor(entry.is_dir), mode: 'copy' })
-    .catch(err => console.warn('[FileManager] native drag failed:', err));
+async function archiveOp(cmd, args) {
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke(cmd, args);
 }
 
 async function openWithSystem(path) {
@@ -276,8 +250,22 @@ function loadJSON(key, fallback) {
  *   sidebar-width Tabs page, where a full-screen modal covered everything.
  *   Inline it only takes the keyboard while focus is inside it, since the rest
  *   of the page is still right there and usable.
+ * @param {boolean} [embedded] in place like `inline`, but with the full
+ *   toolbar and filling its container — the Browse view's Files mode, which
+ *   has a whole pane's width rather than a sidebar's.
+ * @param {boolean} [compact] with `embedded`, keep the two-row sidebar toolbar
+ *   (Files mode docks the manager to the side once file tabs are open).
+ * @param {(path: string) => void} [onOpenFile] open files here instead of
+ *   handing them to the OS default app (Files mode shows them as tabs).
+ * @param {boolean} [projectBar] show the .cooldesk project bar / setup offer
+ *   (off in Browse's narrow Files panel, where it crowds out the file list).
+ * @param {boolean} [placesRow] Places / Pinned / linked projects as a chip row
+ *   across the top instead of a 176px left column (Browse's Files panel).
+ * @param {boolean} [quickLook] the hover-preview column beside the list (off
+ *   where the host shows opened files itself).
  */
-export function FileManager({ isOpen, initialPath, places = [], onClose, inline = false }) {
+export function FileManager({ isOpen, initialPath, places = [], onClose, inline: inlineProp = false, embedded = false, compact = false, onOpenFile, projectBar = true, placesRow = false, quickLook = true }) {
+  const inline = inlineProp || embedded;
   const windowRef = useRef(null);
   const [path, setPath] = useState(initialPath || '');
   // Navigation history — index points at the current entry, so back/forward
@@ -307,6 +295,38 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline 
   const [placesOpen, setPlacesOpen] = useState(false);
   // Inline (sidebar) compact toolbar: which of its dropdowns is open.
   const [compactMenu, setCompactMenu] = useState(null); // 'more' | 'ancestors' | null
+  // Right-click on an item: { entry, left, top }. opStatus: the last
+  // extract / compress, shown in the status bar for a few seconds.
+  const [entryMenu, setEntryMenu] = useState(null);
+  const [opStatus, setOpStatus] = useState(null);
+  useEffect(() => {
+    if (!opStatus || opStatus.busy) return undefined;
+    const t = setTimeout(() => setOpStatus(null), 5000);
+    return () => clearTimeout(t);
+  }, [opStatus]);
+  useEffect(() => {
+    if (!entryMenu) return undefined;
+    const close = (e) => { if (!e.target?.closest?.('.fm-menu')) setEntryMenu(null); };
+    window.addEventListener('mousedown', close, true);
+    window.addEventListener('blur', close);
+    return () => {
+      window.removeEventListener('mousedown', close, true);
+      window.removeEventListener('blur', close);
+    };
+  }, [entryMenu]);
+  // Extract / compress next to the item; the folder watcher shows the result.
+  const runArchive = useCallback(async (kind, entry) => {
+    const name = entry.path.split(/[/\\]/).pop();
+    setOpStatus({ busy: true, text: kind === 'extract' ? `Extracting ${name}…` : `Compressing ${name}…` });
+    try {
+      const out = kind === 'extract'
+        ? await archiveOp('archive_extract', { path: entry.path })
+        : await archiveOp('archive_compress', { paths: [entry.path] });
+      setOpStatus({ text: `${kind === 'extract' ? 'Extracted to' : 'Created'} ${out.split(/[/\\]/).pop()}` });
+    } catch (err) {
+      setOpStatus({ error: true, text: `Couldn’t ${kind === 'extract' ? 'extract' : 'compress'} ${name} — ${err}` });
+    }
+  }, []);
   // Screen coords for whichever popup is open. The bars that host the triggers
   // scroll horizontally (`overflow-x: auto`), which clips any absolutely
   // positioned child — so menus are rendered fixed, anchored to the trigger.
@@ -326,6 +346,13 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline 
   const filterRef = useRef(null);
   const listRef = useRef(null);
   const pathInputRef = useRef(null);
+  // The breadcrumb scrolls sideways when it doesn't fit; keep the current
+  // folder (the end) in view rather than the root.
+  const crumbsRef = useRef(null);
+  useEffect(() => {
+    const el = crumbsRef.current;
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [path, editingPath]);
   const hoverTimer = useRef(null);
 
   // Re-anchor whenever the modal is opened on a different folder.
@@ -646,8 +673,9 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline 
   const openEntry = useCallback((entry) => {
     if (!entry) return;
     if (entry.is_dir) navigate(entry.path);
+    else if (onOpenFile) onOpenFile(entry.path);
     else openWithSystem(entry.path).catch(err => console.error('[FileManager] open failed:', err));
-  }, [navigate]);
+  }, [navigate, onOpenFile]);
 
   // Warm a folder's contents (and its item count) shortly after hover, so the
   // click that follows renders instantly.
@@ -672,19 +700,15 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline 
     }).catch(() => { });
   }, [path]);
 
-  // Run a project command in its own console, rooted at the project folder
-  // (not the folder you happen to be browsing).
+  // Run a project command in a CoolDesk terminal tab (else the system
+  // terminal), rooted at the project folder — not the folder you happen to
+  // be browsing — plus the command's own relative cwd.
   const runCommand = useCallback(async (cmd) => {
     if (!cmd?.run || !project?.path) return;
     setRanCommand(cmd.id || cmd.run);
     setTimeout(() => setRanCommand(null), 1600);
     try {
-      if (window.electronAPI?.runCommand) {
-        await window.electronAPI.runCommand(cmd.run, project.path);
-      } else {
-        const { invoke } = await import('@tauri-apps/api/core');
-        await invoke('run_project_command', { command: cmd.run, cwd: project.path });
-      }
+      await runInTerminal({ command: cmd.run, cwd: commandCwd(project.path, cmd.cwd), label: cmd.label || cmd.id });
     } catch (err) {
       console.error('[FileManager] command failed:', cmd.run, err);
     }
@@ -875,8 +899,8 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline 
       };
       if (e.key === 'Escape') {
         take();
-        if (crumbMenu || showRecent || showLinkMenu || compactMenu) {
-          setCrumbMenu(null); setShowRecent(false); setShowLinkMenu(false); setCompactMenu(null); return;
+        if (crumbMenu || showRecent || showLinkMenu || compactMenu || entryMenu) {
+          setCrumbMenu(null); setShowRecent(false); setShowLinkMenu(false); setCompactMenu(null); setEntryMenu(null); return;
         }
         if (editingPath !== null) { setEditingPath(null); return; }
         if (filter) { setFilter(''); return; }
@@ -929,7 +953,7 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline 
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [isOpen, filter, visible, cursor, view, editingPath, crumbMenu, showRecent, showLinkMenu,
-      path, onClose, goBack, goForward, goUp, openEntry, inline, compactMenu]);
+      path, onClose, goBack, goForward, goUp, openEntry, inline, compactMenu, entryMenu]);
 
   // Inline has no backdrop, and its menus are portaled outside the window —
   // so close them on any press that lands in neither the window nor a menu
@@ -1165,14 +1189,14 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline 
   const windowEl = (
       <div
         ref={windowRef}
-        className={`fm-window${inline ? ' fm-window--inline' : ''}`}
+        className={`fm-window${inline ? ' fm-window--inline' : ''}${embedded ? ' fm-window--embedded' : ''}${placesRow ? ' fm-window--places-row' : ''}`}
         // Inline has no backdrop to give focus to, so make the window itself
         // focusable — clicking anywhere in it then routes keys to it.
         tabIndex={inline ? -1 : undefined}
         onClick={(e) => { e.stopPropagation(); setCrumbMenu(null); setShowRecent(false); setPlacesOpen(false); setCompactMenu(null); }}
       >
         {/* Toolbar: history + address bar + filter */}
-        {inline ? compactToolbar : (
+        {inline && (!embedded || compact) ? compactToolbar : (
         <div className="fm-toolbar">
           <div className="fm-nav">
             {/* Only visible below the 720px breakpoint (see fileManager.css) —
@@ -1239,6 +1263,7 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline 
             />
           ) : (
             <div
+              ref={crumbsRef}
               className="fm-crumbs"
               onDoubleClick={() => { setEditingPath(path); setTimeout(() => pathInputRef.current?.select(), 0); }}
               title="Double-click (or Ctrl+L) to type a path"
@@ -1326,7 +1351,7 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline 
             folders and open todo count, available from anywhere inside it. */}
         {/* No workspace here yet, but this looks like a project root — offer to
             run the plugin's /cd-init in this folder. */}
-        {looksLikeProjectRoot && (
+        {projectBar && looksLikeProjectRoot && (
           <div className="fm-project-bar fm-project-bar--setup">
             <span className="fm-setup-text">
               No CoolDesk workspace in <strong>{baseName(path)}</strong>
@@ -1353,7 +1378,7 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline 
           </div>
         )}
 
-        {project && (
+        {projectBar && project && (
           <div className="fm-project-bar">
             <button
               className="fm-project-name"
@@ -1539,7 +1564,15 @@ ${c.path}`}
 
         <div className="fm-body">
           {sidebar.length > 0 && (
-            <div className={`fm-sidebar ${placesOpen ? 'fm-sidebar--open' : ''}`} onClick={(e) => e.stopPropagation()}>
+            <div
+              className={`fm-sidebar ${placesOpen ? 'fm-sidebar--open' : ''} ${placesRow ? 'fm-sidebar--row' : ''}`}
+              onClick={(e) => e.stopPropagation()}
+              // The chip row only scrolls sideways; let a plain (vertical)
+              // mouse wheel drive it too. Trackpad sideways swipes already do.
+              onWheel={placesRow ? (e) => {
+                if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) e.currentTarget.scrollLeft += e.deltaY;
+              } : undefined}
+            >
               {sidebar.map(section => (
                 <div key={section.title} className={`fm-side-section ${section.kind === 'linked' ? 'fm-side-linked' : ''}`}>
                   <div className="fm-side-title">
@@ -1622,11 +1655,20 @@ ${c.path}`}
                 const common = {
                   className: `fm-item ${view === 'grid' ? 'fm-tile' : 'fm-row'} ${active ? 'active' : ''} ${entry.hidden ? 'hidden-entry' : ''}`,
                   onClick: () => { setCursor(i); openEntry(entry); },
+                  onContextMenu: (e) => {
+                    e.preventDefault();
+                    setCursor(i);
+                    setEntryMenu({
+                      entry,
+                      left: Math.min(e.clientX, window.innerWidth - 248),
+                      top: Math.min(e.clientY, window.innerHeight - 220),
+                    });
+                  },
                   onMouseEnter: (e) => { if (isRealHover(e)) { setCursor(i); prefetch(entry); } },
                   title: IS_TAURI ? `${entry.path}\nDrag out to copy it into a folder or an upload box` : entry.path,
                   // Drag out → copy into Finder/Explorer or a web upload field.
                   draggable: IS_TAURI,
-                  onDragStart: IS_TAURI ? (e) => startNativeDrag(e, entry) : undefined,
+                  onDragStart: IS_TAURI ? (e) => startNativeDrag(e, entry.path, entry.is_dir) : undefined,
                 };
                 if (view === 'grid') {
                   return (
@@ -1667,17 +1709,57 @@ ${c.path}`}
                   +{hiddenCount} hidden
                 </button>
               )}
-              {current && <span className="fm-status-sel">{baseName(current.path)}</span>}
+              {opStatus ? (
+                <span className={`fm-status-op ${opStatus.error ? 'is-error' : ''}`}>
+                  {opStatus.busy && <FontAwesomeIcon icon={faSpinner} spin />} {opStatus.text}
+                </span>
+              ) : current && <span className="fm-status-sel">{baseName(current.path)}</span>}
               <span className="fm-status-hint">
                 <kbd>↑↓</kbd> move <kbd>↵</kbd> open <kbd>⌫</kbd> up <kbd>Ctrl+L</kbd> path
               </span>
             </div>
+
+            {entryMenu && floatMenu(
+              <div className="fm-menu fm-entry-menu" style={{ left: entryMenu.left, top: entryMenu.top }} onClick={(e) => e.stopPropagation()}>
+                {(() => {
+                  const { entry } = entryMenu;
+                  const act = (fn) => () => { setEntryMenu(null); fn(); };
+                  return (
+                    <>
+                      <button className="fm-menu-item" onClick={act(() => openEntry(entry))}>
+                        <FontAwesomeIcon icon={entry.is_dir ? faFolder : faFile} className="fm-menu-icon" />
+                        <span className="fm-menu-label">Open</span>
+                      </button>
+                      <button className="fm-menu-item" onClick={act(() => openWithSystem(entry.path).catch(() => { }))}>
+                        <FontAwesomeIcon icon={faExternalLinkAlt} className="fm-menu-icon" />
+                        <span className="fm-menu-label">{entry.is_dir ? 'Open in system file manager' : 'Open with default app'}</span>
+                      </button>
+                      <div className="fm-menu-sep" />
+                      {!entry.is_dir && ARCHIVE_RE.test(entry.path) && (
+                        <button className="fm-menu-item" onClick={act(() => runArchive('extract', entry))} disabled={opStatus?.busy}>
+                          <FontAwesomeIcon icon={faBoxOpen} className="fm-menu-icon" />
+                          <span className="fm-menu-label">Extract here</span>
+                        </button>
+                      )}
+                      <button className="fm-menu-item" onClick={act(() => runArchive('compress', entry))} disabled={opStatus?.busy}>
+                        <FontAwesomeIcon icon={faBoxArchive} className="fm-menu-icon" />
+                        <span className="fm-menu-label">Compress “{baseName(entry.path)}”</span>
+                      </button>
+                      <button className="fm-menu-item" onClick={act(() => navigator.clipboard.writeText(entry.path).catch(() => { }))}>
+                        <FontAwesomeIcon icon={faCopy} className="fm-menu-icon" />
+                        <span className="fm-menu-label">Copy path</span>
+                      </button>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
           </div>
 
           {/* Quick Look-style preview, wide widths only (see fileManager.css
               — there's no room for a third column once the sidebar has
               already been dropped for space). */}
-          {previewItem && (
+          {quickLook && previewItem && (
             <>
               <div className="fm-preview-resize" onPointerDown={startPreviewResize} title="Drag to resize" />
               <div className="fm-preview" style={{ width: previewWidth }}>

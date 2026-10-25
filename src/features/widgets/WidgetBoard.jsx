@@ -878,4 +878,33 @@ const WidgetBoard = memo(function WidgetBoard({ storageArea, compact = false, de
     );
 });
 
-export { WidgetBoard };
+// One widget on its own, without the board around it — the Custom layout's
+// per-widget cards (faces/overview/CardBoard.jsx). Same frame, theme,
+// see-through and storage bridge as a board tile; the card supplies the
+// surface, size and edit controls.
+const WidgetEmbed = memo(function WidgetEmbed({ widgetId }) {
+    const theme = useWidgetTheme();
+    const widget = useMemo(
+        () => getWidget(widgetId) || loadCustomWidgets().find(c => c.id === widgetId) || null,
+        [widgetId]
+    );
+    if (!widget) return <div className="wgb-embed-missing">Widget not found</div>;
+    return widget.custom ? (
+        <CustomWidgetFrame widget={widget} theme={theme} className="wgb-frame" />
+    ) : (
+        <iframe
+            className="wgb-frame"
+            src={widgetEmbedUrl(widget.id, theme, undefined, {
+                clear: clearTiles(theme),
+                // Scaled from a ~240px-wide design (fitW overrides for wider
+                // layouts), so a small square card fills out rather than
+                // leaving a wide margin.
+                fit: widget.fit ? { w: widget.fitW || 240, h: widget.h } : null,
+            })}
+            title={widget.name}
+            onLoad={bridgeOnLoad}
+        />
+    );
+});
+
+export { WidgetBoard, WidgetEmbed };

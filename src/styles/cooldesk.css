@@ -629,35 +629,6 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   background: rgba(139, 92, 246, 0.4);
 }
 
-.activity-feed-scroll::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.activity-feed-scroll::-webkit-scrollbar-track {
-  background: transparent;
-  /* Inset from the card's rounded corners; also shortens the thumb a bit,
-     since its length is a share of the track. */
-  margin-block: 14px;
-}
-
-/* Thumb shows only while the card is hovered (macOS-style) — its length is
-   set by the content ratio and can't be capped in CSS, so a long thumb is
-   kept out of sight the rest of the time. */
-.activity-feed-scroll::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 4px;
-}
-
-.overview-activity-column:hover .activity-feed-scroll::-webkit-scrollbar-thumb,
-.activity-feed-scroll:hover::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.2);
-}
-
-.activity-feed-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.4);
-}
-
 .expanded-search-panel::-webkit-scrollbar {
   width: 8px;
 }
@@ -3813,16 +3784,12 @@ body.bg-white-cred .wgb-tile.has-accent {
     linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 40%),
     color-mix(in oklab, var(--wall-tint, rgb(30 30 32)) 30%, rgb(30 30 32 / 0.5));
   --glass-blur: blur(40px) saturate(190%);
-  /* One even hairline on all four sides. The edge used to be a faint 0.1
-     border plus inset top-highlight / bottom-shade lines, which made the top
-     and bottom crisp while the left and right sides washed out into the
-     wallpaper. The lit-from-above cue now lives only in --glass-fill's
-     gradient, so the outline itself stays uniform. Like a macOS window:
-     a faint light inner edge (0.14 read as a whitish outline) plus a thin
-     dark outer ring that defines the shape against bright wallpaper. */
-  --glass-edge: 1px solid rgba(255, 255, 255, 0.07);
+  /* No outline. A hairline (white, dark, then both stacked) kept reading as
+     a visible border — whitish on dark wallpaper, a light-inside/dark-outside
+     double line on light ones. The card's edge comes from the glass itself
+     (blur + tinted fill against the wallpaper) and its soft drop shadow. */
+  --glass-edge: none;
   --glass-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.28),
     0 20px 44px -18px rgba(0, 0, 0, 0.55),
     0 4px 12px rgba(0, 0, 0, 0.22);
   padding-top: 0;
@@ -4005,12 +3972,11 @@ body.bg-white-cred .wgb-tile.has-accent {
 .overview-left-column {
   display: flex;
   flex-direction: column;
-  gap: 16px;
   min-width: 0;
-  /* Fills the grid frame and scrolls on its own (independent of the feed). */
+  /* Fills the grid frame; its content scrolls on its own (independent of the
+     feed) inside .overview-left-scroll. */
   height: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   /* Quiet translucent slab so the widget rail separates from busy wallpapers.
      Same radius + edge padding as the feed card so both columns share a grid. */
   background: var(--glass-fill, rgba(11, 11, 14, 0.35));
@@ -4019,31 +3985,17 @@ body.bg-white-cred .wgb-tile.has-accent {
   border: var(--glass-edge, none);
   box-shadow: var(--glass-shadow, none);
   border-radius: 16px;
+}
+
+.overview-left-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   padding: 16px;
-  /* No scrollbar-width/-color here: in Chrome they'd override the 6px
-     ::-webkit-scrollbar rules below with the wider native bar. */
-}
-
-.overview-left-column::-webkit-scrollbar {
-  width: 6px;
-}
-
-.overview-left-column::-webkit-scrollbar-track {
-  background: transparent;
-  margin-block: 14px; /* see .activity-feed-scroll's track */
-}
-
-.overview-left-column::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 3px;
-}
-
-.overview-left-column:hover::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.2);
-}
-
-.overview-left-column::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.4);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .overview-notes-section {
@@ -4229,7 +4181,7 @@ body.bg-white-cred .wgb-tile.has-accent {
     grid-template-columns: minmax(220px, 0.85fr) 1.15fr;
   }
 
-  .overview-left-column {
+  .overview-left-scroll {
     gap: 12px;
   }
 }
@@ -4248,8 +4200,12 @@ body.bg-white-cred .wgb-tile.has-accent {
   }
 
   .overview-left-column {
-    gap: 12px;
     height: auto;
+    overflow: visible;
+  }
+
+  .overview-left-scroll {
+    gap: 12px;
     overflow: visible;
   }
 
@@ -4336,6 +4292,7 @@ body.bg-white-cred .wgb-tile.has-accent {
     margin-bottom: var(--frame-bottom, 16px);
   }
   .overview-dashboard-grid[data-layout="focus"] .overview-left-column,
+  .overview-dashboard-grid[data-layout="focus"] .overview-left-scroll,
   .overview-dashboard-grid[data-layout="focus"] .overview-activity-column {
     height: auto;
     overflow: visible;
@@ -4353,6 +4310,534 @@ body.bg-white-cred .wgb-tile.has-accent {
   .overview-dashboard-grid[data-layout="stacked"] .wgb-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+}
+
+/* ── Custom layout: card grid (CardBoard.jsx) ──
+   macOS-widget proportions: small square cells (--ocb-cell, 124–168px, set
+   from JS with --ocb-cols), as many columns as fit, grid centered. Every card
+   sits on an explicit cell (free placement), so empty space stays empty.
+   Cards are squircles of vibrant frosted glass. Type comes from the font
+   service (Settings → font, fontUtils.js sets --font-family-base on <html>);
+   never redefine that var here or the user's choice is ignored. */
+.ocb {
+  --ocb-radius: 24px;
+  font-family: var(--font-family-base);
+  letter-spacing: -0.005em;
+  -webkit-font-smoothing: antialiased;
+  margin: var(--frame-top, 72px) 0 var(--frame-bottom, 24px);
+}
+
+/* The page itself never shows a scrollbar in the Custom layout: the board is
+   sized to fit the screen, and when it can't (many rows) the page still
+   scrolls — but a bar appearing would narrow the board, shrink the cells,
+   remove the overflow, drop the bar and widen it again (a loop that kept
+   snapping the scroll back to the top). */
+.popup-wrap:has(.ocb) {
+  scrollbar-width: none;
+}
+
+.popup-wrap:has(.ocb)::-webkit-scrollbar {
+  display: none;
+}
+
+.ocb-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--ocb-cols, 8), var(--ocb-cell, 148px));
+  grid-auto-rows: var(--ocb-cell, 148px);
+  gap: var(--ocb-gap, 16px);
+  justify-content: center;
+}
+
+/* The card material: macOS widget glass — heavy blur with boosted
+   saturation so the wallpaper's colour glows through, the overview's tinted
+   graphite fill, a faint top sheen, and a soft two-layer shadow (contact +
+   ambient). No outline. Squircle corners where the browser has corner-shape. */
+.ocb-card {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  border-radius: var(--ocb-radius);
+  overflow: hidden;
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgba(255, 255, 255, 0.07), transparent 60%),
+    var(--glass-fill, rgba(11, 11, 14, 0.45));
+  backdrop-filter: blur(36px) saturate(200%);
+  -webkit-backdrop-filter: blur(36px) saturate(200%);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.18),
+    0 14px 34px -14px rgba(0, 0, 0, 0.55);
+  transition: box-shadow 0.25s ease;
+}
+
+@supports (corner-shape: squircle) {
+  .ocb { --ocb-radius: 34px; }
+  .ocb-card,
+  .ocb-ghost {
+    corner-shape: squircle;
+  }
+}
+
+.ocb-card-body {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+/* Feed + Favorites manage their own scroll (the feed list scrolls under its
+   sticky tabs), so their body just clips. A single widget fills its card
+   edge to edge — the card's glass is the widget's surface. */
+.ocb-card-feed .ocb-card-body,
+.ocb-card-favorites .ocb-card-body,
+.ocb-card-widget .ocb-card-body {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Favorites card: a compact header and an icon area that scrolls (with the
+   edge fade) instead of clipping a half-visible second row — a 2×1 card is
+   only ~150px tall. Inline paddings from ActivityFeed need !important. */
+.ocb-card-favorites .feed-favorites {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.ocb-card-favorites .feed-favorites-header {
+  padding: 12px 14px 8px !important;
+  font-size: 11px !important;
+  flex-shrink: 0;
+}
+
+.ocb-card-favorites .favorites-scroll-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  align-content: flex-start;
+  padding: 2px 14px 12px !important;
+}
+
+/* The feed's panel must not stack a second card inside the card (same reset
+   as .overview-activity-column — wallpaper-enhancements gives every panel
+   glass, a border, a shadow and a 450px min-height). */
+.ocb-card .cooldesk-panel,
+.wallpaper-enabled .ocb-card .cooldesk-panel {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0;
+  min-height: 0;
+}
+
+/* The widget board inside follows the card's width: one widget per row in a
+   1-column card (two-up tiles would be ~120px), more per row in wide cards.
+   !important beats the tile's inline grid-column span. */
+.ocb-card-widgets:is([data-w="1"], [data-w="2"]) .wgb-grid { grid-template-columns: minmax(0, 1fr); }
+.ocb-card-widgets:is([data-w="1"], [data-w="2"]) .wgb-tile { grid-column: span 1 !important; }
+.ocb-card-widgets[data-w="5"] .wgb-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ocb-card-widgets[data-w="6"] .wgb-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+
+.ocb-empty {
+  grid-column: 1 / -1;
+  padding: 48px 16px;
+  text-align: center;
+  color: rgba(226, 232, 240, 0.55);
+  font-size: var(--font-sm, 13px);
+}
+
+/* Edit mode: content dims and stops taking clicks, each card gets a dashed
+   outline + a title/size/remove bar, and cards jiggle like macOS widgets in
+   edit mode. Whole card is the drag handle. */
+.ocb.is-editing .ocb-card {
+  outline: 1px dashed rgba(255, 255, 255, 0.28);
+  outline-offset: -1px;
+  cursor: grab;
+  animation: ocb-jiggle 0.32s ease-in-out infinite alternate;
+}
+
+.ocb.is-editing .ocb-card:nth-child(2n) { animation-delay: -0.16s; }
+
+.ocb.is-editing .ocb-card {
+  touch-action: none;
+  user-select: none;
+}
+
+/* The card being dragged rides above the others, following the pointer. */
+.ocb.is-editing .ocb-card.is-dragging {
+  z-index: 20;
+  cursor: grabbing;
+  animation: none;
+  opacity: 0.92;
+  box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.7);
+}
+
+/* Where the dragged card will land. */
+.ocb-ghost {
+  border-radius: var(--ocb-radius, 24px);
+  border: 1.5px dashed rgba(147, 197, 253, 0.7);
+  background: rgba(96, 165, 250, 0.12);
+  pointer-events: none;
+}
+
+.ocb-spacer {
+  pointer-events: none;
+}
+
+.ocb.is-editing .ocb-card-body {
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+@keyframes ocb-jiggle {
+  from { transform: rotate(-0.25deg); }
+  to { transform: rotate(0.25deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ocb.is-editing .ocb-card { animation: none; }
+}
+
+.ocb-card-edit {
+  position: absolute;
+  inset: 0 0 auto 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 22px;
+  background: linear-gradient(180deg, rgba(8, 8, 12, 0.72), rgba(8, 8, 12, 0));
+  z-index: 4;
+}
+
+.ocb-card-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Edit controls are real buttons: solid, raised, with hover/press feedback
+   (they used to be faint pills that read as labels). */
+.ocb-remove,
+.ocb-resize {
+  appearance: none;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(58, 58, 66, 0.92);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.ocb-remove svg,
+.ocb-resize svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* macOS widget-edit style remove: a round minus button. */
+.ocb-remove {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.ocb-remove svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2.4;
+}
+
+.ocb-remove:hover {
+  background: #e5484d;
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.ocb-resize {
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px 0 8px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.ocb-resize svg {
+  width: 13px;
+  height: 13px;
+}
+
+.ocb-resize:hover {
+  background: rgba(59, 130, 246, 0.95);
+  border-color: rgba(147, 197, 253, 0.7);
+}
+
+.ocb-remove:active,
+.ocb-resize:active {
+  transform: scale(0.93);
+}
+
+.ocb-remove:focus-visible,
+.ocb-resize:focus-visible {
+  outline: 2px solid rgba(147, 197, 253, 0.9);
+  outline-offset: 2px;
+}
+
+/* Size picker: 4×4 cells, hover previews, click applies. Portaled. */
+.ocb-size-picker {
+  position: fixed;
+  z-index: 1000;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(18, 18, 22, 0.94);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.6);
+}
+
+.ocb-size-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 18px);
+  grid-auto-rows: 18px;
+  gap: 4px;
+}
+
+.ocb-size-cell {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0;
+  cursor: pointer;
+}
+
+.ocb-size-cell.on {
+  background: rgba(96, 165, 250, 0.55);
+  border-color: rgba(147, 197, 253, 0.8);
+}
+
+.ocb-size-label {
+  margin-top: 8px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.8);
+}
+
+/* Floating edit bar. */
+.ocb-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 120;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 14px;
+  background: rgba(18, 18, 22, 0.88);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 18px 44px -14px rgba(0, 0, 0, 0.7);
+}
+
+.ocb-bar-btn {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.ocb-bar-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.ocb-bar-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: rgba(226, 232, 240, 0.65);
+}
+
+.ocb-bar-done {
+  background: rgba(96, 165, 250, 0.85);
+  border-color: rgba(147, 197, 253, 0.9);
+  color: #fff;
+}
+
+.ocb-bar-done:hover {
+  background: rgba(96, 165, 250, 1);
+}
+
+.ocb-add {
+  position: relative;
+}
+
+.ocb-add-menu {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  min-width: 200px;
+  padding: 6px;
+  border-radius: 12px;
+  background: rgba(18, 18, 22, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+}
+
+.ocb-add-menu {
+  min-width: 250px;
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.ocb-add-label {
+  padding: 8px 10px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.ocb-add-search {
+  margin: 2px 4px 6px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.ocb-add-search:focus {
+  border-color: rgba(147, 197, 253, 0.6);
+}
+
+.ocb-add-widgets {
+  display: flex;
+  flex-direction: column;
+}
+
+.ocb-add-meta {
+  margin-left: 8px;
+  font-size: 10.5px;
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.ocb-add-none {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.wgb-embed-missing {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.ocb-add-item {
+  appearance: none;
+  border: 0;
+  border-radius: 7px;
+  padding: 8px 10px;
+  background: transparent;
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ocb-add-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ocb-add-item:disabled {
+  color: rgba(226, 232, 240, 0.3);
+  cursor: default;
+}
+
+/* ── Overview scroll areas: no scrollbar, edge fades instead ──
+   The thumb's length is set by the content ratio and can't be capped, so on
+   these panels (widget column, feed list, Custom cards) the bar is hidden and
+   overflow is shown macOS-widget style: content fades out at whichever edge
+   has more to scroll to. Wheel/trackpad/keyboard scrolling is unchanged.
+   The fade sizes are driven by a scroll-driven animation on the element's own
+   scroll position (Chrome 115+): top fade grows in as you leave the top,
+   bottom fade shrinks away as you reach the end. With nothing to scroll, or
+   where scroll timelines aren't supported (the Tauri WebKit view), both stay
+   0 and nothing is masked. */
+@property --fade-top {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --fade-bottom {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes overview-scroll-fade {
+  0% { --fade-top: 0px; --fade-bottom: 28px; }
+  8% { --fade-top: 28px; }
+  92% { --fade-bottom: 28px; }
+  100% { --fade-top: 28px; --fade-bottom: 0px; }
+}
+
+.overview-left-scroll,
+.activity-feed-scroll:not(.favorites-scroll-container),
+.ocb-card-favorites .favorites-scroll-container,
+.ocb-card-body {
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent 100%);
+  animation: overview-scroll-fade linear both;
+  animation-timeline: scroll(self block);
+}
+
+.overview-left-scroll::-webkit-scrollbar,
+.activity-feed-scroll::-webkit-scrollbar,
+.ocb-card-body::-webkit-scrollbar {
+  display: none;
 }
 
 /* Layout picker (corner action next to settings). */
@@ -6993,16 +7478,16 @@ body.bg-white-cred .workspace-context-panel.has-accent {
 .wcp-section-head[data-accent="status"] { color: #60a5fa; }
 .wcp-section-head[data-accent="todos"]  { color: #f59e0b; }
 .wcp-section-head[data-accent="notes"]  { color: #a78bfa; }
-.wcp-section-head[data-accent="cooldesk"] { color: #2dd4bf; }
+.wcp-section-head[data-accent="cooldesk"] { color: #94a3b8; }
 .wcp-section-head[data-accent="color"] { color: var(--card-accent-text, var(--card-accent, #94a3b8)); }
 body.bg-white-cred .wcp-section-head[data-accent="color"] { color: var(--card-accent-text-light, var(--card-accent, #94a3b8)); }
 
 /* ── CoolDesk project section (.cooldesk reader) ─────────────────────── */
 .cdk-section {
   padding: 10px 12px 12px;
-  border: 1px solid color-mix(in srgb, #2dd4bf 22%, transparent);
+  border: 1px solid rgba(148, 163, 184, 0.14);
   border-radius: 12px;
-  background: color-mix(in srgb, #2dd4bf 6%, transparent);
+  background: rgba(148, 163, 184, 0.04);
   /* Track the user's global font setting (fontUtils --font-family-base), like the
      other cooldesk panels do. */
   font-family: var(--font-family-base, -apple-system, system-ui, sans-serif);
@@ -7012,11 +7497,11 @@ body.bg-white-cred .wcp-section-head[data-accent="color"] { color: var(--card-ac
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #2dd4bf;
+  color: #94a3b8;
   padding: 1px 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, #2dd4bf 14%, transparent);
-  border: 1px solid color-mix(in srgb, #2dd4bf 30%, transparent);
+  background: color-mix(in srgb, #94a3b8 14%, transparent);
+  border: 1px solid color-mix(in srgb, #94a3b8 30%, transparent);
 }
 .cdk-ident { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cdk-name { font-size: var(--font-md, 14px); font-weight: 700; color: #e2e8f0; }
@@ -7051,7 +7536,7 @@ body.bg-white-cred .wcp-section-head[data-accent="color"] { color: var(--card-ac
   background: rgba(148, 163, 184, 0.1);
   border: 1px solid rgba(148, 163, 184, 0.18);
 }
-.cdk-chip-type { color: #2dd4bf; font-weight: 600; }
+.cdk-chip-type { color: #94a3b8; font-weight: 600; }
 
 /* Linked member projects — rendered as chips inline with resources */
 .cdk-member { display: inline-flex; align-items: center; gap: 5px; }
@@ -7100,17 +7585,17 @@ body.bg-white-cred .wcp-section-head[data-accent="color"] { color: var(--card-ac
   transition: border-color 140ms ease, background 140ms ease, transform 100ms ease;
 }
 .cdk-cmd-pill:hover {
-  border-color: color-mix(in srgb, #2dd4bf 45%, transparent);
-  background: color-mix(in srgb, #2dd4bf 12%, transparent);
+  border-color: color-mix(in srgb, #94a3b8 45%, transparent);
+  background: color-mix(in srgb, #94a3b8 12%, transparent);
   color: #e2e8f0;
 }
 .cdk-cmd-pill:active { transform: scale(0.96); }
 .cdk-cmd-play {
   font-size: var(--font-xs, 9px);
-  color: #2dd4bf;
+  color: #94a3b8;
   line-height: 1;
 }
-/* Shared todos (from .cooldesk) merged into the Next Up list — read-only, teal-tinted */
+/* Shared todos (from .cooldesk) merged into the Next Up list — read-only, grey dot */
 .wcp-todo-row.is-shared {
   cursor: default;
 }
@@ -7119,32 +7604,31 @@ body.bg-white-cred .wcp-section-head[data-accent="color"] { color: var(--card-ac
 }
 .wcp-todo-shared-dot {
   width: 7px; height: 7px; border-radius: 50%;
-  background: rgba(45, 212, 191, 0.55);
-  border: 1px solid #2dd4bf;
+  background: rgba(148, 163, 184, 0.55);
+  border: 1px solid #94a3b8;
   flex-shrink: 0;
   margin: 0 5px 0 5px;
 }
 .wcp-todo-row.is-shared.is-active .wcp-todo-shared-dot {
-  background: #2dd4bf;
-  box-shadow: 0 0 6px #2dd4bf;
+  background: #94a3b8;
 }
 .wcp-todo-shared-tag {
   font-size: var(--font-xs, 9px);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #2dd4bf;
+  color: #94a3b8;
   padding: 1px 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, #2dd4bf 13%, transparent);
-  border: 1px solid color-mix(in srgb, #2dd4bf 28%, transparent);
+  background: color-mix(in srgb, #94a3b8 13%, transparent);
+  border: 1px solid color-mix(in srgb, #94a3b8 28%, transparent);
   flex-shrink: 0;
 }
 
 /* README card in the notes list + read-only editor view */
 .wcp-note-card.is-readme {
-  border-color: color-mix(in srgb, #2dd4bf 28%, transparent);
-  background: color-mix(in srgb, #2dd4bf 6%, transparent);
+  border-color: color-mix(in srgb, #94a3b8 28%, transparent);
+  background: color-mix(in srgb, #94a3b8 6%, transparent);
 }
 .wcp-note-readme-tag,
 .wcp-notes-readonly-tag {
@@ -7152,11 +7636,11 @@ body.bg-white-cred .wcp-section-head[data-accent="color"] { color: var(--card-ac
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #2dd4bf;
+  color: #94a3b8;
   padding: 1px 7px;
   border-radius: 999px;
-  background: color-mix(in srgb, #2dd4bf 13%, transparent);
-  border: 1px solid color-mix(in srgb, #2dd4bf 28%, transparent);
+  background: color-mix(in srgb, #94a3b8 13%, transparent);
+  border: 1px solid color-mix(in srgb, #94a3b8 28%, transparent);
 }
 .wcp-readme-view .wcp-note-tiptap {
   cursor: default;
@@ -7216,9 +7700,8 @@ body.bg-white-cred .wcp-section-head[data-accent="color"] { color: var(--card-ac
   padding: 0 6px 3px;
 }
 /* Panel cards — each section of the workspace panel is its own box. The
-   `.is-shared` variant marks the project's committed .cooldesk content (same
-   teal treatment as .cdk-section), so shared read-only items never blend into
-   the user's own todos and notes. */
+   `.is-shared` variant (the project's committed .cooldesk content) looks the
+   same; its "shared" badge tells it apart, in muted grey like the rest. */
 .wcp-card {
   padding: 10px 12px 12px;
   border: 1px solid rgba(148, 163, 184, 0.14);
@@ -7228,8 +7711,8 @@ body.bg-white-cred .wcp-section-head[data-accent="color"] { color: var(--card-ac
   min-width: 0;
 }
 .wcp-card.is-shared {
-  border-color: color-mix(in srgb, #2dd4bf 22%, transparent);
-  background: color-mix(in srgb, #2dd4bf 6%, transparent);
+  /* Same plain card as the user's own notes: the "shared" badge marks it.
+     (A teal tint made the shared docs the loudest thing in the panel.) */
 }
 /* Notes column: cards stack; the main card (my notes / open note or doc)
    takes the remaining height, the shared-docs card stays compact and
@@ -8562,4 +9045,72 @@ body.bg-white-cred .wcp-section-head[data-accent="color"] { color: var(--card-ac
 .local-empty svg {
   font-size: 20px;
   opacity: 0.5;
+}
+
+/* Compact workspace panel (WorkspaceContextPanel compact — the docked
+   sidebar): To-dos / Notes buttons; a click opens just that section below. */
+.wcp-compact-bar {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0 2px;
+}
+
+.wcp-compact-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary, #e2e8f0);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.wcp-compact-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.wcp-compact-btn.is-open {
+  border-color: rgba(139, 92, 246, 0.55);
+  background: rgba(139, 92, 246, 0.14);
+}
+
+.wcp-compact-icon {
+  color: #a78bfa;
+}
+
+.wcp-compact-btn:nth-child(2) .wcp-compact-icon {
+  color: #fbbf24;
+}
+
+.wcp-compact-caret {
+  margin-left: auto;
+  font-size: 10px;
+  opacity: 0.6;
+  transition: transform 180ms ease;
+}
+
+.wcp-compact-btn.is-open .wcp-compact-caret {
+  transform: rotate(180deg);
+}
+
+.wcp-compact-bar + .wcp-grid {
+  margin-top: 10px;
+}
+
+/* See-through sidebar: same near-solid tile as the cards (dock-see-through.css). */
+html.dock-sidebar.dock-sidebar .wcp-compact-btn {
+  background: rgba(34, 34, 38, 0.96);
+}
+
+html.dock-sidebar.dock-sidebar .wcp-compact-btn.is-open {
+  background: rgba(58, 44, 104, 0.96);
 }

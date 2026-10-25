@@ -37,9 +37,15 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background-image: var(--wallpaper-url);
-      background-size: cover;
-      background-position: center;
+      /* Finish: a soft vignette over the photo plus a touch more colour and
+         contrast, so wallpapers look richer and the edges (corner buttons,
+         cards) sit on calmer, darker ground. */
+      background-image:
+        radial-gradient(120% 95% at 50% 42%, transparent 55%, rgba(0, 0, 0, 0.38) 100%),
+        var(--wallpaper-url);
+      background-size: cover, cover;
+      background-position: center, center;
+      filter: saturate(1.1) contrast(1.04);
       opacity: var(--wallpaper-opacity, 0.3);
       z-index: -2;
       pointer-events: none;

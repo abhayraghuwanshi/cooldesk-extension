@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Core permissions (window, event, app, …) for every CoolDesk window.",
-  "windows": [
+  "description": "Core permissions (window, event, app, …) for CoolDesk's own pages. Scoped by webview, not window: the main window also hosts browser-pane child webviews (remote sites), which must not inherit these — in dev builds a pane on the devUrl would otherwise count as a local origin.",
+  "webviews": [
     "main",
     "spotlight",
     "handle",

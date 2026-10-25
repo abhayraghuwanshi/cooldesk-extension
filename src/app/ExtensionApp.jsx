@@ -30,6 +30,8 @@ import { OverviewDashboard } from '../faces/overview/OverviewDashboard';
 import { LayoutPicker } from '../faces/overview/LayoutPicker';
 import { useOverviewLayout, useOverviewVisibility } from '../faces/overview/overviewLayouts';
 import { CURATED_WALLPAPER_URLS } from '../shared/data/wallpapers';
+import { UpdateButton } from '../features/updates/UpdateButton';
+import { UpdatedNotice } from '../features/updates/UpdatedNotice';
 
 // Lazy load heavy components
 const SettingsModal = React.lazy(() => import('../features/settings/SettingsModal').then(module => ({ default: module.SettingsModal })));
@@ -74,6 +76,7 @@ export default function ExtensionApp() {
   const [showSettings, setShowSettings] = useState(false);
   const [layout, setLayout] = useOverviewLayout();
   const [visibleParts, setVisibleParts] = useOverviewVisibility();
+  const [cardEditing, setCardEditing] = useState(false);
   const [themeClass, setThemeClass] = useState(() => {
     try {
       const savedTheme = localStorage.getItem('cooldesk-theme');
@@ -201,7 +204,12 @@ export default function ExtensionApp() {
       }}>
         <div className="cooldesk-container">
           {/* Main Content - Overview Only */}
-          <OverviewDashboard layout={layout} visible={visibleParts} />
+          <OverviewDashboard
+            layout={layout}
+            visible={visibleParts}
+            cardEditing={layout === 'custom' && cardEditing}
+            onCardEditingDone={() => setCardEditing(false)}
+          />
         </div>
 
         {/* Global Add Button */}
@@ -213,11 +221,13 @@ export default function ExtensionApp() {
 
         {/* Floating top-right buttons: next wallpaper (only when a wallpaper is on) + settings */}
         <div className="overview-corner-actions">
+          <UpdateButton className="upd-pill--glass" />
           <LayoutPicker
             layout={layout}
             onChange={setLayout}
             visible={visibleParts}
             onVisibleChange={setVisibleParts}
+            onCustomize={() => setCardEditing(true)}
           />
           {wallpaperEnabled && (
             <button
@@ -243,6 +253,8 @@ export default function ExtensionApp() {
             </svg>
           </button>
         </div>
+
+        <UpdatedNotice />
 
         {/* Settings Modal */}
         {showSettings && (

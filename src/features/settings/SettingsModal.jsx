@@ -285,20 +285,6 @@ export function SettingsModal({
     return () => window.removeEventListener('keydown', handleShortcutKeyDown, true);
   }, [isRecordingShortcut]);
 
-  useEffect(() => {
-    if (!show) return;
-    const handleUpdateAvailable = (details) => {
-      setUpdateAvailable(true);
-      storageGet(['autoUpdateEnabled']).then((result) => {
-        if (result?.autoUpdateEnabled !== false && chrome.runtime?.reload) chrome.runtime.reload();
-      });
-    };
-    if (chrome.runtime?.onUpdateAvailable) chrome.runtime.onUpdateAvailable.addListener(handleUpdateAvailable);
-    return () => {
-      if (chrome.runtime?.onUpdateAvailable) chrome.runtime.onUpdateAvailable.removeListener(handleUpdateAvailable);
-    };
-  }, [show]);
-
   const loadSettingsSync = async (forceProbe = false) => {
     try {
       setSyncConfigLoading(true);
@@ -1008,7 +994,7 @@ export function SettingsModal({
                     />
                     <SettingRow
                       label="Auto-Update"
-                      hint="Install updates automatically in the background"
+                      hint={isTauri ? "Install updates automatically in the background" : "Restart into a new version when no CoolDesk tab is open"}
                       right={<Toggle checked={autoUpdateEnabled} onChange={handleToggleAutoUpdate} />}
                       onClick={() => handleToggleAutoUpdate(!autoUpdateEnabled)}
                       last={!isTauri}

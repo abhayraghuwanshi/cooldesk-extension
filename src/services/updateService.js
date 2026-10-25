@@ -83,19 +83,35 @@ async function checkDesktop() {
   };
 }
 
-async function checkExtension() {
-  // Chrome throttles this hard; 'throttled' and 'no_update' both mean
-  // "nothing to show right now".
-  const { status, version } = await chrome.runtime.requestUpdateCheck();
-  if (status !== 'update_available') return null;
+function extensionInfo(latest) {
   return {
     current: chrome.runtime.getManifest?.().version || '',
-    latest: version || '',
+    latest: latest === 'new' ? '' : latest || '',
     // The extension updates through the Web Store, so "what's new" points at
     // the listing rather than at GitHub releases.
     notesUrl: EXTENSION_URL,
     target: 'extension',
   };
+}
+
+async function checkExtension() {
+  // The background worker records a downloaded update (background/autoUpdate.js).
+  // Ask the store too, but Chrome throttles that hard — after the first hit
+  // it answers 'throttled', so the stored flag is what keeps the pill up.
+  const { pendingExtensionUpdate } = await chrome.storage.local.get('pendingExtensionUpdate');
+  if (pendingExtensionUpdate) return extensionInfo(pendingExtensionUpdate);
+  const { status, version } = await chrome.runtime.requestUpdateCheck();
+  if (status !== 'update_available') return null;
+  return extensionInfo(version);
+}
+
+// Show the pill as soon as the worker sees an update, without a re-check.
+if (!isTauri() && typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !('pendingExtensionUpdate' in changes)) return;
+    const next = changes.pendingExtensionUpdate.newValue;
+    setState({ info: next ? extensionInfo(next) : null });
+  });
 }
 
 /**
@@ -151,6 +167,8 @@ export async function installUpdate() {
   setState({ installing: true });
   try {
     if (info.target === 'extension') {
+      // Reloading closes this tab; the worker reopens a fresh one afterwards.
+      await chrome.storage.local.set({ reopenAfterUpdate: true });
       chrome.runtime.reload();
       return true;
     }

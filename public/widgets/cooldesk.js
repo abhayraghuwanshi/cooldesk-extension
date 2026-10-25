@@ -32,6 +32,23 @@
     root.setProperty("--accent", "#" + tint);
   }
 
+  // `?fitw=&fith=` — the widget's designed size. Glanceable widgets in a big
+  // card scale up to fill it, and down as far as needed to fit a small one
+  // (a 1×1 card is ~150px; a floor of 0.7 cropped the clock's sides). Capped
+  // at 2.5× so text never gets absurd.
+  var fitW = Number(params.get("fitw"));
+  var fitH = Number(params.get("fith"));
+  if (fitW > 0 && fitH > 0) {
+    var docEl = document.documentElement;
+    docEl.dataset.fit = "";
+    var applyFit = function () {
+      var s = Math.min(window.innerWidth / fitW, window.innerHeight / fitH);
+      docEl.style.setProperty("--fit", Math.max(0.35, Math.min(2.5, s)).toFixed(3));
+    };
+    applyFit();
+    window.addEventListener("resize", applyFit);
+  }
+
   var pending = new Map();
   var seq = 0;
 

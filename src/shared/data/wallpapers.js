@@ -11,9 +11,47 @@
  * first run and get browser-cached after the first load.
  */
 
-import { GRADIENT_WALLPAPERS } from './gradientWallpapers.js';
+/**
+ * Featured: the 25 picked to lead the picker and drive rotation — abstract
+ * art (3D fluid shapes, light waves, pastel spectrums) and landscapes (alpine
+ * lakes, aurora, starry skies). Unsplash, free to use. Every original was
+ * checked to be ≥ ~4000px wide in landscape (portrait or 3000px sources
+ * upscale soft on big screens). `url` asks for a 3840×2400 landscape crop in
+ * the browser's best format (AVIF/WebP); `thumbnail` is cropped to the tile.
+ */
+export const FEATURED_WALLPAPERS = [
+  { id: 'featured-1', name: 'Silk Waves', url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-2', name: 'Blue Fluid', url: 'https://images.unsplash.com/photo-1620121692029-d088224ddc74?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1620121692029-d088224ddc74?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-3', name: 'Spiral', url: 'https://images.unsplash.com/photo-1618172193622-ae2d025f4032?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1618172193622-ae2d025f4032?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-4', name: 'Prism', url: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-5', name: 'Nebula Swirl', url: 'https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-6', name: 'Crimson Night', url: 'https://images.unsplash.com/photo-1614851099511-773084f6911d?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1614851099511-773084f6911d?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-7', name: 'Bubble Nebula', url: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-8', name: 'Neon Dusk', url: 'https://images.unsplash.com/photo-1614850523459-c2f4c699c52e?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1614850523459-c2f4c699c52e?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-9', name: 'Paper Fold', url: 'https://images.unsplash.com/photo-1636955816868-fcb881e57954?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1636955816868-fcb881e57954?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-10', name: 'Pastel Marble', url: 'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-11', name: 'Spectrum', url: 'https://images.unsplash.com/photo-1579547945413-497e1b99dac0?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1579547945413-497e1b99dac0?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-12', name: 'Violet Glow', url: 'https://images.unsplash.com/photo-1635776062127-d379bfcba9f8?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1635776062127-d379bfcba9f8?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-13', name: 'Ink Clouds', url: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-14', name: 'Lake Braies', url: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-15', name: 'Moraine Lake', url: 'https://images.unsplash.com/photo-1493246507139-91e8fad9978e?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1493246507139-91e8fad9978e?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-16', name: 'Above the Clouds', url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-17', name: 'Starlit Sail', url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-18', name: 'Northern Lights', url: 'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-19', name: 'Starry Peaks', url: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-20', name: 'Starry Sky', url: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-21', name: 'Red Ridge', url: 'https://images.unsplash.com/photo-1477346611705-65d1883cee1e?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1477346611705-65d1883cee1e?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-22', name: 'Golden Beach', url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-23', name: 'Lake House', url: 'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-24', name: 'Valley River', url: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+  { id: 'featured-25', name: 'Misty Valley', url: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=3840&h=2400&fit=crop&q=85&auto=format', thumbnail: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=480&h=300&fit=crop&q=80&auto=format', category: 'featured' },
+];
 
-export { GRADIENT_WALLPAPERS };
+const photoId = (url) => (/photo-([\w-]+)/.exec(url) || [])[1];
+const FEATURED_IDS = new Set(FEATURED_WALLPAPERS.map(w => photoId(w.url)));
+
+/** Catalogue entries not already in Featured — the picker's "More photos". */
+export const moreWallpapers = () => WALLPAPER_CATALOG.filter(w => !FEATURED_IDS.has(photoId(w.url)));
 
 /**
  * The full picker catalogue: 40 entries with display metadata.
@@ -301,28 +339,11 @@ export const WALLPAPER_CATALOG = [
     category: 'forest'
   },];
 
-/** First N catalogue entries — what the onboarding tour offers. */
-export const onboardingWallpapers = (n = 8) => WALLPAPER_CATALOG.slice(0, n);
+/** First N Featured wallpapers — what the onboarding tour offers. */
+export const onboardingWallpapers = (n = 8) => FEATURED_WALLPAPERS.slice(0, n);
 
-/**
- * The rotation pool the app roots shuffle through for "random wallpaper".
- * Deliberately its own list rather than a slice of the catalogue: two of these
- * (`photo-1514565131…`, `photo-1557683316…`) are not in the picker at all.
- */
-export const CURATED_WALLPAPER_URLS = [
-  'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=3840&q=90&fm=jpg',
-  'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=3840&q=90&fm=jpg',
-  'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=3840&q=90&fm=jpg',
-  'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=3840&q=90&fm=jpg',
-  'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=3840&q=90&fm=jpg',
-  'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=3840&q=90&fm=jpg',
-  'https://images.unsplash.com/photo-1448375240586-882707db888b?w=3840&q=90&fm=jpg',
-  'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=3840&q=90&fm=jpg',
-  'https://images.unsplash.com/photo-1557683316-973673baf926?w=3840&q=90&fm=jpg',
-  'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?w=3840&q=90&fm=jpg',
-  // Local gradients (gradientWallpapers.js) — inline SVG, no download.
-  ...GRADIENT_WALLPAPERS.map(w => w.url),
-];
+/** The rotation pool the app roots shuffle through (auto-rotate, next-wallpaper button). */
+export const CURATED_WALLPAPER_URLS = FEATURED_WALLPAPERS.map(w => w.url);
 
 /** Default wallpaper shown before the user picks one. */
 export const DEFAULT_WALLPAPER_URL = WALLPAPER_CATALOG[0].url;

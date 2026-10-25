@@ -1,18 +1,22 @@
 import { faBriefcase, faChevronLeft, faDesktop, faGamepad, faGraduationCap, faRobot, faRocket, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { deleteWorkspace } from '../../db/index.js';
 import { clearWorkspaceSuggestions } from '../../services/appCategorizationService.js';
 import { itemRankingService } from '../../services/itemRankingService.js';
 import { workspaceActivityService } from '../../services/workspaceActivityService.js';
-import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
+import { useLiveItems } from '../../features/dock/useLiveItems.js';
 import '../../styles/cooldesk.css';
 import { defaultFontFamily } from '../../utils/fontUtils';
 import { ShareToTeamModal } from '../team/ShareToTeamModal';
 import { WorkspaceCard } from './parts/WorkspaceCard';
 import { WorkspaceContextPanel } from './parts/WorkspaceContextPanel.jsx';
 import { AppGrid } from './parts/AppGrid';
+import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
+
+// Shared with Browse's side panel (Home → Notes, to-dos & commands).
+export { WorkspaceContextPanel };
 
 // Same desktop-app detection as WorkspaceCard: positive signal only, since
 // WebView2 populates chrome.runtime inside the Tauri app.
@@ -76,7 +80,9 @@ export function WorkspaceList({
     onTogglePin,
     onEditWorkspace,
     appSuggestions = {},        // { [workspaceName]: [{ name, path, icon }] }
-    onAddAppsToWorkspace        // (workspaceName, apps[]) => void
+    onAddAppsToWorkspace,       // (workspaceName, apps[]) => void
+    initialLimit = 100,         // unpinned workspaces shown before "Show all"
+    showActive = false          // desktop sidebar: the Active card on top
 }) {
     // Load view mode from localStorage, default to 'list'
     const [viewMode, setViewMode] = useState(() => {
@@ -90,7 +96,7 @@ export function WorkspaceList({
     const [bookmarks, setBookmarks] = useState([]);
     const [bookmarkSearch, setBookmarkSearch] = useState('');
     const [showBookmarks, setShowBookmarks] = useState(true);
-    const [workspaceLimit, setWorkspaceLimit] = useState(100); // Show all workspaces
+    const [workspaceLimit, setWorkspaceLimit] = useState(initialLimit);
     const [popoverState, setPopoverState] = useState({ id: null, rect: null });
     const [hoveredBookmark, setHoveredBookmark] = useState(null);
     const [bookmarkLimit, setBookmarkLimit] = useState(20);
@@ -102,11 +108,11 @@ export function WorkspaceList({
     const [deleteTarget, setDeleteTarget] = useState(null); // workspace pending confirmation
     const [deleteError, setDeleteError] = useState('');
     const [isDeleting, setIsDeleting] = useState(false);
-    const [activeMode, setActiveMode] = useState('all');
-    const [isPending, startTransition] = useTransition();
-
-    // Sidebar width: the mode selector row is hidden (see its render below).
-    const isNarrow = useIsSidebarWidth();
+    // Docked sidebar: the opened workspace's to-dos and notes start folded
+    // behind a button row (WorkspaceContextPanel compact).
+    const isSidebarWidth = useIsSidebarWidth();
+    // The All / Work / Play… mode bar is gone: Home shows every workspace.
+    const activeMode = 'all';
 
     // Expanding a workspace takes over the list as a full detail view (status /
     // tasks / notes as their own full-width section below the items) at every
@@ -117,6 +123,25 @@ export function WorkspaceList({
         if (!expandedWorkspaceId) return null;
         return savedWorkspaces.find(w => w.id === expandedWorkspaceId) || null;
     }, [expandedWorkspaceId, savedWorkspaces]);
+
+    // Active: everything open right now (running apps, open tabs) as one more
+    // workspace card, always on top — the dock bar's Active view, sidebar
+    // shaped. Not a saved workspace: read-only card (nothing to remove, edit,
+    // pin or drop onto), and its detail view has no notes/tasks panel. Opened
+    // here rather than through onWorkspaceClick, which would make it the
+    // current workspace.
+    const { liveApps, liveTabs } = useLiveItems(showActive);
+    const activeWorkspace = useMemo(() => showActive ? {
+        id: '__active__',
+        name: 'Active',
+        icon: 'folder-open',
+        urls: liveTabs.map(t => ({ url: t.url, title: t.title })),
+        apps: liveApps,
+    } : null, [showActive, liveApps, liveTabs]);
+    const [activeOpen, setActiveOpen] = useState(false);
+    useEffect(() => {
+        if (expandedWorkspaceId) setActiveOpen(false);
+    }, [expandedWorkspaceId]);
     // Track which workspace app banners have been dismissed in this session
     const [dismissedBanners, setDismissedBanners] = useState(new Set());
 
@@ -155,12 +180,6 @@ export function WorkspaceList({
                 return { workspaceName: wsName, apps: newApps };
             });
     }, [appSuggestions, dismissedBanners, savedWorkspaces]);
-
-    const handleModeChange = useCallback((mode) => {
-        startTransition(() => {
-            setActiveMode(mode);
-        });
-    }, []);
 
     const hasItems = (ws) => (ws.urls?.length || 0) + (ws.apps?.length || 0) > 0;
     const pinned = useMemo(() => savedWorkspaces.filter(ws => pinnedWorkspaces.includes(ws.name) && hasItems(ws)), [savedWorkspaces, pinnedWorkspaces]);
@@ -325,7 +344,28 @@ export function WorkspaceList({
                 paddingRight: '4px',
                 minHeight: 0
             }}>
-                {expandedDetailWorkspace ? (
+                {activeWorkspace && activeOpen ? (
+                    <div
+                        className="workspace-detail-view"
+                        onMouseDown={(e) => e.stopPropagation()}
+                    >
+                        <button
+                            className="workspace-detail-back"
+                            onClick={() => setActiveOpen(false)}
+                        >
+                            <FontAwesomeIcon icon={faChevronLeft} />
+                            All Workspaces
+                        </button>
+                        <WorkspaceCard
+                            workspace={activeWorkspace}
+                            onClick={() => setActiveOpen(false)}
+                            isExpanded={true}
+                            compact={true}
+                            fullView={true}
+                            readOnly
+                        />
+                    </div>
+                ) : expandedDetailWorkspace ? (
                     /* Sidebar width: single workspace opened in full, in-depth view.
                        stopPropagation keeps the container's outside-click-close from
                        firing for clicks inside the detail view (e.g. the back button). */
@@ -357,7 +397,7 @@ export function WorkspaceList({
                         {/* Status / tasks / notes as their own section below the
                             items — keeps them out of the card's layout entirely. */}
                         {isDesktopApp && (
-                            <WorkspaceContextPanel workspace={expandedDetailWorkspace} />
+                            <WorkspaceContextPanel workspace={expandedDetailWorkspace} compact={isSidebarWidth} />
                         )}
                     </div>
                 ) : (
@@ -424,85 +464,6 @@ export function WorkspaceList({
                     </div>
                 )}
 
-                {/* Mode selector + greeting — full app only. The docked sidebar is
-                    for quick launching; its mode is still whatever was picked in
-                    the full app, and the section heading below names it. The
-                    layout switch lives in the sidebar's corner control bar
-                    (CoolDeskContainer) instead of a row here. */}
-                {!isNarrow && (
-                <div style={{
-                    marginBottom: '20px',
-                    padding: '0 4px'
-                }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div className="mode-selector-container" style={{ flex: 1, minWidth: 0 }}>
-                            <button
-                                className={`mode-item ${activeMode === 'all' ? 'active' : ''}`}
-                                onClick={() => handleModeChange('all')}
-                                title="All Workspaces"
-                            >
-                                <span className="mode-icon">
-                                    <span style={{ fontSize: '14px', fontWeight: 700 }}>ALL</span>
-                                </span>
-                                {activeMode === 'all' && <span className="mode-label">All</span>}
-                            </button>
-
-                            {Object.entries(modeConfigs).map(([key, config]) => {
-                                const isActive = activeMode === key;
-                                return (
-                                    <button
-                                        key={key}
-                                        className={`mode-item ${isActive ? 'active' : ''}`}
-                                        onClick={() => handleModeChange(key)}
-                                        title={config.label}
-                                        style={{
-                                            '--mode-color': config.theme
-                                        }}
-                                    >
-                                        <span className="mode-icon">
-                                            <FontAwesomeIcon icon={config.icon} />
-                                        </span>
-                                        {isActive && <span className="mode-label">{config.label}</span>}
-                                    </button>
-                                );
-                            })}
-                        </div>
-
-                </div>
-
-                    {/* Active Mode Greeting */}
-                    <div style={{
-                        height: (activeMode !== 'all' && activeMode !== 'apps') ? '30px' : '0',
-                        overflow: 'hidden',
-                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                        opacity: (activeMode !== 'all' && activeMode !== 'apps') ? 1 : 0,
-                        transform: (activeMode !== 'all' && activeMode !== 'apps') ? 'translateY(0)' : 'translateY(-10px)',
-                        marginTop: (activeMode !== 'all' && activeMode !== 'apps') ? '8px' : '0'
-                    }}>
-                        {activeMode !== 'all' && activeMode !== 'apps' && modeConfigs[activeMode] && (
-                            <div style={{
-                                fontSize: '13px',
-                                color: modeConfigs[activeMode].theme,
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                fontWeight: 500,
-                                paddingLeft: '4px'
-                            }}>
-                                <span style={{
-                                    width: '6px',
-                                    height: '6px',
-                                    borderRadius: '50%',
-                                    background: modeConfigs[activeMode].theme,
-                                    display: 'inline-block'
-                                }}></span>
-                                {modeConfigs[activeMode].behavior.greeting}
-                            </div>
-                        )}
-                    </div>
-                </div>
-                )}
-
                 {/* Apps Mode - Show AppGrid */}
                 {activeMode === 'apps' && (
                     <AppGrid
@@ -513,6 +474,17 @@ export function WorkspaceList({
                 )}
 
                 {/* Workspace Modes */}
+                {activeWorkspace && (
+                    <div className={viewMode === 'list' ? 'cooldesk-list-view' : ''}>
+                        <WorkspaceCard
+                            workspace={activeWorkspace}
+                            onClick={() => setActiveOpen(true)}
+                            compact={viewMode === 'list'}
+                            readOnly
+                        />
+                    </div>
+                )}
+
                 {activeMode !== 'apps' && (savedWorkspaces.length > 0 ? (
                     <>
                         {/* Pinned Workspaces Section */}
@@ -616,6 +588,15 @@ export function WorkspaceList({
                                         />
                                     ))}
                                 </div>
+                                {filteredUnpinned.length > workspaceLimit ? (
+                                    <button className="ws-show-all" onClick={() => setWorkspaceLimit(Infinity)}>
+                                        Show all {filteredUnpinned.length} workspaces
+                                    </button>
+                                ) : filteredUnpinned.length > initialLimit && (
+                                    <button className="ws-show-all" onClick={() => setWorkspaceLimit(initialLimit)}>
+                                        Show fewer
+                                    </button>
+                                )}
 
                             </div>
                         )}

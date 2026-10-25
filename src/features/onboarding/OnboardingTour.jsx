@@ -347,41 +347,38 @@ function StepDock({ isDesktop }) {
 // Only the faces that are actually reachable. The third one (Spaces/Team) is
 // behind TEAM_FEATURE_ENABLED, so it stays out of onboarding until it ships.
 //
-// The pairing is the point: Collections is what you curated, Active is what the
-// machine is doing right now. "Active" covers apps, tabs, folders and dev
-// servers — everything TabManagement actually renders, not just tabs.
-const FACES = [
-  { key: 'collections', name: 'Collections', blurb: 'Projects you put together — links, apps, notes', combo: '1' },
-  { key: 'active', name: 'Active', blurb: 'Everything open right now — apps, tabs, folders', combo: '2' },
+// The desktop app is one screen: Home (what you curated), your tabs (what's
+// open — pages, files, apps), and the side panel beside them. No switching
+// between screens any more.
+const SCREEN_PARTS = [
+  { key: 'home', name: 'Home', blurb: 'Your workspaces — every new tab starts here', keys: ['Ctrl', 'T'] },
+  { key: 'tabs', name: 'Tabs', blurb: 'Pages, files and apps you have open, side by side', keys: ['Ctrl', '1–9'] },
+  { key: 'panel', name: 'Side panel', blurb: 'Files, Shelf, Notes and page tools next to what you read', keys: null },
 ];
 
 function StepMoves() {
-  // Cycle the highlighted face so the swipe idea reads at a glance
+  // Cycle the highlight across the parts of the one screen.
   const [active, setActive] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setActive(i => (i + 1) % FACES.length), 1600);
+    const id = setInterval(() => setActive(i => (i + 1) % SCREEN_PARTS.length), 1600);
     return () => clearInterval(id);
   }, []);
 
   return (
     <div className="ob-step">
       <div className="ob-faces">
-        {FACES.map((f, i) => (
+        {SCREEN_PARTS.map((f, i) => (
           <div key={f.key} className={`ob-face${i === active ? ' is-active' : ''}`}>
             <div className="ob-face-name">{f.name}</div>
             <div className="ob-face-blurb">{f.blurb}</div>
-            <div className="ob-face-combo"><Kbd>Ctrl</Kbd><Kbd>{f.combo}</Kbd></div>
+            {f.keys && <div className="ob-face-combo">{f.keys.map(k => <Kbd key={k}>{k}</Kbd>)}</div>}
           </div>
         ))}
-        <div className="ob-swipe-hint">
-          <span className="ob-swipe-fingers">✋</span>
-          <span>Three-finger swipe left / right to slide between them</span>
-        </div>
       </div>
 
       <div className="ob-shortcuts">
         <div className="ob-shortcut"><Kbd>Ctrl</Kbd><Kbd>K</Kbd><span>Quick add — drop a link or app into a workspace</span></div>
-        <div className="ob-shortcut"><Kbd>Shift</Kbd><span>+ scroll wheel does the same as the swipe, on a mouse</span></div>
+        <div className="ob-shortcut"><Kbd>Ctrl</Kbd><Kbd>L</Kbd><span>Type an address or search, or a file with /f</span></div>
       </div>
 
       <p className="ob-note">That's it. Everything else you'll find as you go — and anything from this tour (look, hotkey, and more) can be changed later in Settings.</p>
@@ -401,7 +398,8 @@ const ALL_STEPS = [
   // Only for desktop users whose browser isn't hooked up yet — see buildSteps.
   { id: 'extension', emoji: '🧩', title: 'Connect your browser', subtitle: 'CoolDesk reads your tabs through a small browser extension.', desktopOnly: true },
   { id: 'dock', emoji: '📌', title: 'Keep it in reach', subtitle: 'One button in the top bar switches how CoolDesk sits on your screen.' },
-  { id: 'moves', emoji: '🧭', title: 'Two screens, one gesture', subtitle: 'What you saved, and what is open right now. That is the whole model.' },
+  // Desktop only: the extension has no tabs or side panel.
+  { id: 'moves', emoji: '🧭', title: 'One screen, everything in it', subtitle: 'What you saved and what is open, side by side. No switching between screens.', desktopOnly: true },
 ];
 
 const buildSteps = (isDesktop, extensionState) => ALL_STEPS.filter(s => {

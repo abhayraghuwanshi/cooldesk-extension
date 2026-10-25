@@ -157,7 +157,7 @@ const isDesktopApp = typeof window !== 'undefined' &&
   !!(window.__TAURI__ || window.__TAURI_INTERNALS__ || window.electronAPI);
 
 // Memoized WorkspaceCard to prevent unnecessary re-renders
-export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, fullView = false, isPinned = false, onPin, onDelete, onEditWorkspace, onUrlAction, deferAnalytics = false, ...rest }) {
+export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, fullView = false, isPinned = false, onPin, onDelete, onEditWorkspace, onUrlAction, deferAnalytics = false, readOnly = false, ...rest }) {
   if (!workspace) return null;
 
   const [popoverState, setPopoverState] = useState({ index: null, rect: null });
@@ -822,10 +822,10 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     <div
       ref={cardRef}
       // Drop target for files/folders from Finder (see WorkspaceFileDrop).
-      data-workspace-id={workspace.id}
+      data-workspace-id={readOnly ? undefined : workspace.id}
       className={`cooldesk-workspace-card ${isActive ? 'active' : ''} ${compact ? 'compact' : ''} ${contextPanelVisible ? 'panel-open' : ''} ${fullView ? 'full-view' : ''} ${colorOverride ? 'has-accent' : ''}`}
       onClick={handleCardClick}
-      onContextMenu={handleContextMenu}
+      onContextMenu={readOnly ? undefined : handleContextMenu}
       style={colorOverride ? { ...cardStyle, '--card-accent': colorOverride, ...accentTextVars(colorOverride, 0.16) } : cardStyle}
       {...rest}
     >
@@ -941,7 +941,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                     )}
                     {/* Groups have no × — one chip stands for several links, so
                         a single cross would silently drop all of them. */}
-                    {!isGroup && !item._cd && (
+                    {!readOnly && !isGroup && !item._cd && (
                       <button
                         type="button"
                         className="item-remove-btn"
@@ -994,7 +994,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                     {showLabel && (
                       <span className="compact-icon-label" style={{ color: appColor }}>{app.name}</span>
                     )}
-                    {!app._cd && (
+                    {!readOnly && !app._cd && (
                       <button
                         type="button"
                         className="item-remove-btn"
@@ -1080,7 +1080,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
               const placeRowForApp = (app, idx) => renderPlaceRow(app, `app-${idx}`, {
                 isFile: app.appType === 'file',
                 onOpen: () => activate(app),
-                removable: !app._cd,
+                removable: !readOnly && !app._cd,
                 onRemove: handleRemoveApp,
               });
               const projectRow = (proj, idx) => renderPlaceRow(proj, `proj-${idx}`, {
@@ -1238,7 +1238,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                 glyph: app.appType === 'file' ? faFileLines : faFolderOpen,
                 isFile: app.appType === 'file',
                 onOpen: () => activate(app),
-                removable: !app._cd,
+                removable: !readOnly && !app._cd,
                 onRemove: handleRemoveApp,
               });
               return (
@@ -1400,7 +1400,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                           triggerRect={popoverState.rect}
                         />
                       )}
-                      {!urlObj._cd && (
+                      {!readOnly && !urlObj._cd && (
                         <button
                           type="button"
                           className="item-remove-btn is-inline"
@@ -1450,7 +1450,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                         <FontAwesomeIcon icon={appIcon} style={{ color: appColor, fontSize: '12px' }} />
                       )}
                       <span>{app.name}</span>
-                      {!app._cd && (
+                      {!readOnly && !app._cd && (
                         <button
                           type="button"
                           className="item-remove-btn is-inline"
@@ -1499,7 +1499,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                         <FontAwesomeIcon icon={appIcon} style={{ color: appColor, fontSize: '12px' }} />
                       )}
                       <span>{app.name}</span>
-                      {!app._cd && (
+                      {!readOnly && !app._cd && (
                         <button
                           type="button"
                           className="item-remove-btn is-inline"
