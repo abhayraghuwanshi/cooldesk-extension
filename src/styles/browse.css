@@ -98,7 +98,10 @@ body.bg-white-cred .bp-root {
   inset: 0;
   display: flex;
   overflow: hidden;
-  padding: 4px 16px 16px;
+  /* No side padding: the panels' outer edges line up with the header bar
+     (search) above, which spans the same container width. The panel shadow
+     (0 24px 60px -28px) barely reaches sideways, so nothing gets clipped. */
+  padding: 4px 0 16px;
   box-sizing: border-box;
 }
 
@@ -2196,6 +2199,8 @@ html.browse-focus .browse-view.browse-peek .browse-list {
 .pg-section { display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 12px; background: var(--bv-field); }
 .pg-section h4 { margin: 0; padding: 4px 6px 8px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--bv-dim); }
 .pg-section h4 span { text-transform: none; letter-spacing: 0; font-weight: 500; }
+/* One line: a long host ellipsizes instead of wrapping under the title. */
+.pg-section h4 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pg-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px; border: none; border-radius: 10px; background: none; color: var(--bv-text); font: inherit; text-align: left; cursor: pointer; }
 .pg-row:hover:not(:disabled) { background: var(--bv-hover); }
 .pg-row:disabled { opacity: 0.4; cursor: default; }
@@ -2319,9 +2324,18 @@ html.browse-focus .browse-view.browse-peek .browse-list {
 /* ── Tabs tab of the side panel (BrowseView navContent) ─────────────── */
 .fp-body.nav-body {
   flex-direction: column;
-  overflow: hidden;
+  /* Home scrolls as one page — folders, widgets, apps, the workspace header,
+     its notes & to-dos, search and links. With only the link list scrolling,
+     opening the notes squeezed search and links into a sliver at the bottom. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
   border-radius: 12px;
   background: var(--bv-field);
+}
+
+.nav-body > * {
+  flex-shrink: 0;
 }
 
 .nav-body .browse-head {
@@ -2337,22 +2351,8 @@ html.browse-focus .browse-view.browse-peek .browse-list {
 }
 
 .nav-body .browse-groups {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-/* Single | Multi view switch, stretched across the top of the Tabs tab. */
-.bp-capsule.nav-modes {
-  margin: 8px 8px 2px;
-}
-
-.nav-modes .bp-btn {
-  flex: 1;
-  width: auto;
-  gap: 7px;
-  font-size: 12px;
-  font-weight: 600;
+  flex: none;
+  overflow: visible;
 }
 
 /* Panel tab buttons: icon, plus the label on the active one. */
@@ -3158,3 +3158,211 @@ body.bg-white-cred .js-null { color: #8250df; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Note tabs (NoteTab.jsx): a workspace note in the main view, like a file.
+   The title and editor reuse the notes panel's .wcp-note-title /
+   .wcp-note-tiptap look, in one readable centred column; the body is the
+   scroller, so the editor doesn't scroll on its own. */
+.note-tab-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border-radius: 18px;
+  background: linear-gradient(180deg, var(--bv-sheen), transparent 120px), var(--bv-panel);
+  border: 1px solid var(--bv-line);
+}
+
+.note-tab-page {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 36px 40px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.note-tab-title {
+  width: 100%;
+  font-size: 26px;
+}
+
+.note-tab .wcp-note-tiptap.note-tab-editor {
+  flex: none;
+  overflow: visible;
+  min-height: 50vh;
+}
+
+.note-tab-loading {
+  padding: 12px 0;
+  color: var(--bv-dim);
+  font-size: 13px;
+}
+
+.note-tab-icon,
+.note-tile svg {
+  color: #fbbf24;
+}
+
+/* Address box of file / note / shell tabs (TabAddressBar): the label at
+   rest, a search box when clicked. Its suggestions hang below it as a
+   dropdown instead of covering a page stage like a web tab's. */
+.tab-address {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.tab-address > .bp-address {
+  flex: 1;
+}
+
+.tab-address > .bp-address:not(.editing) {
+  cursor: text;
+}
+
+.tab-address > .as-panel {
+  inset: auto;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  max-height: min(60vh, 520px);
+  box-shadow: 0 18px 48px -12px rgba(0, 0, 0, 0.6);
+}
+
+/* Home header's Notes button (next to the workspace switcher): opens the
+   workspace's notes, to-dos & commands right under the header. */
+.browse-head {
+  gap: 8px;
+}
+
+.browse-head-notes {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 9px;
+  border: 1px solid var(--bv-line);
+  background: var(--bv-field);
+  color: var(--bv-dim);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.browse-head-notes svg {
+  color: #fbbf24;
+}
+
+.browse-head-notes:hover {
+  color: var(--bv-text);
+  background: var(--bv-hover);
+}
+
+.browse-head-notes.on {
+  color: var(--bv-text);
+  border-color: color-mix(in srgb, var(--bv-accent) 45%, var(--bv-line));
+  background: var(--bv-tint);
+}
+
+.browse-head-context {
+  margin: 0 8px 10px;
+}
+
+/* Folders, widgets and apps above the workspace switcher (outside
+   .browse-groups, so it brings that list's 8px side gutter itself). Home
+   scrolls as a whole (.nav-body), so the strip just takes its height. */
+.nav-quick {
+  flex: 0 0 auto;
+  margin: 10px 8px 0;
+}
+
+/* ── Page health (usePaneGuard + useNativePane) ────────────────────── */
+/* Above the stage, not over the slot, so the page stays visible under it. */
+.bp-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 8px 8px;
+  padding: 6px 6px 6px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--bv-text);
+  background: color-mix(in srgb, #f59e0b 14%, transparent);
+  border: 1px solid color-mix(in srgb, #f59e0b 35%, transparent);
+  animation: bv-fade 160ms var(--bv-ease) both;
+}
+
+.bp-notice > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.bp-notice-btn {
+  flex: 0 0 auto;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--bv-line);
+  background: var(--bv-field);
+  color: var(--bv-text);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.bp-notice-btn:hover {
+  background: var(--bv-hover);
+}
+
+.bp-crashed {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--bv-dim);
+}
+
+.bp-crashed strong {
+  font-size: 15px;
+  color: var(--bv-text);
+}
+
+.bp-crashed .bp-notice-btn {
+  margin-top: 6px;
+}
+
+/* ── Site permissions (SitePermissions, in the Page tab) ───────────── */
+.sp-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px; border: none; border-radius: 10px; background: none; color: var(--bv-text); font: inherit; text-align: left; }
+.sp-sound { cursor: pointer; }
+.sp-sound:hover { background: var(--bv-hover); }
+.pg-icon.sp-live { color: #f87171; background: color-mix(in srgb, #f87171 16%, transparent); }
+.sp-sound .pg-icon.sp-live { color: var(--bv-good); background: color-mix(in srgb, var(--bv-good) 16%, transparent); }
+.sp-choice { flex: 0 0 auto; display: inline-flex; padding: 2px; border-radius: 8px; background: var(--bv-hover); }
+.sp-choice button { padding: 3px 8px; border: none; border-radius: 6px; background: none; color: var(--bv-dim); font-size: 11px; font-weight: 600; cursor: pointer; transition: background 160ms ease, color 160ms ease; }
+.sp-choice button:hover:not(.on) { color: var(--bv-text); }
+.sp-choice button.on { background: var(--bv-panel); color: var(--bv-text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15); }
+.sp-choice button.on.allow { color: var(--bv-good); }
+.sp-choice button.on.block { color: #f87171; }
+.sp-stop { flex: 0 0 auto; padding: 3px 9px; border-radius: 6px; border: 1px solid color-mix(in srgb, #f87171 40%, transparent); background: none; color: #f87171; font-size: 11px; font-weight: 600; cursor: pointer; }
+.sp-stop:hover { background: color-mix(in srgb, #f87171 12%, transparent); }
+.sp-switch { flex: 0 0 auto; width: 30px; height: 18px; padding: 2px; border-radius: 9px; background: var(--bv-hover); transition: background 160ms ease; }
+.sp-switch i { display: block; width: 14px; height: 14px; border-radius: 50%; background: var(--bv-dim); transition: transform 160ms var(--bv-ease), background 160ms ease; }
+.sp-switch.on { background: color-mix(in srgb, var(--bv-good) 30%, transparent); }
+.sp-switch.on i { transform: translateX(12px); background: var(--bv-good); }
+/* Camera / mic: label (and Stop) on the first line, Ask / Allow / Block
+   full width under it — side by side, the switch squeezed the label into
+   one word per line in the narrow panel. */
+.sp-row:not(.sp-sound) { flex-wrap: wrap; row-gap: 6px; }
+.sp-row .pg-label, .sp-row .pg-detail { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-row .sp-choice { flex: 1 0 100%; margin-left: 38px; max-width: calc(100% - 38px); }
+.sp-row .sp-choice button { flex: 1; }

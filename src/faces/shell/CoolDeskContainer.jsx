@@ -185,7 +185,15 @@ export function CoolDeskContainer({
   // reports the mode closed (Esc, its chip's ×, or picking another workspace),
   // so the next right-click "Edit" — even on the same workspace — re-triggers.
   const [editTarget, setEditTarget] = useState(null);
-  const isSidebarWidth = useIsSidebarWidth();
+  // Backend dock state — drives the sidebar / horizontal-bar render modes below.
+  const dockState = useDockState();
+  // Docked left/right always gets the sidebar layout, whatever width the page
+  // reports: if the page view ever lags the window (it did — see
+  // `autoresize_main_page` in src-tauri/src/lib.rs), Browse stayed mounted and its
+  // native page showed over the 360pt panel.
+  const isVerticalDock = isDesktopApp && !!dockState?.enabled
+    && (dockState.side === 'left' || dockState.side === 'right');
+  const isSidebarWidth = useIsSidebarWidth() || isVerticalDock;
 
   // At sidebar widths the header (and its embedded spotlight) isn't mounted,
   // so hand the edit to the standalone spotlight window instead.
@@ -206,9 +214,6 @@ export function CoolDeskContainer({
   // widths (same reasoning that already keeps it out of `sidebar-control-bar`
   // below) — gate WorkspaceShell's own settings nav dot on the same check so
   // it isn't reachable from a width where it can't actually open correctly.
-
-  // Backend dock state — drives the horizontal-bar render mode below.
-  const dockState = useDockState();
 
   // macOS Dock look: while docked (sidebar or bar), the Rust side makes the
   // window non-opaque and `dock-see-through.css` drops the panel/wallpaper

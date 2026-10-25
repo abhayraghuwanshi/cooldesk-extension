@@ -1,9 +1,11 @@
-import { faArrowUpRightFromSquare, faCompass, faDesktop, faFolder, faHouse, faPlus, faTerminal, faCompress, faExpand, faChevronDown, faSearch, faServer, faTableCellsLarge, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faArrowUpRightFromSquare, faCompass, faDesktop, faFolder, faHouse, faNoteSticky, faPlus, faTerminal, faCompress, faExpand, faChevronDown, faSearch, faServer, faTableCellsLarge, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserPane } from '../../features/browser/BrowserPane';
+import { usePaneGuard } from '../../features/browser/usePaneGuard';
 import { FilesView } from './FilesView';
 import { FileIcon, FileTab } from './FileTab';
+import { NoteTab } from './NoteTab';
 import { TerminalTab } from '../../features/terminal/TerminalTab';
 import { registerTerminalHost } from '../../features/terminal/runInTerminal';
 import { WorkspaceContextPanel } from '../workspace/WorkspaceList';
@@ -42,7 +44,6 @@ function parentDir(p) {
   const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
   return i > 0 ? p.slice(0, i) : p;
 }
-const STATS_POLL_MS = 3000;
 const LIST_WS_KEY = 'cooldesk.browse.workspace';
 const WS_CONTEXT_KEY = 'cooldesk.browse.workspaceContext';
 // list_listening_ports runs netstat and samples every process's CPU (with a
@@ -111,7 +112,7 @@ function SidePanelIcon() {
 
 const isWebUrl = (url) => typeof url === 'string' && /^https?:\/\//i.test(url);
 // A blank tab: a new tab's start screen (not a page, file or terminal).
-const isBlank = (t) => !t.url && !t.file && !t.term;
+const isBlank = (t) => !t.url && !t.file && !t.term && !t.note;
 
 /**
  * Left: only what you're looking at (a page, file or terminal). Right: the
@@ -119,8 +120,8 @@ const isBlank = (t) => !t.url && !t.file && !t.term;
  * widgets), Files, Shelf, Notes, Page.
  *
  * @param onSelectWorkspace (id) → make a workspace current (picked in the panel)
- * @param homeExtras  bottom of the panel's Home tab (CoolDeskContainer passes
- *                    widgets, Popular Folders and dev servers)
+ * @param homeExtras  in the panel's Home tab, between Folders and Apps
+ *                    (CoolDeskContainer passes the widgets and dev servers)
  */
 export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWorkspace, isActive, homeExtras = null }) {
   const isSidebarWidth = useIsSidebarWidth();
@@ -515,27 +516,20 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   const onCanvas = useMemo(() => new Set(tiles.map(t => t.url)), [tiles]);
 
   // Live memory/CPU of every in-app page (browser_pane/stats.rs), shown in
-  // the side panel's Page tab. Each page is its own WebKit process.
-  const [stats, setStats] = useState(null);
-  // Only measured while the Page tab is on screen.
+  // the side panel's Page tab; the same poll lets the pane guard put
+  // background tabs to sleep before they slow the Mac down. Each page is its
+  // own WebKit process.
   const [pageTools, setPageTools] = useState(null);
   const pageTabShown = isActive && filesShown && filesTab === 'page';
-  useEffect(() => {
-    if (!pageTabShown) return;
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        const next = await invoke('browser_pane_stats');
-        if (!cancelled) setStats(next);
-      } catch {
-        if (!cancelled) setStats(null);
-      }
-    };
-    load();
-    const timer = setInterval(load, STATS_POLL_MS);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [pageTabShown]);
+  const activeIsPage = !activeTab.file && !activeTab.term && !activeTab.note;
+  const { stats, heavyPaneId, dismissHeavy } = usePaneGuard({
+    browseTabs,
+    paneIdOf: tabPaneId,
+    shownPaneId: isActive && browseMode && activeIsPage ? tabPaneId(browseTabs.activeId) : null,
+    enabled: tiles.length > 0 || browseTabs.tabs.some(t => browseTabs.live.has(t.id) && (t.url || t.req.url)),
+    meterShown: pageTabShown,
+    onScreen: isActive,
+  });
 
   const openPages = useMemo(() => {
     if (!stats) return [];
@@ -588,7 +582,9 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   // Typing in the filter always searches every workspace.
   const [listWs, setListWsState] = useState(() => localStorage.getItem(LIST_WS_KEY) || activeWorkspaceId || '');
   const [wsPickerOpen, setWsPickerOpen] = useState(false);
-  const [wsContextOpen, setWsContextOpenState] = useState(() => localStorage.getItem(WS_CONTEXT_KEY) !== 'false');
+  // Notes, to-dos & commands: folded behind the Notes button in Home's
+  // header until asked for (the panel is tall).
+  const [wsContextOpen, setWsContextOpenState] = useState(() => localStorage.getItem(WS_CONTEXT_KEY) === 'true');
   const setWsContextOpen = (open) => {
     setWsContextOpenState(open);
     persist(WS_CONTEXT_KEY, String(open));
@@ -695,6 +691,15 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   );
   const toolbarEnd = (
     <>
+    {/* Single ⇄ Multi view. Shows the view it switches to, like the
+        layout button (it used to be a two-button row atop the panel). */}
+    <button
+      className="bp-btn"
+      onClick={() => setMode(canvasMode ? 'browse' : 'canvas')}
+      title={canvasMode ? 'Single view: one page at a time, with tabs' : 'Multi view: pages side by side'}
+    >
+      <FontAwesomeIcon icon={canvasMode ? faWindowMaximize : faTableCellsLarge} />
+    </button>
     <button
       className={`bp-btn ${filesShown ? 'on' : ''} ${downloading || shelf.unseen ? 'files-badge' : ''} ${downloading ? 'downloading' : ''}`}
       data-count={shelf.unseen || ''}
@@ -734,7 +739,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
     ? (shownWs.ws.apps || []).filter(isFileItem).map(a => ({ path: a.path, isDir: a.appType === 'folder', title: a.name || a.path.split(/[/\\]/).pop(), sub: a.path }))
     : [];
   const serverLinks = groups.find(g => g.id === 'servers')?.items || [];
-  const tabForUrl = (url) => browseTabs.tabs.find(t => !t.file && !t.term && (t.url === url || t.req.url === url));
+  const tabForUrl = (url) => browseTabs.tabs.find(t => !t.file && !t.term && !t.note && (t.url === url || t.req.url === url));
   const tabForPath = (path) => browseTabs.tabs.find(t => t.file?.path === path);
   const claimed = new Set([
     ...pinnedLinks.map(l => tabForUrl(l.url)?.id),
@@ -794,7 +799,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
 
   function renderTabRow(tab) {
     const host = tab.url ? hostOf(tab.url) : '';
-    const asleep = !tab.file && !tab.term && !browseTabs.live.has(tab.id);
+    const asleep = !tab.file && !tab.term && !tab.note && !browseTabs.live.has(tab.id);
     return (
       <div
         key={tab.id}
@@ -803,12 +808,14 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
         className={`browse-tab-row is-open ${tab.id === browseTabs.activeId ? 'active' : ''} ${asleep ? 'asleep' : ''}`}
         onClick={() => browseTabs.activate(tab.id)}
         onAuxClick={(e) => { if (e.button === 1) browseTabs.close(tab.id); }}
-        title={tab.file ? tab.file.path : tab.term ? `Terminal — ${tab.term.cwd || '~'}` : asleep ? `${tab.url || 'New tab'}\nAsleep (reloads when opened)` : (tab.url || 'New tab')}
+        title={tab.file ? tab.file.path : tab.term ? `Shell — ${tab.term.cwd || '~'}` : tab.note ? `Note${tab.note.workspaceName ? ` in ${tab.note.workspaceName}` : ''}` : asleep ? `${tab.url || 'New tab'}\nAsleep (reloads when opened)` : (tab.url || 'New tab')}
       >
         {tab.file
           ? <span className="browse-tile"><FileIcon path={tab.file.path} isDir={tab.file.isDir} /></span>
           : tab.term
             ? <span className="browse-tile term-tile"><FontAwesomeIcon icon={faTerminal} /></span>
+          : tab.note
+            ? <span className="browse-tile note-tile"><FontAwesomeIcon icon={faNoteSticky} /></span>
           : tab.url
             ? <ItemIcon item={{ url: tab.url, title: tab.title, sub: host }} />
             : <span className="browse-tile"><FontAwesomeIcon icon={faPlus} /></span>}
@@ -891,28 +898,29 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   // view switch, workspace selector, filter, open tabs, links.
   const navContent = (
     <>
-      {!isSidebarWidth && (
-        <div className="bp-capsule bp-modes nav-modes" role="tablist" aria-label="View">
-          <button
-            className={`bp-btn ${browseMode ? 'on' : ''}`}
-            onClick={() => setMode('browse')}
-            title="Single view: one page at a time, with tabs"
-            role="tab"
-            aria-selected={browseMode}
-          >
-            <FontAwesomeIcon icon={faWindowMaximize} /> Single
-          </button>
-          <button
-            className={`bp-btn ${canvasMode ? 'on' : ''}`}
-            onClick={() => setMode('canvas')}
-            title="Multi view: pages side by side"
-            role="tab"
-            aria-selected={canvasMode}
-          >
-            <FontAwesomeIcon icon={faTableCellsLarge} /> Multi
-          </button>
-        </div>
-      )}
+        {/* Folders and running apps first: one click to what's in use, above
+            the workspace switcher and its links. */}
+        {!filter && (frequentFolders.length > 0 || external.apps.length > 0 || homeExtras) && (
+          <section className="nav-section nav-quick">
+            {frequentFolders.length > 0 && (
+              <>
+                <div className="nav-section-head"><span>Folders</span></div>
+                <div className="nav-chips">{frequentFolders.map(renderFolderChip)}</div>
+              </>
+            )}
+            {/* Widgets (and running dev servers) before the apps. */}
+            {homeExtras && <div className="nav-home-extras">{homeExtras}</div>}
+            {external.apps.length > 0 && (
+              <>
+                <div className="nav-section-head">
+                  <span>Apps</span>
+                  <span className="browse-count">{external.apps.length}</span>
+                </div>
+                <div className="nav-chips">{external.apps.map(renderApp)}</div>
+              </>
+            )}
+          </section>
+        )}
         <header className="browse-head">
           <button
             className={`browse-ws ${wsPickerOpen ? 'open' : ''}`}
@@ -924,6 +932,17 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
             <span className="browse-ws-name">{shownWs ? shownWs.ws.name : 'No workspace'}</span>
             <FontAwesomeIcon icon={faChevronDown} className="browse-ws-caret" />
           </button>
+          {shownWs && (
+            <button
+              className={`browse-head-notes ${wsContextOpen ? 'on' : ''}`}
+              onClick={() => setWsContextOpen(!wsContextOpen)}
+              title={wsContextOpen ? 'Hide notes, to-dos & commands' : `Notes, to-dos & commands for ${shownWs.ws.name}`}
+              aria-expanded={wsContextOpen}
+            >
+              <FontAwesomeIcon icon={faNoteSticky} />
+              <span>Notes</span>
+            </button>
+          )}
         </header>
         {wsPickerOpen && (
           <div className="browse-ws-list" role="listbox">
@@ -940,6 +959,18 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                 <span className="browse-count">{count}</span>
               </button>
             ))}
+          </div>
+        )}
+        {shownWs && wsContextOpen && !wsPickerOpen && (
+          <div className="workspace-detail-view nav-ws-context browse-head-context">
+            {/* Full width: a note opens as a tab in the main view, like a
+                file. The docked sidebar has no main view, so there it still
+                opens in place. */}
+            <WorkspaceContextPanel
+              key={shownWs.ws.id}
+              workspace={shownWs.ws}
+              onOpenNote={isSidebarWidth ? null : browseTabs.openNoteTab}
+            />
           </div>
         )}
         <div className="browse-search">
@@ -967,25 +998,6 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
             </>
           ) : (
             <>
-              {(frequentFolders.length > 0 || external.apps.length > 0) && (
-                <section className="nav-section nav-quick">
-                  {frequentFolders.length > 0 && (
-                    <>
-                      <div className="nav-section-head"><span>Folders</span></div>
-                      <div className="nav-chips">{frequentFolders.map(renderFolderChip)}</div>
-                    </>
-                  )}
-                  {external.apps.length > 0 && (
-                    <>
-                      <div className="nav-section-head">
-                        <span>Apps</span>
-                        <span className="browse-count">{external.apps.length}</span>
-                      </div>
-                      <div className="nav-chips">{external.apps.map(renderApp)}</div>
-                    </>
-                  )}
-                </section>
-              )}
               <section className="nav-section">
                 <div className="nav-section-head">
                   <span>Pinned</span>
@@ -997,23 +1009,6 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                 {pinnedLinks.map(renderPinnedLink)}
                 {pinnedFiles.map(renderPinnedFile)}
               </section>
-              {/* The workspace's own context — notes, to-dos, status and the
-                  .cooldesk project's run commands — as on its old detail view.
-                  Wrapped in .workspace-detail-view for that view's one-column
-                  layout rules. */}
-              {shownWs && (
-                <section className="nav-section">
-                  <button className="nav-section-head nav-section-toggle" onClick={() => setWsContextOpen(!wsContextOpen)} aria-expanded={wsContextOpen}>
-                    <FontAwesomeIcon icon={faChevronDown} className={`nav-caret ${wsContextOpen ? '' : 'is-closed'}`} />
-                    <span>Notes, to-dos &amp; commands</span>
-                  </button>
-                  {wsContextOpen && (
-                    <div className="workspace-detail-view nav-ws-context">
-                      <WorkspaceContextPanel key={shownWs.ws.id} workspace={shownWs.ws} />
-                    </div>
-                  )}
-                </section>
-              )}
               {serverLinks.length > 0 && (
                 <section className="nav-section is-servers">
                   <div className="nav-section-head"><span>Local servers</span><span className="browse-count">{serverLinks.length}</span></div>
@@ -1026,7 +1021,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                     <span>Open tabs</span>
                     <span className="browse-count">{looseTabs.length}</span>
                     <span className="nt-grow" />
-                    <button className="bp-btn browse-tabs-new" onClick={() => openTerminal()} title="New terminal tab (Ctrl+` opens the terminal drawer)">
+                    <button className="bp-btn browse-tabs-new" onClick={() => openTerminal()} title="New shell tab (Ctrl+` opens the shell drawer)">
                       <FontAwesomeIcon icon={faTerminal} />
                     </button>
                     <button className="bp-btn browse-tabs-new" onClick={newTab} title="New tab (⌘T)">
@@ -1050,7 +1045,6 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                   )}
                 </section>
               )}
-              {homeExtras && <div className="nav-home-extras">{homeExtras}</div>}
             </>
           )}
         </div>
@@ -1066,8 +1060,24 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
         <main className="browse-pane">
           <div className={`browse-mode ${browseMode ? '' : 'is-hidden'}`}>
             {/* One live page per awake tab; inactive ones stay loaded but hidden. */}
-            {browseTabs.tabs.filter(tab => tab.file || tab.term || browseTabs.live.has(tab.id)).map(tab => {
+            {browseTabs.tabs.filter(tab => tab.file || tab.term || tab.note || browseTabs.live.has(tab.id)).map(tab => {
               const isCurrent = tab.id === browseTabs.activeId;
+              if (tab.note) {
+                return (
+                  <div key={tab.id} className={`browse-tabpane ${isCurrent ? '' : 'is-hidden'}`}>
+                    <NoteTab
+                      note={tab.note}
+                      onTitle={(title) => browseTabs.noteTitle(tab.id, title)}
+                      onClose={() => browseTabs.close(tab.id)}
+                      onOpenUrl={(url) => browseTabs.openInNew(url, { position: 'after' })}
+                      onOpenPath={openPath}
+                      onOpenShell={openTerminal}
+                      toolbarStart={toolbarStart}
+                      toolbarEnd={toolbarEnd}
+                    />
+                  </div>
+                );
+              }
               if (tab.term) {
                 return (
                   <div key={tab.id} className={`browse-tabpane ${isCurrent ? '' : 'is-hidden'}`}>
@@ -1078,6 +1088,8 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                       active={isActive && browseMode && isCurrent}
                       onTitle={(title) => browseTabs.noteTitle(tab.id, title)}
                       onOpenUrl={(url) => browseTabs.openInNew(url, { position: 'after' })}
+                      onOpenPath={openPath}
+                      onOpenShell={openTerminal}
                       onShowInFiles={(dir) => { showFolder(dir); setFilesTab('files'); setFilesOpen(true); }}
                       toolbarStart={toolbarStart}
                       toolbarEnd={toolbarEnd}
@@ -1114,7 +1126,10 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                     onNavigate={(url, opts) => handleNavigate(tab.id, url, opts)}
                     onTitle={(title) => browseTabs.noteTitle(tab.id, title)}
                     onTools={setPageTools}
+                    heavy={heavyPaneId === tabPaneId(tab.id)}
+                    onDismissHeavy={dismissHeavy}
                     onOpenPath={openPath}
+                    onOpenShell={openTerminal}
                     focusAddressKey={isCurrent ? focusAddress : 0}
                     findKey={isCurrent ? findKey : 0}
                     toolbarStart={toolbarStart}
@@ -1205,9 +1220,10 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
               notesPaneId={tabPaneId(browseTabs.activeId)}
               onOpen={openPath}
               page={{
-                tools: browseMode && !activeTab.file && !activeTab.term ? pageTools : null,
+                tools: browseMode && !activeTab.file && !activeTab.term && !activeTab.note ? pageTools : null,
                 pages: openPages,
                 totals: { memory: pagesMemory, cpu: pagesCpu, app: stats?.app_memory },
+                live: stats?.panes.find(p => p.id === pageTools?.paneId) || null,
                 onClosePage: (p) => (p.tabId ? browseTabs.close(p.tabId) : changeTiles(compact(tiles.filter(t => t.id !== p.tileId)))),
               }}
             />

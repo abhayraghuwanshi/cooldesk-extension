@@ -2,12 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { browseUrls, quickSearch, refreshElectronCache } from '../../services/searchService';
 import { getFaviconUrl } from '../../utils/helpers.js';
 import { hostOf, invoke, normalizeAddress } from './useNativePane';
+import { recentFiles, recentShells } from './recentHistory';
 
 // Suggestions for the Browse address bar and the Canvas "add" bar — the same
 // sources as the spotlight's scoped searches: "/u" (open tabs, history,
 // bookmarks, links saved in workspaces — ranked by searchService, learned
 // click boosts included) and "/f" (search_files over the home folder; recent
 // folders while empty). The prefixes work here too: "/u gmail", "/f invoice".
+//
+// While empty it also lists what Browse opened lately besides pages — files
+// and folders shown as tabs, and shells (recentHistory.js).
 //
 // The first item always does exactly what was typed (go to it, or search
 // it), so Enter never opens a fuzzy match the user didn't pick.
@@ -16,6 +20,7 @@ const URL_TYPES = new Set(['tab', 'history', 'bookmark', 'workspace-url']);
 const DEBOUNCE_MS = 120;
 const MAX_LINKS = 7;
 const MAX_FILES = 5;
+const MAX_SHELLS = 3;
 
 const LINK_LABEL = { tab: 'Open tab', history: 'History', bookmark: 'Bookmark', 'workspace-url': 'Saved link' };
 
@@ -75,13 +80,36 @@ async function recentFolders() {
   }
 }
 
+// Files and folders opened as Browse tabs, newest first.
+const recentFileItems = () => recentFiles(MAX_FILES).map(f => ({ ...toFile(f), recent: true }));
+
+// "/f" with nothing typed: what you opened here first, then the OS's
+// frequently used folders.
+async function recentPlaces() {
+  const mine = recentFileItems();
+  const seen = new Set(mine.map(f => f.path));
+  const os = (await recentFolders()).filter(f => !seen.has(f.path));
+  return [...mine, ...os].slice(0, MAX_FILES + 3);
+}
+
+function shellItems() {
+  return recentShells(MAX_SHELLS).map(s => ({
+    kind: 'shell',
+    id: `shell:${s.cwd || '~'}`,
+    cwd: s.cwd || null,
+    title: s.cwd ? baseName(s.cwd) : 'Home',
+    sub: `Shell · ${s.cwd || '~'}`,
+  }));
+}
+
 /**
- * @param query      text in the bar
- * @param enabled    only search while the bar is being edited
- * @param withFiles  include files/folders (Browse) or links only (Canvas)
+ * @param query       text in the bar
+ * @param enabled     only search while the bar is being edited
+ * @param withFiles   include files/folders (Browse) or links only (Canvas)
+ * @param withShells  list recent shells while empty (the host can open them)
  * @returns {{ items: object[], scope: 'u'|'f'|null }}
  */
-export function useAddressSuggestions(query, { enabled, withFiles = true }) {
+export function useAddressSuggestions(query, { enabled, withFiles = true, withShells = false }) {
   const [state, setState] = useState({ items: [], scope: null });
   const seq = useRef(0);
 
@@ -112,8 +140,11 @@ export function useAddressSuggestions(query, { enabled, withFiles = true }) {
         !wantLinks ? [] : term
           ? quickSearch(term, 20).then(rs => rs.filter(r => URL_TYPES.has(r.type) && r.url)).catch(() => [])
           : recentLinks(),
-        !wantFiles ? [] : term.length >= 2 ? searchFiles(term) : (!term && scope === 'f' ? recentFolders() : []),
+        !wantFiles ? [] : term.length >= 2 ? searchFiles(term)
+          : !term ? (scope === 'f' ? recentPlaces() : recentFileItems())
+            : [],
       ]);
+      const shells = withShells && !term && !scope ? shellItems() : [];
       if (id !== seq.current) return;
 
       const seen = new Set(typed.map(t => t.url));
@@ -124,11 +155,11 @@ export function useAddressSuggestions(query, { enabled, withFiles = true }) {
         linkItems.push(toLink(r));
         if (linkItems.length >= MAX_LINKS) break;
       }
-      setState({ items: [...typed, ...linkItems, ...files], scope });
+      setState({ items: [...typed, ...linkItems, ...files, ...shells], scope });
     }, term ? DEBOUNCE_MS : 0);
 
     return () => clearTimeout(timer);
-  }, [query, enabled, withFiles]);
+  }, [query, enabled, withFiles, withShells]);
 
   return enabled ? state : { items: [], scope: null };
 }

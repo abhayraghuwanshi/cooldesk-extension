@@ -1,4 +1,4 @@
-import { faArrowLeft, faPalette, faPlus, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faArrowLeft, faChevronDown, faListCheck, faNoteSticky, faPalette, faPlus, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -307,7 +307,7 @@ function NoteCard({ note, onOpen, onTogglePin, onDelete }) {
 // Notes — the right column: a shared-docs card and a my-notes card, or (while
 // one is open) the read-only doc reader / the note editor with autosave.
 // ─────────────────────────────────────────────────────────────────────────────
-function NotesSection({ workspaceId, workspaceName, sharedDocs }) {
+function NotesSection({ workspaceId, workspaceName, sharedDocs, onOpenNote }) {
   const [notes, setNotes] = useState([]);
   const [activeNote, setActiveNote] = useState(null);
   const [noteTitle, setNoteTitle] = useState('');
@@ -339,15 +339,25 @@ function NotesSection({ workspaceId, workspaceName, sharedDocs }) {
 
   const openNote = useCallback((note) => {
     setReadmeDoc(null);
+    // Browse: open it as a tab in the main view instead of in this column.
+    if (onOpenNote) {
+      onOpenNote({ id: note.id, workspaceId, workspaceName, title: note.title });
+      return;
+    }
     setActiveNote(note);
     setNoteTitle(note.title || '');
     setNoteContent(note.text || '');
-  }, []);
+  }, [onOpenNote, workspaceId, workspaceName]);
 
   const newNote = useCallback(() => {
     setReadmeDoc(null);
+    const id = `wsnote_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    if (onOpenNote) {
+      onOpenNote({ id, workspaceId, workspaceName, title: '' });
+      return;
+    }
     const blank = {
-      id: `wsnote_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      id,
       workspaceId,
       title: '',
       text: '',
@@ -360,7 +370,7 @@ function NotesSection({ workspaceId, workspaceName, sharedDocs }) {
     setActiveNote(blank);
     setNoteTitle('');
     setNoteContent('');
-  }, [workspaceId, workspaceName]);
+  }, [workspaceId, workspaceName, onOpenNote]);
 
   const persistNote = useCallback((note, title, text) => {
     if (!title.trim() && !stripHtml(text)) return;
@@ -566,7 +576,15 @@ function NotesSection({ workspaceId, workspaceName, sharedDocs }) {
 // Panel — owns the .cooldesk fetch (shared by both sections) and the accent
 // color menu; Next Up and Notes manage their own state.
 // ─────────────────────────────────────────────────────────────────────────────
-export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ workspace }) {
+/**
+ * @param onOpenNote  optional ({ id, workspaceId, workspaceName, title }) —
+ *                    open notes somewhere else (Browse: as a main-view tab)
+ *                    instead of in the panel's own notes column.
+ * @param compact     docked sidebar: just a To-dos / Notes button row; a click
+ *                    opens that one section (the full panel was most of the
+ *                    sidebar's height).
+ */
+export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ workspace, onOpenNote = null, compact = false }) {
   const { id: workspaceId, name } = workspace;
 
   // ── CoolDesk (.cooldesk) — committed project knowledge from the workspace folder ──
@@ -602,6 +620,9 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
   // both painted the same.
   const [accent, setAccent] = useWorkspaceAccent(workspace);
   const [colorMenu, setColorMenu] = useState(null); // { x, y }
+  // Compact mode: which section is open ('todos' | 'notes'), or none.
+  const [openPart, setOpenPart] = useState(null);
+  const togglePart = (part) => setOpenPart(p => (p === part ? null : part));
 
   // ── Accent color (right-click menu) ───────────────────────────────────────
   const applyAccent = useCallback((color) => {
@@ -665,20 +686,46 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
         </div>,
         document.body
       )}
-      <div className="wcp-grid">
+      {compact && (
+        <div className="wcp-compact-bar">
+          {[
+            { id: 'todos', label: 'To-dos', icon: faListCheck },
+            { id: 'notes', label: 'Notes', icon: faNoteSticky },
+          ].map(({ id, label, icon }) => (
+            <button
+              key={id}
+              type="button"
+              className={`wcp-compact-btn ${openPart === id ? 'is-open' : ''}`}
+              onClick={() => togglePart(id)}
+              aria-expanded={openPart === id}
+            >
+              <FontAwesomeIcon icon={icon} className="wcp-compact-icon" />
+              <span>{label}</span>
+              <FontAwesomeIcon icon={faChevronDown} className="wcp-compact-caret" />
+            </button>
+          ))}
+        </div>
+      )}
+      {(!compact || openPart) && (
+        <div className="wcp-grid">
 
-        {/* ── LEFT RAIL: project (.cooldesk) + todos ─────────────────────── */}
-        <aside className="wcp-rail">
+          {/* ── LEFT RAIL: project (.cooldesk) + todos ─────────────────────── */}
+          {(!compact || openPart === 'todos') && (
+            <aside className="wcp-rail">
 
-          <CooldeskSection cooldesk={cooldesk} />
+              <CooldeskSection cooldesk={cooldesk} />
 
-          <TodosSection workspaceId={workspaceId} sharedTodos={sharedTodos} />
+              <TodosSection workspaceId={workspaceId} sharedTodos={sharedTodos} />
 
-        </aside>
+            </aside>
+          )}
 
-        {/* ── RIGHT COLUMN: notes ───────────────────────────────────────── */}
-        <NotesSection workspaceId={workspaceId} workspaceName={name} sharedDocs={sharedDocs} />
-      </div>
+          {/* ── RIGHT COLUMN: notes ───────────────────────────────────────── */}
+          {(!compact || openPart === 'notes') && (
+            <NotesSection workspaceId={workspaceId} workspaceName={name} sharedDocs={sharedDocs} onOpenNote={onOpenNote} />
+          )}
+        </div>
+      )}
     </div>
   );
 });

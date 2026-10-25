@@ -2,9 +2,11 @@ import { faArrowUpRightFromSquare, faCamera, faCropSimple, faCheck, faExpand, fa
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useState } from 'react';
 import '../../styles/browse.css';
+import { SitePermissions } from './SitePermissions';
 
 // Page tab of Browse's side panel: the visible tab's page controls (moved off
-// the toolbar to keep it clean) and the memory/CPU of every in-app page.
+// the toolbar to keep it clean), the site's permissions (camera, mic, sound)
+// and the memory/CPU of every in-app page.
 
 const MB = 1024 * 1024;
 
@@ -75,9 +77,10 @@ function Action({ tool, icon, label, state, disabled, onRun }) {
  * @param tools      the visible tab's controls (BrowserPane onTools), or null
  * @param pages      open pages with memory/cpu (BrowseView's openPages)
  * @param totals     { memory, cpu, app }
+ * @param live       the visible page's stats ({ audible, camera, microphone }), or null
  * @param onClosePage(page)
  */
-export function PageView({ tools, pages = [], totals, onClosePage }) {
+export function PageView({ tools, pages = [], totals, live = null, onClosePage }) {
   const hasPage = !!tools?.url;
   const host = tools?.host || '';
   const maxMemory = Math.max(1, ...pages.map(p => p.memory || 0));
@@ -120,6 +123,8 @@ export function PageView({ tools, pages = [], totals, onClosePage }) {
           <Action tool="open" icon={faArrowUpRightFromSquare} label="Open outside" state="Your browser" disabled={!hasPage} onRun={() => tools.openExternal()} />
         </div>
       </section>
+
+      <SitePermissions host={hasPage ? host : ''} paneId={tools?.paneId} live={live} />
 
       <section className="pg-section">
         <h4>

@@ -6,6 +6,7 @@ import { ARCHIVE_RE, AUDIO_RE, ArchiveView, AudioView, CsvView, JsonView } from 
 import { FileManager } from '../../features/file-manager/FileManager';
 import { getFileVisual } from '../../utils/fileIcons';
 import { getPreviewItem } from '../../utils/filePreviewKind.js';
+import { TabAddressBar } from './TabAddressBar';
 
 // A Browse tab showing something from disk in the main area: a file at full
 // size (the spotlight's PreviewPane — code, images, PDF, video) or a folder
@@ -107,11 +108,15 @@ export function FileTab({ file, active, onOpenFile, onOpenUrl, onShowFolder, onB
             <FontAwesomeIcon icon={faArrowRight} />
           </button>
         </div>
-        <div className="bp-address ft-address" title={file.path}>
-          <FileIcon path={file.path} isDir={file.isDir} className="ft-address-icon" />
-          <span className="bp-host">{baseName(file.path)}</span>
-          <span className="bp-path ft-dir">{parentDir(file.path)}</span>
-        </div>
+        <TabAddressBar
+          icon={<FileIcon path={file.path} isDir={file.isDir} className="ft-address-icon" />}
+          label={baseName(file.path)}
+          sub={parentDir(file.path)}
+          title={file.path}
+          onOpenUrl={onOpenUrl}
+          onOpenPath={(path, isDir) => (isDir ? onShowFolder?.(path) : onOpenFile?.(path))}
+          onOpenShell={onOpenTerminal}
+        />
         <div className="bp-capsule">
           {isText && (
             <CopyButton
@@ -125,7 +130,7 @@ export function FileTab({ file, active, onOpenFile, onOpenUrl, onShowFolder, onB
           )}
           <CopyButton icon={faLink} label="Copy path" run={() => navigator.clipboard.writeText(file.path)} />
           {onOpenTerminal && (
-            <button className="bp-btn" onClick={() => onOpenTerminal(file.isDir ? file.path : parentDir(file.path))} title="Open a terminal here">
+            <button className="bp-btn" onClick={() => onOpenTerminal(file.isDir ? file.path : parentDir(file.path))} title="Open a shell here">
               <FontAwesomeIcon icon={faTerminal} />
             </button>
           )}

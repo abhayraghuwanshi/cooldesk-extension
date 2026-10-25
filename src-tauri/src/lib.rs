@@ -454,6 +454,77 @@ fn set_main_background(window: &tauri::Window, color: Option<tauri::window::Colo
     }
 }
 
+/// Let AppKit resize the main page webview with the window again.
+///
+/// Tauri's `unstable` multi-webview feature (needed for browser panes) builds
+/// the page as a child view with no autoresizing mask and resizes it itself
+/// from Resized events. Those didn't keep up: docking (an AppKit `setFrame`
+/// on a hidden, just-undecorated window) and native fullscreen both left the
+/// page at its old size — Browse stayed mounted inside the 360pt sidebar
+/// with its native page over the panel, and fullscreen showed the old-size
+/// page stuck inside the bigger window until a reload. A width/height-sizable
+/// mask is what wry gives a non-child webview, so the page tracks the window
+/// synchronously in every case; Tauri's own resizing is turned off so the
+/// two can't fight.
+/// Logs the main page view's geometry against its parent and the window's
+/// content view — the facts behind "dark / wrong-size panel" reports.
+#[cfg(target_os = "macos")]
+fn log_main_page_geometry(window: &tauri::Window, when: &'static str) {
+    let Some(page) = window.get_webview("main") else {
+        log::warn!("[Window] {when}: no main page webview");
+        return;
+    };
+    let ns_window = window.ns_window().map(|p| p as usize).unwrap_or(0);
+    let _ = page.with_webview(move |pw| unsafe {
+        use objc2::msg_send;
+        use objc2::runtime::AnyObject;
+        use objc2_foundation::NSRect;
+        let r = |f: NSRect| format!("({:.0},{:.0} {:.0}x{:.0})", f.origin.x, f.origin.y, f.size.width, f.size.height);
+        let view = pw.inner() as *mut AnyObject;
+        let frame: NSRect = msg_send![view, frame];
+        let hidden: bool = msg_send![view, isHidden];
+        let mask: usize = msg_send![view, autoresizingMask];
+        let parent: *mut AnyObject = msg_send![view, superview];
+        let parent_frame = if parent.is_null() { "none".into() } else { let f: NSRect = msg_send![parent, frame]; r(f) };
+        let (content, opaque, win_state) = if ns_window == 0 { ("none".into(), true, String::new()) } else {
+            let w = ns_window as *mut AnyObject;
+            let cv: *mut AnyObject = msg_send![w, contentView];
+            let o: bool = msg_send![w, isOpaque];
+            let same = cv == parent;
+            let f: NSRect = msg_send![cv, frame];
+            let style: usize = msg_send![w, styleMask];
+            let behavior: usize = msg_send![w, collectionBehavior];
+            let level: isize = msg_send![w, level];
+            let max: objc2_foundation::NSSize = msg_send![w, maxSize];
+            let state = format!(
+                " style={style:#x} (resizable={} titled={} fullscreen={}) behavior={behavior:#x} level={level} maxSize={:.0}x{:.0}",
+                style & 8 != 0, style & 1 != 0, style & (1 << 14) != 0, max.width, max.height,
+            );
+            (format!("{}{}", r(f), if same { " (= parent)" } else { " (≠ parent)" }), o, state)
+        };
+        log::info!("[Window] {when}: page {} hidden={hidden} mask={mask} parent {parent_frame} contentView {content} windowOpaque={opaque}{win_state}", r(frame));
+    });
+}
+
+#[cfg(target_os = "macos")]
+fn autoresize_main_page(page: &tauri::Webview) {
+    let _ = page.set_auto_resize(false);
+    let _ = page.with_webview(|pw| unsafe {
+        use objc2::msg_send;
+        use objc2::runtime::AnyObject;
+        use objc2_foundation::NSRect;
+        let view = pw.inner() as *mut AnyObject;
+        let parent: *mut AnyObject = msg_send![view, superview];
+        if parent.is_null() {
+            return;
+        }
+        let bounds: NSRect = msg_send![parent, bounds];
+        let _: () = msg_send![view, setFrame: bounds];
+        // NSViewWidthSizable (2) | NSViewHeightSizable (16)
+        let _: () = msg_send![view, setAutoresizingMask: 18usize];
+    });
+}
+
 /// The main window is *not* declared in tauri.conf.json — declaring it there
 /// makes Tauri build the webview and load the whole React dashboard at process
 /// start, which is exactly the login-time cost we're avoiding. It's built here
@@ -488,6 +559,8 @@ fn ensure_main_window(app: &tauri::AppHandle) -> Option<tauri::Window> {
             attach_main_window_events(&win);
             #[cfg(target_os = "macos")]
             {
+                autoresize_main_page(built.as_ref());
+                log_main_page_geometry(&win, "main window created");
                 browser_pane::permissions::install(built.as_ref());
                 browser_pane::webcrypto::install(built.as_ref());
             }
@@ -534,6 +607,11 @@ fn focus_left_the_app(app: &tauri::AppHandle) -> bool {
 fn attach_main_window_events(window: &tauri::Window) {
     let win = window.clone();
     window.on_window_event(move |event| match event {
+        #[cfg(target_os = "macos")]
+        tauri::WindowEvent::Resized(size) => {
+            log::info!("[Window] resized to {}x{} (fullscreen={})", size.width, size.height, win.is_fullscreen().unwrap_or(false));
+            log_main_page_geometry(&win, "after resize");
+        }
         tauri::WindowEvent::CloseRequested { api, .. } => {
             api.prevent_close();
             let _ = win.hide();
@@ -915,6 +993,28 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
         log::error!("[Dock] expand_drawer: no main window");
         return;
     };
+    // A natively fullscreen window ignores setFrame: docking the full app
+    // while it was fullscreen left a screen-sized, see-through window in its
+    // own fullscreen Space — black, with the "CoolDesk" title bar on hover.
+    // Leave fullscreen first, then dock once the exit animation is over.
+    #[cfg(target_os = "macos")]
+    if main.is_fullscreen().unwrap_or(false) {
+        log::info!("[Dock] main window is fullscreen — leaving fullscreen before docking");
+        let _ = main.set_fullscreen(false);
+        let (app, st) = (app.clone(), st.clone());
+        std::thread::spawn(move || {
+            for _ in 0..30 {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                if !main.is_fullscreen().unwrap_or(false) {
+                    break;
+                }
+            }
+            // is_fullscreen flips before AppKit finishes animating back.
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            expand_drawer(&app, &st);
+        });
+        return;
+    }
     let scale = main.scale_factor().unwrap_or(1.0);
     match drawer_geom(app, &main, horizontal) {
         None => log::error!("[Dock] expand_drawer: no monitor geometry"),
@@ -1018,6 +1118,7 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
                     MAIN_PANEL_HORIZONTAL.store(horizontal, Ordering::Relaxed);
                     let _ = main_for_appkit.show();
                     let _ = main_for_appkit.set_focus();
+                    log_main_page_geometry(&main_for_appkit, "dock expanded");
                 });
                 MAC_DOCK_ACTIVE.store(true, Ordering::Relaxed);
             }
@@ -1253,8 +1354,13 @@ fn disable_dock(app: &tauri::AppHandle) -> DockState {
                 set_main_background(&window_for_appkit, None);
             });
         }
-        let _ = window.set_decorations(true);
+        // Resizable first: tao's set_decorations builds the new style mask
+        // from the *current* resizable flag and applies it a run-loop later,
+        // so the other order re-applied the dock's non-resizable mask after
+        // set_resizable(true) had already run. A non-resizable window can't
+        // grow, so fullscreen then sat at 1400x900 in a black Space.
         let _ = window.set_resizable(true);
+        let _ = window.set_decorations(true);
         let _ = window.set_shadow(true);
         let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 1400.0, height: 900.0 }));
         let _ = window.center();
@@ -3374,6 +3480,10 @@ pub fn run() {
         browser_pane::browser_pane_open,
         browser_pane::browser_pane_set_bounds,
         browser_pane::browser_pane_nav,
+        browser_pane::browser_pane_kill,
+        browser_pane::browser_pane_stop_capture,
+        browser_pane::site_permissions_get,
+        browser_pane::site_permissions_set,
         browser_pane::browser_pane_set_adblock,
         browser_pane::browser_pane_set_zoom,
         browser_pane::stats::browser_pane_stats,

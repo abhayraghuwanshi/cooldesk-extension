@@ -13,6 +13,7 @@ import { ShareToTeamModal } from '../team/ShareToTeamModal';
 import { WorkspaceCard } from './parts/WorkspaceCard';
 import { WorkspaceContextPanel } from './parts/WorkspaceContextPanel.jsx';
 import { AppGrid } from './parts/AppGrid';
+import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
 
 // Shared with Browse's side panel (Home → Notes, to-dos & commands).
 export { WorkspaceContextPanel };
@@ -107,6 +108,9 @@ export function WorkspaceList({
     const [deleteTarget, setDeleteTarget] = useState(null); // workspace pending confirmation
     const [deleteError, setDeleteError] = useState('');
     const [isDeleting, setIsDeleting] = useState(false);
+    // Docked sidebar: the opened workspace's to-dos and notes start folded
+    // behind a button row (WorkspaceContextPanel compact).
+    const isSidebarWidth = useIsSidebarWidth();
     // The All / Work / Play… mode bar is gone: Home shows every workspace.
     const activeMode = 'all';
 
@@ -393,7 +397,7 @@ export function WorkspaceList({
                         {/* Status / tasks / notes as their own section below the
                             items — keeps them out of the card's layout entirely. */}
                         {isDesktopApp && (
-                            <WorkspaceContextPanel workspace={expandedDetailWorkspace} />
+                            <WorkspaceContextPanel workspace={expandedDetailWorkspace} compact={isSidebarWidth} />
                         )}
                     </div>
                 ) : (

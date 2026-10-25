@@ -56,7 +56,16 @@ export function useExternalTabs(enabled) {
     if (!enabled || !window.electronAPI?.getRunningApps) return undefined;
     return runningAppsService.subscribe(({ runningApps, installedApps }) => {
       if (!Array.isArray(runningApps)) return;
-      const list = filterUserApps(enrichRunningAppsWithIcons(runningApps, installedApps));
+      // One chip per app: the service reports one entry per window (five
+      // screencapture windows were five chips). Same key as the dock's
+      // useLiveItems.
+      const seen = new Set();
+      const list = filterUserApps(enrichRunningAppsWithIcons(runningApps, installedApps)).filter((a) => {
+        const k = (a.path || a.name || '').toLowerCase();
+        if (!k || seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
       setApps([...list].sort((a, b) => (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase())));
     });
   }, [enabled]);

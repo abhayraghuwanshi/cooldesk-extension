@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { recordRecentFile, recordRecentShell } from '../../features/browser/recentHistory';
 
 // Tabs for Browse mode. A tab is a web page (its own native page, BrowserPane
 // with paneId `bt-<id>`), a file / folder from disk (`file: { path, isDir }`,
-// previewed in the main area) or a terminal (`term: { cwd }`, a shell that
-// runs as long as the tab is open — never put to sleep). Web tabs stay loaded while you switch away —
+// previewed in the main area), a terminal (`term: { cwd }`, a shell that
+// runs as long as the tab is open — never put to sleep) or a workspace note
+// (`note: { id, workspaceId, workspaceName }`, its TipTap editor — NoteTab). Web tabs stay loaded while you switch away —
 // up to MAX_LIVE of them; older ones "sleep" (their page is closed) and
 // reload when you come back, since every live page is a WebKit process of
-// 100–300 MB.
+// 100–300 MB. The pane guard (usePaneGuard) also puts tabs to sleep early —
+// idle, burning CPU in the background, or over the memory budget — via
+// `sleep`.
 
 const TABS_KEY = 'cooldesk.browse.tabs';
 const MAX_LIVE = 6;
@@ -74,6 +78,9 @@ function load(fallbackUrl) {
           req: { url: isWebUrl(t.url) ? t.url : null, key: 0 },
           file: t.file && typeof t.file.path === 'string' ? { path: t.file.path, isDir: !!t.file.isDir } : null,
           term: t.term ? { cwd: typeof t.term.cwd === 'string' ? t.term.cwd : null } : null,
+          note: t.note && typeof t.note.id === 'string' && t.note.workspaceId
+            ? { id: t.note.id, workspaceId: t.note.workspaceId, workspaceName: t.note.workspaceName || '' }
+            : null,
           back: cleanEntries(t.back),
           fwd: cleanEntries(t.fwd),
         }));
@@ -93,6 +100,12 @@ export function useBrowseTabs(initialUrl) {
   const { tabs, activeId } = state;
   // Most-recently-used order; the first MAX_LIVE stay loaded.
   const mru = useRef([activeId]);
+  // Put to sleep by the pane guard (until next activated), and when each tab
+  // was last left — the active tab is in use, so it has no entry.
+  const asleep = useRef(new Set());
+  const [sleepTick, setSleepTick] = useState(0);
+  const leftAt = useRef(new Map());
+  useEffect(() => () => { leftAt.current.set(activeId, Date.now()); }, [activeId]);
 
   // Persist (urls + titles only; requests are per-session).
   useEffect(() => {
@@ -102,7 +115,7 @@ export function useBrowseTabs(initialUrl) {
           activeId,
           // A terminal's start command isn't saved: after a restart the tab
           // is a plain shell, so a dev server doesn't start on its own.
-          tabs: tabs.map(({ id, url, title, file, term, back, fwd }) => ({ id, url, title, file, term: term ? { cwd: term.cwd } : term, back, fwd })),
+          tabs: tabs.map(({ id, url, title, file, term, note, back, fwd }) => ({ id, url, title, file, term: term ? { cwd: term.cwd } : term, note, back, fwd })),
         }));
       } catch { /* keep in memory */ }
     }, 300);
@@ -111,6 +124,7 @@ export function useBrowseTabs(initialUrl) {
 
   const touch = (id) => {
     mru.current = [id, ...mru.current.filter(x => x !== id)];
+    asleep.current.delete(id);
   };
 
   const activate = useCallback((id) => {
@@ -127,7 +141,7 @@ export function useBrowseTabs(initialUrl) {
         if (t.id !== s.activeId) return t;
         // Leaving a file for a page: the file goes on Back (page-to-page
         // history is the page's own).
-        const next = { ...t, url, file: null, term: null, req: { url, key: t.req.key + 1 } };
+        const next = { ...t, url, file: null, term: null, note: null, req: { url, key: t.req.key + 1 } };
         return t.file ? { ...next, back: [...(t.back || []), entryOf(t)].slice(-HISTORY), fwd: [] } : next;
       }),
     }));
@@ -202,21 +216,55 @@ export function useBrowseTabs(initialUrl) {
   if (!mru.current.includes(activeId)) touch(activeId);
   // Only web tabs count toward MAX_LIVE (file tabs have no web process).
   const live = useMemo(
-    () => new Set([activeId, ...mru.current.filter(id => tabs.some(t => t.id === id && !t.file && !t.term))].slice(0, MAX_LIVE)),
-    // mru is a ref; recompute when the active tab or the tab set changes.
-    [activeId, tabs],
+    () => new Set([activeId, ...mru.current.filter(id => !asleep.current.has(id) && tabs.some(t => t.id === id && !t.file && !t.term && !t.note))].slice(0, MAX_LIVE)),
+    // mru / asleep are refs; recompute when the active tab, the tab set or
+    // the sleepers change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeId, tabs, sleepTick],
   );
+
+  // A tab that fell asleep reloads its request when it wakes — point that at
+  // the page it was last on, not the one it was first opened at.
+  const prevLive = useRef(live);
+  useEffect(() => {
+    const gone = [...prevLive.current].filter(id => !live.has(id));
+    prevLive.current = live;
+    if (!gone.length) return;
+    setState(s => ({
+      ...s,
+      tabs: s.tabs.map(t => (gone.includes(t.id) && t.url && t.url !== t.req.url
+        ? { ...t, req: { url: t.url, key: t.req.key + 1 } }
+        : t)),
+    }));
+  }, [live]);
+
+  /** Close the pages of these background tabs; they reload when opened. */
+  const sleep = useCallback((ids) => {
+    const fresh = ids.filter(id => id !== activeId && !asleep.current.has(id));
+    if (!fresh.length) return;
+    fresh.forEach(id => asleep.current.add(id));
+    setSleepTick(n => n + 1);
+  }, [activeId]);
+
+  /** ms since tab `id` was last the active tab (0 for the active one). */
+  const idleFor = useCallback((id) => {
+    if (id === activeId) return 0;
+    const at = leftAt.current.get(id);
+    return at ? Date.now() - at : 0;
+  }, [activeId]);
 
   /** Tab already showing `url` (its current page or what was asked for). */
   const findByUrl = useCallback((url) => tabs.find(t => t.url === url || t.req.url === url) || null, [tabs]);
 
   /** A file or folder (switches to its tab if it's already open).
    *  inPlace: show it in the current tab, as following a link would — the
-   *  page or file it replaces goes on the tab's Back list. A terminal tab is
-   *  never replaced (its shell would end), so then it gets a new tab. */
+   *  page or file it replaces goes on the tab's Back list. A terminal or note
+   *  tab is never replaced (its shell would end; a note has no Back entry),
+   *  so then it gets a new tab. */
   const openFileTab = useCallback((rawPath, isDir = false, inPlace = false) => {
     if (!rawPath) return;
     const path = normalizePath(rawPath);
+    recordRecentFile(path, isDir);
     const existing = tabs.find(t => t.file?.path === path);
     if (existing) {
       touch(existing.id);
@@ -225,7 +273,7 @@ export function useBrowseTabs(initialUrl) {
     }
     const title = path.split(/[/\\]/).filter(Boolean).pop() || path;
     const here = tabs.find(t => t.id === activeId);
-    if (inPlace && here && !here.term) {
+    if (inPlace && here && !here.term && !here.note) {
       touch(here.id);
       setState(s => ({ ...s, tabs: s.tabs.map(t => (t.id === here.id ? goTo(t, { url: null, file: { path, isDir }, title }) : t)) }));
       return;
@@ -244,6 +292,9 @@ export function useBrowseTabs(initialUrl) {
    *  to its tab instead of starting a second copy. */
   const openTerminalTab = useCallback((rawCwd = null, inPlace = false, { run = null, title: name = null } = {}) => {
     const cwd = rawCwd ? normalizePath(rawCwd) : null;
+    // Plain shells only: a project command (run) is that project's, not a
+    // place you went.
+    if (!run) recordRecentShell(cwd);
     if (run) {
       const same = tabs.find(t => t.term?.run === run && t.term?.cwd === cwd);
       if (same) {
@@ -252,9 +303,9 @@ export function useBrowseTabs(initialUrl) {
         return;
       }
     }
-    const title = name || (cwd ? cwd.split(/[/\\]/).filter(Boolean).pop() || cwd : 'Terminal');
+    const title = name || (cwd ? cwd.split(/[/\\]/).filter(Boolean).pop() || cwd : 'Shell');
     const here = tabs.find(t => t.id === activeId);
-    if (inPlace && here && !here.url && !here.file && !here.term) {
+    if (inPlace && here && !here.url && !here.file && !here.term && !here.note) {
       touch(here.id);
       setState(s => ({ ...s, tabs: s.tabs.map(t => (t.id === here.id ? { ...t, title, term: { cwd, run } } : t)) }));
       return;
@@ -263,6 +314,34 @@ export function useBrowseTabs(initialUrl) {
     touch(id);
     setState(s => (s.tabs.length >= MAX_TABS ? s : {
       tabs: [...s.tabs, { id, url: null, title, req: { url: null, key: 0 }, term: { cwd, run } }],
+      activeId: id,
+    }));
+  }, [tabs, activeId]);
+
+  /** A workspace note in the main view, like a file: switches to its tab if
+   *  it's open, else takes the blank tab it was opened from or a new one.
+   *  `note`: { id, workspaceId, workspaceName, title } — a new note just has
+   *  a fresh id (NoteTab saves it once it has content). */
+  const openNoteTab = useCallback((note) => {
+    if (!note?.id || !note.workspaceId) return;
+    const existing = tabs.find(t => t.note?.id === note.id);
+    if (existing) {
+      touch(existing.id);
+      setState(s => ({ ...s, activeId: existing.id }));
+      return;
+    }
+    const meta = { id: note.id, workspaceId: note.workspaceId, workspaceName: note.workspaceName || '' };
+    const title = note.title || 'New note';
+    const here = tabs.find(t => t.id === activeId);
+    if (here && !here.url && !here.file && !here.term && !here.note) {
+      touch(here.id);
+      setState(s => ({ ...s, tabs: s.tabs.map(t => (t.id === here.id ? { ...t, title, note: meta } : t)) }));
+      return;
+    }
+    const id = newId();
+    touch(id);
+    setState(s => (s.tabs.length >= MAX_TABS ? s : {
+      tabs: [...s.tabs, { id, url: null, title, req: { url: null, key: 0 }, note: meta }],
       activeId: id,
     }));
   }, [tabs, activeId]);
@@ -291,5 +370,5 @@ export function useBrowseTabs(initialUrl) {
   }, [tabs, activeId]);
 
   const active = tabs.find(t => t.id === activeId) || tabs[0];
-  return { tabs, active, activeId: active.id, live, activate, openInActive, openInNew, openFileTab, openTerminalTab, step, close, cycle, noteUrl, noteTitle, move, findByUrl };
+  return { tabs, active, activeId: active.id, live, sleep, idleFor, activate, openInActive, openInNew, openFileTab, openTerminalTab, openNoteTab, step, close, cycle, noteUrl, noteTitle, move, findByUrl };
 }

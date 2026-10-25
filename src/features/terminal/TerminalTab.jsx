@@ -3,6 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useRef, useState } from 'react';
 import '@xterm/xterm/css/xterm.css';
 import './terminal.css';
+import { TabAddressBar } from '../../faces/browse/TabAddressBar';
 
 // A Browse tab running a real shell (src-tauri/src/terminal.rs) drawn by
 // xterm.js. The shell lives as long as the tab is mounted: switching tabs
@@ -52,7 +53,7 @@ function themeFor(el) {
  * @param run         a command typed in once the shell starts (and again on
  *                    Restart) — a project's dev server, build, tests…
  */
-export function TerminalTab({ tabId, cwd, run = null, active, onTitle, onOpenUrl, onShowInFiles, variant = 'tab', filesPath = null, onPopOut, onHide, toolbarStart = null, toolbarEnd = null }) {
+export function TerminalTab({ tabId, cwd, run = null, active, onTitle, onOpenUrl, onOpenPath, onOpenShell, onShowInFiles, variant = 'tab', filesPath = null, onPopOut, onHide, toolbarStart = null, toolbarEnd = null }) {
   const hostRef = useRef(null);
   const termRef = useRef(null);
   const fitRef = useRef(null);
@@ -222,7 +223,7 @@ export function TerminalTab({ tabId, cwd, run = null, active, onTitle, onOpenUrl
       <div className="term-root term-panel">
         <div className="term-panel-bar">
           <FontAwesomeIcon icon={faTerminal} className="term-address-icon" />
-          <span className="term-panel-name" title={folder}>{cwd ? baseName(cwd) : 'Terminal'}</span>
+          <span className="term-panel-name" title={folder}>{cwd ? baseName(cwd) : 'Shell'}</span>
           {filesPath && (
             <button className="bp-btn" onClick={cdHere} title={`cd to ${baseName(filesPath)} — the folder you're viewing`}>
               <FontAwesomeIcon icon={faLocationArrow} />
@@ -235,12 +236,12 @@ export function TerminalTab({ tabId, cwd, run = null, active, onTitle, onOpenUrl
             <FontAwesomeIcon icon={faRotateRight} />
           </button>
           {onPopOut && (
-            <button className="bp-btn" onClick={() => onPopOut(cwd)} title="New terminal tab in the main view">
+            <button className="bp-btn" onClick={() => onPopOut(cwd)} title="New shell tab in the main view">
               <FontAwesomeIcon icon={faArrowUpRightFromSquare} />
             </button>
           )}
           {onHide && (
-            <button className="bp-btn" onClick={onHide} title="Hide the terminal (Ctrl+`) — it keeps running">
+            <button className="bp-btn" onClick={onHide} title="Hide the shell (Ctrl+`) — it keeps running">
               <FontAwesomeIcon icon={faXmark} />
             </button>
           )}
@@ -257,11 +258,15 @@ export function TerminalTab({ tabId, cwd, run = null, active, onTitle, onOpenUrl
     <div className="bp-root ft-root term-root">
       <div className="bp-toolbar">
         {toolbarStart}
-        <div className="bp-address ft-address" title={folder}>
-          <FontAwesomeIcon icon={faTerminal} className="ft-address-icon term-address-icon" />
-          <span className="bp-host">{cwd ? baseName(cwd) : 'Terminal'}</span>
-          <span className="bp-path ft-dir">{run ? `$ ${run}` : folder}</span>
-        </div>
+        <TabAddressBar
+          icon={<FontAwesomeIcon icon={faTerminal} className="ft-address-icon term-address-icon" />}
+          label={cwd ? baseName(cwd) : 'Shell'}
+          sub={run ? `$ ${run}` : folder}
+          title={folder}
+          onOpenUrl={onOpenUrl}
+          onOpenPath={onOpenPath}
+          onOpenShell={onOpenShell}
+        />
         <div className="bp-capsule">
           <button className="bp-btn" onClick={clear} title={IS_MAC ? 'Clear (⌘K)' : 'Clear'}>
             <FontAwesomeIcon icon={faBroom} />

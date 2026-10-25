@@ -41,15 +41,17 @@ export function PageLoader({ url, compact = false }) {
  * bar (⌘T / ⌘L), bumping `findKey` opens find in page (⌘F). `onTools`
  * receives the visible tab's page controls (zoom, ad blocking, dark mode,
  * screenshot, find, open externally) for the side panel's Page tab.
+ * `heavy` (from usePaneGuard) shows a notice offering to stop a page that's
+ * been spinning a core; a page whose process died shows a Reload screen.
  */
-export function BrowserPane({ paneId, url, requestKey = 0, active, onNavigate, onOpenPath, onTitle, onTools, focusAddressKey = 0, findKey = 0, emptyState = null, toolbarStart = null, toolbarEnd = null }) {
+export function BrowserPane({ paneId, url, requestKey = 0, active, heavy = false, onDismissHeavy, onNavigate, onOpenPath, onOpenShell, onTitle, onTools, focusAddressKey = 0, findKey = 0, emptyState = null, toolbarStart = null, toolbarEnd = null }) {
   const [autoFit, setAutoFit] = useState(() => localStorage.getItem(AUTO_FIT_KEY) !== 'false');
   const onNavigateRef = useRef(onNavigate);
   useEffect(() => { onNavigateRef.current = onNavigate; }, [onNavigate]);
 
   const {
-    slotRef, pageUrl, title, loading, error, zoom, revealing,
-    adblockSupported, blocking, currentHost, toggleAdblock, nav,
+    slotRef, pageUrl, title, loading, error, zoom, revealing, crashed,
+    adblockSupported, blocking, currentHost, toggleAdblock, nav, reloadCrashed, stop,
   } = useNativePane({ paneId, url, requestKey, active, autoFit, onUrl: (u) => onNavigateRef.current?.(u) });
 
   const onTitleRef = useRef(onTitle);
@@ -71,7 +73,7 @@ export function BrowserPane({ paneId, url, requestKey = 0, active, onNavigate, o
   }, [focusAddressKey]);
   const [selected, setSelected] = useState(-1);
   const typed = editing && address !== pageUrl ? address : '';
-  const { items, scope } = useAddressSuggestions(typed, { enabled: editing, withFiles: !!onOpenPath });
+  const { items, scope } = useAddressSuggestions(typed, { enabled: editing, withFiles: !!onOpenPath, withShells: !!onOpenShell });
   useEffect(() => { setSelected(items[0]?.id === 'typed' ? 0 : -1); }, [items]);
 
   const finishEditing = () => {
@@ -81,7 +83,8 @@ export function BrowserPane({ paneId, url, requestKey = 0, active, onNavigate, o
 
   const pick = (item) => {
     finishEditing();
-    if (item.path) onOpenPath?.(item.path, item.isDir);
+    if (item.kind === 'shell') onOpenShell?.(item.cwd);
+    else if (item.path) onOpenPath?.(item.path, item.isDir);
     else if (item.url) onNavigateRef.current?.(item.url, { requested: true });
   };
 
@@ -280,10 +283,26 @@ export function BrowserPane({ paneId, url, requestKey = 0, active, onNavigate, o
       </div>
       {/* The suggestions panel is a sibling over the slot, not inside it, so
           the overlay check sees the slot covered and the page hides under it. */}
+      {heavy && !crashed && (
+        <div className="bp-notice" role="alert">
+          <span><strong>{currentHost || 'This page'}</strong> is using a lot of CPU and may slow down your Mac.</span>
+          <button className="bp-notice-btn" onClick={stop}>Stop page</button>
+          <button className="bp-btn" onClick={onDismissHeavy} title="Keep running">
+            <FontAwesomeIcon icon={faXmark} />
+          </button>
+        </div>
+      )}
       <div className="bp-stage">
         <div className="bp-slot" ref={slotRef}>
           {error
             ? <div className="bp-empty bp-error">{error}</div>
+            : crashed ? (
+              <div className="bp-crashed" role="status">
+                <strong>This page stopped</strong>
+                <span>{currentHost ? `${currentHost} ran out of memory or crashed.` : 'The page ran out of memory or crashed.'}</span>
+                <button className="bp-notice-btn" onClick={reloadCrashed}>Reload</button>
+              </div>
+            )
             : revealing ? <PageLoader url={url} /> : !url && emptyState}
         </div>
         {editing && (

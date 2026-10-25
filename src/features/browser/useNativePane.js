@@ -20,6 +20,10 @@ const SYNC_MS = 120;
 // site's stray ad request can't keep it covered.
 const REVEAL_MAX_MS = 6000;
 const PROBES = [0.08, 0.5, 0.92];
+// A page whose process dies (stats.rs reports it) reloads by itself once it's
+// on screen — unless it already did that this recently, then it waits for
+// the user's Reload, so a page that keeps crashing doesn't loop.
+const CRASH_RELOAD_MS = 60000;
 
 // Closing is deferred one tick so an immediate remount (StrictMode's dev
 // double-mount, HMR) reuses the live webview instead of destroying and
@@ -112,6 +116,11 @@ export function useNativePane({ paneId, url, requestKey = 0, active, clipRef = n
   // Loading gate for requested navigations (not in-page clicks).
   const [revealing, setRevealing] = useState(false);
   const gateRef = useRef(null); // { started: bool, timer } while gated
+  // Its WebContent process died: the view is blank, so it hides and the slot
+  // says so until a reload starts.
+  const [crashed, setCrashed] = useState(false);
+  const crashedRef = useRef(false);
+  const lastCrashReloadRef = useRef(0);
   const [adblockSupported, setAdblockSupported] = useState(false);
   const [allowed, setAllowed] = useState(loadAllowed);
   const allowedRef = useRef(allowed);
@@ -134,6 +143,7 @@ export function useNativePane({ paneId, url, requestKey = 0, active, clipRef = n
     // first failing one when visibility changes).
     const reason = !active ? 'inactive'
       : gateRef.current ? 'loading'
+        : crashedRef.current ? 'crashed'
         : (r.width < 1 || r.height < 1) ? 'zero-size'
           : document.hidden ? 'document-hidden'
             : (clip && (r.width < MIN_VISIBLE || r.height < MIN_VISIBLE)) ? 'outside-clip'
@@ -257,8 +267,19 @@ export function useNativePane({ paneId, url, requestKey = 0, active, clipRef = n
         onUrlRef.current?.(payload.url);
       }
       if (payload.title != null) setTitle(payload.title);
+      if (payload.crashed) {
+        crashedRef.current = true;
+        setCrashed(true);
+        setLoading(false);
+      }
       if (payload.loading != null) {
         setLoading(payload.loading);
+        // A load starting means there's a live process again.
+        if (payload.loading && crashedRef.current) {
+          crashedRef.current = false;
+          setCrashed(false);
+          lastBoundsRef.current = '';
+        }
         // Lift the loading gate once the requested page has started and
         // then finished (a Finished from the previous page doesn't count).
         const gate = gateRef.current;
@@ -308,8 +329,28 @@ export function useNativePane({ paneId, url, requestKey = 0, active, clipRef = n
     if (openedRef.current) invoke('browser_pane_nav', { id: paneId, action }).catch(() => { });
   }, [paneId]);
 
+  const reloadCrashed = useCallback(() => {
+    lastCrashReloadRef.current = Date.now();
+    nav('reload');
+  }, [nav]);
+  useEffect(() => {
+    if (crashed && active && Date.now() - lastCrashReloadRef.current >= CRASH_RELOAD_MS) {
+      console.info(`[BrowserPane] ${paneId} crashed, reloading`);
+      reloadCrashed();
+    }
+  }, [crashed, active, paneId, reloadCrashed]);
+
+  /** End a runaway page's process; it then shows as crashed, with Reload. */
+  const stop = useCallback(() => {
+    // Stopped on purpose: don't bring it straight back.
+    lastCrashReloadRef.current = Date.now();
+    invoke('browser_pane_kill', { id: paneId })
+      .then(() => { crashedRef.current = true; setCrashed(true); setLoading(false); })
+      .catch(err => console.warn('[BrowserPane] stop failed:', err));
+  }, [paneId]);
+
   return {
-    slotRef, pageUrl, title, loading, error, zoom, shown, revealing,
-    adblockSupported, blocking, currentHost, toggleAdblock, nav,
+    slotRef, pageUrl, title, loading, error, zoom, shown, revealing, crashed,
+    adblockSupported, blocking, currentHost, toggleAdblock, nav, reloadCrashed, stop,
   };
 }

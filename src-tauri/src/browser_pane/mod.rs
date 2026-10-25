@@ -153,6 +153,12 @@ async fn open_pane(
             if payload.url().scheme() == "about" {
                 return;
             }
+            // Mute follows the site, so set it for each page this pane loads.
+            #[cfg(target_os = "macos")]
+            if let Some(host) = payload.url().host_str() {
+                let muted = permissions::get(host).muted;
+                let _ = wv.with_webview(move |pw| unsafe { permissions::apply_muted(pw.inner() as _, muted) });
+            }
             let _ = wv.emit(
                 "browser-pane-state",
                 PaneState {
@@ -505,10 +511,42 @@ pub fn browser_pane_nav(app: tauri::AppHandle, id: String, action: String) -> Re
     let js = match action.as_str() {
         "back" => "history.back()",
         "forward" => "history.forward()",
-        "reload" => "location.reload()",
+        // Native, not location.reload(): a hung page never runs the script,
+        // and a crashed one has no process to run it in — WebKit starts a
+        // fresh one for a native reload.
+        "reload" => return wv.reload().map_err(|e| e.to_string()),
         other => return Err(format!("Unknown action: {other}")),
     };
     wv.eval(js).map_err(|e| e.to_string())
+}
+
+/// Stop a runaway page (spinning a core, unresponsive) by ending its WebKit
+/// process, as Safari's "Close page" does for a page that slows the Mac. The
+/// pane then shows as crashed (stats.rs) with a Reload button.
+#[tauri::command]
+pub fn browser_pane_kill(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    let wv = app.get_webview(&label_for(&id)).ok_or("Browser pane is not open")?;
+    #[cfg(target_os = "macos")]
+    {
+        return wv
+            .with_webview(|pw| unsafe {
+                use objc2::msg_send;
+                use objc2::runtime::AnyObject;
+                let view = pw.inner() as *mut AnyObject;
+                let supported: bool = msg_send![view, respondsToSelector: objc2::sel!(_killWebContentProcess)];
+                if supported {
+                    let _: () = msg_send![view, _killWebContentProcess];
+                } else {
+                    let _: () = msg_send![view, stopLoading];
+                }
+            })
+            .map_err(|e| e.to_string());
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = wv;
+        Err("Stopping a page isn't available on this platform yet".into())
+    }
 }
 
 /// Page zoom (WKWebView pageZoom on macOS 11+, WebView2 zoom factor on
@@ -540,5 +578,74 @@ pub fn browser_pane_close(app: tauri::AppHandle, id: String) -> Result<(), Strin
     match app.get_webview(&label_for(&id)) {
         Some(wv) => wv.close().map_err(|e| e.to_string()),
         None => Ok(()),
+    }
+}
+
+/// Saved camera / microphone / sound settings for a site (Page tab).
+#[tauri::command]
+pub fn site_permissions_get(host: String) -> serde_json::Value {
+    #[cfg(target_os = "macos")]
+    {
+        serde_json::to_value(permissions::get(&host)).unwrap_or_default()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = host;
+        serde_json::Value::Null
+    }
+}
+
+/// Save a site's settings and apply them to its open pages now: mute or
+/// unmute, and a newly blocked camera / microphone is turned off.
+#[tauri::command]
+pub fn site_permissions_set(app: tauri::AppHandle, host: String, settings: serde_json::Value) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let next: permissions::SitePermissions = serde_json::from_value(settings).map_err(|e| e.to_string())?;
+        let key = permissions::site_key(&host);
+        permissions::set(&key, next);
+        log::info!("[BrowserPane] site permissions for {key}: camera={:?} microphone={:?} muted={}",
+            serde_json::to_value(next.camera).unwrap_or_default(), serde_json::to_value(next.microphone).unwrap_or_default(), next.muted);
+        for (label, wv) in app.webviews() {
+            if !label.starts_with(LABEL_PREFIX) {
+                continue;
+            }
+            let on_site = wv.url().ok().and_then(|u| u.host_str().map(permissions::site_key)).is_some_and(|h| h == key);
+            if !on_site {
+                continue;
+            }
+            let _ = wv.with_webview(move |pw| unsafe {
+                let view = pw.inner() as *mut objc2::runtime::AnyObject;
+                permissions::apply_muted(view, next.muted);
+                permissions::stop_capture(
+                    view,
+                    next.camera == permissions::Decision::Block,
+                    next.microphone == permissions::Decision::Block,
+                );
+            });
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, host, settings);
+        Err("Site permissions aren't available on this platform yet".into())
+    }
+}
+
+/// Turn off a page's camera and/or microphone right now (Page tab's Stop).
+#[tauri::command]
+pub fn browser_pane_stop_capture(app: tauri::AppHandle, id: String, camera: bool, microphone: bool) -> Result<(), String> {
+    let wv = app.get_webview(&label_for(&id)).ok_or("Browser pane is not open")?;
+    #[cfg(target_os = "macos")]
+    {
+        return wv
+            .with_webview(move |pw| unsafe { permissions::stop_capture(pw.inner() as _, camera, microphone) })
+            .map_err(|e| e.to_string());
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (wv, camera, microphone);
+        Err("Not available on this platform yet".into())
     }
 }

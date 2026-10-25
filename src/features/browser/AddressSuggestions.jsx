@@ -1,4 +1,4 @@
-import { faArrowRight, faFile, faFolder, faGlobe, faMagnifyingGlass } from '@fortawesome/free-solid-svg-icons';
+import { faArrowRight, faFile, faFolder, faGlobe, faMagnifyingGlass, faTerminal } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useRef } from 'react';
 
@@ -9,7 +9,8 @@ import { useEffect, useRef } from 'react';
 const GROUPS = [
   { kinds: ['go', 'search'], label: null },
   { kinds: ['link'], label: 'Links' },
-  { kinds: ['folder', 'file'], label: 'Files' },
+  { kinds: ['folder', 'file'], label: 'Files', recentLabel: 'Recent files' },
+  { kinds: ['shell'], label: 'Recent shells' },
 ];
 
 function KindIcon({ item }) {
@@ -17,7 +18,8 @@ function KindIcon({ item }) {
   const icon = item.kind === 'search' ? faMagnifyingGlass
     : item.kind === 'go' ? faArrowRight
       : item.kind === 'folder' ? faFolder
-        : item.kind === 'file' ? faFile : faGlobe;
+        : item.kind === 'file' ? faFile
+          : item.kind === 'shell' ? faTerminal : faGlobe;
   return <FontAwesomeIcon className={`as-kind as-kind-${item.kind}`} icon={icon} />;
 }
 
@@ -46,7 +48,7 @@ export function AddressSuggestions({ items, selected, onPick, onHover, scope }) 
         if (groupItems.length === 0) return null;
         return (
           <section key={group.kinds[0]} className="as-group">
-            {group.label && <h4>{group.label}</h4>}
+            {group.label && <h4>{groupItems.every(i => i.recent) && group.recentLabel ? group.recentLabel : group.label}</h4>}
             {groupItems.map(item => {
               const i = items.indexOf(item);
               return (
@@ -55,7 +57,7 @@ export function AddressSuggestions({ items, selected, onPick, onHover, scope }) 
                   className={`as-item ${i === selected ? 'selected' : ''}`}
                   onMouseEnter={() => onHover(i)}
                   onClick={() => onPick(item)}
-                  title={item.url || item.path}
+                  title={item.url || item.path || item.sub}
                 >
                   <span className="as-icon"><KindIcon item={item} /></span>
                   <span className="as-text">
