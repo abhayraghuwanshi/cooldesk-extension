@@ -215,19 +215,23 @@ export function CoolDeskContainer({
   // below) — gate WorkspaceShell's own settings nav dot on the same check so
   // it isn't reachable from a width where it can't actually open correctly.
 
-  // macOS Dock look: while docked (sidebar or bar), the Rust side makes the
-  // window non-opaque and `dock-see-through.css` drops the panel/wallpaper
-  // background so only the cards (sidebar) or the pill (bar) float over the
-  // desktop. macOS only — other platforms keep an opaque window, where
-  // transparent CSS would just show black.
-  const isSeeThroughDock = isDesktopApp
-    && /Mac/.test(navigator.platform)
-    && dockState?.enabled
-    && dockState.mode === 'drawer';
-  // Sidebar (left/right) additionally sits on a native frosted panel
-  // (`set_effects` in `expand_drawer`), so its cards switch to translucent
-  // widget tiles — see `dock-sidebar` in dock-see-through.css.
-  const isSidebarDock = isSeeThroughDock && (dockState.side === 'left' || dockState.side === 'right');
+  const isDockedDrawer = isDesktopApp && !!dockState?.enabled && dockState.mode === 'drawer';
+
+  // See-through on every platform now. How the window gets there differs —
+  // macOS flips `setOpaque(false)` on the live window (`dock::set_see_through`),
+  // Windows is built `.transparent(true)` up front because Win32/WebView2 fixes
+  // transparency at creation — but from here it is one flag either way.
+  //
+  // This was long assumed macOS-only. The objection on record was that
+  // `backdrop-filter` glitches inside a transparent webview, which is true of
+  // WebKit and not of Chromium/WebView2; see `ensure_main_window`.
+  const isSeeThroughDock = isDockedDrawer;
+
+  // Vertical sides additionally get the floating-tile treatment — card
+  // border/radius/shadow, hidden scrollbars, lifted text (`dock-sidebar` in
+  // dock-see-through.css). The bar has its own pill styling instead.
+  const isSidebarDock = isDockedDrawer
+    && (dockState.side === 'left' || dockState.side === 'right');
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle('dock-see-through', !!isSeeThroughDock);

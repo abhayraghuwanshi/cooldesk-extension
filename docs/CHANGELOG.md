@@ -4,7 +4,7 @@ All notable changes to CoolDesk (desktop app + Chrome extension) are documented 
 
 ## [Unreleased]
 
-## [2.0.16] — 2026-10-08
+## [2.0.16] — 2026-10-18
 
 ### Added
 - **New tab layouts.** A layout button next to settings switches the extension's new tab between Classic, Mirror, Split, Stacked and Focus, and shows or hides the widgets, activity summary, feed, Favorites and individual feed tabs — or everything (Zen, wallpaper only). Hiding one side keeps the other where it was.
@@ -14,11 +14,16 @@ All notable changes to CoolDesk (desktop app + Chrome extension) are documented 
 - Security policy and issue templates for the repo.
 
 ### Changed
+- **Windows: the docked sidebar and bar are now see-through, like macOS.** Cards (sidebar) and the pill (bar) float over the real desktop instead of a panel. The window is built `.transparent(true)` on Windows; macOS keeps its opaque window and flips `setOpaque(false)` only while docked, which is the one thing Win32/WebView2 cannot do since it fixes transparency at window creation. This was long assumed impossible off macOS — the objection on record was that `backdrop-filter` glitches inside a transparent window, which is WebKit’s problem and not Chromium/WebView2’s. The bar window now also hugs its pill (`BAR_CONTENT_WIDTH` and `dock_set_bar_content_width` are no longer macOS-only): a transparent full-width strip is invisible but still swallows clicks meant for windows behind it.
+- **Windows/Linux: the dock and sidebar no longer show the wallpaper.** Wallpaper mode makes `body` transparent so the desktop shows through the window — right at full size, wrong in a narrow strip where what shows through is mostly other windows and cards become hard to read against them. macOS already handled this with its see-through dock (`dock-see-through.css`), which needs the native `set_see_through` it alone has; everywhere else the docked panel now goes solid instead. Dropping the `wallpaper-enabled` class lets each theme's own `.bg-*` gradient reassert itself, so no colour is hardcoded and light themes stay light. The saved preference is untouched — undocking brings the wallpaper straight back.
 - **See-through widgets** in the extension: widgets drop their own dark card and sit on the board's glass; primary buttons (Start, Save…) are glass instead of solid white.
 - **No scrollbars on the new tab panels** — content fades out at the edge that has more to scroll to. Other scrollbars are 6px again (a global Firefox rule had switched Chrome to its wider native bar).
 - Cards have no outline (the glass and its shadow define the edge); the feed's tabs are an underline tab bar; feed row labels and "2 tabs" counts are soft pills; the Favorites strip scrolls inside small cards instead of clipping.
 
 ### Fixed
+- **Windows: dozens of terminal windows opened on launch (regression in 2.0.15).** The folder tiles' git badge ran `git status` as a child process per folder, without `CREATE_NO_WINDOW`. A GUI app spawning a console program makes Windows allocate a console for it, and with "Default terminal application" set to Windows Terminal each allocation became a real terminal window — about 30 at startup and another ~20 every two minutes, since the badge is computed for the folders of *every* workspace and refreshed on a timer. The same flag was missing on the `.cooldesk` project-link and local-resource git calls. All git invocations now go through `proc::command`, which sets the flag on Windows and is a plain `Command` elsewhere. Unaffected on macOS and Linux, which have no console to allocate.
+- **Windows: "Update" in the app never worked, in any release.** It ran `winget upgrade --id cool-products.CoolDesk`, but the published package is `CoolDesk.CoolDesk` — the id had been derived from the bundle publisher (`CN=cool-products`) instead of the identifier the release workflow submits. winget answered "No installed package found matching input criteria" in the console window that briefly appeared, and because `run_winget_upgrade` returned success as soon as the process *spawned* (never waiting for it or checking its exit code), the app reported the update as applied and the native-updater fallback was unreachable. Present since 2026-06-15, in every tag from 1.0.7 to 2.0.15.
+- **The bundled updater now installs on Windows too**, instead of being stubbed out in favour of winget. It works regardless of how the app was installed, and `latest.json` already ships signed `windows-x86_64`, `-nsis` and `-msi` entries. winget stays as a fallback, now with the right id and a pre-flight check so it reports failure rather than claiming success.
 - Custom layout: the page could sit 1px taller than the window and snap the feed's scroll back to the top; the board now fits the screen without a page scrollbar.
 - A square-cornered blur showing behind cards after a layout switch.
 - A second rounded outline inside the feed card.

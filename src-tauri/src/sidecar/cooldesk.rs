@@ -430,7 +430,7 @@ fn relative_path(base: &Path, target: &Path) -> String {
 /// A project's git remote, the canonical fallback when a relative path doesn't
 /// resolve on someone else's machine. `None` when there is no remote.
 fn git_remote(root: &Path) -> Option<String> {
-    let out = std::process::Command::new("git")
+    let out = crate::proc::command("git")
         .args(["config", "--get", "remote.origin.url"])
         .current_dir(root)
         .output()
@@ -698,7 +698,7 @@ fn ensure_local_ignored(project_root: &Path) -> Result<PathBuf, String> {
     // Only meaningful inside a git work tree; no git (or not a repo) means there
     // is nothing that could commit the file.
     let git = |args: &[&str]| {
-        std::process::Command::new("git")
+        crate::proc::command("git")
             .args(args)
             .current_dir(project_root)
             .output()

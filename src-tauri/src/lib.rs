@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::tray::TrayIconBuilder;
 use tauri::menu::{Menu, MenuItem};
 
+mod proc;
 mod sidecar;
 mod system;
 mod focus;
@@ -543,14 +544,27 @@ fn ensure_main_window(app: &tauri::AppHandle) -> Option<tauri::Window> {
         .resizable(true)
         .fullscreen(false)
         .visible(false)
-        // Deliberately NOT `.transparent(true)`: it was added to let the
-        // docked sidebar's rounded corners reveal real desktop, but WebKit
+        // Transparent on Windows only, and the asymmetry is deliberate.
+        //
+        // This was once transparent everywhere, to let the docked sidebar's
+        // rounded corners reveal real desktop, and was reverted because WebKit
         // renders `backdrop-filter: blur()` unreliably inside a transparent
-        // NSWindow (undefined content behind the blur) — and this app uses
-        // blur in ~170 places (header, modals, dropdowns...), so it showed up
-        // as random blur glitches across the whole app, not just the
-        // sidebar. Traded the sidebar's rounded corners for square ones
-        // instead of shipping that regression app-wide.
+        // NSWindow (undefined content behind the blur) — with blur in ~170
+        // places (header, modals, dropdowns…) that showed up as glitches across
+        // the whole app, not just the sidebar.
+        //
+        // That objection is WebKit's, not Chromium's: WebView2 composites blur
+        // in a transparent window correctly, so Windows can have the
+        // see-through dock that macOS gets. macOS still must not — it keeps its
+        // opaque window and flips `setOpaque(false)` only while docked
+        // (`dock::set_see_through`), which is the one thing Win32/WebView2
+        // cannot do, since it fixes transparency at window creation.
+        //
+        // Consequence worth knowing: on Windows the window is transparent for
+        // the whole session, so the full-size app is opaque only because the
+        // theme's `.bg-*` gradient paints over it. Anything that makes `body`
+        // transparent outside the dock reveals the desktop there too.
+        .transparent(cfg!(windows))
         .build();
 
     match built {
@@ -759,10 +773,11 @@ const BAR_MAX_HEIGHT: u32 = 220;
 
 /// Gap (logical px) between the vertical sidebar panel and its left/right
 /// edges (inner edge and outer/docked edge alike) — a floating panel, not a
-/// flush-docked strip. Relies on the main window being `.transparent(true)`
-/// (see `ensure_main_window`) plus the `sidebar-docked` body class
-/// (`CoolDeskContainer.jsx`) so the gap and rounded corners reveal real
-/// desktop instead of window-colored margin.
+/// flush-docked strip. Needs a non-opaque window plus the `sidebar-docked`
+/// body class (`CoolDeskContainer.jsx`) for the gap and rounded corners to
+/// reveal real desktop instead of window-colored margin — on Windows via
+/// `.transparent(true)` at creation (`ensure_main_window`), on macOS via
+/// `dock::set_see_through` flipping the live window while docked.
 const SIDEBAR_MARGIN: i32 = 16;
 
 /// Gap (logical px) between the vertical sidebar panel and the screen's
@@ -1036,6 +1051,17 @@ fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
                     .unwrap_or((mx, mw));
                 #[cfg(not(windows))]
                 let (bx, bw) = (mx, mw);
+                // Hug the pill instead of spanning the edge, same as macOS
+                // (see `BAR_CONTENT_WIDTH`). Needed as soon as the bar is
+                // see-through: a transparent full-width strip is invisible but
+                // still swallows clicks meant for windows behind it. 0 = the
+                // frontend has not reported a width yet -> span, as before.
+                let content = logical_to_physical(BAR_CONTENT_WIDTH.load(Ordering::Relaxed) as i32, scale);
+                let (bx, bw) = if content > 0 && content < bw {
+                    (bx + (bw - content) / 2, content)
+                } else {
+                    (bx, bw)
+                };
                 (bx, y, bw, h)
             } else {
                 // Floating panel: gap on every edge, including the outer/docked
@@ -1480,7 +1506,7 @@ fn dock_set_width(app: tauri::AppHandle, width: u32) -> Result<DockState, String
 /// full-width bar.
 #[tauri::command(rename_all = "snake_case")]
 fn dock_set_bar_content_width(app: tauri::AppHandle, width: u32) {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     {
         if BAR_CONTENT_WIDTH.swap(width, Ordering::Relaxed) == width {
             return;
@@ -1491,14 +1517,21 @@ fn dock_set_bar_content_width(app: tauri::AppHandle, width: u32) {
         {
             return;
         }
-        let Some(main) = main_window(&app) else { return };
-        let _ = app.run_on_main_thread(move || {
-            if let Some(frame) = mac_drawer_frame(&st, false) {
-                *MAIN_SCREEN_FRAME.lock().unwrap() = dock::set_window_frame(&main, frame);
-            }
-        });
+        #[cfg(target_os = "macos")]
+        {
+            let Some(main) = main_window(&app) else { return };
+            let _ = app.run_on_main_thread(move || {
+                if let Some(frame) = mac_drawer_frame(&st, false) {
+                    *MAIN_SCREEN_FRAME.lock().unwrap() = dock::set_window_frame(&main, frame);
+                }
+            });
+        }
+        #[cfg(windows)]
+        // Re-place the window at the new pill width. `expand_drawer` reads
+        // BAR_CONTENT_WIDTH itself, so this just re-runs the normal path.
+        expand_drawer(&app, &st);
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", windows)))]
     let _ = (app, width);
 }
 
@@ -1586,8 +1619,8 @@ fn parse_update_info(current: String, release: &serde_json::Value) -> UpdateInfo
 }
 
 /// Detection only: compares the running version against the latest GitHub
-/// release tag. The actual update is performed by `run_winget_upgrade` so we
-/// never silently overwrite a winget-managed install.
+/// release tag. The install itself is `install_native_update`, with
+/// `run_winget_upgrade` as a Windows fallback.
 ///
 /// Doubles as the anonymous usage heartbeat: unless `analytics_enabled` is
 /// `Some(false)`, the version check is routed through our own endpoint, which
@@ -1637,17 +1670,53 @@ async fn check_winget_update(
     Ok(parse_update_info(current, &release))
 }
 
-/// Launches `winget upgrade` for this package in a new console window so the
-/// user can see progress. winget replaces the app and relaunches it.
+/// The winget package identifier, which must match the `identifier:` komac
+/// submits in `.github/workflows/release.yml`. It is *not* derived from the
+/// bundle `publisher` ("CN=cool-products") — using that produced
+/// `cool-products.CoolDesk`, which matches nothing, so `winget upgrade` failed
+/// with "No installed package found matching input criteria" on every machine.
+#[cfg(windows)]
+const WINGET_PACKAGE_ID: &str = "CoolDesk.CoolDesk";
+
+/// Last-resort Windows updater: hand off to `winget upgrade` in a visible
+/// console so the user can watch it, since winget replaces the app underneath
+/// us and relaunches it.
+///
+/// Only reached when the bundled updater could not install (see
+/// `install_native_update`, which `updateService.js` tries first). winget is
+/// not a reliable primary: it only knows installs it can match to an
+/// Add/Remove-Programs entry, so a user who ran the downloaded `.exe` may be
+/// invisible to it, and a machine carrying both the MSI and the NSIS install
+/// has *two* entries for one id, which makes `-e` ambiguous.
+///
+/// Verifies the package is actually known before spawning. The old version
+/// returned `Ok` as soon as `spawn()` succeeded, so a winget that failed a
+/// moment later still reported success — the UI claimed the update was done
+/// and the caller's fallback never ran.
 #[tauri::command]
 fn run_winget_upgrade() -> Result<(), String> {
     #[cfg(windows)]
     {
+        // Headless pre-flight: `winget list` exits non-zero when nothing
+        // matches, which is the failure the user used to see flash past in a
+        // console. Doing it here keeps the error in `Result` where the
+        // frontend can act on it.
+        let listed = proc::command("winget")
+            .args(["list", "--id", WINGET_PACKAGE_ID, "-e"])
+            .output()
+            .map_err(|e| format!("winget not available: {e}"))?;
+        if !listed.status.success() {
+            return Err(format!(
+                "winget does not know this install (package {WINGET_PACKAGE_ID} not found)"
+            ));
+        }
+
+        // Visible on purpose: this one the user should see.
         std::process::Command::new("winget")
             .args([
                 "upgrade",
                 "--id",
-                "cool-products.CoolDesk",
+                WINGET_PACKAGE_ID,
                 "-e",
                 "--accept-package-agreements",
                 "--accept-source-agreements",
@@ -1662,32 +1731,29 @@ fn run_winget_upgrade() -> Result<(), String> {
     }
 }
 
-/// macOS/Linux counterpart to `run_winget_upgrade`: downloads the signed
-/// update artifact via `tauri-plugin-updater` and replaces the app in place,
-/// then relaunches. Not used on Windows — that stays on winget, which is
-/// already the OS-native package manager there.
+/// Download the signed update artifact via `tauri-plugin-updater`, replace the
+/// app in place and relaunch. The primary path on every platform, Windows
+/// included.
+///
+/// Windows used to be excluded here and sent to winget instead. That was the
+/// wrong default: the updater works regardless of how the app was installed,
+/// `latest.json` already publishes signed `windows-x86_64`, `-nsis` and `-msi`
+/// entries, and the plugin is registered unconditionally — the startup check
+/// has always run on Windows, only the install was stubbed out.
 #[tauri::command]
 async fn install_native_update(app: tauri::AppHandle) -> Result<(), String> {
-    #[cfg(windows)]
-    {
-        let _ = &app;
-        Err("use run_winget_upgrade on Windows".to_string())
-    }
-    #[cfg(not(windows))]
-    {
-        use tauri_plugin_updater::UpdaterExt;
-        let updater = app.updater().map_err(|e| e.to_string())?;
-        let update = updater
-            .check()
-            .await
-            .map_err(|e| e.to_string())?
-            .ok_or_else(|| "no update available".to_string())?;
-        update
-            .download_and_install(|_chunk, _total| {}, || {})
-            .await
-            .map_err(|e| e.to_string())?;
-        app.restart();
-    }
+    use tauri_plugin_updater::UpdaterExt;
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "no update available".to_string())?;
+    update
+        .download_and_install(|_chunk, _total| {}, || {})
+        .await
+        .map_err(|e| e.to_string())?;
+    app.restart();
 }
 
 #[tauri::command]

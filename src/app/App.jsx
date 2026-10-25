@@ -18,6 +18,8 @@ import { config, library } from '@fortawesome/fontawesome-svg-core';
 config.autoAddCss = false; // Disable JS-based CSS injection — we import it above
 import { faBroom, faClone, faGear, faGlobe, faHistory, faPlus, faRotateRight, faThumbtack, faTrash, faTriangleExclamation, faUndo } from '@fortawesome/free-solid-svg-icons';
 import { CoolDeskContainer } from '../faces/shell/CoolDeskContainer';
+import { useDockState } from '../features/dock/useDockState';
+import { isElectronApp } from '../services/environmentDetector';
 import { UpdateBanner } from '../features/updates/UpdateBanner';
 import categoryManager from '../data/categories';
 import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, getWorkspace, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges } from '../db/index.js';
@@ -133,6 +135,23 @@ export default function App() {
       return true;
     }
   });
+
+  // Wallpaper mode makes `body` transparent (App.css) so the desktop shows
+  // through the `transparent: true` window — which is the whole point at full
+  // size, and wrong while docked: at sidebar/bar widths the desktop behind a
+  // narrow strip is mostly other windows, and reading cards against whatever
+  // happens to be under them is the problem macOS solved with its see-through
+  // dock (`dock-see-through.css`). macOS keeps that treatment — it has the
+  // native `set_see_through` to make the window genuinely non-opaque.
+  // Everywhere else the dock goes solid instead: dropping `wallpaper-enabled`
+  // lets each theme's own `.bg-*` gradient reassert itself, so there is no
+  // hardcoded colour here and light themes stay light.
+  const dockState = useDockState();
+  const wallpaperSuppressedByDock = isElectronApp()
+    && !/Mac/.test(navigator.platform)
+    && !!dockState?.enabled
+    && dockState.mode === 'drawer';
+  const wallpaperActive = wallpaperEnabled && !wallpaperSuppressedByDock;
   const [wallpaperUrl, setWallpaperUrl] = useState(() => {
     try {
       return localStorage.getItem('wallpaperUrl') || 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1920&q=80';
@@ -701,16 +720,18 @@ export default function App() {
   useLayoutEffect(() => {
     try {
       console.log('[App] Wallpaper enabled changed to:', wallpaperEnabled);
+      // Persist the user's actual preference, not the dock-suppressed view of
+      // it — undocking must bring their wallpaper back.
       localStorage.setItem('wallpaperEnabled', String(wallpaperEnabled));
 
       // Toggle wallpaper-enabled class on body to override theme backgrounds
-      if (wallpaperEnabled) {
+      if (wallpaperActive) {
         document.body.classList.add('wallpaper-enabled');
       } else {
         document.body.classList.remove('wallpaper-enabled');
       }
     } catch { }
-  }, [wallpaperEnabled]);
+  }, [wallpaperEnabled, wallpaperActive]);
 
   // Wallpaper mode's glass cards (workspace cards, tab/app cards — see
   // wallpaper-enhancements.css) use `backdrop-filter`. On macOS's WKWebView
@@ -726,7 +747,10 @@ export default function App() {
   // forces the browser to tear down whatever compositing layer it just
   // (mis)allocated and build a fresh one from the card's current content.
   useEffect(() => {
-    if (!wallpaperEnabled) return;
+    // `wallpaperActive`, not the raw preference: with the dock suppressing
+    // wallpaper mode there are no glass cards to un-stick, so the observer
+    // would just watch the DOM for nothing.
+    if (!wallpaperActive) return;
     const SELECTOR = '.cooldesk-workspace-card, .cooldesk-tab-card, .cooldesk-tab-group-card';
     const pending = new Set();
     let raf = null;
@@ -759,7 +783,7 @@ export default function App() {
       observer.disconnect();
       if (raf != null) cancelAnimationFrame(raf);
     };
-  }, [wallpaperEnabled]);
+  }, [wallpaperActive]);
 
   useEffect(() => {
     try {
@@ -1390,7 +1414,7 @@ export default function App() {
 
 
   return (
-    <div className={`popup-wrap ${themeClass} ${wallpaperEnabled ? 'wallpaper-enabled' : ''}`} style={{
+    <div className={`popup-wrap ${themeClass} ${wallpaperActive ? 'wallpaper-enabled' : ''}`} style={{
       '--section-spacing': '24px',
       '--card-spacing': '16px',
       position: 'relative'
