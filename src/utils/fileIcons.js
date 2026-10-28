@@ -212,6 +212,7 @@ export function getIcon(type, name, command) {
         case 'command': return COMMAND_ICONS[command] || faTerminal;
         case 'agent-suggest': return faRobot;
         case 'websearch-suggest': return faSearch;
+        case 'terminal-run': return faTerminal;
         case 'workspace-edit': return faFolder;
         case 'todo': return faTasks;
         default: return faLink;

@@ -7,7 +7,7 @@ import { FilesView } from './FilesView';
 import { FileIcon, FileTab } from './FileTab';
 import { NoteTab } from './NoteTab';
 import { TerminalTab } from '../../features/terminal/TerminalTab';
-import { registerTerminalHost } from '../../features/terminal/runInTerminal';
+import { registerTerminalHost, useSpotlightRuns } from '../../features/terminal/runInTerminal';
 import { WorkspaceContextPanel } from '../workspace/WorkspaceList';
 import { clipSummary, saveClipToWorkspace } from '../../features/browser/clipToNote';
 import { useShelf } from '../../features/shelf/useShelf';
@@ -237,10 +237,15 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
 
   // Project commands (.cooldesk commands, the file manager's run buttons)
   // open here as terminal tabs while Browse is up (runInTerminal.js).
-  useEffect(() => registerTerminalHost(({ command, cwd, label }) => {
+  // Spotlight's "> cmd" passes `here` (start in the active tab's folder) and
+  // `fresh` (run again even if that command already has a tab).
+  useEffect(() => registerTerminalHost(({ command, cwd, label, here = false, fresh = false }) => {
     if (mode !== 'browse') setMode('browse');
-    browseTabs.openTerminalTab(cwd || null, false, { run: command, title: label || command });
+    const at = browseTabs.active;
+    const dir = cwd || (here ? (at.file ? (at.file.isDir ? at.file.path : parentDir(at.file.path)) : at.term?.cwd) : null) || null;
+    browseTabs.openTerminalTab(dir, false, { run: command, title: label || command, fresh });
   }), [browseTabs, mode, setMode]);
+  useSpotlightRuns(true);
 
   // Browser shortcuts. Keys typed while the page itself has focus never reach
   // this document; the page tools (tools.js, isolated world) forward these

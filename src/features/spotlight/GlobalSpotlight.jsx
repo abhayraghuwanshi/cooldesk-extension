@@ -51,6 +51,7 @@ import { AgentPanel, AgentToolbar } from './parts/AgentPanel';
 import { NewWorkspacePanel } from './parts/NewWorkspacePanel';
 import { EditWorkspacePanel } from './parts/EditWorkspacePanel';
 import { buildCooldeskAttachment } from './cooldeskContext';
+import { runFromSpotlight } from '../terminal/runInTerminal';
 import './GlobalSpotlight.css';
 
 
@@ -1567,6 +1568,28 @@ export function GlobalSpotlight({
         // Add mode only ever wants addable search results.
         // A scope pill (scopeKey) is a search, never a command or a workspace
         // name — "/u" would otherwise match a workspace called "Utilities".
+        // "> cmd" or "/run cmd": one row that runs it in a CoolDesk terminal
+        // tab (a real shell, so cd, &&, pipes all work). Nothing runs until
+        // that row is picked — it's the only row, so Enter on it is explicit.
+        const shellCommand = (isDesktopApp && !commandMode && !addTarget && !scopeKey)
+            ? (/^>\s*(.*)$/s.exec(trimmedQuery) || /^\/run(?:\s+(.*))?$/is.exec(trimmedQuery))
+            : null;
+        if (shellCommand) {
+            searchIdRef.current++;
+            const command = (shellCommand[1] || '').trim();
+            const rows = command ? [{
+                id: `terminal-run:${command}`,
+                type: 'terminal-run',
+                title: command,
+                description: 'Run in terminal — in the current tab\'s folder',
+                command,
+            }] : [];
+            setResults(rows);
+            setSelectedIndex(rows.length ? 0 : -1);
+            setLoading(false);
+            return;
+        }
+
         const commandItems = (addTarget || scopeKey) ? null : slash.getSuggestions(trimmedQuery);
         // Existing workspaces whose name starts with what's typed — computed
         // independently of the command palette above (which is disabled on
@@ -2456,6 +2479,14 @@ export function GlobalSpotlight({
             return;
         }
 
+        if (item.type === 'terminal-run') {
+            handleClose();
+            runFromSpotlight(item.command).catch((e) => {
+                console.error('[Spotlight] Run in terminal failed:', e);
+            });
+            return;
+        }
+
         // Workspace rows navigate the host's workspace view when it has one
         if (item.type === 'workspace' && onWorkspaceNavigate) {
             handleClose();
@@ -2952,6 +2983,7 @@ export function GlobalSpotlight({
         if (item.type === 'agent-suggest') return 'Agent';
         if (item.type === 'websearch-suggest') return 'Web';
         if (item.type === 'workspace-edit') return 'Workspace';
+        if (item.type === 'terminal-run') return 'Terminal';
         if (item.type === 'todo') return item.done ? 'Done' : 'Todo';
         if (item.type === 'note') return 'Note';
         return item.category || 'Link';

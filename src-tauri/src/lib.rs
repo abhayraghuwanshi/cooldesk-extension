@@ -2137,6 +2137,33 @@ fn take_spotlight_edit() -> Option<serde_json::Value> {
     PENDING_SPOTLIGHT_EDIT.lock().unwrap().take()
 }
 
+// Shell command typed into the spotlight (`> …`) for the main window to run
+// in a terminal tab — set by `spotlight_run_in_terminal`, taken (once) by the
+// main window. A pending slot for the same reason as PENDING_SPOTLIGHT_EDIT:
+// a main window that's only now being created still picks it up on mount.
+static PENDING_TERMINAL_RUN: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Hand a command from the spotlight window to the main window, which opens
+/// it as a terminal tab (see `useSpotlightRuns` in runInTerminal.js).
+#[tauri::command]
+fn spotlight_run_in_terminal(app: tauri::AppHandle, command: String) -> Result<(), String> {
+    if command.trim().is_empty() {
+        return Err("Empty command".into());
+    }
+    *PENDING_TERMINAL_RUN.lock().unwrap() = Some(command);
+    if let Some(window) = app.get_webview_window("spotlight") {
+        let _ = window.hide();
+    }
+    show_main_window(&app);
+    let _ = app.emit("spotlight-run-in-terminal", ());
+    Ok(())
+}
+
+#[tauri::command]
+fn take_terminal_run() -> Option<String> {
+    PENDING_TERMINAL_RUN.lock().unwrap().take()
+}
+
 #[tauri::command]
 fn hide_spotlight(app: tauri::AppHandle) {
     // Grant any process foreground permission BEFORE hiding our window.
@@ -3489,6 +3516,8 @@ pub fn run() {
         open_spotlight_edit,
         folder_identity,
         take_spotlight_edit,
+        spotlight_run_in_terminal,
+        take_terminal_run,
         hide_spotlight,
         set_spotlight_shortcut,
         launch_app,

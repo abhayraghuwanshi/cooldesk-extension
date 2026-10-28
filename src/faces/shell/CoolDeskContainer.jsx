@@ -25,6 +25,7 @@ import { LayoutSwitchButton } from '../../features/dock/LayoutSwitchButton';
 import { ClipboardSection } from '../../features/clipboard/ClipboardSection';
 import { useCooldeskAutoWorkspace, useCooldeskDiscovery } from '../../shared/hooks/useCooldeskProjects.js';
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
+import { useSpotlightRuns } from '../../features/terminal/runInTerminal';
 // Lazy load WorkspaceList (Face 2)
 const WorkspaceList = lazy(() => import('../workspace/WorkspaceList').then(m => ({ default: m.WorkspaceList })));
 
@@ -195,6 +196,9 @@ export function CoolDeskContainer({
   const isVerticalDock = isDesktopApp && !!dockState?.enabled
     && (dockState.side === 'left' || dockState.side === 'right');
   const isSidebarWidth = useIsSidebarWidth() || isVerticalDock;
+  // Spotlight's "> cmd": Browse takes it when it's up; the docked sidebar has
+  // no terminal tabs, so it goes to the system's terminal from here.
+  useSpotlightRuns(isDesktopApp && isSidebarWidth);
 
   // At sidebar widths the header (and its embedded spotlight) isn't mounted,
   // so hand the edit to the standalone spotlight window instead.
