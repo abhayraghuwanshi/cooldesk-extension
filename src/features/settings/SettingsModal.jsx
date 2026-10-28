@@ -2,6 +2,7 @@ import { faCog, faDatabase, faFolderOpen, faPalette, faRocket, faUsers } from '@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import logo from '../../../logo-2.png';
+import { useClipboardStatus } from '../clipboard/useClipboardHistory';
 
 const isTauri = typeof window !== 'undefined' && !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
 async function tauriInvoke(cmd, args) {
@@ -416,6 +417,11 @@ export function SettingsModal({
     } catch { setError('Failed to toggle auto-group'); }
   };
 
+  const { status: clipboardStatus, setEnabled: setClipboardEnabled } = useClipboardStatus();
+  const handleClipboardToggle = (enabled) => {
+    setClipboardEnabled(enabled).catch(err => console.warn('[Settings] clipboard toggle failed:', err));
+  };
+
   const handleAutostartToggle = async (enabled) => {
     try {
       await tauriInvoke('set_launch_at_login', { enabled });
@@ -799,6 +805,14 @@ export function SettingsModal({
                         hint="Start CoolDesk automatically on login"
                         right={<Toggle checked={autostartEnabled} onChange={handleAutostartToggle} accentColor="#22c55e" />}
                         onClick={() => handleAutostartToggle(!autostartEnabled)}
+                      />
+                    )}
+                    {isTauri && (
+                      <SettingRow
+                        label="Clipboard History"
+                        hint="Keep what you copy in the side dock. Stays on this device; password-manager copies are skipped."
+                        right={<Toggle checked={!!clipboardStatus?.enabled} onChange={handleClipboardToggle} accentColor="#22c55e" />}
+                        onClick={() => handleClipboardToggle(!clipboardStatus?.enabled)}
                         last
                       />
                     )}

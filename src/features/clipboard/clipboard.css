@@ -1,0 +1,338 @@
+/* Clipboard history card in the side dock. Same near-solid dark tile as the
+   other sidebar cards (dock-see-through.css), so it reads as one of them. */
+
+.cb-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.cb-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cb-title {
+  font-size: var(--font-2xl, 20px);
+  font-weight: 600;
+  color: var(--text-secondary, #94A3B8);
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cb-header-toggle {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  border-radius: 6px;
+  outline: none;
+}
+
+.cb-header-toggle:focus-visible {
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.6);
+}
+
+.cb-chevron {
+  font-size: 0.6em;
+  opacity: 0.6;
+  margin-left: 2px;
+}
+
+.cb-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.cb-paused-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fbbf24;
+}
+
+.cb-card {
+  background: rgba(34, 34, 38, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cb-filter {
+  margin: 2px 2px 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 12px;
+  outline: none;
+}
+
+.cb-filter:focus {
+  border-color: rgba(139, 92, 246, 0.6);
+}
+
+.cb-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cb-list.is-all {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.cb-row {
+  border-radius: 10px;
+}
+
+.cb-row.is-previewing {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.cb-row-main {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  outline: none;
+}
+
+.cb-row-main:hover,
+.cb-row-main:focus-visible {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.cb-row-main:active {
+  cursor: grabbing;
+}
+
+.cb-thumb {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.cb-thumb-img {
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.cb-thumb-link { color: #60a5fa; }
+.cb-thumb-files { color: #a78bfa; }
+
+.cb-swatch {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.cb-row-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.cb-row-title {
+  font-size: 13px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cb-row-meta {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Actions appear on hover/focus, over the end of the text, so the narrow
+   column keeps its width for the clip itself. */
+.cb-row-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding-left: 6px;
+  background: linear-gradient(to right, transparent, rgba(48, 48, 54, 0.98) 12px);
+}
+
+.cb-row-main:hover .cb-row-actions,
+.cb-row-main:focus-within .cb-row-actions,
+.cb-row.is-previewing .cb-row-actions {
+  display: flex;
+}
+
+.cb-row-main:hover .cb-pin-mark,
+.cb-row.is-previewing .cb-pin-mark {
+  display: none;
+}
+
+.cb-pin-mark {
+  font-size: 10px;
+  color: #a78bfa;
+  transform: rotate(30deg);
+}
+
+.cb-copied {
+  color: #4ade80;
+  font-size: 13px;
+}
+
+.cb-icon-btn {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.cb-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.cb-icon-btn.is-active {
+  color: #a78bfa;
+}
+
+.cb-icon-btn.is-danger:hover {
+  color: #f87171;
+}
+
+.cb-preview {
+  padding: 2px 8px 8px 46px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cb-preview-text {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  color: #e5e7eb;
+  font: 11.5px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.cb-preview-img {
+  max-width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+  align-self: flex-start;
+  border-radius: 8px;
+  background: repeating-conic-gradient(rgba(255, 255, 255, 0.06) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
+}
+
+.cb-preview-swatch {
+  height: 56px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.cb-preview-link {
+  font-size: 12px;
+  color: #93c5fd;
+  word-break: break-all;
+  user-select: text;
+}
+
+.cb-preview-files {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11.5px;
+  color: #e5e7eb;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.cb-preview-files li {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 0;
+}
+
+.cb-preview-meta {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.cb-preview-btn {
+  align-self: flex-start;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cb-preview-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.cb-empty {
+  padding: 10px 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.cb-footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 6px 2px;
+}
+
+.cb-link-btn {
+  border: none;
+  background: none;
+  padding: 4px 2px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+}
+
+.cb-link-btn:hover {
+  color: #fff;
+}
+
+.cb-link-btn.is-danger:hover {
+  color: #f87171;
+}

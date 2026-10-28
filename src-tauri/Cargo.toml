@@ -70,6 +70,9 @@ tauri-plugin-autostart = "2"
 tauri-plugin-drag = "2.1.1"
 portable-pty = "0.9"
 zip = { version = "4.2.0", default-features = false, features = ["deflate"] }
+# Clipboard history (clipboard.rs): cross-platform text/image/file-list
+# read and write.
+arboard = "3"
 
 [dev-dependencies]
 tempfile = "3.10"
@@ -88,7 +91,7 @@ core-foundation = "0.9"
 # is for activateIgnoringOtherApps in show_over_fullscreen_spaces (dock/mac.rs)
 # — bringing the *app* forward, not just making our window key, which matters
 # when spotlight is invoked while a different app is frontmost.
-objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["NSWindow", "NSResponder", "NSScreen", "NSEvent", "NSApplication"] }
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["NSWindow", "NSResponder", "NSScreen", "NSEvent", "NSApplication", "NSPasteboard", "NSWorkspace", "NSRunningApplication"] }
 # Already resolved transitively via objc2-app-kit at this exact version —
 # declared directly only so dock/mac.rs can name MainThreadMarker itself.
 objc2 = "0.6.3"
@@ -119,7 +122,9 @@ windows = { version = "0.58", features = [
     "Win32_System_StationsAndDesktops",
     "Win32_System_Com_StructuredStorage",
     "Win32_Media_Audio",
-    "Win32_Media_Audio_Endpoints"
+    "Win32_Media_Audio_Endpoints",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory"
 ] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

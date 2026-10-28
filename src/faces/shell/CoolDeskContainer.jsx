@@ -22,6 +22,7 @@ import { WorkspaceFileDrop } from '../../features/workspace-drop/WorkspaceFileDr
 import { useDockState } from '../../features/dock/useDockState';
 import { useLayoutSwitch } from '../../features/dock/useLayoutSwitch';
 import { LayoutSwitchButton } from '../../features/dock/LayoutSwitchButton';
+import { ClipboardSection } from '../../features/clipboard/ClipboardSection';
 import { useCooldeskAutoWorkspace, useCooldeskDiscovery } from '../../shared/hooks/useCooldeskProjects.js';
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
 // Lazy load WorkspaceList (Face 2)
@@ -613,6 +614,9 @@ export function CoolDeskContainer({
           />
         </Suspense>
       </section>
+      {/* Clipboard history: used far more often than the folders below, but
+          the workspaces stay on top. Renders nothing until turned on. */}
+      <ClipboardSection />
       <section className="home-stack-active">
         <Suspense fallback={null}>
           {/* Open apps/tabs are in WorkspaceList's Active card; this keeps

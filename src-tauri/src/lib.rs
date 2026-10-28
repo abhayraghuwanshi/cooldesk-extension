@@ -18,6 +18,7 @@ mod tab_uia;
 mod webapp_embed;
 mod browser_pane;
 mod shelf;
+mod clipboard;
 mod terminal;
 mod archive;
 mod annotations;
@@ -3569,6 +3570,16 @@ pub fn run() {
         shelf::shelf_pin,
         shelf::shelf_clear,
         shelf::shelf_save_to,
+        clipboard::clipboard_status,
+        clipboard::clipboard_set_enabled,
+        clipboard::clipboard_set_paused,
+        clipboard::clipboard_list,
+        clipboard::clipboard_text,
+        clipboard::clipboard_copy,
+        clipboard::clipboard_pin,
+        clipboard::clipboard_remove,
+        clipboard::clipboard_clear,
+        clipboard::clipboard_save_to_shelf,
         annotations::highlights_list,
         annotations::highlights_update,
         annotations::highlights_delete,
@@ -3611,6 +3622,9 @@ pub fn run() {
           ])
           .build(),
       )?;
+
+      // Clipboard history watcher — idle until the user turns it on.
+      clipboard::start(app.handle().clone());
 
       // Spawn Rust Sidecar Server (replaces Node.js sidecar)
       tauri::async_runtime::spawn(async {

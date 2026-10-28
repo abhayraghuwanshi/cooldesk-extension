@@ -4,7 +4,7 @@
 // it — what a plain HTML5 drag can't do, since it carries no actual file.
 // Mode is "copy": the source is never moved. Statically imported because the
 // native drag must start while the button is still held — awaiting a dynamic
-// import first can miss it. Shared by the file manager and the Shelf.
+// import first can miss it. Shared by the file manager, the Shelf and clipboard history.
 import { startDrag } from '@crabnebula/tauri-plugin-drag';
 
 export const IS_TAURI = typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__;
@@ -31,10 +31,11 @@ function dragIconFor(isDir) {
   return dragIconCache[key];
 }
 
-/** onDragStart handler body: replace the HTML5 drag with an OS file drag. */
+/** onDragStart handler body: replace the HTML5 drag with an OS file drag.
+ *  `path` may be one path or several (copied files from clipboard history). */
 export function startNativeDrag(e, path, isDir = false) {
   // Cancel the webview's own HTML5 drag — the OS drag replaces it.
   e.preventDefault();
-  startDrag({ item: [path], icon: dragIconFor(isDir), mode: 'copy' })
+  startDrag({ item: Array.isArray(path) ? path : [path], icon: dragIconFor(isDir), mode: 'copy' })
     .catch(err => console.warn('[nativeDrag] native drag failed:', err));
 }
