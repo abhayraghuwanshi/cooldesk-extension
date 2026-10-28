@@ -1,8 +1,9 @@
 // Run a project command (a .cooldesk command, the file manager's project
 // bar) where you can see it: a CoolDesk terminal tab, titled after the
 // command and started in its folder. Browse registers the host while it's on
-// screen; without it (docked sidebar, extension) it falls back to the old
-// behaviour — the system's own terminal.
+// screen, the docked sidebar's shell (ShellSection) while docked; without
+// either (extension) it falls back to the old behaviour — the system's own
+// terminal.
 
 import { useEffect } from 'react';
 
@@ -15,6 +16,14 @@ export function commandCwd(projectPath, cwd) {
   const base = projectPath.replace(/[\\/]+$/, '');
   const rel = String(cwd).replace(/^\.[\\/]/, '').replace(/[/\\]+/g, sep).replace(/^[\\/]+/, '');
   return `${base}${sep}${rel}`;
+}
+
+/** A folder path quoted for the shell: POSIX single quotes, or cmd's double
+ *  quotes for a Windows drive path. */
+export function quotePath(path) {
+  return /Mac/.test(navigator.platform) || !/^[a-z]:\\/i.test(path)
+    ? `'${path.replace(/'/g, "'\\''")}'`
+    : `"${path}"`;
 }
 
 /** Set by BrowseView while it can open terminal tabs. */
@@ -70,8 +79,9 @@ export async function runFromSpotlight(command) {
 /**
  * Main window: take commands the spotlight window handed over — on mount (the
  * window was only just created for it) and on every nudge event. Mount it
- * after registerTerminalHost so the take finds the host; without one (docked
- * sidebar) runInTerminal falls back to the system's terminal.
+ * after registerTerminalHost so the take finds the host (Browse, or the docked
+ * sidebar's ShellSection); without one runInTerminal falls back to the
+ * system's terminal.
  */
 export function useSpotlightRuns(enabled) {
   useEffect(() => {

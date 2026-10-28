@@ -23,6 +23,7 @@ import { useDockState } from '../../features/dock/useDockState';
 import { useLayoutSwitch } from '../../features/dock/useLayoutSwitch';
 import { LayoutSwitchButton } from '../../features/dock/LayoutSwitchButton';
 import { ClipboardSection } from '../../features/clipboard/ClipboardSection';
+import { ShellSection } from '../../features/terminal/ShellSection';
 import { useCooldeskAutoWorkspace, useCooldeskDiscovery } from '../../shared/hooks/useCooldeskProjects.js';
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
 import { useSpotlightRuns } from '../../features/terminal/runInTerminal';
@@ -196,8 +197,8 @@ export function CoolDeskContainer({
   const isVerticalDock = isDesktopApp && !!dockState?.enabled
     && (dockState.side === 'left' || dockState.side === 'right');
   const isSidebarWidth = useIsSidebarWidth() || isVerticalDock;
-  // Spotlight's "> cmd": Browse takes it when it's up; the docked sidebar has
-  // no terminal tabs, so it goes to the system's terminal from here.
+  // Spotlight's "> cmd": Browse takes it when it's up; docked, the sidebar's
+  // ShellSection does (it registers first — a child's effects run first).
   useSpotlightRuns(isDesktopApp && isSidebarWidth);
 
   // At sidebar widths the header (and its embedded spotlight) isn't mounted,
@@ -621,6 +622,9 @@ export function CoolDeskContainer({
       {/* Clipboard history: used far more often than the folders below, but
           the workspaces stay on top. Renders nothing until turned on. */}
       <ClipboardSection />
+      {/* A shell of its own (collapsed until opened); it also takes
+          spotlight's "> cmd" and project commands while docked. */}
+      <ShellSection />
       <section className="home-stack-active">
         <Suspense fallback={null}>
           {/* Open apps/tabs are in WorkspaceList's Active card; this keeps

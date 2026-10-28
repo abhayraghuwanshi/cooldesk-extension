@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import '@xterm/xterm/css/xterm.css';
 import './terminal.css';
 import { TabAddressBar } from '../../faces/browse/TabAddressBar';
+import { quotePath } from './runInTerminal';
 
 // A Browse tab running a real shell (src-tauri/src/terminal.rs) drawn by
 // xterm.js. The shell lives as long as the tab is mounted: switching tabs
@@ -52,15 +53,21 @@ function themeFor(el) {
  * @param onHide      panel: hide the drawer (the shell keeps running)
  * @param run         a command typed in once the shell starts (and again on
  *                    Restart) — a project's dev server, build, tests…
+ * @param input       { text, n }: typed into the running shell (followed by
+ *                    Enter) each time n changes; held until the shell starts
+ * @param compact     a very narrow terminal (the docked sidebar): smaller
+ *                    text and a short `folder %` prompt (terminal.rs)
  */
-export function TerminalTab({ tabId, cwd, run = null, active, onTitle, onOpenUrl, onOpenPath, onOpenShell, onShowInFiles, variant = 'tab', filesPath = null, onPopOut, onHide, toolbarStart = null, toolbarEnd = null }) {
+export function TerminalTab({ tabId, cwd, run = null, input = null, compact = false, active, onTitle, onOpenUrl, onOpenPath, onOpenShell, onShowInFiles, variant = 'tab', filesPath = null, onPopOut, onHide, toolbarStart = null, toolbarEnd = null }) {
   const hostRef = useRef(null);
   const termRef = useRef(null);
   const fitRef = useRef(null);
   const [exited, setExited] = useState(null);   // exit code once the shell ends
   const [generation, setGeneration] = useState(0); // bump to restart the shell
   const [error, setError] = useState(null);
+  const [title, setTitle] = useState(null); // the shell's own title (panel bar)
   const shellIdRef = useRef(null); // the running shell, for the panel's cd
+  const pendingInputRef = useRef(null); // input sent before the shell started
   const onTitleRef = useRef(onTitle);
   onTitleRef.current = onTitle;
   const onOpenUrlRef = useRef(onOpenUrl);
@@ -78,7 +85,7 @@ export function TerminalTab({ tabId, cwd, run = null, active, onTitle, onOpenUrl
       if (disposed) return;
       const term = new Terminal({
         fontFamily: '"SF Mono", Menlo, Monaco, Consolas, "DejaVu Sans Mono", monospace',
-        fontSize: 13,
+        fontSize: compact ? 11.5 : 13,
         lineHeight: 1.15,
         cursorBlink: true,
         scrollback: 10000,
@@ -109,7 +116,11 @@ export function TerminalTab({ tabId, cwd, run = null, active, onTitle, onOpenUrl
         if (e.ctrlKey && e.key === '`') return false;
         return true;
       });
-      const offTitle = term.onTitleChange(t => { if (t) onTitleRef.current?.(t); });
+      const offTitle = term.onTitleChange(t => {
+        if (!t) return;
+        setTitle(t);
+        onTitleRef.current?.(t);
+      });
       termRef.current = term;
       fitRef.current = fit;
       try { fit.fit(); } catch { /* not laid out yet */ }
@@ -133,7 +144,7 @@ export function TerminalTab({ tabId, cwd, run = null, active, onTitle, onOpenUrl
       disposed = true;
       cleanup();
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- once per tab; compact never changes
 
   // The shell: started once xterm exists, and again on restart.
   useEffect(() => {
@@ -156,7 +167,7 @@ export function TerminalTab({ tabId, cwd, run = null, active, onTitle, onOpenUrl
         }
       };
       try {
-        await invoke('terminal_open', { id, cwd: cwd || null, cols: term.cols, rows: term.rows, output });
+        await invoke('terminal_open', { id, cwd: cwd || null, cols: term.cols, rows: term.rows, compact, output });
       } catch (err) {
         if (alive) setError(String(err));
         return;
@@ -165,15 +176,27 @@ export function TerminalTab({ tabId, cwd, run = null, active, onTitle, onOpenUrl
       shellIdRef.current = id;
       // Typed ahead: the shell reads it once its startup files have run.
       if (run) invoke('terminal_write', { id, data: `${run}\r` }).catch(() => { });
+      const queued = pendingInputRef.current;
+      pendingInputRef.current = null;
+      if (queued) invoke('terminal_write', { id, data: `${queued}\r` }).catch(() => { });
       subs.push(term.onData(data => invoke('terminal_write', { id, data }).catch(() => { })));
       subs.push(term.onResize(({ cols, rows }) => invoke('terminal_resize', { id, cols, rows }).catch(() => { })));
     })();
     return () => {
       alive = false;
+      if (shellIdRef.current === id) shellIdRef.current = null;
       subs.forEach(s => s.dispose());
       invoke('terminal_close', { id }).catch(() => { });
     };
-  }, [generation, tabId, cwd, run]);
+  }, [generation, tabId, cwd, run, compact]);
+
+  // Commands handed in from outside (the docked sidebar's terminal host).
+  useEffect(() => {
+    if (!input?.text) return;
+    const id = shellIdRef.current;
+    if (id) invoke('terminal_write', { id, data: `${input.text}\r` }).catch(() => { });
+    else pendingInputRef.current = input.text;
+  }, [input?.n]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // After the shell ends, Enter starts a new one.
   useEffect(() => {
@@ -213,17 +236,17 @@ export function TerminalTab({ tabId, cwd, run = null, active, onTitle, onOpenUrl
     // cd into the Files tab's folder — typed into the shell, as you would.
     const cdHere = () => {
       if (!filesPath || !shellIdRef.current) return;
-      const quoted = IS_MAC || !/^[a-z]:\\/i.test(filesPath)
-        ? `'${filesPath.replace(/'/g, "'\\''")}'`
-        : `"${filesPath}"`;
-      invoke('terminal_write', { id: shellIdRef.current, data: `cd ${quoted}\r` }).catch(() => { });
+      invoke('terminal_write', { id: shellIdRef.current, data: `cd ${quotePath(filesPath)}\r` }).catch(() => { });
       termRef.current?.focus();
     };
     return (
       <div className="term-root term-panel">
         <div className="term-panel-bar">
           <FontAwesomeIcon icon={faTerminal} className="term-address-icon" />
-          <span className="term-panel-name" title={folder}>{cwd ? baseName(cwd) : 'Shell'}</span>
+          {/* The shell's title — a compact shell's current folder (its
+              prompt is a bare %, terminal.rs; the full path is the tooltip)
+              — else where it started. */}
+          <span className="term-panel-name" title={title || folder}>{title ? baseName(title) : (cwd ? baseName(cwd) : 'Shell')}</span>
           {filesPath && (
             <button className="bp-btn" onClick={cdHere} title={`cd to ${baseName(filesPath)} — the folder you're viewing`}>
               <FontAwesomeIcon icon={faLocationArrow} />
