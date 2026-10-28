@@ -876,6 +876,17 @@ fn fuzzy_score(text: &str, query: &str) -> u32 {
     0
 }
 
+/// Chromium browsers' own page history (see browser_history.rs). Blocking
+/// SQLite work, so it runs off the async runtime.
+pub async fn search_browser_history(Query(params): Query<SearchQuery>) -> Json<serde_json::Value> {
+    let query = params.q.unwrap_or_default();
+    let limit = params.limit.unwrap_or(30).min(200);
+    let results = tokio::task::spawn_blocking(move || crate::sidecar::browser_history::search(&query, limit))
+        .await
+        .unwrap_or_default();
+    Json(serde_json::json!({ "results": results }))
+}
+
 pub async fn search_apps(Query(params): Query<SearchQuery>) -> Json<serde_json::Value> {
     let query = params.q.unwrap_or_default();
     let limit = params.limit.unwrap_or(20);

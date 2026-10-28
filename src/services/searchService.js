@@ -1,5 +1,6 @@
 import { listWorkspaces } from '../db/unified-api';
 import { SIDECAR_HTTP } from '../shared/config/sidecar.js';
+import { matchQuality, pageKey, rankUrlResults } from './searchScoring.js';
 
 /**
  * High-Speed Search Service
@@ -354,6 +355,39 @@ async function searchAppsFromBackend(query, maxResults = 20) {
 }
 
 /**
+ * Page-level history straight from the browsers' own History databases
+ * (sidecar /browser-history). The cached activity history is one row per
+ * domain, so on its own "/u reddit" could only ever find one reddit history
+ * entry. Returns unscored candidates — rankUrlResults scores them alongside
+ * tabs and bookmarks, and lends their visit data to those for the same page.
+ */
+async function searchBrowserHistoryFromBackend(query, maxResults = 30) {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1000);
+    const res = await fetch(
+      `${SIDECAR_HTTP}/browser-history?q=${encodeURIComponent(query)}&limit=${maxResults}`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeoutId);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.results || []).map(h => ({
+      id: `bh-${h.url}`,
+      title: h.title || h.url,
+      url: h.url,
+      description: 'History',
+      type: 'history',
+      browser: h.browser,
+      visitCount: h.visitCount,
+      lastVisitTime: h.lastVisitTime,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Full app catalog from the local cache (installed + running, matcher-deduped),
  * for browsing when a scoped "/a" search comes up empty instead of just
  * showing nothing. Running apps first, then everything else — alphabetical
@@ -410,7 +444,7 @@ export async function browseApps(maxResults = 30) {
 /**
  * Default browsable list for a bare "/u" (no query yet) — active tabs first,
  * then recent history, then bookmarks, deduped by URL. Same cache sources as
- * searchElectronCache, just without requiring a query to filter by.
+ * electronCacheCandidates, just without requiring a query to filter by.
  */
 export function browseUrls(maxResults = 30) {
   const seen = new Set();
@@ -506,129 +540,109 @@ function normalizeUrlForBoost(url) {
 }
 
 /**
- * Add learned click-feedback boosts to results that carry a URL.
+ * Every non-app item the desktop can search (open tabs, workspaces and their
+ * saved links, cached history, bookmarks) as unscored candidates. Matching
+ * and ranking happen in rankUrlResults (searchScoring.js), the same for every
+ * source, so there's no per-source filtering here.
  */
-function applyUrlBoosts(results, boosts) {
-  if (!boosts || Object.keys(boosts).length === 0) return results;
-  return results.map(r => {
-    if (!r.url) return r;
-    const boost = boosts[normalizeUrlForBoost(r.url)];
-    if (!boost) return r;
-    return { ...r, score: Math.min(100, (r.score || 0) + boost), rlBoost: boost };
+function electronCacheCandidates() {
+  const out = [];
+  for (const tab of electronDataCache.tabs) {
+    out.push({
+      id: tab.id || tab.tabId,
+      title: tab.title,
+      url: tab.url,
+      description: 'Active Tab',
+      type: 'tab',
+      favicon: tab.favIconUrl || tab.favicon,
+      tabId: tab.id || tab.tabId,
+      // Carry the owning browser through to the jump. Without _deviceId the
+      // jump has no precise routing key and has to guess from the browser
+      // label, which every Chromium browser used to report as "chrome".
+      _deviceId: tab._deviceId,
+      browser: tab.browser,
+      windowId: tab.windowId,
+    });
+  }
+  for (const ws of electronDataCache.workspaces) {
+    out.push({
+      id: ws.id,
+      title: ws.title || ws.name,
+      url: ws.url,
+      description: ws.description || 'Workspace',
+      // A saved link's description is "in <workspace>": lets "/u work" find
+      // the links filed under a workspace named Work.
+      context: ws.description,
+      type: ws.type || 'workspace',
+      favicon: ws.favicon,
+    });
+  }
+  for (const h of electronDataCache.history) {
+    out.push({
+      id: h.id || `hist-${h.url}`,
+      title: h.title,
+      url: h.url,
+      description: 'History',
+      type: 'history',
+      favicon: h.favicon,
+      visitCount: h.visitCount,
+      lastVisitTime: h.lastVisitTime,
+    });
+  }
+  for (const b of electronDataCache.bookmarks) {
+    out.push({
+      id: b.id || `bm-${b.url}`,
+      title: b.title,
+      url: b.url,
+      description: 'Bookmark',
+      type: 'bookmark',
+      favicon: b.favicon,
+    });
+  }
+  return out;
+}
+
+/**
+ * Drop app rows that only matched through browser window titles which are
+ * open tabs. A browser window's title is its active tab's, so "hotstar"
+ * matched Google Chrome (scored ~96, as a running app) above the Hotstar tab
+ * itself — and picking it just raised Chrome on whatever tab it was showing.
+ * The tab row jumps to the exact tab. Each window row of a multi-window app
+ * also carries every sibling window's title, so a Chrome window not showing
+ * Hotstar matched too. Apps whose name matches, or matched through a title
+ * that isn't a known tab (an editor's "project — file"), are kept.
+ */
+function withoutTabWindows(appResults, query) {
+  const tabTitles = new Set(electronDataCache.tabs.map(t => (t.title || '').trim().toLowerCase()).filter(Boolean));
+  if (tabTitles.size === 0) return appResults;
+  return appResults.filter(app => {
+    if (matchQuality({ title: app.name }, query) > 0) return true;
+    const matched = [app.title, ...(app.titles || [])]
+      .filter(t => t && matchQuality({ title: t }, query) > 0);
+    return matched.length === 0 || !matched.every(t => tabTitles.has(t.trim().toLowerCase()));
   });
 }
 
 /**
- * Local cache search for non-app items (tabs, workspaces, history, bookmarks).
- * Apps are handled by the Rust backend via searchAppsFromBackend().
+ * The open browser tab showing the same page as `url` (see pageKey), if any.
+ * Picking a history row, bookmark or saved link whose page is already open
+ * should switch to that tab, not open a duplicate.
  */
-function searchElectronCache(query) {
-  if (!query || !query.trim()) return [];
-
-  const results = [];
-  const q = query.toLowerCase();
-
-  // Search tabs
-  for (const tab of electronDataCache.tabs) {
-    const titleMatch = (tab.title || '').toLowerCase().includes(q);
-    const urlMatch = (tab.url || '').toLowerCase().includes(q);
-    if (titleMatch || urlMatch) {
-      results.push({
-        id: tab.id || tab.tabId,
-        title: tab.title,
-        url: tab.url,
-        description: 'Active Tab',
-        type: 'tab',
-        favicon: tab.favIconUrl || tab.favicon,
-        tabId: tab.id || tab.tabId,
-        // Carry the owning browser through to the jump. Without _deviceId the
-        // jump has no precise routing key and has to guess from the browser
-        // label, which every Chromium browser used to report as "chrome".
-        _deviceId: tab._deviceId,
-        browser: tab.browser,
-        windowId: tab.windowId,
-        score: titleMatch ? 80 : 60
-      });
-    }
-  }
-
-  // Search workspaces
-  for (const ws of electronDataCache.workspaces) {
-    const nameMatch = (ws.title || ws.name || '').toLowerCase().includes(q);
-    const urlMatch = (ws.url || '').toLowerCase().includes(q);
-    const descMatch = (ws.description || '').toLowerCase().includes(q);
-    if (nameMatch || urlMatch || descMatch) {
-      results.push({
-        id: ws.id,
-        title: ws.title || ws.name,
-        url: ws.url,
-        description: ws.description || 'Workspace',
-        type: ws.type || 'workspace',
-        favicon: ws.favicon,
-        score: nameMatch ? 85 : (urlMatch ? 75 : 55)
-      });
-    }
-  }
-
-  // Search cached history (if available). A frequently-visited page should
-  // outrank a one-off visit with the same text match — without this, a site
-  // visited constantly ranks identically to something opened once by accident.
-  for (const h of electronDataCache.history) {
-    const titleMatch = (h.title || '').toLowerCase().includes(q);
-    const urlMatch = (h.url || '').toLowerCase().includes(q);
-    if (titleMatch || urlMatch) {
-      const visitBoost = Math.min(20, (h.visitCount || 1) * 2);
-      results.push({
-        id: h.id || `hist-${h.url}`,
-        title: h.title,
-        url: h.url,
-        description: 'History',
-        type: 'history',
-        favicon: h.favicon,
-        score: (titleMatch ? 55 : 40) + visitBoost
-      });
-    }
-  }
-
-  // Search cached bookmarks (if available)
-  for (const b of electronDataCache.bookmarks) {
-    const titleMatch = (b.title || '').toLowerCase().includes(q);
-    const urlMatch = (b.url || '').toLowerCase().includes(q);
-    if (titleMatch || urlMatch) {
-      results.push({
-        id: b.id || `bm-${b.url}`,
-        title: b.title,
-        url: b.url,
-        description: 'Bookmark',
-        type: 'bookmark',
-        favicon: b.favicon,
-        score: titleMatch ? 65 : 45
-      });
-    }
-  }
-
-  // Sort by score
-  results.sort((a, b) => (b.score || 0) - (a.score || 0));
-
-  // Log final unique results with visibility info
-  console.log(`[SearchService] Search results for "${query}" (${results.length} total):`);
-  if (results.length > 0) {
-    console.table(results.map(r => ({
-      title: r.title,
-      score: r.score,
-      type: r.type,
-      isRunning: r.isRunning ?? false,
-      isVisible: r.isVisible ?? false,
-      cloaked: r.cloaked ?? 0,
-      pid: r.pid ?? null,
-      description: (r.description || '').slice(0, 50)
-    })));
-  }
-
-  return results;
+export function findOpenTab(url) {
+  if (!url) return null;
+  const key = pageKey(url);
+  const tab = electronDataCache.tabs.find(t => t.url && pageKey(t.url) === key);
+  if (!tab) return null;
+  return {
+    type: 'tab',
+    tabId: tab.id || tab.tabId,
+    windowId: tab.windowId,
+    url: tab.url,
+    title: tab.title,
+    _deviceId: tab._deviceId,
+    browser: tab.browser,
+  };
 }
-
-
 
 // --- HELPER: Is Content Script? ---
 function isContentScript() {
@@ -821,9 +835,9 @@ export async function quickSearch(query, maxResults = 15) {
   // ELECTRON/TAURI: apps come from Rust backend, tabs/workspaces from local cache
   if (isElectron()) {
     // Run app search (backend), non-app cache search, and learned URL boosts in parallel
-    const [appResults, cacheResults, urlBoosts] = await Promise.all([
+    const [appResults, browserHistory, urlBoosts] = await Promise.all([
       searchAppsFromBackend(query, maxResults),
-      Promise.resolve(searchElectronCache(query)),
+      searchBrowserHistoryFromBackend(query, Math.max(maxResults, 30)),
       fetchUrlBoosts(query),
     ]);
 
@@ -832,11 +846,15 @@ export async function quickSearch(query, maxResults = 15) {
       refreshElectronCache().catch(() => { });
     }
 
-    // No deduplication needed — AppMatcher outputs one entry per unique PID.
-    // Each entry is a real focusable window. Show them all.
-    // URL results get their learned click-feedback boost before ranking.
-    const combined = [...appResults, ...applyUrlBoosts(cacheResults, urlBoosts)];
-    return deduplicateByUrl(combined)
+    // Apps arrive scored and deduped (AppMatcher: one entry per real
+    // focusable window). Everything URL-like is scored together here — match
+    // quality + usage + learned click boost, one row per page.
+    const urlResults = rankUrlResults(
+      [...electronCacheCandidates(), ...browserHistory],
+      query,
+      { boosts: urlBoosts, boostKey: normalizeUrlForBoost },
+    );
+    return [...withoutTabWindows(appResults, query), ...urlResults]
       .sort((a, b) => (b.score || 0) - (a.score || 0))
       .slice(0, maxResults);
   }

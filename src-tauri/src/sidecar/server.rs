@@ -217,6 +217,7 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/mcp", post(crate::sidecar::mcp::mcp_post).get(crate::sidecar::mcp::mcp_other).delete(crate::sidecar::mcp::mcp_other))
         // App search (for testing recommendations)
         .route("/search", get(search_apps))
+        .route("/browser-history", get(search_browser_history))
         // GET endpoints
         .route("/workspaces", get(get_workspaces).post(post_workspaces))
         .route("/urls", get(get_urls).post(post_urls))

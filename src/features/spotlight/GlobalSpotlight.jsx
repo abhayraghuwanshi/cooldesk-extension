@@ -9,7 +9,7 @@ import { recordAgentOutcome, recordSearchSelection, watchAgentPlacements } from 
 import { recordSpotlightOpen } from '../../services/analytics';
 import * as LocalAI from '../../services/localAIService';
 import { runningAppsService } from '../../services/runningAppsService';
-import { browseApps, browseUrls, isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../../services/searchService';
+import { browseApps, browseUrls, findOpenTab, isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../../services/searchService';
 import { searchWindowsSettings } from '../../data/windowsSettings';
 import { searchWindowsTools } from '../../data/windowsTools';
 import { enrichRunningAppsWithIcons, getFaviconUrl, getGroupDomainFromUrl } from '../../utils/helpers';
@@ -2539,6 +2539,15 @@ export function GlobalSpotlight({
         // included so the backend learns keyword→URL associations for ranking —
         // strip any /u /a /f scope prefix so it learns the bare keyword.
         recordSearchSelection(item, resultsDisplayedAtRef.current, parseScopedQuery(scopedQuery.trim()).term).catch(() => { });
+
+        // A history row, bookmark or saved link whose page is already open in
+        // a browser tab switches to that tab (via the jump below) instead of
+        // opening a duplicate — only tab rows used to jump, so picking any
+        // other row for the page you're on always opened a new tab.
+        if (item.type !== 'tab' && item.url) {
+            const openTab = findOpenTab(item.url);
+            if (openTab) item = { ...item, ...openTab };
+        }
 
         // For tabs, switch to the existing tab instead of opening new
         if (item.type === 'tab') {
