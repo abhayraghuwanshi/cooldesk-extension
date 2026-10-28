@@ -16,5 +16,6 @@ pub mod sites;
 pub mod cooldesk;
 pub mod local_servers;
 pub mod mcp;
+pub mod browser_history;
 
 pub use server::start_server;

@@ -279,19 +279,48 @@ pub fn merge_settings(
     merged
 }
 
-/// Append activity (limited to last 1000)
+/// Append activity (limited to last 1000 sessions)
+///
+/// One `id` is a single browsing session, re-posted every few seconds by the
+/// focus sampler as its dwell time grows (`time` is cumulative). Appending
+/// each snapshot let one tab left open fill the whole cap — 1000 rows ended
+/// up covering ~9 pages from the last hour, so history search barely knew
+/// any sites. Keep only the latest snapshot per id, moved to the end so the
+/// log stays in most-recent-last order.
 pub fn append_activity(mut existing: Vec<Activity>, new_activities: Vec<Activity>) -> Vec<Activity> {
     existing.extend(new_activities);
-    // Keep only last 1000
-    if existing.len() > 1000 {
-        existing = existing.split_off(existing.len() - 1000);
-    }
-    existing
+    let mut seen = std::collections::HashSet::new();
+    let mut deduped: Vec<Activity> = existing
+        .into_iter()
+        .rev()
+        .filter(|a| match &a.id {
+            Some(id) => seen.insert(id.clone()),
+            None => true,
+        })
+        .collect();
+    deduped.truncate(1000);
+    deduped.reverse();
+    deduped
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_append_activity_keeps_latest_snapshot_per_id() {
+        let row = |id: &str, t: i64| Activity {
+            id: Some(id.to_string()),
+            time: Some(t),
+            ..Default::default()
+        };
+        let log = append_activity(vec![row("a", 1), row("b", 1)], vec![row("a", 2)]);
+        let log = append_activity(log, vec![row("a", 3)]);
+        assert_eq!(log.len(), 2);
+        assert_eq!(log[0].id.as_deref(), Some("b"));
+        assert_eq!(log[1].id.as_deref(), Some("a"));
+        assert_eq!(log[1].time, Some(3));
+    }
 
     #[test]
     fn test_normalize_url() {
