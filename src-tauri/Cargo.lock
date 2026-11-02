@@ -742,7 +742,7 @@ dependencies = [
 
 [[package]]
 name = "cooldesk"
-version = "2.0.16"
+version = "2.0.17"
 dependencies = [
  "arboard",
  "async-stream",

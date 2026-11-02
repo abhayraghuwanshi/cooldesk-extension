@@ -142,6 +142,7 @@
 }
 
 .cb-thumb-link { color: #60a5fa; }
+.cb-thumb-code { color: #34d399; }
 .cb-thumb-files { color: #a78bfa; }
 
 .cb-swatch {
@@ -335,4 +336,45 @@
 
 .cb-link-btn.is-danger:hover {
   color: #f87171;
+}
+
+.cb-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 2px 2px 4px;
+}
+
+.cb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.cb-chip svg {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.cb-chip:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.cb-chip.is-active {
+  color: #fff;
+  border-color: rgba(139, 92, 246, 0.6);
+  background: rgba(139, 92, 246, 0.2);
+}
+
+.cb-chip-count {
+  opacity: 0.55;
+  font-variant-numeric: tabular-nums;
 }

@@ -51,6 +51,16 @@
   overflow: hidden;
 }
 
+/* Rendered markdown (RenderedPreview's frame). Spotlight doesn't load
+   browse.css, where .rp-frame is otherwise styled. */
+.preview-pane-body .rp-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+}
+
 .preview-pane-footer-meta {
   flex-shrink: 0;
   padding: 6px 14px;

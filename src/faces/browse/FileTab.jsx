@@ -174,7 +174,7 @@ export function FileTab({ file, active, onOpenFile, onOpenUrl, onShowFolder, onB
           <FileManager embedded isOpen={active} initialPath={file.path} onOpenFile={onOpenFile} />
         ) : preview ? (
           <Suspense fallback={<div className="bp-empty">Opening…</div>}>
-            <PreviewPane key={file.path} item={preview} />
+            <PreviewPane key={file.path} item={preview} markdownSource />
           </Suspense>
         ) : (
           <div className="fv-nopreview">

@@ -31,6 +31,7 @@ import 'prismjs/components/prism-toml';
 import 'prismjs/components/prism-markdown';
 import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-bash';
+import { RenderedPreview } from '../../faces/browse/RenderedPreview';
 import './PreviewPane.css';
 
 function formatBytes(n) {
@@ -313,8 +314,13 @@ function PdfPreview({ item }) {
  * Images, code/text, video and PDF each get their own renderer below —
  * dispatched here by item.previewKind — so a bug/crash in one kind's
  * fetching logic can't take another kind down with it.
+ *
+ * Markdown shows rendered (headings, lists, tables — like the Browse tab's
+ * Preview view), not as highlighted source: a README is read, not edited,
+ * here. `markdownSource` keeps the raw text, for the Browse tab's own
+ * Source view, which has a switch to the rendered one.
  */
-export function PreviewPane({ item }) {
+export function PreviewPane({ item, markdownSource = false }) {
     if (!item) return null;
     const { path, previewKind: kind } = item;
     const fileName = path.split(/[/\\]/).pop();
@@ -331,12 +337,21 @@ export function PreviewPane({ item }) {
 
             <div className="preview-pane-body">
                 {kind === 'image' && <ImagePreview item={item} fileName={fileName} />}
-                {kind === 'code' && <CodePreview item={item} />}
+                {kind === 'code' && item.language === 'markdown' && !markdownSource
+                    ? <RenderedPreview key={path} path={path} kind="markdown" compact onOpenUrl={openWebLink} />
+                    : kind === 'code' && <CodePreview item={item} />}
                 {kind === 'video' && <VideoPreview item={item} />}
                 {kind === 'pdf' && <PdfPreview item={item} />}
             </div>
         </div>
     );
+}
+
+// Web links clicked in a rendered README open in the default browser; the
+// pane has no tabs of its own to open them in.
+function openWebLink(url) {
+    if (window.electronAPI?.openExternal) window.electronAPI.openExternal(url);
+    else window.open(url, '_blank');
 }
 
 export default PreviewPane;

@@ -49,9 +49,14 @@ lazy_static::lazy_static! {
     /// clipboard has to stay alive serving it, so writes can't go through a
     /// handle that's dropped right after.
     static ref BOARD: Mutex<Option<arboard::Clipboard>> = Mutex::new(None);
+    /// Clip kinds the user doesn't want recorded at all ("image", "code", …).
+    static ref SKIP_KINDS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 }
 
 static ENABLED: AtomicBool = AtomicBool::new(false);
+/// Skip text that looks like a password, API key, token, private key or
+/// card number (on by default).
+static SKIP_SECRETS: AtomicBool = AtomicBool::new(true);
 static PAUSED: AtomicBool = AtomicBool::new(false);
 /// Set by enable/resume: the watcher records the current clipboard as its
 /// baseline instead of capturing it.
@@ -61,7 +66,7 @@ static REBASE: AtomicBool = AtomicBool::new(true);
 #[serde(rename_all = "camelCase")]
 pub struct Clip {
     pub id: String,
-    /// "text" | "link" | "color" | "image" | "files"
+    /// "text" | "code" | "link" | "color" | "image" | "files"
     pub kind: String,
     /// The text (or its first `INLINE_TEXT` bytes when `long`).
     #[serde(default)]
@@ -88,11 +93,29 @@ pub struct Clip {
     pub path: Option<String>,
 }
 
-#[derive(Clone, Copy, Default, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClipboardStatus {
     pub enabled: bool,
     pub paused: bool,
+    #[serde(default = "default_true")]
+    pub skip_secrets: bool,
+    /// Kinds that are never recorded.
+    #[serde(default)]
+    pub skip_kinds: Vec<String>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn current_status() -> ClipboardStatus {
+    ClipboardStatus {
+        enabled: ENABLED.load(Ordering::SeqCst),
+        paused: PAUSED.load(Ordering::SeqCst),
+        skip_secrets: SKIP_SECRETS.load(Ordering::SeqCst),
+        skip_kinds: SKIP_KINDS.lock().unwrap().clone(),
+    }
 }
 
 fn now_ms() -> i64 {
@@ -180,35 +203,232 @@ fn is_link(s: &str) -> bool {
         && url::Url::parse(s).is_ok()
 }
 
+/// Line starts that are almost always code or a shell command. Case-sensitive
+/// on purpose ("Import the data" isn't `import`).
+const CODE_STARTS: &[&str] = &[
+    "import ", "export ", "const ", "function ", "def ", "fn ", "pub ", "impl ", "struct ",
+    "package ", "#include", "#define", "#!/", "<?php", "<div", "<span", "<html", "<script", "</",
+    "@media", "SELECT ", "INSERT ", "UPDATE ", "DELETE FROM", "CREATE TABLE", "public ", "private ",
+    "func ", "} ", "};", "})", "//", "/*", "$ ", "sudo ", "git ", "npm ", "npx ", "pnpm ", "yarn ",
+    "cargo ", "brew ", "pip ", "docker ", "kubectl ", "curl ",
+];
+/// Starts that are code-ish but also open ordinary sentences; worth less.
+const WEAK_STARTS: &[&str] = &[
+    "let ", "var ", "from ", "use ", "type ", "return ", "if ", "if (", "for ", "while ", "async ",
+    "await ", "class ", "interface ", "enum ", "static ", "else", "try {", "try:", "catch", "cd ",
+];
+const CODE_TOKENS: &[&str] = &["=>", "->", "::", "==", "!=", "&&", "||", "();", "){", ") {", "</", "/>", "${", "+="];
+
+/// Rough "is this source code / a shell command" check: each line scores on
+/// code-ish starts, endings and operators; enough score per line is code.
+fn is_code(s: &str) -> bool {
+    let lines: Vec<&str> = s.lines().filter(|l| !l.trim().is_empty()).take(200).collect();
+    if lines.is_empty() {
+        return false;
+    }
+    let mut score = 0.0f32;
+    for line in &lines {
+        let t = line.trim();
+        if CODE_STARTS.iter().any(|k| t.starts_with(k)) {
+            score += 2.0;
+        } else if WEAK_STARTS.iter().any(|k| t.starts_with(k)) {
+            score += 1.0;
+        }
+        if t.ends_with(';') || t.ends_with('{') || t.ends_with('}') || t.ends_with("):") || (t.ends_with(',') && t.contains('(')) {
+            score += 1.0;
+        }
+        if CODE_TOKENS.iter().any(|k| t.contains(k)) {
+            score += 1.0;
+        }
+        if line.starts_with("  ") || line.starts_with('\t') {
+            score += 0.5;
+        }
+    }
+    // Prose: mostly sentences.
+    let sentences = s.matches(". ").count();
+    score >= 2.0 && score / lines.len() as f32 >= 1.2 && sentences < lines.len()
+}
+
 fn text_kind(s: &str) -> &'static str {
     if is_color(s) {
         "color"
     } else if is_link(s) {
         "link"
+    } else if is_code(s) {
+        "code"
     } else {
         "text"
     }
 }
 
+// ── Secret detection ─────────────────────────────────────────────────────
+
+/// Well-known API key / token prefixes, with the minimum token length.
+const TOKEN_PREFIXES: &[(&str, usize)] = &[
+    ("sk-", 20), ("sk_live_", 20), ("sk_test_", 20), ("rk_live_", 20), ("pk_live_", 20),
+    ("ghp_", 30), ("gho_", 30), ("ghs_", 30), ("ghu_", 30), ("ghr_", 30), ("github_pat_", 30),
+    ("glpat-", 20), ("xoxb-", 20), ("xoxp-", 20), ("xoxa-", 20), ("xapp-", 20),
+    ("AKIA", 20), ("ASIA", 20), ("AIza", 35), ("ya29.", 30), ("npm_", 36), ("hf_", 30),
+    ("SG.", 40), ("shpat_", 30), ("dop_v1_", 40),
+];
+
+fn shannon_entropy(s: &str) -> f32 {
+    let mut counts = std::collections::HashMap::new();
+    for c in s.chars() {
+        *counts.entry(c).or_insert(0usize) += 1;
+    }
+    let n = s.chars().count() as f32;
+    counts.values().map(|&c| {
+        let p = c as f32 / n;
+        -p * p.log2()
+    }).sum()
+}
+
+fn luhn_ok(digits: &[u32]) -> bool {
+    let sum: u32 = digits.iter().rev().enumerate().map(|(i, &d)| {
+        if i % 2 == 1 {
+            let d2 = d * 2;
+            if d2 > 9 { d2 - 9 } else { d2 }
+        } else {
+            d
+        }
+    }).sum();
+    sum % 10 == 0
+}
+
+/// A single whitespace-free token that looks like a credential.
+fn token_is_secret(t: &str) -> bool {
+    let t = t.trim_matches(|c: char| matches!(c, '"' | '\'' | '`' | ',' | ';' | '(' | ')'));
+    if TOKEN_PREFIXES.iter().any(|(p, min)| t.len() >= *min && t.starts_with(p)) {
+        return true;
+    }
+    // JWT
+    if t.starts_with("eyJ") && t.split('.').count() == 3 && t.len() > 40 {
+        return true;
+    }
+    if !t.is_ascii() {
+        return false; // a word, not a key
+    }
+    let lower = t.chars().any(|c| c.is_ascii_lowercase());
+    let upper = t.chars().any(|c| c.is_ascii_uppercase());
+    let digit = t.chars().any(|c| c.is_ascii_digit());
+    // Long random-looking key (base64 / base62 style).
+    if (32..=200).contains(&t.len()) && lower && upper && digit
+        && t.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '+' | '/' | '='))
+        && shannon_entropy(t) >= 4.0
+    {
+        return true;
+    }
+    false
+}
+
+/// Whether copied text looks like a password, key, token or card number.
+/// Errs toward skipping: a missed clip costs less than a recorded secret.
+fn looks_secret(s: &str) -> bool {
+    let t = s.trim();
+    if t.contains("PRIVATE KEY-----") || t.contains("BEGIN OPENSSH PRIVATE KEY") || t.contains("BEGIN PGP PRIVATE") {
+        return true;
+    }
+    // Card number: 13–19 digits, optionally grouped, passing Luhn.
+    if t.chars().all(|c| c.is_ascii_digit() || c == ' ' || c == '-') {
+        let digits: Vec<u32> = t.chars().filter_map(|c| c.to_digit(10)).collect();
+        if (13..=19).contains(&digits.len()) && luhn_ok(&digits) {
+            return true;
+        }
+    }
+    // A lone password-ish token: one short word mixing lower, upper, digits
+    // and a "real" symbol (not just the . _ - of file names and
+    // identifiers), that isn't a link, path, email, color or code.
+    if !t.contains(char::is_whitespace) && (8..=64).contains(&t.len()) && !is_link(t) && !is_color(t)
+        && !t.starts_with('/') && !t.starts_with('~') && !t.contains("://") && !t.contains('\\')
+    {
+        let email = t.split_once('@').is_some_and(|(a, b)| !a.is_empty() && b.contains('.') && !b.contains('@'));
+        let classes = [
+            t.chars().any(|c| c.is_ascii_lowercase()),
+            t.chars().any(|c| c.is_ascii_uppercase()),
+            t.chars().any(|c| c.is_ascii_digit()),
+            t.chars().any(|c| "!@#$%^&*+=?~|<>[]{};,".contains(c)),
+        ];
+        if !email && classes.iter().all(|&b| b) && t.is_ascii() && !t.contains('(') {
+            return true;
+        }
+    }
+    // Secrets inside larger text: `.env` lines, config, a key pasted in a snippet.
+    for line in t.lines().take(500) {
+        let l = line.trim();
+        if let Some((key, value)) = l.split_once('=').or_else(|| l.split_once(':')) {
+            let key = key.trim().trim_start_matches("export ").to_lowercase();
+            let value = value.trim().trim_matches(|c| c == '"' || c == '\'');
+            let secret_key = ["password", "passwd", "pwd", "secret", "token", "api_key", "apikey", "api-key", "private_key", "access_key", "auth"]
+                .iter()
+                .any(|k| key.ends_with(k) || key.contains(&format!("{k}_")));
+            // A literal value, not code (`token = getToken()`).
+            let literal = value.len() >= 6 && !value.contains(char::is_whitespace) && !value.contains('(');
+            if secret_key && literal && !key.contains(char::is_whitespace) {
+                return true;
+            }
+        }
+        if l.split_whitespace().any(token_is_secret) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Kind of the clip `content` would become, or `None` if the user's filters
+/// say not to record it.
+fn allowed_kind(content: &Content) -> Option<&'static str> {
+    let kind = match content {
+        Content::Files(_) => "files",
+        Content::Image { .. } => "image",
+        Content::Text(t) => {
+            if SKIP_SECRETS.load(Ordering::SeqCst) && looks_secret(t) {
+                log::info!("[Clipboard] skipped a copy that looks like a secret");
+                return None;
+            }
+            text_kind(t)
+        }
+    };
+    if SKIP_KINDS.lock().unwrap().iter().any(|k| k == kind) {
+        return None;
+    }
+    Some(kind)
+}
+
 // ── Settings ─────────────────────────────────────────────────────────────
 
 fn save_status(app: &tauri::AppHandle) -> Result<ClipboardStatus, String> {
-    let status = ClipboardStatus {
-        enabled: ENABLED.load(Ordering::SeqCst),
-        paused: PAUSED.load(Ordering::SeqCst),
-    };
+    let status = current_status();
     let json = serde_json::to_string(&status).map_err(|e| e.to_string())?;
     std::fs::write(clip_dir(app)?.join(SETTINGS), json).map_err(|e| e.to_string())?;
-    let _ = app.emit("clipboard-status", status);
+    let _ = app.emit("clipboard-status", status.clone());
     Ok(status)
 }
 
 #[tauri::command]
 pub fn clipboard_status() -> ClipboardStatus {
-    ClipboardStatus {
-        enabled: ENABLED.load(Ordering::SeqCst),
-        paused: PAUSED.load(Ordering::SeqCst),
+    current_status()
+}
+
+/// What not to record: secret-looking text, and whole kinds (e.g. images).
+/// Turning a kind off also drops the unpinned clips of that kind already kept.
+#[tauri::command]
+pub fn clipboard_set_filters(app: tauri::AppHandle, skip_secrets: bool, skip_kinds: Vec<String>) -> Result<ClipboardStatus, String> {
+    SKIP_SECRETS.store(skip_secrets, Ordering::SeqCst);
+    *SKIP_KINDS.lock().unwrap() = skip_kinds.clone();
+    if !skip_kinds.is_empty() {
+        update(&app, |items, dir| {
+            items.retain(|c| {
+                let keep = c.pinned || !skip_kinds.contains(&c.kind);
+                if !keep {
+                    remove_files(dir, c);
+                }
+                keep
+            });
+            Ok(())
+        })?;
     }
+    save_status(&app)
 }
 
 #[tauri::command]
@@ -537,6 +757,8 @@ pub fn start(app: tauri::AppHandle) {
         {
             ENABLED.store(s.enabled, Ordering::SeqCst);
             PAUSED.store(s.paused, Ordering::SeqCst);
+            SKIP_SECRETS.store(s.skip_secrets, Ordering::SeqCst);
+            *SKIP_KINDS.lock().unwrap() = s.skip_kinds;
         }
     }
     std::thread::Builder::new()
@@ -572,6 +794,9 @@ pub fn start(app: tauri::AppHandle) {
                 if source.as_deref().is_some_and(ignored_app) {
                     continue;
                 }
+                if allowed_kind(&content).is_none() {
+                    continue;
+                }
                 if let Err(e) = record(&app, content, source) {
                     log::warn!("[Clipboard] record failed: {e}");
                 }
@@ -593,6 +818,10 @@ pub fn clipboard_list(app: tauri::AppHandle) -> Result<Vec<Clip>, String> {
         write_index(&dir, &items)?;
     }
     for c in &mut items {
+        // Clips recorded before "code" existed.
+        if c.kind == "text" && c.text.as_deref().is_some_and(is_code) {
+            c.kind = "code".into();
+        }
         c.path = if c.kind == "image" {
             Some(image_path(&dir, &c.id).to_string_lossy().into_owned())
         } else if c.long {
@@ -724,6 +953,38 @@ mod tests {
         assert_eq!(text_kind("https://github.com/a/b"), "link");
         assert_eq!(text_kind("see https://x.com"), "text");
         assert_eq!(text_kind("hello"), "text");
+    }
+
+    #[test]
+    fn detects_code() {
+        assert_eq!(text_kind("const x = foo();"), "code");
+        assert_eq!(text_kind("git commit -m \"wip\""), "code");
+        assert_eq!(text_kind("fn main() {\n    println!(\"hi\");\n}"), "code");
+        assert_eq!(text_kind("def f(x):\n    return x + 1"), "code");
+        assert_eq!(text_kind("Let me know if this works. Thanks!"), "text");
+        assert_eq!(text_kind("Meeting at 5pm, bring the slides"), "text");
+        assert_eq!(text_kind("for later"), "text");
+        assert_eq!(text_kind("let x = 5;"), "code");
+    }
+
+    #[test]
+    fn detects_secrets() {
+        assert!(looks_secret("Tr0ub4dor&3x!"));
+        assert!(looks_secret("ghp_abcdefghijklmnopqrstuvwxyz0123456789"));
+        assert!(looks_secret("sk-ant-api03-abcdefghijklmnopqrstuvwxyz"));
+        assert!(looks_secret("AKIAIOSFODNN7EXAMPLE"));
+        assert!(looks_secret("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"));
+        assert!(looks_secret("DATABASE_URL=x\nAPI_KEY=abc123def456\n"));
+        assert!(looks_secret("4111 1111 1111 1111"));
+        assert!(looks_secret("-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----"));
+        assert!(!looks_secret("hello world"));
+        assert!(!looks_secret("https://github.com/a/b?x=1"));
+        assert!(!looks_secret("someone@example.com"));
+        assert!(!looks_secret("const token = getToken();"));
+        assert!(!looks_secret("4111 1111 1111 1112"));
+        assert!(!looks_secret("3f786850e387550fdab836ed7e6dc881de23001b"));
+        assert!(!looks_secret("#3B82F6"));
+        assert!(!looks_secret("Report_2024-Final.pdf"));
     }
 
     #[test]

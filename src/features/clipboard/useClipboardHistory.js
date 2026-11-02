@@ -41,7 +41,10 @@ export function useClipboardStatus() {
 
   const setEnabled = useCallback(enabled => invoke('clipboard_set_enabled', { enabled }).then(setStatus), []);
   const setPaused = useCallback(paused => invoke('clipboard_set_paused', { paused }).then(setStatus), []);
-  return { status, setEnabled, setPaused };
+  /** skipSecrets: drop password/key/token-looking text. skipKinds: kinds never recorded. */
+  const setFilters = useCallback(({ skipSecrets, skipKinds }) =>
+    invoke('clipboard_set_filters', { skipSecrets, skipKinds }).then(setStatus), []);
+  return { status, setEnabled, setPaused, setFilters };
 }
 
 export function useClipboardHistory({ active = true } = {}) {

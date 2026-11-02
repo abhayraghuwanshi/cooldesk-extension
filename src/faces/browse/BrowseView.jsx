@@ -1227,7 +1227,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
               page={{
                 tools: browseMode && !activeTab.file && !activeTab.term && !activeTab.note ? pageTools : null,
                 pages: openPages,
-                totals: { memory: pagesMemory, cpu: pagesCpu, app: stats?.app_memory },
+                totals: { memory: pagesMemory, cpu: pagesCpu, app: stats?.app_memory, appCpu: stats?.app_cpu },
                 live: stats?.panes.find(p => p.id === pageTools?.paneId) || null,
                 onClosePage: (p) => (p.tabId ? browseTabs.close(p.tabId) : changeTiles(compact(tiles.filter(t => t.id !== p.tileId)))),
               }}

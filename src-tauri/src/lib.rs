@@ -3602,6 +3602,7 @@ pub fn run() {
         clipboard::clipboard_status,
         clipboard::clipboard_set_enabled,
         clipboard::clipboard_set_paused,
+        clipboard::clipboard_set_filters,
         clipboard::clipboard_list,
         clipboard::clipboard_text,
         clipboard::clipboard_copy,

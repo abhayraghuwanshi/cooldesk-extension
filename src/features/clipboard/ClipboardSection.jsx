@@ -1,4 +1,4 @@
-import { faCheck, faChevronDown, faChevronRight, faClipboard, faEye, faEyeSlash, faFile, faFileLines, faImage, faLink, faPalette, faPause, faPlay, faThumbtack, faTrashCan, faBoxArchive } from '@fortawesome/free-solid-svg-icons';
+import { faCheck, faCode, faChevronDown, faChevronRight, faClipboard, faEye, faEyeSlash, faFile, faFileLines, faImage, faLink, faPalette, faPause, faPlay, faThumbtack, faTrashCan, faBoxArchive } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { workspaceActivityService } from '../../services/workspaceActivityService';
@@ -79,7 +79,17 @@ function SectionHeader({ icon, children }) {
   );
 }
 
-const KIND_ICON = { text: faFileLines, link: faLink, color: faPalette, image: faImage, files: faFile };
+const KIND_ICON = { text: faFileLines, code: faCode, link: faLink, color: faPalette, image: faImage, files: faFile };
+
+/** Category chips, in display order. */
+const CATEGORIES = [
+  { kind: 'text', label: 'Text' },
+  { kind: 'code', label: 'Code' },
+  { kind: 'link', label: 'Links' },
+  { kind: 'image', label: 'Images' },
+  { kind: 'files', label: 'Files' },
+  { kind: 'color', label: 'Colors' },
+];
 
 function Thumb({ clip }) {
   const [src, setSrc] = useState(null);
@@ -325,6 +335,7 @@ export function ClipboardSection() {
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [showAll, setShowAll] = useState(false);
   const [filter, setFilter] = useState('');
+  const [category, setCategory] = useState(null); // null = all
   const [previewId, setPreviewId] = useState(null);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
@@ -350,12 +361,23 @@ export function ClipboardSection() {
     return [...items.filter(c => c.pinned), ...items.filter(c => !c.pinned)];
   }, [history.items]);
 
+  const counts = useMemo(() => {
+    const n = {};
+    for (const c of ordered) n[c.kind] = (n[c.kind] || 0) + 1;
+    return n;
+  }, [ordered]);
+  const chips = CATEGORIES.filter(c => counts[c.kind]);
+  // A category that's emptied out (last clip deleted) falls back to All.
+  const activeCategory = category && counts[category] ? category : null;
+
   const visible = useMemo(() => {
-    if (!showAll) return ordered.slice(0, PEEK);
+    const inCategory = activeCategory ? ordered.filter(c => c.kind === activeCategory) : ordered;
+    if (!showAll) return inCategory.slice(0, PEEK);
     const q = filter.trim().toLowerCase();
-    if (!q) return ordered;
-    return ordered.filter(c => [c.text, c.source, ...(c.files || [])].some(v => v && v.toLowerCase().includes(q)));
-  }, [ordered, showAll, filter]);
+    if (!q) return inCategory;
+    return inCategory.filter(c => [c.text, c.source, ...(c.files || [])].some(v => v && v.toLowerCase().includes(q)));
+  }, [ordered, activeCategory, showAll, filter]);
+  const shownTotal = activeCategory ? counts[activeCategory] : ordered.length;
 
   if (!IS_TAURI || !enabled) return null;
 
@@ -399,6 +421,33 @@ export function ClipboardSection() {
               autoFocus
             />
           )}
+          {chips.length > 1 && (
+            <div className="cb-chips" role="tablist" aria-label="Clip categories">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!activeCategory}
+                className={`cb-chip${!activeCategory ? ' is-active' : ''}`}
+                onClick={() => setCategory(null)}
+              >
+                All
+              </button>
+              {chips.map(c => (
+                <button
+                  key={c.kind}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeCategory === c.kind}
+                  className={`cb-chip${activeCategory === c.kind ? ' is-active' : ''}`}
+                  onClick={() => setCategory(k => (k === c.kind ? null : c.kind))}
+                >
+                  <FontAwesomeIcon icon={KIND_ICON[c.kind]} />
+                  {c.label}
+                  <span className="cb-chip-count">{counts[c.kind]}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {visible.length ? (
             <ul className={`cb-list${showAll ? ' is-all' : ''}`}>
               {visible.map(clip => (
@@ -414,10 +463,10 @@ export function ClipboardSection() {
           ) : (
             <div className="cb-empty">{filter ? 'No matching clips' : 'Copy something — it shows up here.'}</div>
           )}
-          {ordered.length > PEEK && (
+          {shownTotal > PEEK && (
             <div className="cb-footer">
               <button type="button" className="cb-link-btn" onClick={() => { setShowAll(s => !s); setFilter(''); }}>
-                {showAll ? 'Show less' : `Show all (${ordered.length})`}
+                {showAll ? 'Show less' : `Show all (${shownTotal})`}
               </button>
               {showAll && (
                 <button type="button" className="cb-link-btn is-danger" onClick={() => history.clear(false).catch(() => { })}>

@@ -417,9 +417,20 @@ export function SettingsModal({
     } catch { setError('Failed to toggle auto-group'); }
   };
 
-  const { status: clipboardStatus, setEnabled: setClipboardEnabled } = useClipboardStatus();
+  const { status: clipboardStatus, setEnabled: setClipboardEnabled, setFilters: setClipboardFilters } = useClipboardStatus();
   const handleClipboardToggle = (enabled) => {
     setClipboardEnabled(enabled).catch(err => console.warn('[Settings] clipboard toggle failed:', err));
+  };
+  const clipboardSkipKinds = clipboardStatus?.skipKinds || [];
+  const clipboardSkipSecrets = clipboardStatus?.skipSecrets !== false;
+  const updateClipboardFilters = (patch) => {
+    setClipboardFilters({ skipSecrets: clipboardSkipSecrets, skipKinds: clipboardSkipKinds, ...patch })
+      .catch(err => console.warn('[Settings] clipboard filters failed:', err));
+  };
+  // "Record X" toggles: checked = recorded = not in skipKinds.
+  const toggleClipboardKind = (kind, record) => {
+    const rest = clipboardSkipKinds.filter(k => k !== kind);
+    updateClipboardFilters({ skipKinds: record ? rest : [...rest, kind] });
   };
 
   const handleAutostartToggle = async (enabled) => {
@@ -813,8 +824,34 @@ export function SettingsModal({
                         hint="Keep what you copy in the side dock. Stays on this device; password-manager copies are skipped."
                         right={<Toggle checked={!!clipboardStatus?.enabled} onChange={handleClipboardToggle} accentColor="#22c55e" />}
                         onClick={() => handleClipboardToggle(!clipboardStatus?.enabled)}
-                        last
+                        last={!clipboardStatus?.enabled}
                       />
+                    )}
+                    {isTauri && clipboardStatus?.enabled && (
+                      <>
+                        <SettingRow
+                          label="Skip passwords & keys"
+                          hint="Don’t record text that looks like a password, API key, token, private key or card number"
+                          right={<Toggle checked={clipboardSkipSecrets} onChange={v => updateClipboardFilters({ skipSecrets: v })} accentColor="#22c55e" />}
+                          onClick={() => updateClipboardFilters({ skipSecrets: !clipboardSkipSecrets })}
+                          style={{ paddingLeft: 28 }}
+                        />
+                        {[
+                          ['image', 'Record images', 'Screenshots and copied pictures. Turning this off also removes unpinned image clips.'],
+                          ['code', 'Record code', 'Snippets and shell commands'],
+                          ['files', 'Record copied files', 'Files copied in Finder / Explorer'],
+                        ].map(([kind, label, hint], i, arr) => (
+                          <SettingRow
+                            key={kind}
+                            label={label}
+                            hint={hint}
+                            right={<Toggle checked={!clipboardSkipKinds.includes(kind)} onChange={v => toggleClipboardKind(kind, v)} accentColor="#22c55e" />}
+                            onClick={() => toggleClipboardKind(kind, clipboardSkipKinds.includes(kind))}
+                            style={{ paddingLeft: 28 }}
+                            last={i === arr.length - 1}
+                          />
+                        ))}
+                      </>
                     )}
                   </Card>
                 </section>
