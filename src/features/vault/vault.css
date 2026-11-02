@@ -1,0 +1,87 @@
+/* Password vault card. Rows, buttons and the card itself reuse the clipboard
+   card's cb-* styles; this adds the forms. */
+
+.vt-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 2px;
+}
+
+.vt-input {
+  margin: 0;
+  font-family: inherit;
+}
+
+.vt-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.02em;
+}
+
+.vt-notes {
+  resize: vertical;
+  min-height: 40px;
+}
+
+.vt-password-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.vt-password-row .vt-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.vt-note {
+  margin: 0 2px 2px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.vt-error,
+.vt-error-text {
+  font-size: 12px;
+  color: #f87171;
+}
+
+.vt-error {
+  padding: 0 4px;
+}
+
+.vt-primary {
+  align-self: flex-end;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(139, 92, 246, 0.85);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.vt-primary:hover:not(:disabled) {
+  background: rgba(139, 92, 246, 1);
+}
+
+.vt-primary:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.vt-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.vt-thumb {
+  background: rgba(139, 92, 246, 0.2);
+  color: #c4b5fd;
+  font-size: 12px;
+  font-weight: 700;
+}

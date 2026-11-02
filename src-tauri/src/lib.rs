@@ -19,6 +19,7 @@ mod webapp_embed;
 mod browser_pane;
 mod shelf;
 mod clipboard;
+mod vault;
 mod terminal;
 mod archive;
 mod annotations;
@@ -3610,6 +3611,18 @@ pub fn run() {
         clipboard::clipboard_remove,
         clipboard::clipboard_clear,
         clipboard::clipboard_save_to_shelf,
+        vault::vault_status,
+        vault::vault_set_enabled,
+        vault::vault_create,
+        vault::vault_unlock,
+        vault::vault_lock,
+        vault::vault_change_master,
+        vault::vault_list,
+        vault::vault_get,
+        vault::vault_save,
+        vault::vault_delete,
+        vault::vault_copy,
+        vault::vault_generate,
         annotations::highlights_list,
         annotations::highlights_update,
         annotations::highlights_delete,
@@ -3655,6 +3668,8 @@ pub fn run() {
 
       // Clipboard history watcher — idle until the user turns it on.
       clipboard::start(app.handle().clone());
+      // Password vault: settings + idle auto-lock.
+      vault::start(app.handle().clone());
 
       // Spawn Rust Sidecar Server (replaces Node.js sidecar)
       tauri::async_runtime::spawn(async {

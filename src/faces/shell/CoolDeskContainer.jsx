@@ -23,6 +23,7 @@ import { useDockState } from '../../features/dock/useDockState';
 import { useLayoutSwitch } from '../../features/dock/useLayoutSwitch';
 import { LayoutSwitchButton } from '../../features/dock/LayoutSwitchButton';
 import { ClipboardSection } from '../../features/clipboard/ClipboardSection';
+import { VaultSection } from '../../features/vault/VaultSection';
 import { ShellSection } from '../../features/terminal/ShellSection';
 import { useCooldeskAutoWorkspace, useCooldeskDiscovery } from '../../shared/hooks/useCooldeskProjects.js';
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
@@ -622,6 +623,8 @@ export function CoolDeskContainer({
       {/* Clipboard history: used far more often than the folders below, but
           the workspaces stay on top. Renders nothing until turned on. */}
       <ClipboardSection />
+      {/* Password vault — renders nothing until turned on in Settings. */}
+      <VaultSection />
       {/* A shell of its own (collapsed until opened); it also takes
           spotlight's "> cmd" and project commands while docked. */}
       <ShellSection />

@@ -1015,3 +1015,39 @@ mod tests {
         assert_eq!(items[0].id, "c0");
     }
 }
+
+// ── Secrets (used by the password vault) ─────────────────────────────────
+
+/// Put a secret on the clipboard marked so clipboard managers — this app's
+/// history included — leave it alone (nspasteboard ConcealedType on macOS;
+/// the monitor/history/cloud opt-outs on Windows).
+pub fn set_secret_text(text: &str) -> Result<(), String> {
+    let mut guard = BOARD.lock().unwrap();
+    if guard.is_none() {
+        *guard = Some(arboard::Clipboard::new().map_err(|e| e.to_string())?);
+    }
+    let board = guard.as_mut().unwrap();
+    #[allow(unused_mut)]
+    let mut set = board.set();
+    #[cfg(target_os = "macos")]
+    {
+        use arboard::SetExtApple;
+        set = set.exclude_from_history();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use arboard::SetExtWindows;
+        set = set.exclude_from_monitoring().exclude_from_history().exclude_from_cloud();
+    }
+    set.text(text.to_owned()).map_err(|e| e.to_string())
+}
+
+/// Clear the clipboard, but only if it still holds `text` — if the user has
+/// copied something else since, that's left alone.
+pub fn clear_if_text(text: &str) {
+    let mut guard = BOARD.lock().unwrap();
+    let Some(board) = guard.as_mut() else { return };
+    if board.get_text().ok().as_deref() == Some(text) {
+        let _ = board.clear();
+    }
+}

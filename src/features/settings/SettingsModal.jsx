@@ -3,6 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import logo from '../../../logo-2.png';
 import { useClipboardStatus } from '../clipboard/useClipboardHistory';
+import { useVaultStatus } from '../vault/useVault';
 
 const isTauri = typeof window !== 'undefined' && !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
 async function tauriInvoke(cmd, args) {
@@ -433,6 +434,11 @@ export function SettingsModal({
     updateClipboardFilters({ skipKinds: record ? rest : [...rest, kind] });
   };
 
+  const { status: vaultStatus, setEnabled: setVaultEnabled } = useVaultStatus();
+  const handleVaultToggle = (enabled) => {
+    setVaultEnabled(enabled).catch(err => console.warn('[Settings] vault toggle failed:', err));
+  };
+
   const handleAutostartToggle = async (enabled) => {
     try {
       await tauriInvoke('set_launch_at_login', { enabled });
@@ -816,6 +822,14 @@ export function SettingsModal({
                         hint="Start CoolDesk automatically on login"
                         right={<Toggle checked={autostartEnabled} onChange={handleAutostartToggle} accentColor="#22c55e" />}
                         onClick={() => handleAutostartToggle(!autostartEnabled)}
+                      />
+                    )}
+                    {isTauri && (
+                      <SettingRow
+                        label="Passwords"
+                        hint="A small encrypted password vault in the side dock, locked with a master password. Stays on this device."
+                        right={<Toggle checked={!!vaultStatus?.enabled} onChange={handleVaultToggle} accentColor="#22c55e" />}
+                        onClick={() => handleVaultToggle(!vaultStatus?.enabled)}
                       />
                     )}
                     {isTauri && (
