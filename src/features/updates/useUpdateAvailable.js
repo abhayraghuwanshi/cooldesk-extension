@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { checkForUpdate, getUpdateState, subscribeUpdate } from '../../services/updateService';
+import { checkForUpdate, getUpdateState, startHeartbeat, subscribeUpdate } from '../../services/updateService';
 
 /**
  * Subscribes to the shared update state and kicks off the check on first mount.
@@ -15,6 +15,7 @@ export function useUpdateAvailable() {
   useEffect(() => {
     const unsubscribe = subscribeUpdate(setState);
     checkForUpdate();
+    startHeartbeat();
     return unsubscribe;
   }, []);
 

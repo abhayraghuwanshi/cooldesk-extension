@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { recordFeature } from '../../services/analytics';
 
 const ONBOARDING_KEY = 'cooldesk_onboarding_completed';
 // Bumped for the 3-step getting-started flow — existing users see it once more.
@@ -37,6 +38,7 @@ export function useOnboarding() {
     try {
       localStorage.setItem(ONBOARDING_KEY, 'true');
       localStorage.setItem(`${ONBOARDING_KEY}_version`, ONBOARDING_VERSION);
+      recordFeature('onboarding_done');
       setShouldShowOnboarding(false);
       setIsManualStart(false);
     } catch (error) {

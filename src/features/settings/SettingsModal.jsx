@@ -1070,7 +1070,7 @@ export function SettingsModal({
                         label="Anonymous Usage Stats"
                         hint={
                           <span>
-                            Share anonymous launch counts to help improve CoolDesk. No search queries, URLs, or personal data.{' '}
+                            Share anonymous counts — days used, active minutes, which features get used — to help improve CoolDesk. No search queries, URLs, file names or personal data.{' '}
                             <a
                               href="https://cool-desk.com/privacy-details"
                               target="_blank"

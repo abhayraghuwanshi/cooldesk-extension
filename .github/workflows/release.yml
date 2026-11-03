@@ -109,6 +109,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           COOLDESK_INSTALL_SOURCE: ${{ matrix.install_source }}
+          # Tagged builds report channel=release; manual test runs report "test"
+          # so they never count as real users (see release_channel in lib.rs).
+          COOLDESK_CHANNEL: ${{ github.event_name == 'push' && 'release' || 'test' }}
         with:
           args: --target ${{ matrix.target }} ${{ matrix.bundle_args }}
 
@@ -202,6 +205,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           COOLDESK_INSTALL_SOURCE: ${{ matrix.install_source }}
+          # Tagged builds report channel=release; manual test runs report "test"
+          # so they never count as real users (see release_channel in lib.rs).
+          COOLDESK_CHANNEL: ${{ github.event_name == 'push' && 'release' || 'test' }}
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           tagName: ${{ github.ref_name }}
@@ -356,6 +362,31 @@ jobs:
           gh release upload "$TAG" latest.json --clobber --repo "$REPO"
           echo "==> latest.json uploaded"
 
+      # winget gets its own byte-identical copy of the NSIS installer, so that
+      # asset's download count is the number of winget installs and upgrades,
+      # and the plain setup.exe counts only direct downloads. Same bytes, same
+      # signature and hash — winget only sees a different URL. Nothing else
+      # picks it up: latest.json, R2 and the website all match `-setup.exe$`.
+      - name: Add winget copy of the installer
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_CD }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          NSIS=$(gh release view "$TAG" --repo "$REPO" --json assets \
+            --jq '.assets[].name | select(endswith("-setup.exe"))' | head -1)
+          if [ -z "$NSIS" ]; then
+            echo "::error::No -setup.exe on $TAG — winget would have nothing to install."
+            exit 1
+          fi
+          mkdir -p winget-copy
+          gh release download "$TAG" --repo "$REPO" --pattern "$NSIS" --dir winget-copy
+          COPY="${NSIS%-setup.exe}-setup-winget.exe"
+          mv "winget-copy/$NSIS" "winget-copy/$COPY"
+          gh release upload "$TAG" "winget-copy/$COPY" --clobber --repo "$REPO"
+          echo "==> Uploaded $COPY"
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
@@ -375,27 +406,29 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
           CF_ACCOUNT_ID: ${{ secrets.CF_R2_ACCOUNT_ID }}
         run: |
-          # Download the signed MSI from the release
-          MSI_URL=$(gh release view "$TAG" --repo "$REPO" --json assets \
-            --jq '.assets[] | select(.name | endswith("_en-US.msi")) | .url' | head -1)
+          # Mirror the NSIS installer — the one Windows installer we offer.
+          # The MSI is still built so existing MSI installs keep updating via
+          # the `-msi` key in latest.json, but it is no longer distributed.
+          EXE_URL=$(gh release view "$TAG" --repo "$REPO" --json assets \
+            --jq '.assets[] | select(.name | endswith("-setup.exe")) | .url' | head -1)
 
-          if [ -z "$MSI_URL" ]; then
-            echo "No MSI found in release — skipping R2 upload"
+          if [ -z "$EXE_URL" ]; then
+            echo "No setup.exe found in release — skipping R2 upload"
             exit 0
           fi
 
-          curl -L "$MSI_URL" -o CoolDesk-setup.msi
-          echo "Downloaded: $(du -h CoolDesk-setup.msi | cut -f1)"
+          curl -L "$EXE_URL" -o CoolDesk-setup.exe
+          echo "Downloaded: $(du -h CoolDesk-setup.exe | cut -f1)"
 
           # Upload to R2 using S3-compatible API (R2 is S3-compatible)
-          aws s3 cp CoolDesk-setup.msi \
-            s3://cooldesk-downloads/CoolDesk-setup.msi \
+          aws s3 cp CoolDesk-setup.exe \
+            s3://cooldesk-downloads/CoolDesk-setup.exe \
             --endpoint-url "https://${CF_ACCOUNT_ID}.r2.cloudflarestorage.com" \
             --region auto \
             --no-progress
 
           echo "Uploaded to R2 — available at:"
-          echo "https://pub-c48321b20c8942d1ad52781d27b6b607.r2.dev/CoolDesk-setup.msi"
+          echo "https://pub-c48321b20c8942d1ad52781d27b6b607.r2.dev/CoolDesk-setup.exe"
 
   winget:
     needs: [publish]
@@ -416,7 +449,6 @@ jobs:
           ASSETS=$(gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets')
 
           NSIS_URL=$(echo "$ASSETS" | jq -r '.[] | select(.name | endswith("-setup.exe")) | .url' | head -1)
-          MSI_URL=$(echo "$ASSETS" | jq -r '.[] | select(.name | endswith("_en-US.msi")) | .url' | head -1)
 
           echo "==> Hashing final signed artifacts from release URLs"
           if [ -n "$NSIS_URL" ]; then
@@ -424,12 +456,6 @@ jobs:
               && echo "NSIS SHA256: $(sha256sum installer.exe | cut -d' ' -f1 | tr '[:lower:]' '[:upper:]')" \
               || echo "NSIS download failed (non-fatal)"
             echo "NSIS URL:    $NSIS_URL"
-          fi
-          if [ -n "$MSI_URL" ]; then
-            curl -fsSL --retry 5 --retry-all-errors "$MSI_URL" -o installer.msi \
-              && echo "MSI  SHA256: $(sha256sum installer.msi | cut -d' ' -f1 | tr '[:lower:]' '[:upper:]')" \
-              || echo "MSI download failed (non-fatal)"
-            echo "MSI  URL:    $MSI_URL"
           fi
 
       # komac creates the submission branch on <owner>/winget-pkgs from the
@@ -465,7 +491,18 @@ jobs:
         uses: vedantmgoyal9/winget-releaser@v2
         with:
           identifier: CoolDesk.CoolDesk
-          installers-regex: '(setup\.exe|en-US\.msi)$'
+          # NSIS only, and its dedicated `-setup-winget.exe` copy (see "Add
+          # winget copy of the installer") so winget downloads are counted
+          # apart. Offering the MSI too let one machine end up with both a
+          # per-user (NSIS) and a per-machine (MSI) install. Existing MSI
+          # installs update in-app via the `-msi` entry in latest.json.
+          #
+          # The manifest must also carry `InstallerSwitches: Custom:
+          # /SOURCE=winget` so the installer can mark the install as winget
+          # (nsis/installer-hooks.nsh). Komac, which winget-releaser runs,
+          # carries fields over from the previous manifest version, so this is
+          # added once by hand in winget-pkgs — check it survived each release.
+          installers-regex: 'setup-winget\.exe$'
           token: ${{ secrets.WINGET_TOKEN }}
 
   homebrew:

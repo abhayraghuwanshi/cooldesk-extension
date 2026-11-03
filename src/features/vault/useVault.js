@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { recordFeature } from '../../services/analytics';
 
 // Password vault (src-tauri/src/vault.rs). Emits `vault-status` when it's
 // enabled/created/unlocked/locked (including the idle auto-lock) and
@@ -37,7 +38,7 @@ export function useVaultStatus() {
 
   const setEnabled = useCallback(enabled => invoke('vault_set_enabled', { enabled }).then(setStatus), []);
   const create = useCallback(master => invoke('vault_create', { master }).then(setStatus), []);
-  const unlock = useCallback(master => invoke('vault_unlock', { master }).then(setStatus), []);
+  const unlock = useCallback(master => invoke('vault_unlock', { master }).then((s) => { recordFeature('vault_unlock'); setStatus(s); }), []);
   const lock = useCallback(() => invoke('vault_lock').then(setStatus), []);
   const changeMaster = useCallback((current, next) => invoke('vault_change_master', { current, next }), []);
   return { status, setEnabled, create, unlock, lock, changeMaster };

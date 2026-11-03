@@ -1,5 +1,6 @@
 import { faGripLines, faTableColumns, faWindowMaximize } from '@fortawesome/free-solid-svg-icons';
 import { useCallback } from 'react';
+import { recordFeature } from '../../services/analytics';
 
 // One button walks the window through three layouts:
 //   full → side (drawer on the saved vertical edge) → bar (bottom strip) → full
@@ -37,6 +38,7 @@ export function useLayoutSwitch(dockState) {
         ? 'bottom'
         : (dockState?.side === 'left' ? 'left' : 'right');
       await invoke('dock_enable', { mode: 'drawer', side });
+      recordFeature('dock_enabled');
       await invoke('dock_expand');
     } catch (e) {
       console.error(`[LayoutSwitch] Failed to switch layout to "${layout}":`, e);

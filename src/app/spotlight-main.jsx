@@ -4,11 +4,13 @@ config.autoAddCss = false;
 import React, { Suspense, useCallback, useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { initChromePolyfill } from '../services/chromePolyfill';
+import { initActivityTracking } from '../services/analytics';
 
 // Initialize Chrome API polyfill for Electron environment
 // Initialize Chrome API polyfill for Electron environment
 import './electron-shim';
 initChromePolyfill();
+initActivityTracking();
 
 // GlobalSpotlight.css scopes its window chrome (transparent bg, no scroll) to
 // this class so the shared component can also be embedded in the main app.
