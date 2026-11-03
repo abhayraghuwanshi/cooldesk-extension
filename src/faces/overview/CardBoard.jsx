@@ -5,6 +5,10 @@ import { ActivityOverview } from '../../features/activity/ActivityOverview';
 import { WidgetBoard, WidgetEmbed } from '../../features/widgets/WidgetBoard';
 import { WIDGET_CATALOG } from '../../data/widgetCatalog';
 import { loadCustomWidgets } from '../../data/customWidgets';
+import { TRANSPARENT_ACCENT } from '../../shared/components/AccentColorPicker.jsx';
+import { accentTextVars } from '../../utils/readableColor.js';
+import { ColumnColorChip } from './ColumnColorChip.jsx';
+import { DEFAULT_COLORLESS_OPACITY, colorlessStyle } from './columnColor.js';
 import { CARD_MAX, CARD_TYPES, cardLabel, firstFreeCell, makeCard, resolveLayout, useOverviewCards, widgetRows } from './overviewLayouts';
 
 // Custom layout: the page as a free grid of cards (macOS-desktop-widget
@@ -166,7 +170,19 @@ function AddMenu({ cards, onAdd }) {
     );
 }
 
-const CardBoard = memo(function CardBoard({ editing = false, onDone }) {
+// Same card-colour treatment as the column layouts' ◍ chip, per card: an
+// accent tint over the glass, or Colorless (no blur, darkness slider).
+function cardColorClass(color) {
+    return color === TRANSPARENT_ACCENT ? 'is-colorless' : color ? 'has-accent' : '';
+}
+
+function cardColorStyle(card, wall) {
+    if (card.color === TRANSPARENT_ACCENT) return colorlessStyle(card.opacity ?? DEFAULT_COLORLESS_OPACITY, wall);
+    if (card.color) return { '--card-accent': card.color, ...accentTextVars(card.color, 0.13) };
+    return null;
+}
+
+const CardBoard = memo(function CardBoard({ editing = false, onDone, wall = null }) {
     const [cards, setCards, resetCards] = useOverviewCards();
     const [{ cell, cols }, setGrid] = useState(() => gridFor(window.innerWidth * 0.9, window.innerHeight - 110));
     // Rows the stored board spans — what the cell size must fit vertically.
@@ -227,6 +243,7 @@ const CardBoard = memo(function CardBoard({ editing = false, onDone }) {
 
     const resize = (id, w, h) => commit(cards.map(c => (c.id === id ? { ...c, w, h } : c)), id);
     const remove = (id) => setCards(prev => prev.filter(c => c.id !== id));
+    const patch = (id, fields) => setCards(prev => prev.map(c => (c.id === id ? { ...c, ...fields } : c)));
     const add = (t) => {
         // macOS-ish starting sizes: widgets small (2×2, tall ones 2×3), the
         // Favorites strip 4×1, everything else a 4×4 large card (summary 2×3).
@@ -309,11 +326,12 @@ const CardBoard = memo(function CardBoard({ editing = false, onDone }) {
                     return (
                     <div
                         key={card.id}
-                        className={`ocb-card ocb-card-${card.type} ${isDragged ? 'is-dragging' : ''}`}
+                        className={`ocb-card ocb-card-${card.type} ${cardColorClass(card.color)} ${isDragged ? 'is-dragging' : ''}`}
                         data-w={cell.w}
                         style={{
                             gridColumn: `${at.x + 1} / span ${cell.w}`,
                             gridRow: `${at.y + 1} / span ${cell.h}`,
+                            ...cardColorStyle(card, wall),
                             ...(isDragged ? { transform: `translate(${drag.dx}px, ${drag.dy}px)` } : {}),
                         }}
                         onPointerDown={e => onPointerDown(e, card)}
@@ -324,6 +342,14 @@ const CardBoard = memo(function CardBoard({ editing = false, onDone }) {
                         <div className="ocb-card-body">
                             <CardContent card={card} pinnedTabs={pinnedTabs} />
                         </div>
+                        {!editing && (
+                            <ColumnColorChip
+                                color={card.color || null}
+                                onChange={color => patch(card.id, { color })}
+                                opacity={card.opacity ?? DEFAULT_COLORLESS_OPACITY}
+                                onOpacityChange={opacity => patch(card.id, { opacity })}
+                            />
+                        )}
                         {editing && (
                             <div className="ocb-card-edit">
                                 <button
