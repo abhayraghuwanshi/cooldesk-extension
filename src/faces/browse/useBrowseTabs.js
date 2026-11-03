@@ -290,12 +290,12 @@ export function useBrowseTabs(initialUrl) {
    *  the blank Home tab it was opened from. `run`: a command it starts with
    *  (a project's dev server, build…); running the same one again switches
    *  to its tab instead of starting a second copy. */
-  const openTerminalTab = useCallback((rawCwd = null, inPlace = false, { run = null, title: name = null } = {}) => {
+  const openTerminalTab = useCallback((rawCwd = null, inPlace = false, { run = null, title: name = null, fresh = false } = {}) => {
     const cwd = rawCwd ? normalizePath(rawCwd) : null;
     // Plain shells only: a project command (run) is that project's, not a
     // place you went.
     if (!run) recordRecentShell(cwd);
-    if (run) {
+    if (run && !fresh) {
       const same = tabs.find(t => t.term?.run === run && t.term?.cwd === cwd);
       if (same) {
         touch(same.id);

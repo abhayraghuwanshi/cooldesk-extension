@@ -15,6 +15,16 @@
 // that resets on every refresh call, so refreshing pids one by one gave every
 // pid after the first a microseconds-long interval (and absurd percentages).
 //
+// Memory is the physical footprint (what Activity Monitor shows), not RSS:
+// a WebContent process keeps most of its memory as compressed pages and GPU
+// layer surfaces ("owned unmapped (graphics)" in vmmap), which RSS leaves
+// out — RSS read ~230 MB for a UI process whose footprint was 555 MB.
+//
+// CoolDesk itself is every process macOS holds us responsible for — the app,
+// the web processes of its own windows (main, spotlight, handle) and WebKit's
+// shared GPU and Networking processes — minus the pages, which are listed on
+// their own.
+//
 // Crashes: when a page's WebContent process dies (jetsam under memory
 // pressure, a WebKit crash, browser_pane_kill) the view stays up but blank,
 // and `_webProcessIdentifier` drops to 0 until it's reloaded. Tauri doesn't
@@ -55,8 +65,11 @@ pub struct PaneStat {
 #[derive(Serialize)]
 pub struct BrowserStats {
     panes: Vec<PaneStat>,
-    /// CoolDesk itself: the app process plus its own UI's WebContent process.
+    /// CoolDesk itself: the app process, its own windows' WebContent
+    /// processes and WebKit's GPU / Networking processes (pages excluded).
     app_memory: Option<u64>,
+    /// Same processes, percent of one core summed (can pass 100%).
+    app_cpu: Option<f32>,
     /// Physical memory, bytes.
     total_memory: u64,
     /// Free + reclaimable memory, bytes (low means the system is under pressure).
@@ -99,8 +112,67 @@ fn probe(_wv: &tauri::Webview) -> Probe {
     Probe::default()
 }
 
+#[cfg(target_os = "macos")]
+mod darwin {
+    /// Leading fields of `struct rusage_info_v2` (<sys/resource.h>), up to the
+    /// footprint; the kernel writes the whole struct, so the buffer is padded.
+    #[repr(C)]
+    struct RusageInfoV2 {
+        uuid: [u8; 16],
+        user_time: u64,
+        system_time: u64,
+        pkg_idle_wkups: u64,
+        interrupt_wkups: u64,
+        pageins: u64,
+        wired_size: u64,
+        resident_size: u64,
+        phys_footprint: u64,
+        _rest: [u64; 10],
+    }
+    const RUSAGE_INFO_V2: i32 = 2;
+
+    extern "C" {
+        fn proc_pid_rusage(pid: i32, flavor: i32, buffer: *mut RusageInfoV2) -> i32;
+        // libquarantine (part of libSystem): the app an XPC service such as
+        // a WebKit process works for. Private, but what Activity Monitor uses.
+        fn responsibility_get_pid_responsible_for_pid(pid: i32) -> i32;
+    }
+
+    pub fn footprint(pid: u32) -> Option<u64> {
+        let mut ri: RusageInfoV2 = unsafe { std::mem::zeroed() };
+        (unsafe { proc_pid_rusage(pid as i32, RUSAGE_INFO_V2, &mut ri) } == 0).then_some(ri.phys_footprint)
+    }
+
+    pub fn responsible_for(pid: u32) -> Option<u32> {
+        let r = unsafe { responsibility_get_pid_responsible_for_pid(pid as i32) };
+        (r > 0).then_some(r as u32)
+    }
+}
+
+/// Memory (physical footprint on macOS, RSS elsewhere) and CPU% of `pid`.
 fn sample(sys: &System, pid: u32) -> Option<(u64, f32)> {
-    sys.process(Pid::from_u32(pid)).map(|p| (p.memory(), p.cpu_usage()))
+    let p = sys.process(Pid::from_u32(pid))?;
+    #[cfg(target_os = "macos")]
+    let memory = darwin::footprint(pid).unwrap_or_else(|| p.memory());
+    #[cfg(not(target_os = "macos"))]
+    let memory = p.memory();
+    Some((memory, p.cpu_usage()))
+}
+
+/// Pids that make up CoolDesk itself, pages excluded.
+#[cfg(target_os = "macos")]
+fn own_pids(sys: &System, _main_pid: Option<u32>, pane_pids: &[u32]) -> Vec<u32> {
+    let me = std::process::id();
+    sys.processes()
+        .keys()
+        .map(|pid| pid.as_u32())
+        .filter(|&pid| pid == me || (darwin::responsible_for(pid) == Some(me) && !pane_pids.contains(&pid)))
+        .collect()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn own_pids(_sys: &System, main_pid: Option<u32>, _pane_pids: &[u32]) -> Vec<u32> {
+    std::iter::once(std::process::id()).chain(main_pid).collect()
 }
 
 /// Whether the pane `label` (now reporting `pid`) has crashed; emits the
@@ -151,7 +223,7 @@ pub async fn browser_pane_stats(app: tauri::AppHandle) -> BrowserStats {
     sys.refresh_processes_specifics(ProcessRefreshKind::new().with_cpu().with_memory());
     sys.refresh_memory();
     let sys = &*sys;
-    let panes = probes
+    let panes: Vec<PaneStat> = probes
         .into_iter()
         .zip(crashed)
         .map(|((_, id, p), crashed)| {
@@ -169,11 +241,12 @@ pub async fn browser_pane_stats(app: tauri::AppHandle) -> BrowserStats {
             }
         })
         .collect();
-    let own = sample(sys, std::process::id()).map(|s| s.0);
-    let ui = main_pid.and_then(|p| sample(sys, p)).map(|s| s.0);
-    let app_memory = match (own, ui) {
-        (None, None) => None,
-        (a, b) => Some(a.unwrap_or(0) + b.unwrap_or(0)),
+    let pane_pids: Vec<u32> = panes.iter().filter_map(|p| p.pid).collect();
+    let own: Vec<(u64, f32)> = own_pids(sys, main_pid, &pane_pids).into_iter().filter_map(|pid| sample(sys, pid)).collect();
+    let (app_memory, app_cpu) = if own.is_empty() {
+        (None, None)
+    } else {
+        (Some(own.iter().map(|s| s.0).sum()), Some(own.iter().map(|s| s.1).sum()))
     };
-    BrowserStats { panes, app_memory, total_memory: sys.total_memory(), available_memory: sys.available_memory() }
+    BrowserStats { panes, app_memory, app_cpu, total_memory: sys.total_memory(), available_memory: sys.available_memory() }
 }

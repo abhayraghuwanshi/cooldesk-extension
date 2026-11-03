@@ -76,7 +76,7 @@ function Action({ tool, icon, label, state, disabled, onRun }) {
 /**
  * @param tools      the visible tab's controls (BrowserPane onTools), or null
  * @param pages      open pages with memory/cpu (BrowseView's openPages)
- * @param totals     { memory, cpu, app }
+ * @param totals     { memory, cpu, app, appCpu }
  * @param live       the visible page's stats ({ audible, camera, microphone }), or null
  * @param onClosePage(page)
  */
@@ -151,7 +151,10 @@ export function PageView({ tools, pages = [], totals, live = null, onClosePage }
           </div>
         ))}
         {totals?.app != null && (
-          <div className="pg-foot">CoolDesk itself <strong>{formatBytes(totals.app)}</strong></div>
+          <div className="pg-foot">
+            CoolDesk itself <strong>{formatBytes(totals.app)}</strong>
+            {totals.appCpu != null && <span> · {Math.round(totals.appCpu)}% CPU</span>}
+          </div>
         )}
       </section>
     </div>

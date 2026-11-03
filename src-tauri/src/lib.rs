@@ -18,6 +18,8 @@ mod tab_uia;
 mod webapp_embed;
 mod browser_pane;
 mod shelf;
+mod clipboard;
+mod vault;
 mod terminal;
 mod archive;
 mod annotations;
@@ -2136,6 +2138,33 @@ fn take_spotlight_edit() -> Option<serde_json::Value> {
     PENDING_SPOTLIGHT_EDIT.lock().unwrap().take()
 }
 
+// Shell command typed into the spotlight (`> …`) for the main window to run
+// in a terminal tab — set by `spotlight_run_in_terminal`, taken (once) by the
+// main window. A pending slot for the same reason as PENDING_SPOTLIGHT_EDIT:
+// a main window that's only now being created still picks it up on mount.
+static PENDING_TERMINAL_RUN: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Hand a command from the spotlight window to the main window, which opens
+/// it as a terminal tab (see `useSpotlightRuns` in runInTerminal.js).
+#[tauri::command]
+fn spotlight_run_in_terminal(app: tauri::AppHandle, command: String) -> Result<(), String> {
+    if command.trim().is_empty() {
+        return Err("Empty command".into());
+    }
+    *PENDING_TERMINAL_RUN.lock().unwrap() = Some(command);
+    if let Some(window) = app.get_webview_window("spotlight") {
+        let _ = window.hide();
+    }
+    show_main_window(&app);
+    let _ = app.emit("spotlight-run-in-terminal", ());
+    Ok(())
+}
+
+#[tauri::command]
+fn take_terminal_run() -> Option<String> {
+    PENDING_TERMINAL_RUN.lock().unwrap().take()
+}
+
 #[tauri::command]
 fn hide_spotlight(app: tauri::AppHandle) {
     // Grant any process foreground permission BEFORE hiding our window.
@@ -3488,6 +3517,8 @@ pub fn run() {
         open_spotlight_edit,
         folder_identity,
         take_spotlight_edit,
+        spotlight_run_in_terminal,
+        take_terminal_run,
         hide_spotlight,
         set_spotlight_shortcut,
         launch_app,
@@ -3569,6 +3600,29 @@ pub fn run() {
         shelf::shelf_pin,
         shelf::shelf_clear,
         shelf::shelf_save_to,
+        clipboard::clipboard_status,
+        clipboard::clipboard_set_enabled,
+        clipboard::clipboard_set_paused,
+        clipboard::clipboard_set_filters,
+        clipboard::clipboard_list,
+        clipboard::clipboard_text,
+        clipboard::clipboard_copy,
+        clipboard::clipboard_pin,
+        clipboard::clipboard_remove,
+        clipboard::clipboard_clear,
+        clipboard::clipboard_save_to_shelf,
+        vault::vault_status,
+        vault::vault_set_enabled,
+        vault::vault_create,
+        vault::vault_unlock,
+        vault::vault_lock,
+        vault::vault_change_master,
+        vault::vault_list,
+        vault::vault_get,
+        vault::vault_save,
+        vault::vault_delete,
+        vault::vault_copy,
+        vault::vault_generate,
         annotations::highlights_list,
         annotations::highlights_update,
         annotations::highlights_delete,
@@ -3611,6 +3665,11 @@ pub fn run() {
           ])
           .build(),
       )?;
+
+      // Clipboard history watcher — idle until the user turns it on.
+      clipboard::start(app.handle().clone());
+      // Password vault: settings + idle auto-lock.
+      vault::start(app.handle().clone());
 
       // Spawn Rust Sidecar Server (replaces Node.js sidecar)
       tauri::async_runtime::spawn(async {

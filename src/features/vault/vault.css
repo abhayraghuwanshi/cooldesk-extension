@@ -1,0 +1,350 @@
+/* Password vault card. The card shell, header and rows reuse the clipboard
+   card's cb-* styles so the two read as siblings; this covers the lock
+   screen, the entry form and the vault's own controls. */
+
+.home-stack-vault {
+  --vt-accent: 139, 92, 246;
+  --vt-field-bg: rgba(255, 255, 255, 0.05);
+  --vt-field-border: rgba(255, 255, 255, 0.1);
+}
+
+/* ── Inputs ────────────────────────────────────────────────────────────── */
+
+.vt-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--vt-field-border);
+  background: var(--vt-field-bg);
+  color: #fff;
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.vt-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.vt-input:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.vt-input:focus {
+  border-color: rgba(var(--vt-accent), 0.7);
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: 0 0 0 3px rgba(var(--vt-accent), 0.18);
+}
+
+.vt-input[aria-invalid="true"] {
+  border-color: rgba(248, 113, 113, 0.6);
+}
+
+.vt-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+}
+
+.vt-notes {
+  height: auto;
+  min-height: 52px;
+  padding: 7px 10px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+/* An input with icon buttons sitting inside its right edge. */
+.vt-input-wrap {
+  position: relative;
+}
+
+.vt-input-wrap.has-1 .vt-input { padding-right: 36px; }
+.vt-input-wrap.has-2 .vt-input { padding-right: 62px; }
+
+.vt-inline-actions {
+  position: absolute;
+  top: 0;
+  right: 4px;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.vt-inline-btn {
+  width: 26px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.vt-inline-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.vt-inline-btn.is-active {
+  color: rgb(var(--vt-accent));
+}
+
+.vt-go {
+  background: rgba(var(--vt-accent), 0.85);
+  color: #fff;
+}
+
+.vt-go:hover:not(:disabled) {
+  background: rgb(var(--vt-accent));
+}
+
+.vt-go:disabled {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.3);
+  cursor: default;
+}
+
+.vt-spinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: vt-spin 0.7s linear infinite;
+}
+
+@keyframes vt-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+
+.vt-primary,
+.vt-ghost {
+  height: 28px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, opacity 0.15s;
+}
+
+.vt-primary {
+  border: none;
+  background: rgba(var(--vt-accent), 0.85);
+  color: #fff;
+}
+
+.vt-primary:hover:not(:disabled) {
+  background: rgb(var(--vt-accent));
+}
+
+.vt-primary:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.vt-block {
+  width: 100%;
+  height: 32px;
+  margin-top: 2px;
+}
+
+.vt-ghost {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.65);
+  font-weight: 500;
+  padding: 0 10px;
+}
+
+.vt-ghost:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.vt-ghost.is-danger {
+  color: rgba(248, 113, 113, 0.8);
+  padding-left: 6px;
+}
+
+.vt-ghost.is-danger:hover,
+.vt-ghost.is-danger.is-armed {
+  background: rgba(248, 113, 113, 0.14);
+  color: #fca5a5;
+}
+
+/* ── Lock / setup screen ───────────────────────────────────────────────── */
+
+.vt-lock {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 14px 10px 12px;
+  text-align: center;
+}
+
+.vt-lock-icon {
+  align-self: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: #c4b5fd;
+  background: linear-gradient(145deg, rgba(var(--vt-accent), 0.35), rgba(var(--vt-accent), 0.12));
+  box-shadow: inset 0 0 0 1px rgba(var(--vt-accent), 0.35);
+}
+
+.vt-lock-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #fff;
+  margin-top: 2px;
+}
+
+.vt-note {
+  margin: -4px 4px 4px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.vt-lock .vt-input {
+  text-align: left;
+}
+
+/* ── Entry form ────────────────────────────────────────────────────────── */
+
+.vt-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 6px 4px;
+}
+
+.vt-form-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 6px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.vt-form-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.vt-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vt-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  padding-left: 2px;
+}
+
+.vt-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-top: 4px;
+}
+
+.vt-error {
+  font-size: 11.5px;
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.1);
+  border-radius: 6px;
+  padding: 5px 8px;
+  text-align: left;
+}
+
+.vt-error-text {
+  color: #fca5a5;
+}
+
+/* ── List ──────────────────────────────────────────────────────────────── */
+
+.vt-avatar {
+  background: var(--vt-av-bg, rgba(var(--vt-accent), 0.2));
+  color: var(--vt-av-fg, #c4b5fd);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.vt-search {
+  height: 30px;
+  box-sizing: border-box;
+}
+
+.vt-empty {
+  padding: 14px 10px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.vt-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px 2px;
+}
+
+.vt-footer .cb-link-btn {
+  flex-shrink: 0;
+  padding: 4px 6px;
+}
+
+.vt-add {
+  flex: 1;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.vt-add:hover {
+  border-color: rgba(var(--vt-accent), 0.6);
+  background: rgba(var(--vt-accent), 0.1);
+  color: #fff;
+}

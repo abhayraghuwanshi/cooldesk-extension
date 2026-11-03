@@ -47,7 +47,13 @@ fn size(cols: u16, rows: u16) -> PtySize {
 /// zsh startup files that load the user's own (same order, same ZDOTDIR
 /// they'd normally see) and then, only if the prompt is still macOS's
 /// stock `user@host dir %`, shorten it to `dir %` — the user@host part ate
-/// half a narrow panel. A prompt the user set themselves is left alone.
+/// half a narrow panel. A prompt the user set themselves is left alone —
+/// except in a compact shell (the docked sidebar's, a few dozen columns
+/// wide), which always gets a bare `%`: a themed prompt's path and git
+/// segments wrapped every line there, and even one long folder name took a
+/// third of it. The folder goes in the terminal title instead, which the
+/// panel's bar shows. It's re-applied before each prompt so themes that
+/// rebuild PROMPT in their own precmd (p10k, …) don't win.
 /// (The same wrapper trick VS Code's terminal uses.)
 const ZSH_FORWARD: &str = r#"if [[ -f "$COOLDESK_USER_ZDOTDIR/FILE" ]]; then
   COOLDESK_ZDOTDIR=$ZDOTDIR
@@ -58,6 +64,12 @@ const ZSH_FORWARD: &str = r#"if [[ -f "$COOLDESK_USER_ZDOTDIR/FILE" ]]; then
 fi
 "#;
 const ZSH_RC_TAIL: &str = r#"[[ "$PROMPT" == '%n@%m %1~ %# ' ]] && PROMPT='%1~ %# '
+if [[ -n "$COOLDESK_COMPACT_PROMPT" ]]; then
+  _cooldesk_compact_prompt() { PROMPT='%# '; RPROMPT=''; print -Pn '\e]0;%~\a'; }
+  precmd_functions+=(_cooldesk_compact_prompt)
+  _cooldesk_compact_prompt
+fi
+unset COOLDESK_COMPACT_PROMPT
 "#;
 const ZSH_LOGIN_TAIL: &str = r#"ZDOTDIR=$COOLDESK_USER_ZDOTDIR
 unset COOLDESK_ZDOTDIR COOLDESK_USER_ZDOTDIR
@@ -82,7 +94,7 @@ fn zsh_wrapper(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
     Some(dir)
 }
 
-fn shell_command(app: &tauri::AppHandle, cwd: Option<&str>) -> CommandBuilder {
+fn shell_command(app: &tauri::AppHandle, cwd: Option<&str>, compact: bool) -> CommandBuilder {
     #[cfg(windows)]
     let mut cmd = {
         let mut c = CommandBuilder::new("powershell.exe");
@@ -130,13 +142,17 @@ fn shell_command(app: &tauri::AppHandle, cwd: Option<&str>) -> CommandBuilder {
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
     cmd.env("TERM_PROGRAM", "CoolDesk");
+    if compact {
+        cmd.env("COOLDESK_COMPACT_PROMPT", "1");
+    }
     if std::env::var("LANG").map(|v| v.is_empty()).unwrap_or(true) {
         cmd.env("LANG", "en_US.UTF-8");
     }
     cmd
 }
 
-/// Start a shell for terminal `id` (one per tab mount) in `cwd`.
+/// Start a shell for terminal `id` (one per tab mount) in `cwd`. `compact`:
+/// a very narrow terminal, which gets a short prompt (see ZSH_RC_TAIL).
 #[tauri::command]
 pub fn terminal_open(
     webview: tauri::Webview,
@@ -144,6 +160,7 @@ pub fn terminal_open(
     cwd: Option<String>,
     cols: u16,
     rows: u16,
+    compact: Option<bool>,
     output: Channel<InvokeResponseBody>,
 ) -> Result<(), String> {
     require_main(&webview)?;
@@ -152,7 +169,7 @@ pub fn terminal_open(
         .map_err(|e| format!("openpty: {e}"))?;
     let mut child = pair
         .slave
-        .spawn_command(shell_command(tauri::Manager::app_handle(&webview), cwd.as_deref()))
+        .spawn_command(shell_command(tauri::Manager::app_handle(&webview), cwd.as_deref(), compact.unwrap_or(false)))
         .map_err(|e| format!("spawn shell: {e}"))?;
     // The slave end belongs to the shell now; holding it open here would
     // keep the reader from seeing EOF when the shell exits.

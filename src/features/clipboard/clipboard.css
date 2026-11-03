@@ -1,0 +1,564 @@
+/* Clipboard history card in the side dock. Same near-solid dark tile as the
+   other sidebar cards (dock-see-through.css), so it reads as one of them.
+   The password vault card (features/vault) reuses the row, header and
+   button styles here, so keep the two in mind together. */
+
+.cb-section {
+  --cb-accent: 139, 92, 246;
+  --cb-card-bg: rgb(34, 34, 38);
+  --cb-row-hover: rgb(46, 46, 51);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ────────────────────────────────────────────────────────────── */
+
+.cb-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cb-title {
+  font-size: var(--font-2xl, 20px);
+  font-weight: 600;
+  color: var(--text-secondary, #94A3B8);
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cb-header-toggle {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  border-radius: 6px;
+  outline: none;
+}
+
+.cb-header-toggle:focus-visible {
+  box-shadow: 0 0 0 2px rgba(var(--cb-accent), 0.6);
+}
+
+.cb-chevron {
+  font-size: 0.6em;
+  opacity: 0.6;
+  margin-left: 2px;
+  transition: opacity 0.15s;
+}
+
+.cb-header-toggle:hover .cb-chevron {
+  opacity: 1;
+}
+
+.cb-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.cb-paused-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: #fcd34d;
+  background: rgba(251, 191, 36, 0.12);
+}
+
+.cb-paused-label::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* ── Card ──────────────────────────────────────────────────────────────── */
+
+.cb-card {
+  background: var(--cb-card-bg);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 6px 18px rgba(0, 0, 0, 0.18);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cb-filter {
+  height: 32px;
+  box-sizing: border-box;
+  margin: 2px 2px 2px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.cb-filter::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.cb-filter:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.cb-filter:focus {
+  border-color: rgba(var(--cb-accent), 0.7);
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: 0 0 0 3px rgba(var(--cb-accent), 0.18);
+}
+
+/* ── Category chips ────────────────────────────────────────────────────── */
+
+.cb-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 2px 2px 4px;
+}
+
+.cb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.6);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.cb-chip svg {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.cb-chip:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.cb-chip.is-active {
+  color: #fff;
+  background: rgba(var(--cb-accent), 0.85);
+}
+
+.cb-chip.is-active svg,
+.cb-chip.is-active .cb-chip-count {
+  opacity: 0.85;
+}
+
+.cb-chip-count {
+  opacity: 0.5;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Rows ──────────────────────────────────────────────────────────────── */
+
+.cb-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cb-list.is-all {
+  max-height: 420px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.cb-row {
+  border-radius: 10px;
+}
+
+.cb-row.is-previewing {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.cb-row-main {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  outline: none;
+  transition: background 0.12s;
+}
+
+.cb-row-main:hover,
+.cb-row-main:focus-visible {
+  background: var(--cb-row-hover);
+}
+
+.cb-row-main:focus-visible {
+  box-shadow: inset 0 0 0 1px rgba(var(--cb-accent), 0.6);
+}
+
+.cb-row-main:active {
+  cursor: grabbing;
+}
+
+/* Kind tile: a tinted square per kind, so a column of clips scans by type. */
+.cb-thumb {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+.cb-thumb-img {
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.cb-thumb-text  { color: #cbd5e1; background: rgba(148, 163, 184, 0.14); }
+.cb-thumb-link  { color: #93c5fd; background: rgba(59, 130, 246, 0.18); }
+.cb-thumb-code  { color: #6ee7b7; background: rgba(16, 185, 129, 0.16); }
+.cb-thumb-files { color: #c4b5fd; background: rgba(139, 92, 246, 0.18); }
+.cb-thumb-image { color: #f9a8d4; background: rgba(236, 72, 153, 0.16); }
+
+.cb-swatch {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.cb-row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cb-row-title {
+  font-size: 13px;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.92);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cb-row-title.is-copied {
+  color: #86efac;
+  font-weight: 500;
+}
+
+.cb-row-meta {
+  font-size: 11px;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Actions appear on hover/focus, over the end of the text, so the narrow
+   column keeps its width for the clip itself. The fade matches the hover
+   background exactly so the text disappears under it cleanly. */
+.cb-row-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  align-items: center;
+  gap: 1px;
+  padding: 0 6px 0 22px;
+  border-radius: 0 10px 10px 0;
+  background: linear-gradient(to right, transparent, var(--cb-row-hover) 18px);
+}
+
+.cb-row-main:hover .cb-row-actions,
+.cb-row-main:focus-within .cb-row-actions,
+.cb-row.is-previewing .cb-row-actions {
+  display: flex;
+}
+
+.cb-row.is-previewing:not(:hover) .cb-row-actions {
+  background: linear-gradient(to right, transparent, rgb(41, 41, 45) 18px);
+}
+
+.cb-row-main:hover .cb-pin-mark,
+.cb-row.is-previewing .cb-pin-mark {
+  display: none;
+}
+
+.cb-pin-mark {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: #a78bfa;
+  transform: rotate(30deg);
+}
+
+.cb-copied {
+  flex-shrink: 0;
+  color: #4ade80;
+  font-size: 13px;
+}
+
+.cb-icon-btn {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.cb-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.cb-icon-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(var(--cb-accent), 0.6);
+}
+
+.cb-icon-btn.is-active {
+  color: #c4b5fd;
+  background: rgba(var(--cb-accent), 0.16);
+}
+
+.cb-icon-btn.is-danger:hover {
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.14);
+}
+
+/* ── Inline preview ────────────────────────────────────────────────────── */
+
+.cb-preview {
+  padding: 2px 8px 10px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cb-preview-text {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.28);
+  color: #e5e7eb;
+  font: 11.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  scrollbar-width: thin;
+}
+
+.cb-preview-img {
+  max-width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+  align-self: flex-start;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  background: repeating-conic-gradient(rgba(255, 255, 255, 0.06) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
+}
+
+.cb-preview-swatch {
+  height: 56px;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.cb-preview-link {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #93c5fd;
+  word-break: break-all;
+  user-select: text;
+}
+
+.cb-preview-files {
+  margin: 0;
+  padding: 6px 10px;
+  list-style: none;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  font-size: 11.5px;
+  color: #e5e7eb;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.cb-preview-files li {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 0;
+}
+
+.cb-preview-meta {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  font-variant-numeric: tabular-nums;
+}
+
+.cb-preview-btn {
+  align-self: flex-start;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 7px;
+  border: none;
+  background: rgba(var(--cb-accent), 0.85);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.cb-preview-btn:hover {
+  background: rgb(var(--cb-accent));
+}
+
+/* ── Empty state & footer ──────────────────────────────────────────────── */
+
+.cb-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 10px 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.cb-empty-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.cb-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 2px;
+  padding: 4px 2px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.cb-link-btn {
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.cb-link-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.cb-link-btn.is-danger:hover {
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.12);
+}
+
+/* ── Wallpaper mode ────────────────────────────────────────────────────────
+   wallpaper-enhancements.css strips every input's background/border and
+   forces every span/label/p to grey with a text shadow, all !important.
+   Inside these cards (clipboard, and the vault that shares this file's
+   section class) put the card's own look back. */
+
+.wallpaper-enabled .cb-section :is(.cb-filter, .vt-input) {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none !important;
+  text-shadow: none;
+}
+
+.wallpaper-enabled .cb-section :is(.cb-filter, .vt-input):focus {
+  background: rgba(255, 255, 255, 0.07) !important;
+  border-color: rgba(var(--cb-accent), 0.7) !important;
+  box-shadow: 0 0 0 3px rgba(var(--cb-accent), 0.18) !important;
+}
+
+.wallpaper-enabled .cb-section .cb-card :is(span, label, p) {
+  text-shadow: none;
+}
+
+.wallpaper-enabled .cb-section .cb-thumb       { color: rgba(255, 255, 255, 0.7) !important; }
+.wallpaper-enabled .cb-section .cb-thumb-text  { color: #cbd5e1 !important; }
+.wallpaper-enabled .cb-section .cb-thumb-link  { color: #93c5fd !important; }
+.wallpaper-enabled .cb-section .cb-thumb-code  { color: #6ee7b7 !important; }
+.wallpaper-enabled .cb-section .cb-thumb-files { color: #c4b5fd !important; }
+.wallpaper-enabled .cb-section .cb-thumb-image { color: #f9a8d4 !important; }
+.wallpaper-enabled .cb-section .vt-avatar      { color: var(--vt-av-fg, #c4b5fd) !important; }
+.wallpaper-enabled .cb-section .cb-paused-label { color: #fcd34d !important; text-shadow: none; }
+.wallpaper-enabled .cb-section .cb-chip-count  { color: inherit !important; }
+.wallpaper-enabled .cb-section .cb-empty-icon  { color: rgba(255, 255, 255, 0.5) !important; }
+.wallpaper-enabled .cb-section .vt-label       { color: rgba(255, 255, 255, 0.45) !important; }
+.wallpaper-enabled .cb-section .vt-note        { color: rgba(255, 255, 255, 0.5) !important; }
+.wallpaper-enabled .cb-section .vt-form-title  { color: #fff !important; }

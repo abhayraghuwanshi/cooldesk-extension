@@ -89,3 +89,25 @@ body.bg-white-cred .term-body {
 .term-panel .term-body {
   margin: 0;
 }
+
+/* Docked sidebar's shell card (ShellSection.jsx): the clipboard card's tile,
+   not Browse's glass panel (.bp-root is only there for the --bv-* tokens),
+   at a fixed height — the sidebar scrolls, the terminal box can't. */
+.cb-card.sh-card {
+  flex: none;
+  height: 300px;
+  padding: 8px 6px 6px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(34, 34, 38, 0.96);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.cb-card.sh-card[hidden] {
+  display: none;
+}
+
+.sh-card .term-body {
+  border-radius: 10px;
+}

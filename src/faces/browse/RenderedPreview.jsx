@@ -21,14 +21,14 @@ async function invoke(cmd, args) {
 
 const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-function markdownCss(light) {
+function markdownCss(light, compact) {
   const c = light
     ? { bg: '#ffffff', text: '#1f2328', dim: '#59636e', line: '#d1d9e0', code: '#f6f8fa', link: '#0969da' }
     : { bg: '#0d1117', text: '#e6edf3', dim: '#9198a1', line: '#30363d', code: '#161b22', link: '#4493f8' };
   return `
     html { background: ${c.bg}; }
-    body { margin: 0 auto; max-width: 860px; padding: 28px 36px 64px; color: ${c.text};
-      font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; word-wrap: break-word; }
+    body { margin: 0 auto; max-width: 860px; padding: ${compact ? '14px 16px 32px' : '28px 36px 64px'}; color: ${c.text};
+      font: ${compact ? '13px/1.6' : '15px/1.65'} -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; word-wrap: break-word; }
     h1, h2, h3, h4, h5, h6 { margin: 1.4em 0 0.6em; line-height: 1.25; font-weight: 600; }
     h1 { font-size: 2em; padding-bottom: 0.3em; border-bottom: 1px solid ${c.line}; }
     h2 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid ${c.line}; }
@@ -53,8 +53,9 @@ function markdownCss(light) {
  * @param kind       'markdown' | 'html'
  * @param onOpenUrl  (url) → a web link clicked in the preview
  * @param onOpenPath (path) → a link to another local file
+ * @param compact    tighter margins and type, for a narrow side pane
  */
-export function RenderedPreview({ path, kind, onOpenUrl, onOpenPath }) {
+export function RenderedPreview({ path, kind, onOpenUrl, onOpenPath, compact = false }) {
   const [doc, setDoc] = useState(null);
   const [error, setError] = useState(null);
   const frameRef = useRef(null);
@@ -79,7 +80,7 @@ export function RenderedPreview({ path, kind, onOpenUrl, onOpenPath }) {
           const { marked } = await import('marked');
           const body = marked.parse(content, { gfm: true });
           html = `<!doctype html><html><head><meta charset="utf-8">${base}<title>${escapeHtml(baseName(path))}</title>`
-            + `<style>${markdownCss(light)}</style></head><body>${body}`
+            + `<style>${markdownCss(light, compact)}</style></head><body>${body}`
             + `${truncated ? '<p><em>(Preview cut short — the file is large.)</em></p>' : ''}</body></html>`;
         } else {
           // Put <base> first in <head> (or up front) so it applies to everything.
@@ -93,7 +94,7 @@ export function RenderedPreview({ path, kind, onOpenUrl, onOpenPath }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [path, kind]);
+  }, [path, kind, compact]);
 
   // Links: web ones open as tabs, local ones as file tabs; in-page anchors
   // scroll. Reachable because the frame is same-origin (scripts stay off).

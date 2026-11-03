@@ -2,6 +2,8 @@ import { faCog, faDatabase, faFolderOpen, faPalette, faRocket, faUsers } from '@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import logo from '../../../logo-2.png';
+import { useClipboardStatus } from '../clipboard/useClipboardHistory';
+import { useVaultStatus } from '../vault/useVault';
 
 const isTauri = typeof window !== 'undefined' && !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
 async function tauriInvoke(cmd, args) {
@@ -416,6 +418,27 @@ export function SettingsModal({
     } catch { setError('Failed to toggle auto-group'); }
   };
 
+  const { status: clipboardStatus, setEnabled: setClipboardEnabled, setFilters: setClipboardFilters } = useClipboardStatus();
+  const handleClipboardToggle = (enabled) => {
+    setClipboardEnabled(enabled).catch(err => console.warn('[Settings] clipboard toggle failed:', err));
+  };
+  const clipboardSkipKinds = clipboardStatus?.skipKinds || [];
+  const clipboardSkipSecrets = clipboardStatus?.skipSecrets !== false;
+  const updateClipboardFilters = (patch) => {
+    setClipboardFilters({ skipSecrets: clipboardSkipSecrets, skipKinds: clipboardSkipKinds, ...patch })
+      .catch(err => console.warn('[Settings] clipboard filters failed:', err));
+  };
+  // "Record X" toggles: checked = recorded = not in skipKinds.
+  const toggleClipboardKind = (kind, record) => {
+    const rest = clipboardSkipKinds.filter(k => k !== kind);
+    updateClipboardFilters({ skipKinds: record ? rest : [...rest, kind] });
+  };
+
+  const { status: vaultStatus, setEnabled: setVaultEnabled } = useVaultStatus();
+  const handleVaultToggle = (enabled) => {
+    setVaultEnabled(enabled).catch(err => console.warn('[Settings] vault toggle failed:', err));
+  };
+
   const handleAutostartToggle = async (enabled) => {
     try {
       await tauriInvoke('set_launch_at_login', { enabled });
@@ -799,8 +822,50 @@ export function SettingsModal({
                         hint="Start CoolDesk automatically on login"
                         right={<Toggle checked={autostartEnabled} onChange={handleAutostartToggle} accentColor="#22c55e" />}
                         onClick={() => handleAutostartToggle(!autostartEnabled)}
-                        last
                       />
+                    )}
+                    {isTauri && (
+                      <SettingRow
+                        label="Passwords"
+                        hint="A small encrypted password vault in the side dock, locked with a master password. Stays on this device."
+                        right={<Toggle checked={!!vaultStatus?.enabled} onChange={handleVaultToggle} accentColor="#22c55e" />}
+                        onClick={() => handleVaultToggle(!vaultStatus?.enabled)}
+                      />
+                    )}
+                    {isTauri && (
+                      <SettingRow
+                        label="Clipboard History"
+                        hint="Keep what you copy in the side dock. Stays on this device; password-manager copies are skipped."
+                        right={<Toggle checked={!!clipboardStatus?.enabled} onChange={handleClipboardToggle} accentColor="#22c55e" />}
+                        onClick={() => handleClipboardToggle(!clipboardStatus?.enabled)}
+                        last={!clipboardStatus?.enabled}
+                      />
+                    )}
+                    {isTauri && clipboardStatus?.enabled && (
+                      <>
+                        <SettingRow
+                          label="Skip passwords & keys"
+                          hint="Don’t record text that looks like a password, API key, token, private key or card number"
+                          right={<Toggle checked={clipboardSkipSecrets} onChange={v => updateClipboardFilters({ skipSecrets: v })} accentColor="#22c55e" />}
+                          onClick={() => updateClipboardFilters({ skipSecrets: !clipboardSkipSecrets })}
+                          style={{ paddingLeft: 28 }}
+                        />
+                        {[
+                          ['image', 'Record images', 'Screenshots and copied pictures. Turning this off also removes unpinned image clips.'],
+                          ['code', 'Record code', 'Snippets and shell commands'],
+                          ['files', 'Record copied files', 'Files copied in Finder / Explorer'],
+                        ].map(([kind, label, hint], i, arr) => (
+                          <SettingRow
+                            key={kind}
+                            label={label}
+                            hint={hint}
+                            right={<Toggle checked={!clipboardSkipKinds.includes(kind)} onChange={v => toggleClipboardKind(kind, v)} accentColor="#22c55e" />}
+                            onClick={() => toggleClipboardKind(kind, clipboardSkipKinds.includes(kind))}
+                            style={{ paddingLeft: 28 }}
+                            last={i === arr.length - 1}
+                          />
+                        ))}
+                      </>
                     )}
                   </Card>
                 </section>
