@@ -121,6 +121,8 @@ jobs:
         env:
           CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
           CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           if (-not $env:CERT_PFX_BASE64) {
             Write-Host "WINDOWS_CERT_PFX_BASE64 not set — skipping signing"
@@ -137,8 +139,20 @@ jobs:
               Write-Host "Signing $($_.FullName)"
               & $signtool sign /f $certPath /p $env:CERT_PASSWORD `
                 /tr http://timestamp.digicert.com /td sha256 /fd sha256 $_.FullName
+              if ($LASTEXITCODE -ne 0) { throw "signtool failed on $($_.Name)" }
             }
           Remove-Item $certPath
+
+          # Same as the release path: refresh the updater signature over the
+          # Authenticode-signed bytes, so a test build proves it verifies.
+          Get-ChildItem "src-tauri\target\${{ matrix.target }}\release\bundle" -Recurse -Include "*.msi","*.exe" |
+            ForEach-Object {
+              Remove-Item "$($_.FullName).sig" -ErrorAction SilentlyContinue
+              npx tauri signer sign $_.FullName
+              if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$($_.FullName).sig")) {
+                throw "updater re-sign failed on $($_.Name)"
+              }
+            }
 
       - name: Repack DMG with fix script (test only, macOS)
         if: github.event_name == 'workflow_dispatch' && runner.os == 'macOS'
@@ -193,6 +207,10 @@ jobs:
             src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app
             src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
             src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
+            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe.sig
+            src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi.sig
+            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz
+            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz.sig
             src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
           retention-days: 3
 
@@ -233,6 +251,8 @@ jobs:
         env:
           CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
           CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           if (-not $env:CERT_PFX_BASE64) {
             Write-Host "WINDOWS_CERT_PFX_BASE64 not set — skipping signing"
@@ -249,8 +269,24 @@ jobs:
               Write-Host "Signing $($_.FullName)"
               & $signtool sign /f $certPath /p $env:CERT_PASSWORD `
                 /tr http://timestamp.digicert.com /td sha256 /fd sha256 $_.FullName
+              if ($LASTEXITCODE -ne 0) { throw "signtool failed on $($_.Name)" }
             }
           Remove-Item $certPath
+
+          # Authenticode signing rewrites the installer, so the updater
+          # signature tauri-action made at build time no longer matches it and
+          # the in-app updater rejects the download. Re-sign the final bytes.
+          # (v2.0.16's setup.exe fails `minisign -V` against its .sig; the
+          # macOS .app.tar.gz, which is never re-signed, passes.)
+          Get-ChildItem "src-tauri\target\${{ matrix.target }}\release\bundle" -Recurse -Include "*.msi","*.exe" |
+            ForEach-Object {
+              Remove-Item "$($_.FullName).sig" -ErrorAction SilentlyContinue
+              npx tauri signer sign $_.FullName
+              if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$($_.FullName).sig")) {
+                throw "updater re-sign failed on $($_.Name)"
+              }
+              Write-Host "Updater signature refreshed: $($_.Name).sig"
+            }
 
       - name: Re-upload signed artifacts to release (Windows)
         if: github.event_name == 'push' && runner.os == 'Windows'
@@ -263,10 +299,12 @@ jobs:
             exit 0
           }
           $tag = "${{ github.ref_name }}"
-          Get-ChildItem "src-tauri\target\${{ matrix.target }}\release\bundle" -Recurse -Include "*.msi","*.exe" |
+          # The .sig files too: publish builds latest.json from them.
+          Get-ChildItem "src-tauri\target\${{ matrix.target }}\release\bundle" -Recurse -Include "*.msi","*.exe","*.msi.sig","*.exe.sig" |
             ForEach-Object {
               Write-Host "Re-uploading signed: $($_.Name)"
               gh release upload $tag $_.FullName --clobber --repo ${{ github.repository }}
+              if ($LASTEXITCODE -ne 0) { throw "upload failed: $($_.Name)" }
             }
 
   publish:

@@ -17,6 +17,9 @@ All notable changes to CoolDesk (desktop app + Chrome extension) are documented 
   - **Uninstall reason**: a real uninstall on Windows (not an update or reinstall) opens cool-desk.com/uninstall, which now offers an optional one-tap reason — for the extension too.
 - **winget downloads counted separately**: releases publish a byte-identical `-setup-winget.exe` that only the winget manifest points at.
 
+### Fixed
+- **Windows in-app updates were rejected by their own signature check.** The release workflow Authenticode-signs the `.exe`/`.msi` *after* tauri-action wrote the updater `.sig`, so the published installer no longer matched it (v2.0.16's `setup.exe` fails verification; the macOS `.app.tar.gz`, never re-signed, passes). The updater signature is now recomputed over the final bytes and re-uploaded with them, in release and test builds alike.
+
 ### Changed
 - **Windows: one installer.** winget and the R2 mirror now offer only the NSIS `setup.exe`. Offering the MSI as well let one machine end up with both a per-user and a per-machine install, and split download counts across two files. The MSI is still built and listed in `latest.json` (`windows-x86_64-msi`), so existing MSI installs keep updating in-app.
 - **Windows: the installer sets up WebView2 when it is missing** (`webviewInstallMode: embedBootstrapper`, previously `skip`). Without it, CoolDesk could not start on a PC lacking the runtime (older Windows 10, LTSC, some managed machines), and failed without saying why.
