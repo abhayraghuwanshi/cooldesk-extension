@@ -235,6 +235,10 @@ function loadCards() {
                     w,
                     h,
                     ...cell,
+                    // Card colour from the ◍ chip: a hex accent or 'transparent'
+                    // (Colorless), plus Colorless's darkness (0–1).
+                    ...(c.color === 'transparent' || /^#[0-9a-fA-F]{6}$/.test(c.color || '') ? { color: c.color } : {}),
+                    ...(Number.isFinite(c.opacity) && c.opacity >= 0 && c.opacity <= 1 ? { opacity: c.opacity } : {}),
                 };
             });
     } catch {

@@ -1223,6 +1223,7 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 .workspace-context-panel.has-accent,
 .overview-left-column.has-accent,
 .overview-activity-column.has-accent,
+.ocb-card.has-accent,
 .wgb-tile.has-accent {
   --text-primary: var(--card-text-1);
   --text-secondary: var(--card-text-2);
@@ -1232,6 +1233,7 @@ body.bg-white-cred .cooldesk-workspace-card.has-accent,
 body.bg-white-cred .workspace-context-panel.has-accent,
 body.bg-white-cred .overview-left-column.has-accent,
 body.bg-white-cred .overview-activity-column.has-accent,
+body.bg-white-cred .ocb-card.has-accent,
 body.bg-white-cred .wgb-tile.has-accent {
   --text-primary: var(--card-text-1-light);
   --text-secondary: var(--card-text-2-light);
@@ -4094,7 +4096,8 @@ body.bg-white-cred .wgb-tile.has-accent {
    colours that the --text-* tokens don't. Unset vars (wallpaper off) keep the
    theme tokens and a faint halo. */
 .overview-left-column.is-colorless,
-.overview-activity-column.is-colorless {
+.overview-activity-column.is-colorless,
+.ocb-card.is-colorless {
   --text-primary: var(--card-text-1, #e5e7eb);
   --text-secondary: var(--card-text-2, #9ca3af);
   --text-muted: var(--card-text-3, #6b7280);
@@ -4108,7 +4111,8 @@ body.bg-white-cred .wgb-tile.has-accent {
    --colorless-opacity knob, offset darker since rows sit directly underneath;
    alpha over 1 is clamped, so +0.2 is safe at the slider's max. No blur,
    matching the column rule above. */
-.overview-activity-column.is-colorless .activity-feed-sticky-tabs.is-stuck {
+.overview-activity-column.is-colorless .activity-feed-sticky-tabs.is-stuck,
+.ocb-card.is-colorless .activity-feed-sticky-tabs.is-stuck {
   background: rgba(11, 11, 14, calc(var(--colorless-opacity, 0.55) + 0.2));
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -4133,7 +4137,8 @@ body.bg-white-cred .wgb-tile.has-accent {
 }
 
 .overview-left-column:hover .overview-column-controls,
-.overview-activity-column:hover .overview-column-controls {
+.overview-activity-column:hover .overview-column-controls,
+.ocb-card:hover .overview-column-controls {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
@@ -4367,6 +4372,32 @@ body.bg-white-cred .wgb-tile.has-accent {
     0 1px 2px rgba(0, 0, 0, 0.18),
     0 14px 34px -14px rgba(0, 0, 0, 0.55);
   transition: box-shadow 0.25s ease;
+}
+
+/* Card color (hover ◍ chip, same as the column layouts — see
+   .overview-left-column.has-accent / .is-colorless above). The accent tint
+   keeps the card's top sheen; Colorless drops the blur and sheen and lets the
+   per-card darkness slider carry legibility. */
+.ocb-card.has-accent {
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgba(255, 255, 255, 0.07), transparent 60%),
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--card-accent) 20%, transparent),
+      color-mix(in srgb, var(--card-accent) 6%, transparent)),
+    var(--glass-fill, rgba(11, 11, 14, 0.45));
+}
+
+.ocb-card.is-colorless {
+  background: rgba(11, 11, 14, var(--colorless-opacity, 0.55));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Inset a little more than on the columns so the chip clears the card's
+   larger (squircle) corner. */
+.ocb-card .overview-column-controls {
+  top: 12px;
+  right: 14px;
 }
 
 @supports (corner-shape: squircle) {
