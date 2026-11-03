@@ -59,7 +59,7 @@ if [ ! -d "\$APP" ]; then
 fi
 echo ""
 echo "  Fixing CoolDesk — removing macOS quarantine flag..."
-xattr -cr "\$APP"
+xattr -dr com.apple.quarantine "\$APP"
 echo "  Done! Launching CoolDesk..."
 echo ""
 open "\$APP"

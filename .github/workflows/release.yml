@@ -197,20 +197,19 @@ jobs:
           rm -rf /tmp/CoolDesk-test.app
           echo "==> Installation test complete"
 
-      - name: Upload artifact (test only)
+      # Test builds: just the one installer per platform, uploaded as-is (no
+      # zip) — the .dmg on macOS, the setup .exe on Windows, the AppImage on
+      # Linux. Each job builds exactly one of these, which `archive: false`
+      # requires (it uploads a single file).
+      - name: Upload installer (test only)
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: cooldesk-${{ matrix.target }}
+          archive: false
+          if-no-files-found: error
           path: |
             src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
-            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app
-            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
-            src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
-            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe.sig
-            src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi.sig
-            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz
-            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz.sig
+            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe
             src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
           retention-days: 3
 
