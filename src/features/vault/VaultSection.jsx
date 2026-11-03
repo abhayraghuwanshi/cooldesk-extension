@@ -1,4 +1,4 @@
-import { faArrowUpRightFromSquare, faCheck, faChevronDown, faChevronRight, faEye, faEyeSlash, faKey, faLock, faPen, faPlus, faRotate, faUser } from '@fortawesome/free-solid-svg-icons';
+import { faArrowRight, faArrowUpRightFromSquare, faCheck, faChevronDown, faChevronRight, faEye, faEyeSlash, faKey, faLock, faPen, faPlus, faRotate, faShieldHalved, faUser, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { workspaceActivityService } from '../../services/workspaceActivityService';
@@ -22,6 +22,24 @@ function readCollapsed() {
 
 function hostOf(url) {
   try { return new URL(/^[a-z]+:\/\//i.test(url) ? url : `https://${url}`).hostname.replace(/^www\./, ''); } catch { return url; }
+}
+
+/** A stable hue per name, so entries are told apart at a glance. */
+function avatarStyle(name) {
+  let h = 0;
+  for (const ch of name || '?') h = (h * 31 + ch.charCodeAt(0)) % 360;
+  // As custom properties: wallpaper mode forces span colours with !important,
+  // which an inline `color` can't beat (vault.css applies these).
+  return { '--vt-av-bg': `hsl(${h} 60% 50% / 0.22)`, '--vt-av-fg': `hsl(${h} 85% 78%)` };
+}
+
+function Field({ label, children }) {
+  return (
+    <label className="vt-field">
+      <span className="vt-label">{label}</span>
+      {children}
+    </label>
+  );
 }
 
 function IconBtn({ icon, label, onClick, active = false }) {
@@ -60,34 +78,50 @@ function MasterForm({ creating, onSubmit }) {
   };
 
   return (
-    <form className="vt-form" onSubmit={submit}>
-      {creating && (
-        <p className="vt-note">
-          Choose a master password. It encrypts everything here and can’t be recovered — if you forget it, the vault is lost.
-        </p>
-      )}
-      <input
-        className="cb-filter vt-input"
-        type="password"
-        placeholder={creating ? 'New master password' : 'Master password'}
-        value={master}
-        onChange={e => setMaster(e.target.value)}
-        autoComplete={creating ? 'new-password' : 'current-password'}
-      />
-      {creating && (
+    <form className="vt-lock" onSubmit={submit}>
+      <div className="vt-lock-icon"><FontAwesomeIcon icon={creating ? faShieldHalved : faLock} /></div>
+      <div className="vt-lock-title">{creating ? 'Set up your vault' : 'Vault locked'}</div>
+      <p className="vt-note">
+        {creating
+          ? 'Pick a master password. It encrypts everything here and can’t be recovered if you forget it.'
+          : 'Enter your master password to see your logins.'}
+      </p>
+      <div className={`vt-input-wrap${creating ? '' : ' has-1'}`}>
         <input
-          className="cb-filter vt-input"
+          className="vt-input"
           type="password"
-          placeholder="Confirm master password"
-          value={confirm}
-          onChange={e => setConfirm(e.target.value)}
-          autoComplete="new-password"
+          placeholder={creating ? 'New master password' : 'Master password'}
+          value={master}
+          onChange={e => setMaster(e.target.value)}
+          autoComplete={creating ? 'new-password' : 'current-password'}
+          aria-invalid={!!error}
         />
+        {!creating && (
+          <div className="vt-inline-actions">
+            <button type="submit" className="vt-inline-btn vt-go" disabled={busy || !master} aria-label="Unlock" title="Unlock">
+              {busy ? <span className="vt-spinner" /> : <FontAwesomeIcon icon={faArrowRight} />}
+            </button>
+          </div>
+        )}
+      </div>
+      {creating && (
+        <div className="vt-input-wrap">
+          <input
+            className="vt-input"
+            type="password"
+            placeholder="Confirm master password"
+            value={confirm}
+            onChange={e => setConfirm(e.target.value)}
+            autoComplete="new-password"
+          />
+        </div>
       )}
       {error && <div className="vt-error">{error}</div>}
-      <button type="submit" className="vt-primary" disabled={busy || !master}>
-        {busy ? (creating ? 'Creating…' : 'Unlocking…') : (creating ? 'Create vault' : 'Unlock')}
-      </button>
+      {creating && (
+        <button type="submit" className="vt-primary vt-block" disabled={busy || !master || !confirm}>
+          {busy ? 'Creating…' : 'Create vault'}
+        </button>
+      )}
     </form>
   );
 }
@@ -130,36 +164,58 @@ function EntryForm({ initial, vault, onDone }) {
 
   return (
     <form className="vt-form" onSubmit={submit}>
-      <input className="cb-filter vt-input" placeholder="Name (e.g. GitHub)" value={entry.title} onChange={set('title')} autoFocus />
-      <input className="cb-filter vt-input" placeholder="Username or email" value={entry.username} onChange={set('username')} autoComplete="off" />
-      <div className="vt-password-row">
-        <input
-          className="cb-filter vt-input vt-mono"
-          type={show ? 'text' : 'password'}
-          placeholder="Password"
-          value={entry.password}
-          onChange={set('password')}
-          autoComplete="new-password"
-          spellCheck={false}
-        />
-        <IconBtn icon={show ? faEyeSlash : faEye} label={show ? 'Hide' : 'Show'} onClick={() => setShow(s => !s)} active={show} />
-        <IconBtn
-          icon={faRotate}
-          label="Generate a new password"
-          onClick={() => generatePassword().then(p => { setEntry(prev => ({ ...prev, password: p })); setShow(true); }).catch(() => { })}
-        />
+      <div className="vt-form-head">
+        <span className="cb-thumb vt-avatar" style={avatarStyle(entry.title)}>{(entry.title.trim()[0] || '?').toUpperCase()}</span>
+        <span className="vt-form-title">{initial.id ? 'Edit login' : 'New login'}</span>
+        <IconBtn icon={faXmark} label="Close" onClick={onDone} />
       </div>
-      <input className="cb-filter vt-input" placeholder="Website (optional)" value={entry.url} onChange={set('url')} autoComplete="off" />
-      <textarea className="cb-filter vt-input vt-notes" placeholder="Notes (optional)" value={entry.notes} onChange={set('notes')} rows={2} />
+      <Field label="Name">
+        <input className="vt-input" placeholder="GitHub" value={entry.title} onChange={set('title')} autoFocus />
+      </Field>
+      <Field label="Username">
+        <input className="vt-input" placeholder="you@example.com" value={entry.username} onChange={set('username')} autoComplete="off" spellCheck={false} />
+      </Field>
+      <Field label="Password">
+        <div className="vt-input-wrap has-2">
+          <input
+            className="vt-input vt-mono"
+            type={show ? 'text' : 'password'}
+            value={entry.password}
+            onChange={set('password')}
+            autoComplete="new-password"
+            spellCheck={false}
+          />
+          <div className="vt-inline-actions">
+            <button type="button" className={`vt-inline-btn${show ? ' is-active' : ''}`} title={show ? 'Hide' : 'Show'} aria-label={show ? 'Hide password' : 'Show password'} onClick={() => setShow(v => !v)}>
+              <FontAwesomeIcon icon={show ? faEyeSlash : faEye} />
+            </button>
+            <button
+              type="button"
+              className="vt-inline-btn"
+              title="Generate a new password"
+              aria-label="Generate a new password"
+              onClick={() => generatePassword().then(p => { setEntry(prev => ({ ...prev, password: p })); setShow(true); }).catch(() => { })}
+            >
+              <FontAwesomeIcon icon={faRotate} />
+            </button>
+          </div>
+        </div>
+      </Field>
+      <Field label="Website">
+        <input className="vt-input" placeholder="github.com" value={entry.url} onChange={set('url')} autoComplete="off" spellCheck={false} />
+      </Field>
+      <Field label="Notes">
+        <textarea className="vt-input vt-notes" value={entry.notes} onChange={set('notes')} rows={2} />
+      </Field>
       {error && <div className="vt-error">{error}</div>}
       <div className="vt-form-actions">
         {entry.id && (
-          <button type="button" className="cb-link-btn is-danger" onClick={remove}>
-            {confirmDelete ? 'Really delete?' : 'Delete'}
+          <button type="button" className={`vt-ghost is-danger${confirmDelete ? ' is-armed' : ''}`} onClick={remove}>
+            {confirmDelete ? 'Click again to delete' : 'Delete'}
           </button>
         )}
         <span style={{ flex: 1 }} />
-        <button type="button" className="cb-link-btn" onClick={onDone}>Cancel</button>
+        <button type="button" className="vt-ghost" onClick={onDone}>Cancel</button>
         <button type="submit" className="vt-primary" disabled={!entry.title.trim()}>Save</button>
       </div>
     </form>
@@ -197,7 +253,7 @@ function EntryRow({ item, vault, onEdit }) {
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); copy('password'); } }}
         title="Click to copy the password"
       >
-        <span className="cb-thumb vt-thumb">{(item.title[0] || '?').toUpperCase()}</span>
+        <span className="cb-thumb vt-avatar" style={avatarStyle(item.title)}>{(item.title[0] || '?').toUpperCase()}</span>
         <div className="cb-row-text">
           <div className={`cb-row-title${error ? ' vt-error-text' : ''}`}>{title}</div>
           {sub && <div className="cb-row-meta">{sub}</div>}
@@ -264,7 +320,7 @@ export function VaultSection() {
       <>
         {vault.items.length > PEEK && (
           <input
-            className="cb-filter"
+            className="cb-filter vt-search"
             type="search"
             placeholder="Search passwords…"
             value={filter}
@@ -276,11 +332,13 @@ export function VaultSection() {
             {visible.map(item => <EntryRow key={item.id} item={item} vault={vault} onEdit={() => edit(item.id)} />)}
           </ul>
         ) : (
-          <div className="cb-empty">{vault.items.length ? 'No matches' : 'No passwords yet'}</div>
+          <div className="vt-empty">
+            {vault.items.length ? 'No matches' : 'No logins yet. Add one and it’s encrypted with your master password.'}
+          </div>
         )}
-        <div className="cb-footer">
-          <button type="button" className="cb-link-btn" onClick={() => setEditing({ ...EMPTY })}>
-            <FontAwesomeIcon icon={faPlus} /> Add
+        <div className="vt-footer">
+          <button type="button" className="vt-add" onClick={() => setEditing({ ...EMPTY })}>
+            <FontAwesomeIcon icon={faPlus} /> Add login
           </button>
           {vault.items.length > PEEK && !filter && (
             <button type="button" className="cb-link-btn" onClick={() => setShowAll(s => !s)}>

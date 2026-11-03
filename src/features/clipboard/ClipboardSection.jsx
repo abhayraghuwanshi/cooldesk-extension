@@ -225,7 +225,7 @@ function ClipRow({ clip, history, previewing, onTogglePreview }) {
       >
         <Thumb clip={clip} />
         <div className="cb-row-text">
-          <div className="cb-row-title">{copied ? 'Copied' : titleOf(clip)}</div>
+          <div className={`cb-row-title${copied ? ' is-copied' : ''}`}>{copied ? 'Copied' : titleOf(clip)}</div>
           <div className="cb-row-meta">{meta}</div>
         </div>
         {copied
@@ -461,7 +461,10 @@ export function ClipboardSection() {
               ))}
             </ul>
           ) : (
-            <div className="cb-empty">{filter ? 'No matching clips' : 'Copy something — it shows up here.'}</div>
+            <div className="cb-empty">
+              <span className="cb-empty-icon"><FontAwesomeIcon icon={faClipboard} /></span>
+              {filter ? 'No matching clips' : 'Copy something — it shows up here.'}
+            </div>
           )}
           {shownTotal > PEEK && (
             <div className="cb-footer">
