@@ -2,7 +2,7 @@
 
 All notable changes to CoolDesk (desktop app + Chrome extension) are documented here.
 
-## [Unreleased]
+## [2.0.17] — 2026-11-03
 
 ### Added
 - **Usage analytics that can tell "used" from "running"** (all opt-out via Settings → Anonymous Usage Stats; no queries, URLs, file names or content — see `worker/README.md` for every field):
