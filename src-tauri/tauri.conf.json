@@ -82,7 +82,7 @@
       "digestAlgorithm": "sha256",
       "timestampUrl": "http://timestamp.digicert.com",
       "webviewInstallMode": {
-        "type": "skip"
+        "type": "embedBootstrapper"
       },
       "nsis": {
         "displayLanguageSelector": false,

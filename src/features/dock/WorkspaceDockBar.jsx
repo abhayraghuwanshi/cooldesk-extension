@@ -10,6 +10,7 @@ import { fileStack, stackLogo, useFolderIdentity } from '../../shared/hooks/useF
 import { LayoutSwitchButton } from './LayoutSwitchButton';
 import { useLiveItems } from './useLiveItems';
 import '../../styles/dockbar.css';
+import { recordFeature } from '../../services/analytics';
 
 // Favicon resolution as an ordered fallback chain rather than a single source:
 // stored workspace URLs are often missing their protocol (so `new URL()` throws)
@@ -402,6 +403,7 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       await invoke('dock_enable', { mode: 'drawer', side: 'right' });
+      recordFeature('dock_enabled');
       await invoke('dock_expand');
     } catch (e) {
       console.error('[DockBar] dock_enable/dock_expand failed:', e);

@@ -37,6 +37,40 @@
   done_hklm:
 !macroend
 
+; Runs after files and shortcuts are in place.
+;
+; Records where this install came from, for the anonymous usage ping
+; (install_source in lib.rs). One installer serves winget and direct
+; downloads, so the build can't know; the command line can:
+;   • winget passes /SOURCE=winget (InstallerSwitches: Custom in the manifest)
+;   • any other fresh install is "direct"
+;   • an in-app update (/UPDATE) leaves the existing answer alone
+; Written to the app config dir ($APPDATA\<bundle id>, what Tauri's
+; app_config_dir resolves to), so it survives updates; Tauri's own "delete
+; application data" option removes it with the rest of that folder.
+!macro NSIS_HOOK_POSTINSTALL
+  StrCpy $R8 ""
+  ClearErrors
+  ${GetOptions} $CMDLINE "/SOURCE=" $R9
+  ${IfNot} ${Errors}
+  ${AndIf} $R9 != ""
+    StrCpy $R8 $R9
+  ${ElseIf} $UpdateMode <> 1
+    StrCpy $R8 "direct"
+  ${EndIf}
+
+  ${If} $R8 != ""
+    SetShellVarContext current
+    CreateDirectory "$APPDATA\${BUNDLEID}"
+    ClearErrors
+    FileOpen $R7 "$APPDATA\${BUNDLEID}\install_source" w
+    ${IfNot} ${Errors}
+      FileWrite $R7 $R8
+      FileClose $R7
+    ${EndIf}
+  ${EndIf}
+!macroend
+
 ; Runs before the uninstaller deletes anything.
 ;
 ; Tauri's own CheckIfAppIsRunning (inserted right after this hook) force-kills
@@ -81,4 +115,19 @@
   ; No-op while anything remains (e.g. data the user chose to keep); this just
   ; clears the empty shell Tauri's own RMDir left behind.
   RMDir "$INSTDIR"
+
+  ; Ask people who really uninstall why (cool-desk.com/uninstall: one optional
+  ; tap on a fixed reason, anonymous — the same page the extension opens). Never during an update or a reinstall:
+  ;   • /UPDATE, /S and /P runs are updates or scripted (winget, our own
+  ;     NSIS_HOOK_PREINSTALL), never a person deciding to leave
+  ;   • a newer installer runs the old uninstaller *in place* (`_?=`), so it
+  ;     still sees its own uninstall.exe in $EXEDIR — that file can't be
+  ;     deleted while it runs. A person uninstalling from Settings or Control
+  ;     Panel runs NSIS's temp copy instead, where no uninstall.exe exists.
+  ${If} $UpdateMode <> 1
+  ${AndIf} $PassiveMode <> 1
+  ${AndIfNot} ${Silent}
+  ${AndIfNot} ${FileExists} "$EXEDIR\uninstall.exe"
+    ExecShell "open" "https://cool-desk.com/uninstall?v=${VERSION}&from=windows"
+  ${EndIf}
 !macroend

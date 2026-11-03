@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { recordFeature } from '../services/analytics';
 import { initChromePolyfill } from '../services/chromePolyfill';
 
 // Initialize Chrome API polyfill for Electron environment
@@ -21,6 +22,7 @@ import { CoolDeskContainer } from '../faces/shell/CoolDeskContainer';
 import { useDockState } from '../features/dock/useDockState';
 import { isElectronApp } from '../services/environmentDetector';
 import { UpdateBanner } from '../features/updates/UpdateBanner';
+import { FeedbackPrompt } from '../features/updates/FeedbackPrompt';
 import categoryManager from '../data/categories';
 import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, getWorkspace, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges } from '../db/index.js';
 import { useDashboardData } from '../shared/hooks/useDashboardData';
@@ -1420,6 +1422,7 @@ export default function App() {
       position: 'relative'
     }}>
       <UpdateBanner />
+      <FeedbackPrompt />
       {/* Cooldesk UI */}
       <CoolDeskContainer
         savedWorkspaces={savedWorkspaces}
@@ -1453,6 +1456,7 @@ export default function App() {
 
             try {
               await saveWorkspace(newWorkspace);
+              recordFeature('workspace_created');
               console.log('[App] Created workspace via GlobalAddButton:', newWorkspace);
 
               // Refresh list

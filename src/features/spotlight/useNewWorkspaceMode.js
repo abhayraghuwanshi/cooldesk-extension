@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { browseUrls } from '../../services/searchService';
 import { suggestLinks } from './suggestLinks';
+import { recordFeature } from '../../services/analytics';
 
 // The user's own tabs/history/bookmarks that share a word with the request,
 // handed to the AI as candidates — the exact query already matched nothing
@@ -219,6 +220,7 @@ export function useNewWorkspaceMode({
                 apps: folders.map(f => ({ name: f.name, path: f.path, appType: f.appType, icon: f.icon || null })),
             };
             await saveWorkspace(workspace);
+            recordFeature('workspace_created');
             showFeedback(`Created workspace "${workspace.name}"`, 'success');
             try {
                 const { listWorkspaces } = await import('../../db/index.js');

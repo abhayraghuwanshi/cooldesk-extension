@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { recordFeature } from '../../services/analytics';
 
 // Clipboard history (src-tauri/src/clipboard.rs). The Rust watcher records
 // copies while history is on and emits `clipboard-changed` after every change
@@ -72,7 +73,7 @@ export function useClipboardHistory({ active = true } = {}) {
     }
   }, []);
 
-  const copy = useCallback(id => run('clipboard_copy', { id }), [run]);
+  const copy = useCallback(id => run('clipboard_copy', { id }).then((r) => { recordFeature('clipboard_copy'); return r; }), [run]);
   const pin = useCallback((id, pinned) => run('clipboard_pin', { id, pinned }), [run]);
   const remove = useCallback(id => run('clipboard_remove', { id }), [run]);
   const clear = useCallback((includePinned = false) => run('clipboard_clear', { includePinned }), [run]);

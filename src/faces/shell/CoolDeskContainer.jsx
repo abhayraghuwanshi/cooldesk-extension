@@ -28,6 +28,7 @@ import { ShellSection } from '../../features/terminal/ShellSection';
 import { useCooldeskAutoWorkspace, useCooldeskDiscovery } from '../../shared/hooks/useCooldeskProjects.js';
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
 import { useSpotlightRuns } from '../../features/terminal/runInTerminal';
+import { recordFeature } from '../../services/analytics';
 // Lazy load WorkspaceList (Face 2)
 const WorkspaceList = lazy(() => import('../workspace/WorkspaceList').then(m => ({ default: m.WorkspaceList })));
 
@@ -253,6 +254,7 @@ export function CoolDeskContainer({
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       await invoke('dock_enable', { mode: 'drawer', side: 'bottom' });
+      recordFeature('dock_enabled');
       await invoke('dock_expand');
     } catch (e) {
       console.error('[CoolDesk] Failed to dock workspace as bar:', e);
@@ -515,6 +517,7 @@ export function CoolDeskContainer({
 
     // Keeping existing logic for now, just robust toggle.
     setCurrentWorkspace(workspace);
+    recordFeature('workspace_opened');
     onOpenWorkspace?.(workspace);
   };
 

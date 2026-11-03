@@ -1,6 +1,9 @@
 // Shared "an update is available" state for the whole app.
 //
-// One check per session (re-run every RECHECK_MS while the app stays open),
+// One check at launch, then a heartbeat scheduler (desktop only, see
+// startHeartbeat) re-runs it every RECHECK_MS while the app stays open, and on
+// the first input of a new UTC day — so an app that is left running and woken
+// from sleep for weeks still reports each day it was used. The result is
 // broadcast to every subscriber, so the top banner and the header pill never
 // fire two version pings. Works in both builds:
 //   - Tauri desktop: `check_winget_update` (also the anonymous heartbeat).
@@ -11,9 +14,13 @@
 // Everything degrades to "no update" silently — offline, rate-limited or an
 // unpackaged dev build must never surface an error to the user.
 
-import { checkUpdateWithPing } from './analytics';
+import { checkUpdateWithPing, utcDay, wasActiveToday } from './analytics';
 
 const RECHECK_MS = 6 * 60 * 60 * 1000; // 6h
+const HEARTBEAT_TICK_MS = 15 * 60 * 1000; // how often the scheduler looks
+// When any window last pinged — in localStorage, not a module variable, so a
+// second window that also runs the check (or a reload) doesn't double it.
+const LAST_PING_KEY = 'cooldesk-last-ping-at';
 
 // Both go through cool-desk.com rather than straight to GitHub / the Web Store,
 // so the destination can move without reshipping installed clients. See
@@ -127,6 +134,7 @@ export function checkForUpdate({ force = false } = {}) {
 
   const run = async () => {
     setState({ checking: true });
+    if (isTauri()) writeLastPing(Date.now());
     try {
       let info = null;
       if (isTauri()) info = await checkDesktop();
@@ -145,6 +153,49 @@ export function checkForUpdate({ force = false } = {}) {
 
   inFlight = run();
   return inFlight;
+}
+
+function readLastPing() {
+  try { return parseInt(localStorage.getItem(LAST_PING_KEY) || '0', 10) || 0; } catch { return 0; }
+}
+
+function writeLastPing(ms) {
+  try { localStorage.setItem(LAST_PING_KEY, String(ms)); } catch { /* ignore */ }
+}
+
+// Due when 6h have passed, or when the user is active on a UTC day nothing
+// has pinged yet. An idle machine therefore pings at most every 6h, and an
+// active one gets a row for every day it was used.
+function heartbeatDue() {
+  const last = readLastPing();
+  if (!last) return true;
+  const now = Date.now();
+  if (now - last >= RECHECK_MS) return true;
+  return utcDay(last) !== utcDay(now) && wasActiveToday();
+}
+
+let heartbeatStarted = false;
+/**
+ * Desktop only, once per window that shows the update UI (the main window).
+ * Ticks every 15 min, and on focus / becoming visible, which also catches a
+ * wake from sleep — timers don't fire while the machine sleeps.
+ */
+export function startHeartbeat() {
+  if (heartbeatStarted || !isTauri() || typeof window === 'undefined') return;
+  heartbeatStarted = true;
+  const tick = () => {
+    if (heartbeatDue()) checkForUpdate({ force: true }).catch(() => {});
+  };
+  setInterval(tick, HEARTBEAT_TICK_MS);
+  window.addEventListener('focus', tick);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') tick();
+  });
+}
+
+/** Send the heartbeat now (e.g. right after the feedback prompt is answered). */
+export function pingSoon() {
+  if (isTauri()) checkForUpdate({ force: true }).catch(() => {});
 }
 
 /**

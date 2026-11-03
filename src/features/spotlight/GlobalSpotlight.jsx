@@ -6,7 +6,7 @@ import { storageGet, storageSet } from '../../services/extensionApi';
 import { syncWebSocket } from '../../services/syncWebSocket';
 import { isHostSyncEnabled } from '../../services/syncConfig';
 import { recordAgentOutcome, recordSearchSelection, watchAgentPlacements } from '../../services/feedbackService';
-import { recordSpotlightOpen } from '../../services/analytics';
+import { recordFeature, recordSpotlightOpen } from '../../services/analytics';
 import * as LocalAI from '../../services/localAIService';
 import { runningAppsService } from '../../services/runningAppsService';
 import { browseApps, browseUrls, findOpenTab, isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../../services/searchService';
@@ -593,6 +593,7 @@ export function GlobalSpotlight({
     // yet, so the first question used to go out without it. Follow-ups read
     // the state.
     const runAgent = useCallback(async (request, extraAttachments = [], { originWorkspace } = {}) => {
+        recordFeature('agent_query');
         const origin = originWorkspace || agentOriginWorkspace;
         let list = [];
         try {
@@ -2489,6 +2490,7 @@ export function GlobalSpotlight({
 
         // Workspace rows navigate the host's workspace view when it has one
         if (item.type === 'workspace' && onWorkspaceNavigate) {
+            recordFeature('workspace_opened');
             handleClose();
             onWorkspaceNavigate(item.title || item.name);
             return;
@@ -2570,6 +2572,15 @@ export function GlobalSpotlight({
         // included so the backend learns keyword→URL associations for ranking —
         // strip any /u /a /f scope prefix so it learns the bare keyword.
         recordSearchSelection(item, resultsDisplayedAtRef.current, parseScopedQuery(scopedQuery.trim()).term).catch(() => { });
+
+        // Anonymous usage counters: which kind of result, never which one.
+        recordFeature('result_opened');
+        recordFeature(
+            item.type === 'tab' ? 'open_tab'
+                : item.type === 'app' ? 'open_app'
+                    : (item.type === 'file' || item.type === 'folder') ? 'open_file'
+                        : item.url ? 'open_url' : null,
+        );
 
         // A history row, bookmark or saved link whose page is already open in
         // a browser tab switches to that tab (via the jump below) instead of

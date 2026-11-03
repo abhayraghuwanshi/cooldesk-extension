@@ -4,6 +4,26 @@ All notable changes to CoolDesk (desktop app + Chrome extension) are documented 
 
 ## [Unreleased]
 
+### Added
+- **Usage analytics that can tell "used" from "running"** (all opt-out via Settings → Anonymous Usage Stats; no queries, URLs, file names or content — see `worker/README.md` for every field):
+  - **The heartbeat actually repeats.** It used to run once per launch — the "every 6h" recheck had no timer — so an app left running and woken from sleep looked like a one-day user. The main window now pings at launch, every 6h, and on the first input of each new UTC day (`startHeartbeat` in `updateService.js`).
+  - **First-run ping from Rust**, sent in `setup` before any window loads, so an install whose UI never comes up is still counted (`ui_seen = 0`).
+  - **`active_minutes`**: minutes with any input in a CoolDesk window. Real DAU is `active_minutes > 0`.
+  - **Feature counters** for a fixed list (spotlight results by kind, workspaces opened/created, agent requests, clipboard re-copy, vault unlock, dock, onboarding), stored per day in D1 `feature_counts`.
+  - **No more lost counts.** Counters are cleared only after the endpoint answered; a failed ping keeps them for the next one and is itself counted (`ping_failures`). Previously the spotlight count was cleared even when the ping had silently fallen back to GitHub.
+  - **`channel`** (`release` / `test` / `local` / `dev`) so CI and dev builds stay out of the numbers.
+  - **Real install source on Windows**: the NSIS installer records `winget` (manifest passes `/SOURCE=winget`) or `direct`; MSI installs report `msi`, pre-existing ones `legacy`. It used to say `winget` for every Windows install.
+  - **One-time "How's CoolDesk working for you?"** strip after 7 active days, three fixed answers.
+  - **Uninstall reason**: a real uninstall on Windows (not an update or reinstall) opens cool-desk.com/uninstall, which now offers an optional one-tap reason — for the extension too.
+- **winget downloads counted separately**: releases publish a byte-identical `-setup-winget.exe` that only the winget manifest points at.
+
+### Fixed
+- **Windows in-app updates were rejected by their own signature check.** The release workflow Authenticode-signs the `.exe`/`.msi` *after* tauri-action wrote the updater `.sig`, so the published installer no longer matched it (v2.0.16's `setup.exe` fails verification; the macOS `.app.tar.gz`, never re-signed, passes). The updater signature is now recomputed over the final bytes and re-uploaded with them, in release and test builds alike.
+
+### Changed
+- **Windows: one installer.** winget and the R2 mirror now offer only the NSIS `setup.exe`. Offering the MSI as well let one machine end up with both a per-user and a per-machine install, and split download counts across two files. The MSI is still built and listed in `latest.json` (`windows-x86_64-msi`), so existing MSI installs keep updating in-app.
+- **Windows: the installer sets up WebView2 when it is missing** (`webviewInstallMode: embedBootstrapper`, previously `skip`). Without it, CoolDesk could not start on a PC lacking the runtime (older Windows 10, LTSC, some managed machines), and failed without saying why.
+
 ## [2.0.16] — 2026-10-18
 
 ### Added

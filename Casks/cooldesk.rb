@@ -21,7 +21,7 @@ cask "cooldesk" do
   # submitted to homebrew/cask).
   postflight do
     system_command "/usr/bin/xattr",
-                   args: ["-cr", "#{appdir}/CoolDesk.app"],
+                   args: ["-dr", "com.apple.quarantine", "#{appdir}/CoolDesk.app"],
                    sudo: false
   end
 

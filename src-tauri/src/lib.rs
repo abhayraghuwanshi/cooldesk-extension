@@ -1543,6 +1543,10 @@ struct UpdateInfo {
     latest: String,
     has_update: bool,
     notes_url: String,
+    /// The anonymous heartbeat reached our endpoint. The client clears its
+    /// queued counters only when this is true, so a blocked or offline ping
+    /// delays them rather than losing them.
+    ping_ok: bool,
 }
 
 const GITHUB_LATEST: &str =
@@ -1550,51 +1554,180 @@ const GITHUB_LATEST: &str =
 const ANALYTICS_ENDPOINT: &str =
     "https://cooldesk-analytics.raghuwanshi-abhay405.workers.dev/api/version";
 
-// Distribution channel, stamped at build time by the release workflow
-// (winget / github / dmg). Defaults to "unknown" for local/dev builds.
-fn install_source() -> &'static str {
+// Build-time stamp from the release workflow (winget / dmg / linux); "unknown"
+// for local builds. Only trusted off Windows — see `install_source`.
+#[cfg_attr(windows, allow(dead_code))]
+fn build_install_source() -> &'static str {
     option_env!("COOLDESK_INSTALL_SOURCE").unwrap_or("unknown")
+}
+
+/// Where this install came from.
+///
+/// macOS / Linux: the build stamp. Windows ships one installer for winget and
+/// direct downloads, so the build stamp can't tell them apart (it said
+/// "winget" for everyone). Instead the NSIS installer writes the answer to
+/// `<app config dir>/install_source` (nsis/installer-hooks.nsh): "winget" when
+/// winget passes `/SOURCE=winget`, "direct" for any other fresh install, and
+/// in-app updates leave it untouched. No marker means an MSI install (it lives
+/// under Program Files) or an install older than the marker ("legacy").
+fn install_source(app: &tauri::AppHandle) -> String {
+    #[cfg(windows)]
+    {
+        if let Ok(dir) = app.path().app_config_dir() {
+            if let Ok(raw) = std::fs::read_to_string(dir.join("install_source")) {
+                let s: String = raw
+                    .trim()
+                    .chars()
+                    .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+                    .take(16)
+                    .collect::<String>()
+                    .to_ascii_lowercase();
+                if !s.is_empty() {
+                    return s;
+                }
+            }
+        }
+        let in_program_files = std::env::current_exe()
+            .map(|p| p.to_string_lossy().to_ascii_lowercase().contains("\\program files"))
+            .unwrap_or(false);
+        if in_program_files { "msi".to_string() } else { "legacy".to_string() }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        build_install_source().to_string()
+    }
+}
+
+/// "release" for tagged CI builds, "test" for manual CI runs, "local" for a
+/// release build made on a dev machine, "dev" for debug builds. Lets the
+/// numbers exclude everything that isn't a real user.
+fn release_channel() -> &'static str {
+    if cfg!(debug_assertions) {
+        "dev"
+    } else {
+        option_env!("COOLDESK_CHANNEL").unwrap_or("local")
+    }
 }
 
 // Anonymous, randomly-generated install identifier. Created once and persisted
 // in the app config dir; contains no personal data. Used only to count distinct
 // installs / daily-active installs. Returns an empty string if it can't be
-// persisted, in which case analytics simply degrades — never an error.
-fn get_or_create_install_id(app: &tauri::AppHandle) -> String {
+// persisted, in which case analytics simply degrades — never an error. The
+// flag is true when this call created it, i.e. on the very first launch.
+fn ensure_install_id(app: &tauri::AppHandle) -> (String, bool) {
     let path = match app.path().app_config_dir() {
         Ok(dir) => dir.join("install_id"),
-        Err(_) => return String::new(),
+        Err(_) => return (String::new(), false),
     };
     if let Ok(existing) = std::fs::read_to_string(&path) {
         let trimmed = existing.trim();
         if !trimmed.is_empty() {
-            return trimmed.to_string();
+            return (trimmed.to_string(), false);
         }
     }
     let id = uuid::Uuid::new_v4().to_string();
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let _ = std::fs::write(&path, &id);
-    id
+    match std::fs::write(&path, &id) {
+        Ok(()) => (id, true),
+        // Not persisted: a new id every launch would inflate install counts.
+        Err(_) => (String::new(), false),
+    }
 }
 
-// The anonymous usage payload: 7 scalar fields, no free text. Never includes
-// search queries, URLs, or any user content.
+fn get_or_create_install_id(app: &tauri::AppHandle) -> String {
+    ensure_install_id(app).0
+}
+
+// The opt-out lives in the webview's localStorage, but the first-run ping is
+// sent from Rust before any window has loaded — so Settings mirrors the choice
+// to this file (`set_analytics_enabled`).
+fn analytics_disabled_on_disk(app: &tauri::AppHandle) -> bool {
+    app.path()
+        .app_config_dir()
+        .map(|d| d.join("analytics_disabled").exists())
+        .unwrap_or(false)
+}
+
+#[tauri::command]
+fn set_analytics_enabled(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    let flag = dir.join("analytics_disabled");
+    if enabled {
+        match std::fs::remove_file(&flag) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
+            _ => Ok(()),
+        }
+    } else {
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        std::fs::write(&flag, "1").map_err(|e| e.to_string())
+    }
+}
+
+/// Counters the webview collected since the last successful ping. Integers and
+/// whitelisted names only — the worker re-checks both.
+#[derive(Default)]
+struct PingCounters {
+    event: &'static str,
+    spotlight_opens: u32,
+    active_minutes: u32,
+    ping_failures: u32,
+    features: std::collections::HashMap<String, u32>,
+    feedback: String,
+}
+
+// The anonymous usage payload: scalars and small integer counters, no free
+// text. Never includes search queries, URLs, file names or any user content.
 fn analytics_payload(
     app: &tauri::AppHandle,
     current: &str,
-    spotlight_opens: u32,
     locale: Option<String>,
+    c: PingCounters,
 ) -> serde_json::Value {
     serde_json::json!({
         "install_id": get_or_create_install_id(app),
         "os": std::env::consts::OS,
         "app_version": current,
-        "install_source": install_source(),
+        "install_source": install_source(app),
+        "channel": release_channel(),
         "locale": locale.unwrap_or_default(),
-        "spotlight_opens": spotlight_opens,
+        "event": c.event,
+        "spotlight_opens": c.spotlight_opens,
+        "active_minutes": c.active_minutes,
+        "ping_failures": c.ping_failures,
+        "features": c.features,
+        "feedback": c.feedback,
     })
+}
+
+/// Sent once, from `setup`, on the launch that created the install id — before
+/// any window exists, so an install whose UI never comes up (a missing
+/// runtime, a crash on load) is still counted. The worker records it with
+/// `ui_seen = 0`; the webview's first heartbeat flips that to 1.
+fn send_first_run_ping(app: &tauri::AppHandle) {
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let current = handle.package_info().version.to_string();
+        let payload = analytics_payload(
+            &handle,
+            &current,
+            None,
+            PingCounters { event: "first_run", ..Default::default() },
+        );
+        let result = reqwest::Client::new()
+            .post(ANALYTICS_ENDPOINT)
+            .header("User-Agent", "CoolDesk")
+            .timeout(std::time::Duration::from_secs(15))
+            .json(&payload)
+            .send()
+            .await
+            .and_then(|r| r.error_for_status());
+        if let Err(e) = result {
+            log::info!("[Analytics] first-run ping failed: {}", e);
+        }
+    });
 }
 
 fn parse_update_info(current: String, release: &serde_json::Value) -> UpdateInfo {
@@ -1617,6 +1750,7 @@ fn parse_update_info(current: String, release: &serde_json::Value) -> UpdateInfo
         latest,
         has_update,
         notes_url: release["html_url"].as_str().unwrap_or("").to_string(),
+        ping_ok: false,
     }
 }
 
@@ -1627,31 +1761,48 @@ fn parse_update_info(current: String, release: &serde_json::Value) -> UpdateInfo
 /// Doubles as the anonymous usage heartbeat: unless `analytics_enabled` is
 /// `Some(false)`, the version check is routed through our own endpoint, which
 /// records the ping and proxies the GitHub release back. If that endpoint fails
-/// (offline, not yet deployed, opted out), it falls back to querying GitHub
-/// directly — so the update check is never broken by analytics.
+/// (offline, blocked, opted out), it falls back to querying GitHub directly —
+/// so the update check is never broken by analytics — and reports
+/// `ping_ok: false` so the client keeps its counters for the next try.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 async fn check_winget_update(
     app: tauri::AppHandle,
     analytics_enabled: Option<bool>,
     spotlight_opens: Option<u32>,
     locale: Option<String>,
+    features: Option<std::collections::HashMap<String, u32>>,
+    active_minutes: Option<u32>,
+    ping_failures: Option<u32>,
+    feedback: Option<String>,
 ) -> Result<UpdateInfo, String> {
     let current = app.package_info().version.to_string();
     let client = reqwest::Client::new();
 
     // Preferred path: route through our endpoint so the ping is recorded.
     if analytics_enabled != Some(false) {
-        let payload = analytics_payload(&app, &current, spotlight_opens.unwrap_or(0), locale);
+        let counters = PingCounters {
+            event: "heartbeat",
+            spotlight_opens: spotlight_opens.unwrap_or(0),
+            active_minutes: active_minutes.unwrap_or(0),
+            ping_failures: ping_failures.unwrap_or(0),
+            features: features.unwrap_or_default(),
+            feedback: feedback.unwrap_or_default(),
+        };
+        let payload = analytics_payload(&app, &current, locale, counters);
         let attempt = client
             .post(ANALYTICS_ENDPOINT)
             .header("User-Agent", "CoolDesk")
+            .timeout(std::time::Duration::from_secs(20))
             .json(&payload)
             .send()
             .await
             .and_then(|r| r.error_for_status());
         if let Ok(resp) = attempt {
             if let Ok(release) = resp.json::<serde_json::Value>().await {
-                return Ok(parse_update_info(current, &release));
+                let mut info = parse_update_info(current, &release);
+                info.ping_ok = true;
+                return Ok(info);
             }
         }
         // Any failure falls through to a direct GitHub query below.
@@ -3542,6 +3693,7 @@ pub fn run() {
         set_launch_at_login,
         get_launch_at_login,
         check_winget_update,
+        set_analytics_enabled,
         run_winget_upgrade,
         install_native_update,
         kill_process_on_port,
@@ -3644,6 +3796,14 @@ pub fn run() {
         log::info!("[Startup] --quit with no running instance; exiting");
         app.handle().exit(0);
         return Ok(());
+      }
+
+      // First launch of this install: count it now, before any window loads,
+      // so an install whose UI never appears is still seen. Skipped when the
+      // user opted out (a reinstall that kept its config dir).
+      let (_, first_launch) = ensure_install_id(app.handle());
+      if first_launch && !analytics_disabled_on_disk(app.handle()) {
+          send_first_run_ping(app.handle());
       }
 
       let autostarted = launched_by_autostart();
