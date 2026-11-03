@@ -21,7 +21,7 @@
            home indicator — no tab/box behind it, so it doesn't compete with
            whatever app sits at that screen edge. The pill runs along the edge
            (horizontal for top/bottom, vertical for left/right) and grows +
-           takes the accent color on hover.
+           brightens on hover.
 
            The window is transparent; #handle keeps a near-invisible fill
            (alpha 0.01) so the whole 132×22 strip still receives clicks —
@@ -60,7 +60,7 @@
 
         #handle:hover .grip {
             height: 64px;
-            background: #a78bfa;
+            background: rgba(255, 255, 255, 0.75);
         }
 
         #handle.top:hover .grip,
