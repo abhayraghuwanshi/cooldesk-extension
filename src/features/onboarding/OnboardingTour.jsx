@@ -7,6 +7,7 @@ import { getHostTabs } from '../../services/extensionApi';
 import { ensureFontLoaded, fontFamilies, setAndSaveFontFamily } from '../../utils/fontUtils';
 import { IS_MAC, accelTokens, appKey } from '../../utils/platformKeys';
 import { onboardingWallpapers } from '../../shared/data/wallpapers';
+import { applyTheme } from '../../shared/data/themePresets';
 // CSS is imported in App.jsx to avoid lazy-load preload issues
 
 /* ------------------------------------------------------------------ *
@@ -30,27 +31,6 @@ const WALLPAPER_CHOICES = onboardingWallpapers(8);
 
 const FONT_CHOICES = ['system', 'inter', 'poppins', 'dm-sans', 'lora', 'jetbrains'];
 
-// Every theme id the app knows about, so switching can clear the previous one.
-// Kept in sync with ThemesTab's `themes` list.
-const ALL_THEME_IDS = [
-  'wallpaper-custom', 'ai-midnight-nebula', 'cosmic-aurora', 'sunset-horizon', 'forest-depths',
-  'minimal-dark', 'ocean-depths', 'cherry-blossom', 'arctic-frost', 'volcanic-ember',
-  'neon-cyberpunk', 'white-cred', 'orange-warm', 'brown-earth', 'royal-purple',
-  'golden-honey', 'mint-sage', 'crimson-fire',
-];
-
-// Same body/html class swap SettingsModal does, so the choice made here is the
-// one Settings shows later.
-const applyTheme = (themeId) => {
-  const { body, documentElement: html } = document;
-  ALL_THEME_IDS.forEach(id => { body.classList.remove(`bg-${id}`); html.classList.remove(`bg-${id}`); });
-  body.classList.add(`bg-${themeId}`);
-  html.classList.add(`bg-${themeId}`);
-  try {
-    localStorage.setItem('cooldesk-theme', themeId);
-    window.dispatchEvent(new CustomEvent('cooldesk-theme-changed', { detail: { themeId } }));
-  } catch { /* storage disabled — the class swap above still applies */ }
-};
 
 // In-app shortcut key. Every handler behind these tests `ctrlKey || metaKey`,
 // so "Ctrl" renders as ⌘ on macOS.

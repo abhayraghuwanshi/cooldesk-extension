@@ -20,21 +20,18 @@ config.autoAddCss = false;
 import { faGear, faGlobe, faPlus } from '@fortawesome/free-solid-svg-icons';
 
 // Core services (lightweight)
-import { getSettings as getSettingsDB, saveSettings as saveSettingsDB } from '../db/index.js';
-import { sendMessage } from '../services/extensionApi';
 import { initializeFontSize, setAndSaveFontSize } from '../utils/fontUtils';
 import { useOnboarding } from '../shared/hooks/useOnboarding';
 
 // Extension-only components
 import { OverviewDashboard } from '../faces/overview/OverviewDashboard';
-import { LayoutPicker } from '../faces/overview/LayoutPicker';
+import { CustomizeMenu } from '../faces/overview/CustomizeMenu';
 import { isBoardLayout, useOverviewLayout, useOverviewVisibility } from '../faces/overview/overviewLayouts';
 import { CURATED_WALLPAPER_URLS } from '../shared/data/wallpapers';
 import { UpdateButton } from '../features/updates/UpdateButton';
 import { UpdatedNotice } from '../features/updates/UpdatedNotice';
 
 // Lazy load heavy components
-const SettingsModal = React.lazy(() => import('../features/settings/SettingsModal').then(module => ({ default: module.SettingsModal })));
 const OnboardingTour = React.lazy(() => import('../features/onboarding/OnboardingTour').then(module => ({ default: module.OnboardingTour })));
 
 library.add(faPlus, faGear, faGlobe);
@@ -72,8 +69,6 @@ class ErrorBoundary extends React.Component {
 
 export default function ExtensionApp() {
   const { shouldShowOnboarding, isManualStart, completeOnboarding, skipOnboarding, startOnboarding } = useOnboarding();
-  const [settings, setSettings] = useState({ geminiApiKey: '', modelName: '', visitCountThreshold: '', historyDays: '' });
-  const [showSettings, setShowSettings] = useState(false);
   const [layout, setLayout] = useOverviewLayout();
   const [visibleParts, setVisibleParts] = useOverviewVisibility();
   const [cardEditing, setCardEditing] = useState(false);
@@ -102,6 +97,18 @@ export default function ExtensionApp() {
       return 'medium';
     }
   });
+  // The wrapper's bg-<theme> class follows theme changes made anywhere
+  // (Settings, the Customize menu, onboarding) — it used to keep the class
+  // from page load until the next reload.
+  useEffect(() => {
+    const sync = (e) => {
+      const id = e?.detail?.themeId || (() => { try { return localStorage.getItem('cooldesk-theme'); } catch { return null; } })();
+      if (id) setThemeClass(`bg-${id}`);
+    };
+    window.addEventListener('cooldesk-theme-changed', sync);
+    return () => window.removeEventListener('cooldesk-theme-changed', sync);
+  }, []);
+
   // Wallpaper settings
   const [wallpaperEnabled, setWallpaperEnabled] = useState(() => {
     try {
@@ -163,31 +170,16 @@ export default function ExtensionApp() {
     try { localStorage.setItem('wallpaperUrl', nextWallpaper); } catch { }
   }, []);
 
-  // Next curated wallpaper, in list order (wraps; a custom URL starts from the
-  // top). The one after it is preloaded so the following click swaps instantly.
-  const nextWallpaper = () => {
-    const list = CURATED_WALLPAPER_URLS;
-    if (!list.length) return;
-    const i = list.indexOf(wallpaperUrl);
-    const next = list[(i + 1) % list.length];
-    setWallpaperUrl(next);
-    try { localStorage.setItem('wallpaperUrl', next); } catch { }
-    new Image().src = list[(i + 2) % list.length];
+  // One handler for the Customize menu's background controls: applies and
+  // persists whichever of enabled / url / opacity / autoRotate it's given.
+  const changeWallpaper = (patch) => {
+    const store = (k, v) => { try { localStorage.setItem(k, String(v)); } catch { /* won't persist */ } };
+    if ('enabled' in patch) { setWallpaperEnabled(patch.enabled); store('wallpaperEnabled', patch.enabled); }
+    if ('url' in patch) { setWallpaperUrl(patch.url); store('wallpaperUrl', patch.url); }
+    if ('opacity' in patch) { setWallpaperOpacity(patch.opacity); store('wallpaperOpacity', patch.opacity); }
+    if ('autoRotate' in patch) { setWallpaperAutoRotate(patch.autoRotate); store('wallpaperAutoRotate', patch.autoRotate); }
   };
 
-  // Load settings
-  useEffect(() => {
-    (async () => {
-      const s = await getSettingsDB();
-      const { geminiApiKey, modelName, visitCountThreshold, historyDays } = s || {};
-      setSettings({
-        geminiApiKey: geminiApiKey || '',
-        modelName: modelName || '',
-        visitCountThreshold: Number.isFinite(visitCountThreshold) ? String(visitCountThreshold) : '',
-        historyDays: Number.isFinite(historyDays) ? String(historyDays) : ''
-      });
-    })();
-  }, []);
 
   const handleFontSizeChange = (size) => {
     setAndSaveFontSize(size);
@@ -219,81 +211,29 @@ export default function ExtensionApp() {
           onAddUrlToWorkspace={handleAddUrlToWorkspace}
         /> */}
 
-        {/* Floating top-right buttons: next wallpaper (only when a wallpaper is on) + settings */}
+        {/* Top-right: only the update pill (it renders nothing unless an
+            update is waiting). Everything about the page itself lives in
+            the Customize menu, bottom-right. */}
         <div className="overview-corner-actions">
           <UpdateButton className="upd-pill--glass" />
-          <LayoutPicker
+        </div>
+
+        <div className="overview-edit-dock">
+          <CustomizeMenu
             layout={layout}
-            onChange={setLayout}
+            onLayoutChange={setLayout}
             visible={visibleParts}
             onVisibleChange={setVisibleParts}
-            onCustomize={() => setCardEditing(true)}
+            onCustomizeCards={() => setCardEditing(true)}
+            onStartTour={startOnboarding}
+            wallpaper={{ enabled: wallpaperEnabled, url: wallpaperUrl, opacity: wallpaperOpacity, autoRotate: wallpaperAutoRotate }}
+            onWallpaperChange={changeWallpaper}
+            fontSize={fontSize}
+            onFontSizeChange={handleFontSizeChange}
           />
-          {wallpaperEnabled && (
-            <button
-              className="cooldesk-settings-btn"
-              onClick={nextWallpaper}
-              title="Next wallpaper"
-              aria-label="Next wallpaper"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="3" />
-                <circle cx="9" cy="9" r="1.5" />
-                <path d="M21 15l-5-5L5 21" />
-              </svg>
-            </button>
-          )}
-          <button
-            className="cooldesk-settings-btn"
-            onClick={() => setShowSettings(true)}
-            title="Settings"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
-            </svg>
-          </button>
         </div>
 
         <UpdatedNotice />
-
-        {/* Settings Modal */}
-        {showSettings && (
-          <Suspense fallback={null}>
-            <SettingsModal
-              show={showSettings}
-              onClose={() => setShowSettings(false)}
-              settings={settings}
-              onSave={(newSettings) => {
-                setSettings(newSettings);
-                saveSettingsDB(newSettings);
-                try { sendMessage({ action: 'settingsUpdated', settings: newSettings }); } catch { }
-              }}
-              fontSize={fontSize}
-              onFontSizeChange={handleFontSizeChange}
-              onStartOnboarding={startOnboarding}
-              wallpaperEnabled={wallpaperEnabled}
-              wallpaperUrl={wallpaperUrl}
-              wallpaperOpacity={wallpaperOpacity}
-              wallpaperAutoRotate={wallpaperAutoRotate}
-              onWallpaperEnabledChange={(v) => {
-                setWallpaperEnabled(v);
-                localStorage.setItem('wallpaperEnabled', String(v));
-              }}
-              onWallpaperUrlChange={(v) => {
-                setWallpaperUrl(v);
-                localStorage.setItem('wallpaperUrl', v);
-              }}
-              onWallpaperOpacityChange={(v) => {
-                setWallpaperOpacity(v);
-                localStorage.setItem('wallpaperOpacity', String(v));
-              }}
-              onWallpaperAutoRotateChange={(v) => {
-                setWallpaperAutoRotate(v);
-                localStorage.setItem('wallpaperAutoRotate', String(v));
-              }}
-            />
-          </Suspense>
-        )}
 
         {/* Onboarding Tour */}
         {shouldShowOnboarding && (

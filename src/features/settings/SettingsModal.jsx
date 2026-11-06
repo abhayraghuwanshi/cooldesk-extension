@@ -24,7 +24,7 @@ import { isAnalyticsEnabled, setAnalyticsEnabled } from '../../services/analytic
 import { checkForUpdate, getUpdateState, installUpdate } from '../../services/updateService';
 import { TEAM_FEATURE_ENABLED } from '../../config/features';
 import AIModelsTab from './parts/AIModelsTab';
-import ExportData from './parts/ExportData';
+import ExportData from '../../shared/components/ExportData';
 import FolderIndexTab from './parts/FolderIndexTab';
 import TeamsTab from './parts/TeamsTab';
 import ThemesTab from './parts/ThemesTab';
@@ -98,7 +98,9 @@ export function SettingsModal({
   const TABS = [
     { id: 'general',    label: 'General',    icon: faCog     },
     { id: 'appearance', label: 'Appearance', icon: faPalette },
-    { id: 'local-ai',   label: 'Local AI',   icon: faRocket  },
+    // Local AI configures the desktop app's sidecar (models, cloud keys); in
+    // the browser extension there's nothing behind it, so desktop only.
+    ...(isDesktopApp ? [{ id: 'local-ai', label: 'Local AI', icon: faRocket }] : []),
     ...(isTauri ? [{ id: 'folders', label: 'Folders & Index', icon: faFolderOpen }] : []),
     ...(isDesktopApp && TEAM_FEATURE_ENABLED ? [{ id: 'team', label: 'Team', icon: faUsers }] : []),
   ];
