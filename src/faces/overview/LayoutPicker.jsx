@@ -1,9 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
-import { DEFAULT_VISIBLE, FEED_TABS, OVERVIEW_LAYOUTS, OVERVIEW_PARTS } from './overviewLayouts';
+import { DEFAULT_VISIBLE, FEED_TABS, OVERVIEW_LAYOUTS, OVERVIEW_PARTS, OVERVIEW_VIBES, isBoardLayout, isStageLayout, vibePreview } from './overviewLayouts';
 
 // `show` dims the cells for hidden columns, so the corner button's icon
 // reflects what's actually on the page.
-function LayoutPreview({ cells, extra, show = { w: true, f: true } }) {
+// `rects` (vibes): the board's own cards, drawn as-is instead of two columns.
+function LayoutPreview({ cells, extra, rects, show = { w: true, f: true } }) {
+    if (rects) {
+        return (
+            <svg width="40" height="28" viewBox="0 0 40 28" aria-hidden="true">
+                <rect x="0.5" y="0.5" width="39" height="27" rx="4" fill="none" stroke="currentColor" strokeOpacity="0.25" />
+                {rects.map(([x, y, w, h], i) => (
+                    <rect key={i} x={x} y={y} width={w} height={h} rx="1.5" fill="currentColor" fillOpacity={i % 2 ? 0.4 : 0.65} />
+                ))}
+            </svg>
+        );
+    }
     return (
         <svg width="40" height="28" viewBox="0 0 40 28" aria-hidden="true">
             <rect x="0.5" y="0.5" width="39" height="27" rx="4" fill="none" stroke="currentColor" strokeOpacity="0.25" />
@@ -35,7 +46,9 @@ export function LayoutPicker({ layout, onChange, visible = DEFAULT_VISIBLE, onVi
         };
     }, [open]);
 
-    const current = OVERVIEW_LAYOUTS.find(l => l.key === layout) || OVERVIEW_LAYOUTS[0];
+    const currentVibe = OVERVIEW_VIBES.find(v => v.key === layout);
+    const current = currentVibe || OVERVIEW_LAYOUTS.find(l => l.key === layout) || OVERVIEW_LAYOUTS[0];
+    const isBoard = isBoardLayout(layout);
     const show = { w: visible.widgets || visible.summary, f: visible.feed };
     const allHidden = OVERVIEW_PARTS.every(p => !visible[p.key]);
     const hiddenTabs = visible.hiddenFeedTabs || [];
@@ -54,7 +67,9 @@ export function LayoutPicker({ layout, onChange, visible = DEFAULT_VISIBLE, onVi
                 aria-label="Change layout"
                 aria-expanded={open}
             >
-                <LayoutPreview cells={current.cells} extra={current.extra} show={current.key === 'custom' ? undefined : show} />
+                {currentVibe
+                    ? <LayoutPreview rects={vibePreview(currentVibe)} />
+                    : <LayoutPreview cells={current.cells} extra={current.extra} show={current.key === 'custom' ? undefined : show} />}
             </button>
             {open && (
                 <div className="overview-layout-menu" role="menu">
@@ -75,8 +90,31 @@ export function LayoutPicker({ layout, onChange, visible = DEFAULT_VISIBLE, onVi
                         ))}
                     </div>
 
-                    {/* Custom has no fixed parts to show/hide — it's edited as cards. */}
-                    {layout === 'custom' && onCustomize && (
+                    {[['vibe', 'Vibes'], ['start', 'Start pages'], ['fun', 'Just for fun'], ['design', 'Designs']].map(([group, title]) => (
+                    <div key={group}>
+                    <div className="context-menu-divider" />
+                    <div className="context-menu-label">{title}</div>
+                    <div className="overview-layout-options">
+                        {OVERVIEW_VIBES.filter(v => (v.group || 'vibe') === group).map(v => (
+                            <button
+                                key={v.key}
+                                role="menuitemradio"
+                                aria-checked={v.key === layout}
+                                className={`overview-layout-option ${v.key === layout ? 'active' : ''}`}
+                                title={v.hint}
+                                onClick={() => onChange(v.key)}
+                            >
+                                <LayoutPreview rects={vibePreview(v)} />
+                                <span>{v.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                    </div>
+                    ))}
+
+                    {/* Card boards (Custom + vibes) have no fixed parts to
+                        show/hide — they're edited as cards. */}
+                    {isBoard && onCustomize && (
                         <>
                             <div className="context-menu-divider" />
                             <button
@@ -91,7 +129,7 @@ export function LayoutPicker({ layout, onChange, visible = DEFAULT_VISIBLE, onVi
                         </>
                     )}
 
-                    {onVisibleChange && layout !== 'custom' && (
+                    {onVisibleChange && !isBoard && !isStageLayout(layout) && (
                         <>
                             <div className="context-menu-divider" />
                             <div className="context-menu-label">Show</div>

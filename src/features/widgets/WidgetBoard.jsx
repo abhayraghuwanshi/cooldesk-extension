@@ -882,8 +882,12 @@ const WidgetBoard = memo(function WidgetBoard({ storageArea, compact = false, de
 // per-widget cards (faces/overview/CardBoard.jsx). Same frame, theme,
 // see-through and storage bridge as a board tile; the card supplies the
 // surface, size and edit controls.
-const WidgetEmbed = memo(function WidgetEmbed({ widgetId }) {
-    const theme = useWidgetTheme();
+// `theme`: force 'light' / 'dark' regardless of the app theme (a start page
+// with its own surface — e.g. a cream "newspaper" — needs dark text). A forced
+// theme always draws clear (no widget card), so the host surface shows.
+const WidgetEmbed = memo(function WidgetEmbed({ widgetId, center = false, theme: forcedTheme = null }) {
+    const appTheme = useWidgetTheme();
+    const theme = forcedTheme || appTheme;
     const widget = useMemo(
         () => getWidget(widgetId) || loadCustomWidgets().find(c => c.id === widgetId) || null,
         [widgetId]
@@ -895,11 +899,12 @@ const WidgetEmbed = memo(function WidgetEmbed({ widgetId }) {
         <iframe
             className="wgb-frame"
             src={widgetEmbedUrl(widget.id, theme, undefined, {
-                clear: clearTiles(theme),
+                clear: forcedTheme ? !IS_TAURI : clearTiles(theme),
                 // Scaled from a ~240px-wide design (fitW overrides for wider
                 // layouts), so a small square card fills out rather than
                 // leaving a wide margin.
                 fit: widget.fit ? { w: widget.fitW || 240, h: widget.h } : null,
+                center,
             })}
             title={widget.name}
             onLoad={bridgeOnLoad}

@@ -11,7 +11,7 @@
 
 export const WIDGET_STORE_ORIGIN = 'https://cool-desk.com';
 export const WIDGET_STORE_URL = `${WIDGET_STORE_ORIGIN}/widgets`;
-const WIDGET_VERSION = '9';
+const WIDGET_VERSION = '10';
 
 export const WIDGET_CATEGORIES = ['CoolDesk', 'Time & Focus', 'Productivity', 'Data & Life', 'Dev Tools'];
 
@@ -95,12 +95,14 @@ function widgetBase() {
 // is transparent: plain Chrome yes, the Tauri WebView no (see base.css).
 // `fit`: { w, h } designed size — the widget scales its content to fill the
 // frame (glanceable widgets in Custom-layout cards; see base.css data-fit).
-export function widgetEmbedUrl(id, theme, tint, { clear = false, fit = null } = {}) {
+// `center`: center the widget's content (start pages; base.css data-center).
+export function widgetEmbedUrl(id, theme, tint, { clear = false, fit = null, center = false } = {}) {
     const t = typeof tint === 'string' ? tint.replace(/^#/, '') : '';
     const tintParam = /^(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(t) ? `&tint=${t}` : '';
     const embedParam = clear ? '&embed=host' : '';
     const fitParam = fit ? `&fitw=${Math.round(fit.w)}&fith=${Math.round(fit.h)}` : '';
-    const query = `?theme=${theme === 'light' ? 'light' : 'dark'}${tintParam}${embedParam}${fitParam}&v=${WIDGET_VERSION}`;
+    const centerParam = center ? '&center=1' : '';
+    const query = `?theme=${theme === 'light' ? 'light' : 'dark'}${tintParam}${embedParam}${fitParam}${centerParam}&v=${WIDGET_VERSION}`;
     return new URL(`${id}.html${query}`, widgetBase()).href;
 }
 

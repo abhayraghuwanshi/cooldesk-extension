@@ -28,7 +28,7 @@ import { useOnboarding } from '../shared/hooks/useOnboarding';
 // Extension-only components
 import { OverviewDashboard } from '../faces/overview/OverviewDashboard';
 import { LayoutPicker } from '../faces/overview/LayoutPicker';
-import { useOverviewLayout, useOverviewVisibility } from '../faces/overview/overviewLayouts';
+import { isBoardLayout, useOverviewLayout, useOverviewVisibility } from '../faces/overview/overviewLayouts';
 import { CURATED_WALLPAPER_URLS } from '../shared/data/wallpapers';
 import { UpdateButton } from '../features/updates/UpdateButton';
 import { UpdatedNotice } from '../features/updates/UpdatedNotice';
@@ -207,7 +207,7 @@ export default function ExtensionApp() {
           <OverviewDashboard
             layout={layout}
             visible={visibleParts}
-            cardEditing={layout === 'custom' && cardEditing}
+            cardEditing={isBoardLayout(layout) && cardEditing}
             onCardEditingDone={() => setCardEditing(false)}
           />
         </div>

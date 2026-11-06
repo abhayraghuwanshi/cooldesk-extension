@@ -91,6 +91,14 @@ html[data-fit] .widget {
   transform-origin: 0 0;
 }
 
+/* Centered mode (?center=1, set by cooldesk.js). */
+html[data-center] .widget { align-items: center; text-align: center; }
+html[data-center] .widget > .row { justify-content: center; }
+html[data-center] .widget > form { align-self: stretch; }
+html[data-center] .widget > form input { text-align: center; }
+html[data-center] .widget .row > .grow:not(input) { flex-grow: 0; }
+html[data-center] .widget .stack { align-items: flex-start !important; text-align: left; white-space: nowrap; }
+
 .label {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 10px;

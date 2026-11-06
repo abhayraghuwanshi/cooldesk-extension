@@ -42,7 +42,592 @@ export const FEED_TABS = [
 
 export const DEFAULT_VISIBLE = { widgets: true, summary: true, feed: true, favorites: true, hiddenFeedTabs: [] };
 
-const isLayout = (k) => OVERVIEW_LAYOUTS.some(l => l.key === k);
+// ── Vibes ──────────────────────────────────────────────────────────────────
+// Ready-made card boards for a mood: same CardBoard as Custom, but each vibe
+// keeps its own stored board (seeded from `cards` below), so picking one never
+// overwrites the user's Custom board, and tweaks to a vibe stick to that vibe.
+// Reset in Customize returns a vibe to these defaults. Cards start at x = 0:
+// the board centers on the columns it uses. `center` vertically centers the
+// board (sparse vibes would otherwise hang from the top).
+const vibeCard = (id, widgetId, w, h, x, y) => ({ id, type: 'widget', widgetId, tab: null, w, h, x, y });
+
+export const OVERVIEW_VIBES = [
+    {
+        key: 'vibe-search', label: 'Search', hint: 'Just a search bar — nothing else', center: true,
+        cards: [{ id: 'v-searchbar', type: 'searchbar', tab: null, w: 6, h: 1, x: 0, y: 0 }],
+    },
+    {
+        // Bare on the wallpaper — no card glass — so it's a stage, not a board.
+        key: 'vibe-zen', label: 'Zen', hint: 'Clock, a slow breath, a quote — nothing boxed in',
+        preview: [[12, 4, 16, 7], [17, 13, 6, 6], [10, 23, 20, 2]],
+        stage: {
+            center: [
+                { kind: 'widget', id: 'clock', w: 620, h: 260 },
+                { kind: 'widget', id: 'breathe', w: 280, h: 240 },
+            ],
+            bottom: [{ kind: 'widget', id: 'quotes', w: 640, h: 120 }],
+        },
+    },
+    {
+        key: 'vibe-deep', label: 'Deep work', hint: 'One focus, a timer, tasks and notes', center: true,
+        cards: [
+            vibeCard('v-focus', 'focus', 6, 1, 0, 0),
+            vibeCard('v-pomodoro', 'pomodoro', 2, 3, 0, 1),
+            vibeCard('v-todo', 'todo', 2, 3, 2, 1),
+            vibeCard('v-notes', 'notes', 2, 3, 4, 1),
+        ],
+    },
+    {
+        key: 'vibe-fun', label: 'Fun', hint: 'Typing sprints, fate picks, trivia', center: true,
+        cards: [
+            vibeCard('v-wpm', 'wpm', 2, 2, 0, 0),
+            vibeCard('v-picker', 'picker', 2, 2, 2, 0),
+            vibeCard('v-onthisday', 'on-this-day', 2, 2, 4, 0),
+            vibeCard('v-moon', 'moon', 2, 2, 0, 2),
+            vibeCard('v-water', 'water', 2, 2, 2, 2),
+            vibeCard('v-quotes', 'quotes', 2, 2, 4, 2),
+        ],
+    },
+    {
+        key: 'vibe-morning', label: 'Morning', hint: 'Weather, sun, calendar, today\'s tasks', center: true,
+        cards: [
+            vibeCard('v-today', 'today', 2, 2, 0, 0),
+            vibeCard('v-weather', 'weather', 2, 2, 2, 0),
+            vibeCard('v-sun', 'sun', 2, 2, 4, 0),
+            vibeCard('v-calendar', 'calendar', 3, 3, 0, 2),
+            vibeCard('v-todo', 'todo', 3, 3, 3, 2),
+        ],
+    },
+    {
+        key: 'vibe-dev', label: 'Dev', hint: 'JSON, regex, passwords, contributions', center: true,
+        cards: [
+            vibeCard('v-github', 'github', 4, 2, 0, 0),
+            vibeCard('v-password', 'password', 2, 2, 4, 0),
+            vibeCard('v-json', 'json', 3, 3, 0, 2),
+            vibeCard('v-regex', 'regex', 3, 3, 3, 2),
+        ],
+    },
+
+    // ── Start pages ── the arrangements of well-known new-tab pages, made of
+    // the same pieces. `stage` ones render in StageBoard.jsx (regions: top
+    // corners, a centered stack, a bottom line; sizes are max px); `preview`
+    // is their picker thumbnail as [x, y, w, h] in the 40×28 box.
+    {
+        key: 'start-greeting', group: 'start', label: 'Greeting', hint: 'Big clock, a greeting, today\'s focus, a quote',
+        preview: [[29, 3, 8, 3], [12, 8, 16, 7], [14, 16, 12, 2], [13, 19, 14, 2], [10, 24, 20, 2]],
+        stage: {
+            topRight: [{ kind: 'widget', id: 'weather', w: 230, h: 96 }],
+            center: [
+                { kind: 'widget', id: 'clock', w: 600, h: 260 },
+                { kind: 'greeting' },
+                { kind: 'widget', id: 'focus', w: 460, h: 150 },
+            ],
+            bottom: [{ kind: 'widget', id: 'quotes', w: 620, h: 130 }],
+        },
+    },
+    {
+        key: 'start-shortcuts', group: 'start', label: 'Shortcuts', hint: 'A search bar over your shortcut tiles',
+        preview: [[8, 9, 24, 4], [9, 16, 4, 4], [15, 16, 4, 4], [21, 16, 4, 4], [27, 16, 4, 4]],
+        stage: {
+            center: [
+                { kind: 'searchbar', w: 640 },
+                { kind: 'shortcuts', size: 'md', w: 680 },
+            ],
+        },
+    },
+    {
+        key: 'start-page', group: 'start', label: 'Start Page', hint: 'Favorites, recently visited and your activity in one column',
+        preview: [[8, 3, 24, 2], [8, 6, 5, 5], [14, 6, 5, 5], [20, 6, 5, 5], [26, 6, 5, 5], [8, 13, 24, 7], [8, 21, 24, 5]],
+        stage: {
+            align: 'top',
+            center: [
+                { kind: 'shortcuts', size: 'lg', title: 'Favorites', w: 820 },
+                { kind: 'feed', tab: 'tabs', title: 'Recently visited', w: 820, h: 340 },
+                { kind: 'summary', title: 'Your activity', w: 820 },
+            ],
+        },
+    },
+    {
+        key: 'start-minimal', group: 'start', label: 'Minimal', hint: 'Clock, weather and a search bar — nothing else',
+        preview: [[13, 6, 14, 7], [16, 14, 8, 3], [10, 19, 20, 3]],
+        stage: {
+            center: [
+                { kind: 'widget', id: 'clock', w: 460, h: 200 },
+                { kind: 'widget', id: 'weather', w: 260, h: 100 },
+                { kind: 'searchbar', w: 560 },
+            ],
+        },
+    },
+    {
+        key: 'start-launchpad', group: 'start', label: 'Launchpad', hint: 'Search plus a big grid of app-style icons',
+        preview: [[10, 3, 20, 3], [6, 9, 5, 5], [13, 9, 5, 5], [20, 9, 5, 5], [27, 9, 5, 5], [6, 16, 5, 5], [13, 16, 5, 5], [20, 16, 5, 5], [27, 16, 5, 5]],
+        stage: {
+            center: [
+                { kind: 'searchbar', w: 600 },
+                { kind: 'shortcuts', size: 'xl', w: 920 },
+            ],
+        },
+    },
+    {
+        key: 'start-columns', group: 'start', label: 'Columns', hint: 'Browsing, search engines and suites side by side',
+        cards: [
+            // Browsing rows carry time + tab chips: 2 cells (~300px) is too
+            // narrow for them, so it gets the wide column.
+            { id: 'col-tabs', type: 'feed', tab: 'tabs', w: 4, h: 5, x: 0, y: 0 },
+            { id: 'col-search', type: 'feed', tab: 'search', w: 2, h: 5, x: 4, y: 0 },
+            { id: 'col-suites', type: 'feed', tab: 'suites', w: 2, h: 5, x: 6, y: 0 },
+        ],
+    },
+
+    // ── Just for fun ── the wilder new-tab ideas out there, same pieces.
+    {
+        key: 'fun-poster', group: 'fun', label: 'Poster', hint: 'One giant clock, like a print on the wall',
+        preview: [[4, 7, 32, 12], [12, 21, 16, 2]],
+        stage: { center: [{ kind: 'time', size: 'poster' }, { kind: 'date', className: 'is-poster' }] },
+    },
+    {
+        key: 'fun-orbit', group: 'fun', label: 'Orbit', hint: 'Your shortcuts slowly orbiting the clock',
+        preview: [[16, 11, 8, 6], [18, 2, 4, 4], [28, 6, 4, 4], [28, 18, 4, 4], [18, 22, 4, 4], [8, 18, 4, 4], [8, 6, 4, 4]],
+        stage: { center: [{ kind: 'shortcuts', variant: 'orbit', radius: 250, max: 12 }] },
+    },
+    {
+        key: 'fun-desktop', group: 'fun', label: 'Desktop', hint: 'Clock and search, shortcuts in a magnifying dock',
+        preview: [[12, 6, 16, 6], [10, 14, 20, 3], [8, 22, 24, 4]],
+        stage: {
+            center: [
+                { kind: 'time', size: 'xl' },
+                { kind: 'date' },
+                { kind: 'searchbar', w: 560 },
+            ],
+            bottom: [{ kind: 'shortcuts', variant: 'dock', max: 12 }],
+        },
+    },
+    {
+        key: 'fun-terminal', group: 'fun', label: 'Terminal', hint: 'Green-screen hacker mode',
+        preview: [[4, 4, 14, 2], [4, 8, 20, 6], [4, 16, 26, 2], [4, 19, 12, 1], [4, 21, 12, 1], [4, 23, 12, 1]],
+        stage: {
+            align: 'top',
+            center: [{
+                kind: 'group', className: 'term-screen', w: 860, pieces: [
+                    { kind: 'text', text: 'guest@cooldesk:~$ date', className: 'term-prompt' },
+                    { kind: 'time', size: 'term', seconds: true },
+                    { kind: 'date', long: true, className: 'term-dim' },
+                    { kind: 'text', text: 'guest@cooldesk:~$ search', className: 'term-prompt' },
+                    { kind: 'searchbar' },
+                    { kind: 'text', text: 'guest@cooldesk:~$ ls ~/shortcuts', className: 'term-prompt' },
+                    { kind: 'shortcuts', variant: 'list' },
+                    { kind: 'text', text: 'guest@cooldesk:~$ ', className: 'term-prompt term-cursor' },
+                ],
+            }],
+        },
+    },
+    {
+        key: 'fun-paper', group: 'fun', label: 'Newspaper', hint: 'The morning edition: headline, quote, weather',
+        preview: [[6, 2, 28, 24], [9, 4, 22, 3], [9, 9, 22, 1], [9, 12, 13, 11], [24, 12, 7, 5], [24, 18, 7, 5]],
+        stage: {
+            align: 'top',
+            center: [{
+                kind: 'group', className: 'paper-sheet', w: 980, pieces: [
+                    { kind: 'text', text: 'The Daily Tab', className: 'paper-masthead' },
+                    { kind: 'date', long: true, className: 'paper-dateline' },
+                    {
+                        kind: 'group', dir: 'row', className: 'paper-cols', pieces: [
+                            {
+                                kind: 'group', className: 'paper-lead', pieces: [
+                                    { kind: 'text', text: 'Top story', className: 'paper-kicker' },
+                                    { kind: 'widget', id: 'on-this-day', theme: 'light', align: 'left', h: 200 },
+                                ],
+                            },
+                            {
+                                kind: 'group', className: 'paper-side', pieces: [
+                                    { kind: 'text', text: 'Weather', className: 'paper-kicker' },
+                                    { kind: 'widget', id: 'weather', theme: 'light', h: 110 },
+                                    { kind: 'text', text: 'Words to live by', className: 'paper-kicker' },
+                                    { kind: 'widget', id: 'quotes', theme: 'light', h: 150 },
+                                ],
+                            },
+                        ],
+                    },
+                ],
+            }],
+        },
+    },
+    {
+        key: 'fun-scrapbook', group: 'fun', label: 'Scrapbook', hint: 'Widgets taped to a corkboard, a little crooked',
+        preview: [[4, 4, 10, 9], [16, 3, 9, 10], [27, 5, 9, 8], [6, 15, 11, 9], [20, 15, 12, 9]],
+        stage: {
+            center: [{
+                kind: 'group', dir: 'row', className: 'scrap-board', w: 1000, pieces: [
+                    { kind: 'widget', id: 'today', glass: true, w: 250, h: 170, className: 'scrap' },
+                    { kind: 'widget', id: 'quotes', glass: true, w: 300, h: 190, className: 'scrap' },
+                    { kind: 'widget', id: 'moon', glass: true, align: 'left', w: 260, h: 160, className: 'scrap' },
+                    { kind: 'widget', id: 'todo', glass: true, align: 'left', w: 270, h: 250, className: 'scrap' },
+                    { kind: 'widget', id: 'picker', glass: true, align: 'left', w: 270, h: 230, className: 'scrap' },
+                    { kind: 'widget', id: 'water', glass: true, align: 'left', w: 250, h: 170, className: 'scrap' },
+                ],
+            }],
+        },
+    },
+    {
+        key: 'fun-night', group: 'fun', label: 'Night', hint: 'A starry sky, the moon and the clock',
+        preview: [[15, 4, 10, 8], [10, 14, 20, 6], [14, 22, 12, 3]],
+        stage: {
+            center: [
+                { kind: 'widget', id: 'moon', align: 'left', w: 290, h: 150 },
+                { kind: 'time', size: 'xl' },
+                { kind: 'date' },
+            ],
+            bottom: [{ kind: 'widget', id: 'sun', w: 420, h: 150 }],
+        },
+    },
+    {
+        key: 'fun-corners', group: 'fun', label: 'Corners', hint: 'A widget in every corner, the middle left free',
+        preview: [[2, 2, 10, 6], [28, 2, 10, 5], [2, 20, 14, 6], [28, 18, 10, 8]],
+        stage: {
+            topLeft: [{ kind: 'widget', id: 'clock', align: 'left', w: 300, h: 150 }],
+            topRight: [{ kind: 'widget', id: 'weather', w: 250, h: 104 }],
+            center: [],
+            bottomLeft: [{ kind: 'widget', id: 'quotes', align: 'left', w: 420, h: 130 }],
+            bottomRight: [{ kind: 'widget', id: 'todo', glass: true, align: 'left', w: 290, h: 250 }],
+        },
+    },
+    {
+        key: 'fun-sidebar', group: 'fun', label: 'Sidebar', hint: 'A shortcut rail on the left, search and tabs on the right',
+        preview: [[2, 2, 7, 24], [12, 3, 24, 3], [12, 9, 24, 16]],
+        stage: {
+            align: 'top',
+            left: [{ kind: 'shortcuts', variant: 'rail', max: 14 }],
+            center: [
+                { kind: 'greeting' },
+                { kind: 'searchbar', w: 760 },
+                { kind: 'feed', tab: 'tabs', title: 'Open now', w: 760, h: 420 },
+            ],
+        },
+    },
+    {
+        key: 'fun-bento', group: 'fun', label: 'Bento', hint: 'An Apple-style bento grid of mixed sizes', center: true,
+        cards: [
+            vibeCard('b-clock', 'clock', 4, 2, 0, 0),
+            vibeCard('b-weather', 'weather', 2, 2, 4, 0),
+            vibeCard('b-calendar', 'calendar', 2, 3, 6, 0),
+            vibeCard('b-todo', 'todo', 2, 3, 0, 2),
+            vibeCard('b-quotes', 'quotes', 4, 1, 2, 2),
+            vibeCard('b-pomodoro', 'pomodoro', 2, 2, 2, 3),
+            vibeCard('b-moon', 'moon', 2, 2, 4, 3),
+            vibeCard('b-year', 'year-progress', 2, 1, 6, 3),
+            vibeCard('b-sun', 'sun', 2, 1, 6, 4),
+        ],
+    },
+    {
+        key: 'fun-cockpit', group: 'fun', label: 'Cockpit', hint: 'Every gauge at once — a dense dashboard', center: true,
+        cards: [
+            vibeCard('k-world', 'world-clock', 2, 2, 0, 0),
+            vibeCard('k-crypto', 'crypto', 2, 2, 2, 0),
+            vibeCard('k-currency', 'currency', 2, 2, 4, 0),
+            vibeCard('k-weather', 'weather', 2, 2, 6, 0),
+            vibeCard('k-year', 'year-progress', 2, 1, 0, 2),
+            vibeCard('k-countdown', 'countdown', 2, 1, 2, 2),
+            vibeCard('k-sun', 'sun', 2, 2, 4, 2),
+            vibeCard('k-moon', 'moon', 2, 2, 6, 2),
+            vibeCard('k-today', 'today', 2, 2, 0, 3),
+            vibeCard('k-converter', 'converter', 2, 2, 2, 3),
+            vibeCard('k-quotes', 'quotes', 4, 1, 4, 4),
+        ],
+    },
+
+    // ── Designs ── less widget, more design: the time drawn a dozen ways and
+    // the page dressed as an object, a movement, an era. Mostly CSS skins
+    // (data-stage in cooldesk.css) over text pieces + drawn clocks.
+    {
+        key: 'design-wordclock', group: 'design', label: 'Word Clock', hint: 'The time spelled out in a grid of letters',
+        preview: [[6, 4, 28, 2], [6, 8, 28, 2], [6, 12, 28, 2], [6, 16, 28, 2], [6, 20, 28, 2]],
+        stage: { bg: 'wordclock', center: [{ kind: 'wordclock' }] },
+    },
+    {
+        key: 'design-analog', group: 'design', label: 'Analog', hint: 'A quiet clock face',
+        preview: [[11, 3, 18, 18], [15, 23, 10, 2]],
+        stage: { center: [{ kind: 'analog' }, { kind: 'date', className: 'is-spaced' }] },
+    },
+    {
+        key: 'design-flip', group: 'design', label: 'Flip Clock', hint: 'Split-flap cards that flip each second',
+        preview: [[4, 9, 6, 10], [11, 9, 6, 10], [19, 9, 6, 10], [26, 9, 6, 10], [33, 11, 4, 6]],
+        stage: { center: [{ kind: 'flip' }, { kind: 'date', className: 'is-spaced' }] },
+    },
+    {
+        key: 'design-binary', group: 'design', label: 'Binary', hint: 'Hours, minutes and seconds in glowing bits',
+        preview: [[7, 12, 3, 3], [12, 7, 3, 3], [12, 17, 3, 3], [19, 12, 3, 3], [24, 7, 3, 3], [30, 17, 3, 3]],
+        stage: { bg: 'binary', center: [{ kind: 'binary' }, { kind: 'text', text: 'read each column top-down: 8 · 4 · 2 · 1', className: 'binary-hint' }] },
+    },
+    {
+        key: 'design-tree', group: 'design', label: 'Tree', hint: 'The classic ~/startpage: shortcuts as a file tree',
+        preview: [[8, 4, 24, 20], [10, 6, 8, 2], [10, 10, 12, 4], [10, 16, 10, 1], [10, 18, 10, 1], [10, 20, 10, 1]],
+        stage: {
+            bg: 'mocha',
+            center: [{
+                kind: 'group', className: 'tree-box', w: 620, pieces: [
+                    { kind: 'text', text: '~/startpage', className: 'tree-title' },
+                    { kind: 'time', size: 'md', h24: true },
+                    { kind: 'date', format: 'iso', className: 'tree-dim' },
+                    { kind: 'searchbar' },
+                    { kind: 'text', text: '.', className: 'tree-root' },
+                    { kind: 'shortcuts', variant: 'tree' },
+                ],
+            }],
+        },
+    },
+    {
+        key: 'design-coderain', group: 'design', label: 'Code Rain', hint: 'Falling green glyphs behind the clock',
+        preview: [[4, 2, 1, 10], [9, 6, 1, 14], [15, 1, 1, 8], [27, 4, 1, 16], [34, 2, 1, 12], [12, 11, 16, 6]],
+        stage: {
+            bg: 'coderain',
+            center: [
+                { kind: 'time', size: 'xl', h24: true },
+                { kind: 'text', text: 'system online', className: 'term-prompt term-cursor rain-caption' },
+            ],
+        },
+    },
+    {
+        key: 'design-synthwave', group: 'design', label: 'Synthwave', hint: 'Neon sun, chrome numbers, an endless grid',
+        preview: [[13, 5, 14, 12], [2, 19, 36, 7], [10, 8, 20, 6]],
+        stage: { bg: 'synth', align: 'top', center: [{ kind: 'time', size: 'xl' }, { kind: 'date', className: 'is-spaced' }] },
+    },
+    {
+        key: 'design-retro', group: 'design', label: 'Retro OS', hint: 'A 90s desktop: icons, a window, a taskbar',
+        preview: [[2, 2, 4, 4], [2, 8, 4, 4], [2, 14, 4, 4], [11, 6, 22, 14], [0, 25, 40, 3]],
+        stage: {
+            bg: 'retro',
+            left: [{ kind: 'shortcuts', variant: 'icons' }],
+            center: [{
+                kind: 'group', className: 'r95-window', pieces: [
+                    { kind: 'text', text: 'Welcome.exe', className: 'r95-title' },
+                    {
+                        kind: 'group', className: 'r95-body', pieces: [
+                            { kind: 'greeting' },
+                            { kind: 'time', size: 'lg' },
+                            { kind: 'date' },
+                            { kind: 'searchbar' },
+                        ],
+                    },
+                ],
+            }],
+            bottom: [{
+                kind: 'group', dir: 'row', className: 'r95-taskbar', pieces: [
+                    { kind: 'text', text: 'Start', className: 'r95-start' },
+                    { kind: 'time', size: 'sm' },
+                ],
+            }],
+        },
+    },
+    {
+        key: 'design-neon', group: 'design', label: 'Neon', hint: 'Glowing tubes on a brick wall',
+        preview: [[15, 4, 10, 3], [8, 9, 24, 9], [12, 20, 16, 3]],
+        stage: {
+            bg: 'brick',
+            center: [
+                { kind: 'text', text: 'OPEN', className: 'neon-open' },
+                { kind: 'time', size: 'xl' },
+                { kind: 'greeting' },
+            ],
+        },
+    },
+    {
+        key: 'design-swiss', group: 'design', label: 'Swiss', hint: 'International typographic style: a red bar and big grotesk numerals',
+        preview: [[4, 3, 2, 22], [8, 4, 6, 1], [8, 7, 26, 12], [8, 21, 8, 1], [20, 21, 8, 1]],
+        stage: {
+            bg: 'swiss',
+            center: [{
+                kind: 'group', className: 'swiss-poster', pieces: [
+                    { kind: 'text', text: 'zeit / time', className: 'swiss-label' },
+                    { kind: 'time', size: 'xl', h24: true },
+                    {
+                        kind: 'group', dir: 'row', className: 'swiss-meta', pieces: [
+                            { kind: 'date', format: 'week' },
+                            { kind: 'date', format: 'iso' },
+                            { kind: 'date' },
+                        ],
+                    },
+                    { kind: 'text', text: 'Neue Registerkarte. Form follows function.', className: 'swiss-caption' },
+                ],
+            }],
+        },
+    },
+    {
+        key: 'design-bauhaus', group: 'design', label: 'Bauhaus', hint: 'Circle, square, triangle — primary colours',
+        preview: [[4, 3, 12, 12], [28, 16, 9, 9], [26, 3, 9, 9], [11, 15, 18, 6]],
+        stage: { bg: 'bauhaus', center: [{ kind: 'time', size: 'xl', h24: true }, { kind: 'date', className: 'is-spaced' }] },
+    },
+    {
+        key: 'design-brutalist', group: 'design', label: 'Brutalist', hint: 'Raw HTML energy: huge type, hard borders',
+        preview: [[3, 3, 34, 11], [3, 15, 14, 2], [3, 19, 24, 3], [3, 24, 8, 1], [13, 24, 8, 1]],
+        stage: {
+            bg: 'brutal', align: 'top',
+            center: [{
+                kind: 'group', className: 'brutal', pieces: [
+                    { kind: 'time', size: 'xl', h24: true },
+                    { kind: 'date', long: true },
+                    { kind: 'searchbar' },
+                    { kind: 'shortcuts', variant: 'links' },
+                ],
+            }],
+        },
+    },
+    {
+        key: 'design-blueprint', group: 'design', label: 'Blueprint', hint: 'The time as a technical drawing',
+        preview: [[5, 4, 30, 20], [9, 7, 22, 9], [9, 17, 22, 1], [5, 20, 30, 4]],
+        stage: {
+            bg: 'blueprint',
+            center: [{
+                kind: 'group', className: 'bp-sheet', pieces: [
+                    { kind: 'text', text: 'Detail A — Current time (elevation)', className: 'bp-label' },
+                    { kind: 'time', size: 'xl', h24: true },
+                    { kind: 'text', text: '1 day = 1440 min', className: 'bp-dim' },
+                    {
+                        kind: 'group', dir: 'row', className: 'bp-titleblock', pieces: [
+                            { kind: 'text', text: 'Project: New Tab' },
+                            { kind: 'date', format: 'iso' },
+                            { kind: 'text', text: 'Scale 1:1' },
+                            { kind: 'text', text: 'Sheet 1 of 1' },
+                        ],
+                    },
+                ],
+            }],
+        },
+    },
+    {
+        key: 'design-chalk', group: 'design', label: 'Chalkboard', hint: "Today's lesson, written in chalk",
+        preview: [[3, 3, 34, 22], [8, 6, 12, 2], [8, 10, 22, 7], [8, 19, 16, 2]],
+        stage: {
+            bg: 'chalk',
+            center: [{
+                kind: 'group', className: 'chalk-board', pieces: [
+                    { kind: 'text', text: "Today's lesson:", className: 'chalk-title' },
+                    { kind: 'greeting' },
+                    { kind: 'time', size: 'xl' },
+                    { kind: 'date' },
+                    { kind: 'text', text: '★ drink water   ★ ship it   ★ go outside', className: 'chalk-doodle' },
+                ],
+            }],
+        },
+    },
+    {
+        key: 'design-receipt', group: 'design', label: 'Receipt', hint: 'Your shortcuts, itemised. Total: the time.',
+        preview: [[13, 1, 14, 26], [15, 3, 10, 2], [15, 7, 10, 1], [15, 9, 10, 1], [15, 11, 10, 1], [15, 16, 10, 2], [15, 21, 10, 3]],
+        stage: {
+            center: [{
+                kind: 'group', className: 'receipt', pieces: [
+                    { kind: 'text', text: 'COOLDESK MARKET', className: 'rcpt-head' },
+                    { kind: 'text', text: 'open 24/7 · aisle 42 · no refunds', className: 'rcpt-sub' },
+                    { kind: 'date', long: true, className: 'rcpt-sub' },
+                    { kind: 'deco', className: 'rcpt-rule' },
+                    { kind: 'shortcuts', variant: 'receipt' },
+                    { kind: 'deco', className: 'rcpt-rule' },
+                    {
+                        kind: 'group', dir: 'row', className: 'rcpt-total', pieces: [
+                            { kind: 'text', text: 'TOTAL TIME' },
+                            { kind: 'time', size: 'sm', h24: true },
+                        ],
+                    },
+                    { kind: 'deco', className: 'barcode' },
+                    { kind: 'text', text: '* thank you for browsing *', className: 'rcpt-sub' },
+                ],
+            }],
+        },
+    },
+    {
+        key: 'design-boarding', group: 'design', label: 'Boarding Pass', hint: 'Departing Home, arriving The Internet',
+        preview: [[3, 7, 26, 14], [29, 7, 8, 14], [6, 10, 6, 4], [21, 10, 6, 4], [6, 16, 20, 2]],
+        stage: {
+            center: [{
+                kind: 'group', dir: 'row', className: 'ticket', pieces: [
+                    {
+                        kind: 'group', className: 'ticket-main', pieces: [
+                            { kind: 'text', text: 'COOLDESK AIR · BOARDING PASS', className: 'ticket-airline' },
+                            {
+                                kind: 'group', dir: 'row', className: 'ticket-route', pieces: [
+                                    { kind: 'group', className: 'ticket-cell', pieces: [{ kind: 'text', text: 'HME', className: 'ticket-code' }, { kind: 'text', text: 'Home', className: 'ticket-k' }] },
+                                    { kind: 'text', text: '- - - ✈ - - -', className: 'ticket-plane' },
+                                    { kind: 'group', className: 'ticket-cell is-end', pieces: [{ kind: 'text', text: 'WWW', className: 'ticket-code' }, { kind: 'text', text: 'The Internet', className: 'ticket-k' }] },
+                                ],
+                            },
+                            {
+                                kind: 'group', dir: 'row', className: 'ticket-meta', pieces: [
+                                    { kind: 'group', className: 'ticket-cell', pieces: [{ kind: 'text', text: 'Departs', className: 'ticket-k' }, { kind: 'time', size: 'sm' }] },
+                                    { kind: 'group', className: 'ticket-cell', pieces: [{ kind: 'text', text: 'Date', className: 'ticket-k' }, { kind: 'date', format: 'dm' }] },
+                                    { kind: 'group', className: 'ticket-cell', pieces: [{ kind: 'text', text: 'Gate', className: 'ticket-k' }, { kind: 'text', text: 'T1', className: 'ticket-v' }] },
+                                    { kind: 'group', className: 'ticket-cell', pieces: [{ kind: 'text', text: 'Seat', className: 'ticket-k' }, { kind: 'text', text: '42A', className: 'ticket-v' }] },
+                                ],
+                            },
+                        ],
+                    },
+                    {
+                        kind: 'group', className: 'ticket-stub', pieces: [
+                            { kind: 'text', text: 'BOARDING', className: 'ticket-airline' },
+                            { kind: 'text', text: 'HME → WWW', className: 'ticket-v' },
+                            { kind: 'time', size: 'sm' },
+                            { kind: 'deco', className: 'barcode' },
+                        ],
+                    },
+                ],
+            }],
+        },
+    },
+    {
+        key: 'design-aurora', group: 'design', label: 'Aurora', hint: 'Slow drifting northern lights',
+        preview: [[2, 2, 18, 12], [20, 14, 18, 12], [12, 10, 16, 6]],
+        stage: { bg: 'aurora', center: [{ kind: 'time', size: 'xl' }, { kind: 'greeting' }] },
+    },
+    {
+        key: 'design-sky', group: 'design', label: 'Day Cycle', hint: 'The sky follows the clock; the sun (or moon) rides an arc',
+        preview: [[6, 6, 28, 12], [24, 7, 4, 4], [12, 19, 16, 5]],
+        stage: { bg: 'sky', center: [{ kind: 'skyarc' }, { kind: 'time', size: 'xl' }, { kind: 'date' }] },
+    },
+    {
+        key: 'design-ink', group: 'design', label: 'Ink', hint: 'Washi paper, a vertical date, a red seal',
+        preview: [[14, 3, 4, 22], [22, 4, 6, 6], [21, 14, 8, 2]],
+        stage: {
+            bg: 'washi',
+            center: [{
+                kind: 'group', dir: 'row', className: 'ink', pieces: [
+                    { kind: 'date', format: 'ja', className: 'ink-vertical' },
+                    {
+                        kind: 'group', className: 'ink-side', pieces: [
+                            { kind: 'text', text: '今', className: 'hanko' },
+                            { kind: 'time', size: 'md', h24: true },
+                        ],
+                    },
+                ],
+            }],
+        },
+    },
+    {
+        key: 'design-progress', group: 'design', label: 'Progress', hint: 'How much of the day, week, month and year is gone',
+        preview: [[8, 4, 24, 3], [8, 10, 24, 2], [8, 14, 24, 2], [8, 18, 24, 2], [8, 22, 24, 2]],
+        stage: { center: [{ kind: 'time', size: 'lg' }, { kind: 'progress' }] },
+    },
+];
+
+export const getVibe = (k) => OVERVIEW_VIBES.find(v => v.key === k) || null;
+
+// Layouts rendered as a card board (Custom + every card-based vibe) —
+// editable with "Customize cards". Stage start pages are fixed.
+export const isBoardLayout = (k) => k === 'custom' || !!getVibe(k)?.cards;
+export const isStageLayout = (k) => !!getVibe(k)?.stage;
+
+// Picker thumbnail rects for any vibe / start page.
+export const vibePreview = (v) => v.preview || cardsPreview(v.cards || []);
+
+// Mini preview rects for a card board, scaled into the picker's 40×28 box.
+export function cardsPreview(cards) {
+    const cols = Math.max(1, ...cards.map(c => c.x + c.w));
+    const rows = Math.max(1, ...cards.map(c => c.y + c.h));
+    const unit = Math.min(36 / cols, 24 / rows);
+    const ox = (40 - cols * unit) / 2;
+    const oy = (28 - rows * unit) / 2;
+    const gap = Math.min(1.5, unit * 0.2);
+    return cards.map(c => [ox + c.x * unit + gap / 2, oy + c.y * unit + gap / 2, c.w * unit - gap, c.h * unit - gap]);
+}
+
+const isLayout = (k) => OVERVIEW_LAYOUTS.some(l => l.key === k) || !!getVibe(k);
 
 // Morph the columns into place where the View Transitions API exists; a
 // plain swap elsewhere. The columns only carry their view-transition-name
@@ -122,6 +707,7 @@ export const DEFAULT_COLS = 8;
 
 export const CARD_TYPES = [
     { type: 'widgets', label: 'Widget board', single: true },
+    { type: 'searchbar', label: 'Search bar', single: true },
     { type: 'summary', label: 'Activity summary', single: true },
     { type: 'favorites', label: 'Favorites', single: true },
     { type: 'feed', label: 'Activity feed', tab: null },
@@ -199,9 +785,10 @@ export function resolveLayout(cards, cols, priorityId = null) {
 const clampSpan = (n) => Math.min(CARD_MAX, Math.max(1, Math.round(Number(n) || 1)));
 const tabKeys = FEED_TABS.map(t => t.key);
 
-function loadCards() {
+function loadCards(key = CARDS_KEY, defaults = DEFAULT_CARDS) {
     try {
-        let v = JSON.parse(localStorage.getItem(CARDS_KEY));
+        let v = JSON.parse(localStorage.getItem(key));
+        if (!Array.isArray(v) && key !== CARDS_KEY) return defaults;
         if (!Array.isArray(v)) {
             // One-time upgrade from the 4-column grid: each old cell is 2×2
             // new cells, so the arrangement keeps its proportions.
@@ -242,19 +829,24 @@ function loadCards() {
                 };
             });
     } catch {
-        return DEFAULT_CARDS;
+        return defaults;
     }
 }
 
-export function useOverviewCards() {
-    const [cards, setCards] = useState(loadCards);
+// `board` is 'custom' or a vibe key; each has its own stored cards.
+// (CardBoard is keyed by board, so these never change for a mounted hook.)
+export function useOverviewCards(board = 'custom') {
+    const vibe = getVibe(board);
+    const key = vibe ? `cooldesk-overview-vibe-${vibe.key.replace(/^(vibe|start|fun|design)-/, '')}` : CARDS_KEY;
+    const defaults = vibe ? vibe.cards : DEFAULT_CARDS;
+    const [cards, setCards] = useState(() => loadCards(key, defaults));
     const update = useCallback((next) => {
         setCards(prev => {
             const value = typeof next === 'function' ? next(prev) : next;
-            try { localStorage.setItem(CARDS_KEY, JSON.stringify(value)); } catch { /* storage unavailable — won't persist */ }
+            try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable — won't persist */ }
             return value;
         });
-    }, []);
-    const reset = useCallback(() => update(DEFAULT_CARDS), [update]);
+    }, [key]);
+    const reset = useCallback(() => update(defaults), [update, defaults]);
     return [cards, update, reset];
 }

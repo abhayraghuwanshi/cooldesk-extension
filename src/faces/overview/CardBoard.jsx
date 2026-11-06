@@ -1,6 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ActivityFeed } from './parts/ActivityFeed';
+import { SearchHero } from './parts/SearchHero';
 import { ActivityOverview } from '../../features/activity/ActivityOverview';
 import { WidgetBoard, WidgetEmbed } from '../../features/widgets/WidgetBoard';
 import { WIDGET_CATALOG } from '../../data/widgetCatalog';
@@ -9,7 +10,7 @@ import { TRANSPARENT_ACCENT } from '../../shared/components/AccentColorPicker.js
 import { accentTextVars } from '../../utils/readableColor.js';
 import { ColumnColorChip } from './ColumnColorChip.jsx';
 import { DEFAULT_COLORLESS_OPACITY, colorlessStyle } from './columnColor.js';
-import { CARD_MAX, CARD_TYPES, cardLabel, firstFreeCell, makeCard, resolveLayout, useOverviewCards, widgetRows } from './overviewLayouts';
+import { CARD_MAX, CARD_TYPES, cardLabel, firstFreeCell, getVibe, makeCard, resolveLayout, useOverviewCards, widgetRows } from './overviewLayouts';
 
 // Custom layout: the page as a free grid of cards (macOS-desktop-widget
 // style). Each card is one existing piece of the page, spanning 1–6 cells each
@@ -34,14 +35,27 @@ function gridFor(width, height = Infinity, rows = 6) {
     return { cell, cols };
 }
 
+// The store's Web Search widget is a small iframe form (no suggestions). On a
+// card board it renders as the native search bar instead — same spot, same
+// size, nothing rewritten in storage.
+const kindOf = (card) => (card.type === 'widget' && card.widgetId === 'search' ? 'searchbar' : card.type);
+
 // pinnedTabs: sections that already have their own card. The all-tabs feed
 // card drops those from its tab bar so nothing shows twice.
-function CardContent({ card, pinnedTabs }) {
-    switch (card.type) {
+// centerGlance: on the vibe boards, single-block glanceable widgets center in
+// their card instead of hugging its left edge. Only these: centering widgets
+// with their own row layout (Pomodoro's buttons, Moon, Year in Dots) breaks
+// them.
+const CENTERABLE = new Set(['clock', 'quotes', 'focus', 'countdown', 'year-progress']);
+
+function CardContent({ card, pinnedTabs, centerGlance = false }) {
+    switch (kindOf(card)) {
         case 'widgets':
             return <WidgetBoard />;
+        case 'searchbar':
+            return <SearchHero />;
         case 'widget':
-            return <WidgetEmbed widgetId={card.widgetId} />;
+            return <WidgetEmbed widgetId={card.widgetId} center={centerGlance && CENTERABLE.has(card.widgetId)} />;
         case 'summary':
             return <ActivityOverview embedded />;
         case 'favorites':
@@ -182,8 +196,9 @@ function cardColorStyle(card, wall) {
     return null;
 }
 
-const CardBoard = memo(function CardBoard({ editing = false, onDone, wall = null }) {
-    const [cards, setCards, resetCards] = useOverviewCards();
+const CardBoard = memo(function CardBoard({ board = 'custom', editing = false, onDone, wall = null }) {
+    const [cards, setCards, resetCards] = useOverviewCards(board);
+    const vibe = getVibe(board);
     const [{ cell, cols }, setGrid] = useState(() => gridFor(window.innerWidth * 0.9, window.innerHeight - 110));
     // Rows the stored board spans — what the cell size must fit vertically.
     const storedRows = useMemo(() => cards.reduce((m, c) => Math.max(m, c.y + c.h), 1), [cards]);
@@ -247,9 +262,9 @@ const CardBoard = memo(function CardBoard({ editing = false, onDone, wall = null
     const add = (t) => {
         // macOS-ish starting sizes: widgets small (2×2, tall ones 2×3), the
         // Favorites strip 4×1, everything else a 4×4 large card (summary 2×3).
-        const w = t.type === 'widget' || t.type === 'summary' ? 2 : 4;
+        const w = t.type === 'widget' || t.type === 'summary' ? 2 : t.type === 'searchbar' ? 6 : 4;
         const h = t.type === 'widget' ? widgetRows(t.widgetId)
-            : t.type === 'favorites' ? 1
+            : t.type === 'favorites' || t.type === 'searchbar' ? 1
                 : t.type === 'summary' ? 3 : 4;
         const cell = firstFreeCell(Object.values(layout), w, h, cols);
         setCards(prev => [...prev, makeCard({ type: t.type, tab: t.tab, widgetId: t.widgetId, w, h, x: cell.x, y: cell.y })]);
@@ -317,7 +332,11 @@ const CardBoard = memo(function CardBoard({ editing = false, onDone, wall = null
     const draggedCell = drag && layout[drag.id];
 
     return (
-        <div ref={boardRef} className={`ocb ${editing ? 'is-editing' : ''}`}>
+        <div
+            ref={boardRef}
+            className={`ocb ${editing ? 'is-editing' : ''} ${vibe?.center ? 'is-centered' : ''}`}
+            data-vibe={vibe ? vibe.key.replace(/^(vibe|start|fun)-/, '') : undefined}
+        >
             <div ref={gridRef} className="ocb-grid" style={{ '--ocb-cols': shownCols, '--ocb-cell': `${cell}px`, '--ocb-gap': `${GAP}px` }}>
                 {cards.map(card => {
                     const isDragged = drag?.id === card.id;
@@ -326,7 +345,7 @@ const CardBoard = memo(function CardBoard({ editing = false, onDone, wall = null
                     return (
                     <div
                         key={card.id}
-                        className={`ocb-card ocb-card-${card.type} ${cardColorClass(card.color)} ${isDragged ? 'is-dragging' : ''}`}
+                        className={`ocb-card ocb-card-${kindOf(card)} ${cardColorClass(card.color)} ${isDragged ? 'is-dragging' : ''}`}
                         data-w={cell.w}
                         style={{
                             gridColumn: `${at.x + 1} / span ${cell.w}`,
@@ -340,9 +359,9 @@ const CardBoard = memo(function CardBoard({ editing = false, onDone, wall = null
                         onPointerCancel={onPointerUp}
                     >
                         <div className="ocb-card-body">
-                            <CardContent card={card} pinnedTabs={pinnedTabs} />
+                            <CardContent card={card} pinnedTabs={pinnedTabs} centerGlance={!!vibe} />
                         </div>
-                        {!editing && (
+                        {!editing && kindOf(card) !== 'searchbar' && (
                             <ColumnColorChip
                                 color={card.color || null}
                                 onChange={color => patch(card.id, { color })}
