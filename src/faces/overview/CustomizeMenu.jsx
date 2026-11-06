@@ -7,6 +7,8 @@ import { FEATURED_WALLPAPERS, moreWallpapers } from '../../shared/data/wallpaper
 import { THEME_PRESETS, applyTheme, currentTheme } from '../../shared/data/themePresets';
 import { fontFamilies, fontSizes, getCurrentFontFamily, setAndSaveFontFamily } from '../../utils/fontUtils';
 import ExportData from '../../shared/components/ExportData';
+import { useT } from '../../shared/i18n';
+import { LanguageSelect } from '../../shared/i18n/LanguageSelect';
 
 // Everything about the new tab, in one panel behind the bottom-right
 // Customize button — three tabs, no other windows:
@@ -18,11 +20,7 @@ import ExportData from '../../shared/components/ExportData';
 // Everything applies instantly. The desktop app keeps its own Settings window
 // (it has many more settings); this panel is the extension's only one.
 
-const TABS = [
-    { key: 'layout', label: 'Layout' },
-    { key: 'look', label: 'Look' },
-    { key: 'settings', label: 'Settings' },
-];
+const TABS = ['layout', 'look', 'settings'];
 const TAB_KEY = 'cooldesk-customize-tab';
 
 const ALL_WALLPAPERS = [...FEATURED_WALLPAPERS, ...moreWallpapers()];
@@ -68,6 +66,7 @@ const wheelSideways = (e) => {
 };
 
 function LayoutTab({ layout, onLayoutChange, visible, onVisibleChange, onCustomizeCards, closePanel }) {
+    const t = useT();
     const current = layoutOption(layout);
     const isBoard = isBoardLayout(layout);
     const isColumns = !isBoard && !isStageLayout(layout);
@@ -88,32 +87,32 @@ function LayoutTab({ layout, onLayoutChange, visible, onVisibleChange, onCustomi
             </div>
             {isBoard && onCustomizeCards && (
                 <button type="button" className="cz-btn cz-wide" onClick={() => { closePanel(); onCustomizeCards(); }}>
-                    Customize cards — move, resize, add
+                    {t('cz.customizeCards')}
                 </button>
             )}
             {isColumns && (
                 <div className="cz-show">
-                    <div className="cz-heading">Show</div>
+                    <div className="cz-heading">{t('cz.show')}</div>
                     <div className="cz-checks">
                         {OVERVIEW_PARTS.map(p => (
-                            <Check key={p.key} checked={!!visible[p.key]} onChange={on => setPart(p.key, on)}>{p.label}</Check>
+                            <Check key={p.key} checked={!!visible[p.key]} onChange={on => setPart(p.key, on)}>{t(`part.${p.key}`)}</Check>
                         ))}
-                        <Check checked={visible.favorites !== false} disabled={!visible.feed} onChange={on => setPart('favorites', on)}>Favorites</Check>
+                        <Check checked={visible.favorites !== false} disabled={!visible.feed} onChange={on => setPart('favorites', on)}>{t('cz.favorites')}</Check>
                     </div>
                     {visible.feed && (
-                        <div className="cz-chips" role="group" aria-label="Feed tabs">
-                            {FEED_TABS.map(t => {
-                                const on = !hiddenTabs.includes(t.key);
+                        <div className="cz-chips" role="group" aria-label={t('cz.feedTabs')}>
+                            {FEED_TABS.map(ft => {
+                                const on = !hiddenTabs.includes(ft.key);
                                 return (
                                     <button
-                                        key={t.key}
+                                        key={ft.key}
                                         type="button"
                                         className={`cz-chip ${on ? 'on' : ''}`}
                                         aria-pressed={on}
                                         disabled={on && hiddenTabs.length === FEED_TABS.length - 1}
-                                        onClick={() => setFeedTab(t.key, !on)}
+                                        onClick={() => setFeedTab(ft.key, !on)}
                                     >
-                                        {t.label}
+                                        {t(`feed.${ft.key}`)}
                                     </button>
                                 );
                             })}
@@ -126,6 +125,7 @@ function LayoutTab({ layout, onLayoutChange, visible, onVisibleChange, onCustomi
 }
 
 function LookTab({ wallpaper, onWallpaperChange, fontSize, onFontSizeChange }) {
+    const t = useT();
     const [theme, setTheme] = useState(currentTheme);
     const [font, setFont] = useState(getCurrentFontFamily);
     const [urlOpen, setUrlOpen] = useState(false);
@@ -160,14 +160,14 @@ function LookTab({ wallpaper, onWallpaperChange, fontSize, onFontSizeChange }) {
 
     return (
         <>
-            <div className="cz-heading">Wallpaper</div>
-            <div className="cz-strip" role="listbox" aria-label="Wallpapers" onWheel={wheelSideways}>
+            <div className="cz-heading">{t('cz.wallpaper')}</div>
+            <div className="cz-strip" role="listbox" aria-label={t('cz.wallpapers')} onWheel={wheelSideways}>
                 <button
                     type="button"
                     className={`cz-tile cz-add ${urlOpen ? 'on' : ''}`}
                     onClick={() => setUrlOpen(o => !o)}
-                    title="Use an image from a URL"
-                    aria-label="Use an image from a URL"
+                    title={t('cz.imageFromUrl')}
+                    aria-label={t('cz.imageFromUrl')}
                 >
                     +
                 </button>
@@ -190,26 +190,26 @@ function LookTab({ wallpaper, onWallpaperChange, fontSize, onFontSizeChange }) {
                         autoFocus
                         value={url}
                         onChange={e => setUrl(e.target.value)}
-                        placeholder="Paste an image URL (https://…)"
-                        aria-label="Image URL"
+                        placeholder={t('cz.pasteImageUrl')}
+                        aria-label={t('cz.imageUrl')}
                         spellCheck={false}
                     />
-                    <button type="submit" className="cz-btn" disabled={!urlOk}>Use</button>
+                    <button type="submit" className="cz-btn" disabled={!urlOk}>{t('cz.use')}</button>
                 </form>
             )}
 
-            <div className="cz-heading">Gradient</div>
-            <div className="cz-strip" role="listbox" aria-label="Gradient themes" onWheel={wheelSideways}>
-                {THEME_PRESETS.map(t => (
+            <div className="cz-heading">{t('cz.gradient')}</div>
+            <div className="cz-strip" role="listbox" aria-label={t('cz.gradientThemes')} onWheel={wheelSideways}>
+                {THEME_PRESETS.map(th => (
                     <button
-                        key={t.id}
+                        key={th.id}
                         type="button"
                         role="option"
-                        aria-selected={!wallpaper.enabled && theme === t.id}
-                        className={`cz-tile cz-swatch ${!wallpaper.enabled && theme === t.id ? 'on' : ''}`}
-                        style={{ background: t.preview }}
-                        title={t.name}
-                        onClick={() => pickTheme(t.id)}
+                        aria-selected={!wallpaper.enabled && theme === th.id}
+                        className={`cz-tile cz-swatch ${!wallpaper.enabled && theme === th.id ? 'on' : ''}`}
+                        style={{ background: th.preview }}
+                        title={th.name}
+                        onClick={() => pickTheme(th.id)}
                     />
                 ))}
             </div>
@@ -217,7 +217,7 @@ function LookTab({ wallpaper, onWallpaperChange, fontSize, onFontSizeChange }) {
             {wallpaper.enabled && (
                 <>
                     <label className="cz-range">
-                        <span className="cz-range-label">Brightness</span>
+                        <span className="cz-range-label">{t('cz.brightness')}</span>
                         <input
                             type="range"
                             min="0.1"
@@ -229,18 +229,18 @@ function LookTab({ wallpaper, onWallpaperChange, fontSize, onFontSizeChange }) {
                         <span className="cz-range-value">{Math.round(wallpaper.opacity * 100)}%</span>
                     </label>
                     <Check checked={wallpaper.autoRotate} onChange={on => onWallpaperChange({ autoRotate: on })}>
-                        New wallpaper with each tab
+                        {t('cz.rotateWallpaper')}
                     </Check>
                 </>
             )}
 
-            <div className="cz-heading">Text</div>
+            <div className="cz-heading">{t('cz.text')}</div>
             <div className="cz-text-row">
                 <select
                     className="cz-select"
                     value={font}
                     onChange={e => { setFont(e.target.value); setAndSaveFontFamily(e.target.value); }}
-                    aria-label="Font"
+                    aria-label={t('cz.font')}
                 >
                     {fontGroups.map(([cat, list]) => (
                         <optgroup key={cat} label={cat}>
@@ -248,7 +248,7 @@ function LookTab({ wallpaper, onWallpaperChange, fontSize, onFontSizeChange }) {
                         </optgroup>
                     ))}
                 </select>
-                <div className="cz-seg" role="radiogroup" aria-label="Text size">
+                <div className="cz-seg" role="radiogroup" aria-label={t('cz.textSize')}>
                     {fontSizes.map(s => (
                         <button
                             key={s.id}
@@ -270,47 +270,51 @@ function LookTab({ wallpaper, onWallpaperChange, fontSize, onFontSizeChange }) {
 }
 
 function SettingsTab({ onStartTour, closePanel }) {
+    const t = useT();
     const s = useQuickSettings();
     const syncHint = !s.hostSync
-        ? 'Off'
-        : s.hostAvailable === null ? 'Checking…'
-            : s.hostAvailable ? 'Connected to the desktop app' : 'Desktop app not found';
+        ? t('cz.off')
+        : s.hostAvailable === null ? t('cz.checking')
+            : s.hostAvailable ? t('cz.connected') : t('cz.notFound');
     return (
         <>
-            <Row title="Auto-group tabs" hint="Group new tabs by site">
-                <Switch checked={s.autoGroup} onChange={s.setAutoGroup} label="Auto-group tabs" />
+            <Row title={t('cz.language')} hint={t('cz.languageHint')}>
+                <LanguageSelect className="cz-select cz-lang" />
             </Row>
-            <Row title="Session tracking" hint="Remember what you worked on, for Resume">
-                <Switch checked={s.sessionTracking} onChange={s.setSessionTracking} label="Session tracking" />
+            <Row title={t('cz.autoGroup')} hint={t('cz.autoGroupHint')}>
+                <Switch checked={s.autoGroup} onChange={s.setAutoGroup} label={t('cz.autoGroup')} />
+            </Row>
+            <Row title={t('cz.sessionTracking')} hint={t('cz.sessionTrackingHint')}>
+                <Switch checked={s.sessionTracking} onChange={s.setSessionTracking} label={t('cz.sessionTracking')} />
             </Row>
             <Row
-                title="Desktop sync"
+                title={t('cz.desktopSync')}
                 hint={(
                     <>
                         <i className={`cz-dot ${!s.hostSync ? '' : s.hostAvailable ? 'ok' : s.hostAvailable === false ? 'bad' : 'wait'}`} />
                         {syncHint}
                         {s.hostSync && s.hostAvailable === false && (
-                            <button type="button" className="cz-link" onClick={s.retryHost}>Retry</button>
+                            <button type="button" className="cz-link" onClick={s.retryHost}>{t('cz.retry')}</button>
                         )}
                     </>
                 )}
             >
-                <Switch checked={s.hostSync} onChange={s.setHostSync} label="Desktop sync" />
+                <Switch checked={s.hostSync} onChange={s.setHostSync} label={t('cz.desktopSync')} />
             </Row>
             <Row
-                title={`Version ${s.version || ''}`}
-                hint={s.update ? `v${s.update.latest} is available` : 'Auto-update when no CoolDesk tab is open'}
+                title={t('cz.version', { v: s.version || '' })}
+                hint={s.update ? t('cz.updateAvailable', { v: s.update.latest }) : t('cz.autoUpdateHint')}
             >
                 {s.update
-                    ? <button type="button" className="cz-btn cz-accent" onClick={s.installUpdate}>Install</button>
-                    : <Switch checked={s.autoUpdate} onChange={s.setAutoUpdate} label="Auto-update" />}
+                    ? <button type="button" className="cz-btn cz-accent" onClick={s.installUpdate}>{t('cz.install')}</button>
+                    : <Switch checked={s.autoUpdate} onChange={s.setAutoUpdate} label={t('cz.autoUpdate')} />}
             </Row>
             <div className="cz-data">
                 <ExportData compact />
             </div>
             {onStartTour && (
                 <button type="button" className="cz-link cz-tour" onClick={() => { closePanel(); onStartTour(); }}>
-                    Replay the welcome tour
+                    {t('cz.replayTour')}
                 </button>
             )}
         </>
@@ -329,9 +333,10 @@ export function CustomizeMenu({
     fontSize,
     onFontSizeChange,
 }) {
+    const t = useT();
     const [open, setOpen] = useState(false);
     const [tab, setTab] = useState(() => {
-        try { return TABS.some(t => t.key === localStorage.getItem(TAB_KEY)) ? localStorage.getItem(TAB_KEY) : 'layout'; } catch { return 'layout'; }
+        try { return TABS.includes(localStorage.getItem(TAB_KEY)) ? localStorage.getItem(TAB_KEY) : 'layout'; } catch { return 'layout'; }
     });
     const rootRef = useRef(null);
 
@@ -359,18 +364,18 @@ export function CustomizeMenu({
     return (
         <div className="cz" ref={rootRef}>
             {open && (
-                <div className="cz-panel" role="dialog" aria-label="Customize this page">
+                <div className="cz-panel" role="dialog" aria-label={t('cz.customizePage')}>
                     <div className="cz-tabs" role="tablist">
-                        {TABS.map(t => (
+                        {TABS.map(key => (
                             <button
-                                key={t.key}
+                                key={key}
                                 type="button"
                                 role="tab"
-                                aria-selected={tab === t.key}
-                                className={`cz-tab ${tab === t.key ? 'on' : ''}`}
-                                onClick={() => pickTab(t.key)}
+                                aria-selected={tab === key}
+                                className={`cz-tab ${tab === key ? 'on' : ''}`}
+                                onClick={() => pickTab(key)}
                             >
-                                {t.label}
+                                {t(`cz.tab.${key}`)}
                             </button>
                         ))}
                     </div>
@@ -403,13 +408,13 @@ export function CustomizeMenu({
                 className={`cz-trigger ${open ? 'on' : ''}`}
                 onClick={() => setOpen(o => !o)}
                 aria-expanded={open}
-                aria-label="Customize this page"
-                title={`Layout: ${current.label}`}
+                aria-label={t('cz.customizePage')}
+                title={t('cz.layoutIs', { name: current.label })}
             >
                 <span className="cz-trigger-thumb">
                     <LayoutPreview cells={current.cells} extra={current.extra} rects={current.rects} show={current.rects || current.key === 'custom' ? undefined : show} />
                 </span>
-                <span>Customize</span>
+                <span>{t('cz.customize')}</span>
             </button>
         </div>
     );

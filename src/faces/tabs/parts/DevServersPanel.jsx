@@ -1,6 +1,7 @@
-import { faArrowUpRightFromSquare, faCircleNotch, faMemory, faMicrochip, faPowerOff, faServer, faSync } from '@fortawesome/free-solid-svg-icons';
+import { faArrowUpRightFromSquare, faCircleNotch, faMemory, faMicrochip, faPowerOff, faSync } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useT } from '../../../shared/i18n';
 
 // Common local dev server ports — used to filter out OS/system listeners by default.
 const DEV_PORTS = new Set([
@@ -51,6 +52,7 @@ function looksLikeDevServer(entry) {
  * @param {Function} onTabClick - jump to an existing tab (tab) => void
  */
 export function DevServersPanel({ tabs = [], onTabClick }) {
+  const t = useT();
   const [ports, setPorts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -149,12 +151,11 @@ export function DevServersPanel({ tabs = [], onTabClick }) {
         alignItems: 'center',
         gap: '8px'
       }}>
-        <FontAwesomeIcon icon={faServer} style={{ opacity: 0.6 }} />
-        Dev Servers ({visible.length})
+        {t('tm.devServers', { n: visible.length })}
         <button
           onClick={refresh}
           disabled={loading}
-          title="Refresh port list"
+          title={t('tm.refreshPorts')}
           style={{
             background: 'transparent',
             border: 'none',
@@ -168,7 +169,7 @@ export function DevServersPanel({ tabs = [], onTabClick }) {
         </button>
         <button
           onClick={() => setShowAll(s => !s)}
-          title={showAll ? 'Show only dev servers' : 'Show all listening ports'}
+          title={showAll ? t('tm.showDevOnly') : t('tm.showAllPorts')}
           style={{
             marginLeft: 'auto',
             background: showAll ? 'rgba(59,130,246,0.15)' : 'rgba(100,116,139,0.12)',
@@ -183,7 +184,7 @@ export function DevServersPanel({ tabs = [], onTabClick }) {
             letterSpacing: 0
           }}
         >
-          {showAll ? 'Dev only' : 'Show all'}
+          {showAll ? t('tm.devOnly') : t('tm.showAll')}
         </button>
       </h3>
 
@@ -308,12 +309,12 @@ export function DevServersPanel({ tabs = [], onTabClick }) {
                   }}
                 >
                   <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ fontSize: '10px' }} />
-                  Open
+                  {t('tm.open')}
                 </button>
                 <button
                   onClick={() => handleKill(entry)}
                   disabled={killing}
-                  title={armed ? `Click again to kill port ${entry.port}` : `Kill the process on port ${entry.port}`}
+                  title={armed ? t('tm.killArmed', { port: entry.port }) : t('tm.killTitle', { port: entry.port })}
                   style={{
                     flex: armed ? 1.4 : 1,
                     display: 'inline-flex',
@@ -332,7 +333,7 @@ export function DevServersPanel({ tabs = [], onTabClick }) {
                   }}
                 >
                   <FontAwesomeIcon icon={killing ? faCircleNotch : faPowerOff} spin={killing} style={{ fontSize: '10px' }} />
-                  {armed ? `Kill :${entry.port}?` : 'Kill'}
+                  {armed ? t('tm.killQ', { port: entry.port }) : t('tm.kill')}
                 </button>
               </div>
             </div>

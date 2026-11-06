@@ -51,3 +51,31 @@ export function useLiveItems(enabled = true) {
 
   return { activity, liveApps, liveTabs };
 }
+
+/**
+ * Close something listed in the Active view: a browser tab (same CLOSE_TAB
+ * message spotlight's context pills send) or a running app (graceful quit by
+ * pid / window handle). The lists refresh from their own subscriptions.
+ */
+export async function closeLiveItem(kind, item) {
+  try {
+    if (kind === 'tab') {
+      const msg = { type: 'CLOSE_TAB', tabId: item.tabId ?? item.id, url: item.url, _deviceId: item._deviceId, browser: item.browser };
+      /* global chrome */
+      if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) chrome.runtime.sendMessage(msg);
+      else if (window.electronAPI?.sendMessage) window.electronAPI.sendMessage(msg);
+    } else if (kind === 'app' && (item.pid || item.hwnd) && window.electronAPI?.closeApp) {
+      await window.electronAPI.closeApp(item.pid || 0, item.hwnd);
+    }
+  } catch (err) {
+    console.warn('[Active] close failed:', err);
+  }
+  if (kind === 'tab') {
+    // Tabs are polled on a timer: drop it now; the next poll confirms.
+    workspaceActivityService.openTabs = workspaceActivityService.openTabs.filter(t => t.url !== item.url);
+    workspaceActivityService.notify();
+  } else {
+    // A graceful quit returns once it's sent, not once the app is gone.
+    setTimeout(() => runningAppsService.fetchRunningApps?.(), 800);
+  }
+}

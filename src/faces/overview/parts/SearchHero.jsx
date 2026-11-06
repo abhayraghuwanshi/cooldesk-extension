@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { quickSearch } from '../../../services/searchService';
 import { getFaviconUrl } from '../../../utils/helpers.js';
+import { useT } from '../../../shared/i18n';
 
 // The Search vibe's centerpiece (also addable as a "Search bar" card): one big
 // pill, engine chips under it, and an omnibox-style suggestion panel while
@@ -105,6 +106,7 @@ function engineFor(key) {
 }
 
 export function SearchHero() {
+    const t = useT();
     const [engineKey, setEngineKey] = useState(() => {
         try {
             const v = localStorage.getItem(ENGINE_KEY);
@@ -251,20 +253,20 @@ export function SearchHero() {
                         onFocus={() => setOpen(true)}
                         onBlur={() => setOpen(false)}
                         onKeyDown={onKeyDown}
-                        placeholder={engine.key === 'default' ? 'Search the web or type a URL' : `Search ${engine.label} or type a URL`}
+                        placeholder={engine.key === 'default' ? t('search.placeholder') : t('search.placeholderEngine', { engine: engine.label })}
                         autoComplete="off"
                         spellCheck={false}
                         role="combobox"
                         aria-expanded={showPanel}
                         aria-controls="search-hero-list"
                         aria-activedescendant={showPanel ? `search-hero-opt-${selected}` : undefined}
-                        aria-label="Search"
+                        aria-label={t('search.label')}
                     />
                     {q && (
                         <button
                             type="button"
                             className="search-hero-clear"
-                            aria-label="Clear"
+                            aria-label={t('search.clear')}
                             onMouseDown={e => e.preventDefault()}
                             onClick={() => { setQ(''); inputRef.current?.focus(); }}
                         >
@@ -314,7 +316,7 @@ export function SearchHero() {
                 )}
             </div>
 
-            <div className="search-hero-engines" role="radiogroup" aria-label="Search engine">
+            <div className="search-hero-engines" role="radiogroup" aria-label={t('search.engine')}>
                 {engines.map(e => (
                     <button
                         key={e.key}

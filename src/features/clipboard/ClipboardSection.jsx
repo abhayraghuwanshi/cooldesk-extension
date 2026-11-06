@@ -5,6 +5,7 @@ import { workspaceActivityService } from '../../services/workspaceActivityServic
 import { IS_TAURI, startNativeDrag } from '../../utils/nativeDrag.js';
 import { clipFileUrl, fullClipText, useClipboardHistory, useClipboardStatus } from './useClipboardHistory';
 import './clipboard.css';
+import { t, useT } from '../../shared/i18n';
 
 // Clipboard history in the side dock, between the workspaces and the
 // folders. Three recent clips by default ("Show all" lists the rest with a
@@ -29,10 +30,10 @@ function readCollapsed() {
 
 function ago(ms) {
   const s = Math.max(0, (Date.now() - ms) / 1000);
-  if (s < 60) return 'now';
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  return `${Math.floor(s / 86400)}d`;
+  if (s < 60) return t('cb.now');
+  if (s < 3600) return t('cb.m', { n: Math.floor(s / 60) });
+  if (s < 86400) return t('cb.h', { n: Math.floor(s / 3600) });
+  return t('cb.d', { n: Math.floor(s / 86400) });
 }
 
 function formatSize(bytes) {
@@ -54,7 +55,7 @@ function linkParts(url) {
 /** One-line label for a row. */
 function titleOf(clip) {
   switch (clip.kind) {
-    case 'image': return `Image ${clip.width}×${clip.height}`;
+    case 'image': return t('cb.image', { w: clip.width, h: clip.height });
     case 'files': {
       const files = clip.files || [];
       return files.length > 1 ? `${baseName(files[0])} +${files.length - 1}` : baseName(files[0]);
@@ -70,10 +71,9 @@ function titleOf(clip) {
 
 /** Same look as the side dock's other section titles (TabManagement's
  *  SectionHeader, which is private to that face). */
-function SectionHeader({ icon, children }) {
+function SectionHeader({ children }) {
   return (
     <h3 className="cb-title">
-      <FontAwesomeIcon icon={icon} style={{ opacity: 0.6 }} />
       {children}
     </h3>
   );
@@ -82,14 +82,7 @@ function SectionHeader({ icon, children }) {
 const KIND_ICON = { text: faFileLines, code: faCode, link: faLink, color: faPalette, image: faImage, files: faFile };
 
 /** Category chips, in display order. */
-const CATEGORIES = [
-  { kind: 'text', label: 'Text' },
-  { kind: 'code', label: 'Code' },
-  { kind: 'link', label: 'Links' },
-  { kind: 'image', label: 'Images' },
-  { kind: 'files', label: 'Files' },
-  { kind: 'color', label: 'Colors' },
-];
+const CATEGORIES = ['text', 'code', 'link', 'image', 'files', 'color'].map(kind => ({ kind }));
 
 function Thumb({ clip }) {
   const [src, setSrc] = useState(null);
@@ -105,6 +98,7 @@ function Thumb({ clip }) {
 }
 
 function Preview({ clip }) {
+  useT();
   const [text, setText] = useState(clip.long ? null : clip.text);
   const [src, setSrc] = useState(null);
   useEffect(() => {
@@ -144,7 +138,7 @@ function Preview({ clip }) {
       <div className="cb-preview">
         <div className="cb-preview-link">{clip.text}</div>
         <button type="button" className="cb-preview-btn" onClick={() => workspaceActivityService.activate({ url: clip.text.trim() })}>
-          Open
+          {t('cb.open')}
         </button>
       </div>
     );
@@ -152,8 +146,8 @@ function Preview({ clip }) {
   const lines = (text || '').split('\n').length;
   return (
     <div className="cb-preview">
-      <pre className="cb-preview-text">{text ?? 'Loading…'}</pre>
-      <div className="cb-preview-meta">{clip.size.toLocaleString()} chars · {lines} line{lines === 1 ? '' : 's'}</div>
+      <pre className="cb-preview-text">{text ?? t('cb.loading')}</pre>
+      <div className="cb-preview-meta">{t('cb.chars', { n: clip.size.toLocaleString() })} · {t(lines === 1 ? 'cb.lines1' : 'cb.linesN', { n: lines })}</div>
     </div>
   );
 }
@@ -173,6 +167,7 @@ function IconBtn({ icon, label, onClick, active = false, danger = false }) {
 }
 
 function ClipRow({ clip, history, previewing, onTogglePreview }) {
+  useT();
   const [copied, setCopied] = useState(false);
   const fullText = useRef(null);
   const timer = useRef(null);
@@ -221,23 +216,23 @@ function ClipRow({ clip, history, previewing, onTogglePreview }) {
           if (e.key === 'Enter') { e.preventDefault(); copy(); }
           if (e.key === ' ') { e.preventDefault(); onTogglePreview(); }
         }}
-        title="Click to copy · drag to drop it somewhere"
+        title={t('cb.rowTitle')}
       >
         <Thumb clip={clip} />
         <div className="cb-row-text">
-          <div className={`cb-row-title${copied ? ' is-copied' : ''}`}>{copied ? 'Copied' : titleOf(clip)}</div>
+          <div className={`cb-row-title${copied ? ' is-copied' : ''}`}>{copied ? t('cb.copied') : titleOf(clip)}</div>
           <div className="cb-row-meta">{meta}</div>
         </div>
         {copied
           ? <FontAwesomeIcon icon={faCheck} className="cb-copied" />
           : (
             <div className="cb-row-actions">
-              <IconBtn icon={previewing ? faEyeSlash : faEye} label={previewing ? 'Hide preview' : 'Preview'} onClick={onTogglePreview} active={previewing} />
-              <IconBtn icon={faThumbtack} label={clip.pinned ? 'Unpin' : 'Pin'} active={clip.pinned} onClick={() => history.pin(clip.id, !clip.pinned).catch(() => { })} />
+              <IconBtn icon={previewing ? faEyeSlash : faEye} label={previewing ? t('cb.hidePreview') : t('cb.preview')} onClick={onTogglePreview} active={previewing} />
+              <IconBtn icon={faThumbtack} label={clip.pinned ? t('cb.unpin') : t('cb.pin')} active={clip.pinned} onClick={() => history.pin(clip.id, !clip.pinned).catch(() => { })} />
               {(clip.kind === 'image' || clip.kind === 'files') && (
-                <IconBtn icon={faBoxArchive} label="Save to Shelf" onClick={() => history.saveToShelf(clip.id).catch(() => { })} />
+                <IconBtn icon={faBoxArchive} label={t('cb.saveShelf')} onClick={() => history.saveToShelf(clip.id).catch(() => { })} />
               )}
-              <IconBtn icon={faTrashCan} label="Delete" danger onClick={() => history.remove(clip.id).catch(() => { })} />
+              <IconBtn icon={faTrashCan} label={t('cb.delete')} danger onClick={() => history.remove(clip.id).catch(() => { })} />
             </div>
           )}
         {clip.pinned && !copied && <FontAwesomeIcon icon={faThumbtack} className="cb-pin-mark" />}
@@ -254,7 +249,7 @@ async function addLinkToWorkspace(workspaceId, url, onToast) {
     const ws = res?.success ? res.data : res;
     if (!ws?.id) throw new Error('workspace not found');
     if ((ws.urls || []).some(u => u.url === url)) {
-      onToast(`Already in “${ws.name}”`, 'info');
+      onToast(t('cb.already', { name: ws.name }), 'info');
       return;
     }
     const { host } = linkParts(url);
@@ -263,10 +258,10 @@ async function addLinkToWorkspace(workspaceId, url, onToast) {
       urls: [...(ws.urls || []), { url, title: host, addedAt: Date.now() }],
       updatedAt: Date.now(),
     });
-    onToast(`Added ${host} to “${ws.name}”`);
+    onToast(t('cb.added', { host, name: ws.name }));
   } catch (err) {
     console.error('[Clipboard] add link to workspace failed:', err);
-    onToast('Couldn’t add to workspace — see console', 'error');
+    onToast(t('cb.addFailed'), 'error');
   }
 }
 
@@ -329,6 +324,7 @@ function useLinkDropOnWorkspaces(onToast) {
 }
 
 export function ClipboardSection() {
+  useT();
   const { status, setPaused } = useClipboardStatus();
   const enabled = !!status?.enabled;
   const history = useClipboardHistory({ active: enabled });
@@ -393,16 +389,16 @@ export function ClipboardSection() {
           onClick={toggleCollapsed}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCollapsed(); } }}
         >
-          <SectionHeader icon={faClipboard}>
-            Clipboard{history.items.length ? ` (${history.items.length})` : ''}
+          <SectionHeader>
+            {t('cb.title')}{history.items.length ? ` (${history.items.length})` : ''}
             <FontAwesomeIcon icon={collapsed ? faChevronRight : faChevronDown} className="cb-chevron" />
           </SectionHeader>
         </div>
         <div className="cb-header-actions">
-          {status.paused && <span className="cb-paused-label">Paused</span>}
+          {status.paused && <span className="cb-paused-label">{t('cb.paused')}</span>}
           <IconBtn
             icon={status.paused ? faPlay : faPause}
-            label={status.paused ? 'Resume recording copies' : 'Pause recording copies'}
+            label={status.paused ? t('cb.resume') : t('cb.pause')}
             active={status.paused}
             onClick={() => setPaused(!status.paused).catch(() => { })}
           />
@@ -415,14 +411,14 @@ export function ClipboardSection() {
             <input
               className="cb-filter"
               type="search"
-              placeholder="Filter clips…"
+              placeholder={t('cb.filter')}
               value={filter}
               onChange={e => setFilter(e.target.value)}
               autoFocus
             />
           )}
           {chips.length > 1 && (
-            <div className="cb-chips" role="tablist" aria-label="Clip categories">
+            <div className="cb-chips" role="tablist" aria-label={t('cb.categories')}>
               <button
                 type="button"
                 role="tab"
@@ -430,7 +426,7 @@ export function ClipboardSection() {
                 className={`cb-chip${!activeCategory ? ' is-active' : ''}`}
                 onClick={() => setCategory(null)}
               >
-                All
+                {t('cb.all')}
               </button>
               {chips.map(c => (
                 <button
@@ -442,7 +438,7 @@ export function ClipboardSection() {
                   onClick={() => setCategory(k => (k === c.kind ? null : c.kind))}
                 >
                   <FontAwesomeIcon icon={KIND_ICON[c.kind]} />
-                  {c.label}
+                  {t(`cb.cat.${c.kind}`)}
                   <span className="cb-chip-count">{counts[c.kind]}</span>
                 </button>
               ))}
@@ -463,17 +459,17 @@ export function ClipboardSection() {
           ) : (
             <div className="cb-empty">
               <span className="cb-empty-icon"><FontAwesomeIcon icon={faClipboard} /></span>
-              {filter ? 'No matching clips' : 'Copy something — it shows up here.'}
+              {filter ? t('cb.noMatch') : t('cb.empty')}
             </div>
           )}
           {shownTotal > PEEK && (
             <div className="cb-footer">
               <button type="button" className="cb-link-btn" onClick={() => { setShowAll(s => !s); setFilter(''); }}>
-                {showAll ? 'Show less' : `Show all (${shownTotal})`}
+                {showAll ? t('cb.showLess') : t('cb.showAll', { n: shownTotal })}
               </button>
               {showAll && (
                 <button type="button" className="cb-link-btn is-danger" onClick={() => history.clear(false).catch(() => { })}>
-                  Clear unpinned
+                  {t('cb.clearUnpinned')}
                 </button>
               )}
             </div>

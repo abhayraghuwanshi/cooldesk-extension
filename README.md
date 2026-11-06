@@ -80,6 +80,17 @@ pages grouped together, and a timeline of where your day went.
 
 <img src="./docs/screenshots/new-tab.jpg" alt="The CoolDesk new tab with clock widgets, today's activity timeline, favorites and Google services grouped by site" width="860" />
 
+### In your language
+
+CoolDesk comes in 14 languages: English, Español, Français, Deutsch, Italiano, Português, Русский,
+Türkçe, Bahasa Indonesia, हिन्दी, العربية (right-to-left), 简体中文, 日本語 and 한국어.
+
+It follows your browser or system language. To pick one yourself, open **Customize → Settings → Language**
+on the new tab, or **Settings → General → Language** in the desktop app. The change applies right away.
+
+Translated so far: the new tab, the Settings window, and the sidebar and bottom bar. Spotlight, space
+cards and the file manager are still in English and are next.
+
 ---
 
 ## Install
@@ -201,6 +212,11 @@ click **Load unpacked** and select the project root (it uses `manifest.json`). O
 
 Contributions are welcome. For anything substantial, please open an issue first so we can talk it through.
 Run `npm run lint` before sending a pull request.
+
+**Translations.** UI strings live in `src/shared/i18n/`: English first, one block per language, with
+`{name}`-style placeholders. A string that's missing in a language falls back to English, so partial
+translations are fine. In a component, call `const t = useT()` and use `t('key', { name })`. The Chrome
+Web Store name and description are in `public/_locales/`. Fixes from native speakers are very welcome.
 
 Ideas, bugs and questions: [open an issue](https://github.com/abhayraghuwanshi/cooldesk-extension/issues)
 or post in [r/cooldesk](https://www.reddit.com/r/cooldesk/).

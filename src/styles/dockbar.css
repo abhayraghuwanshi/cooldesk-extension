@@ -501,6 +501,45 @@ button.dockbar-ws-name {
   font-weight: 700;
 }
 
+/* Picker tile as a 2×2 mosaic of the workspace's icons. */
+.dockbar-ws-option-tile.dockbar-ws-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+  padding: 3px;
+  box-sizing: border-box;
+  background: rgba(15, 23, 42, 0.6);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+.dockbar-ws-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.dockbar-ws-cell.is-empty { background: rgba(255, 255, 255, 0.04); }
+.dockbar-place-tile .dockbar-ws-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 2px;
+}
+.dockbar-ws-letter {
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  font-size: 7px;
+  font-weight: 700;
+  color: #fff;
+}
+
 .dockbar-ws-option.is-current {
   border-color: color-mix(in srgb, var(--ws-color) 55%, transparent);
   background: color-mix(in srgb, var(--ws-color) 14%, rgba(255, 255, 255, 0.045));
@@ -587,3 +626,29 @@ button.dockbar-ws-name {
     transition: none;
   }
 }
+
+/* × on open chips (WorkspaceDockBar CloseX): top-right corner, shown on
+   hover so the bar stays calm. */
+.dockbar-close {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(15, 15, 20, 0.85);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 9px;
+  opacity: 0;
+  transform: scale(0.85);
+  transition: opacity 0.12s ease, transform 0.12s ease, background 0.12s ease;
+  cursor: pointer;
+  z-index: 2;
+}
+.dockbar-place:hover .dockbar-close,
+.dockbar-place:focus-visible .dockbar-close { opacity: 1; transform: scale(1); }
+.dockbar-close:hover { background: #ef4444; color: #fff; }

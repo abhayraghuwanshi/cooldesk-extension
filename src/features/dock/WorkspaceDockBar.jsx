@@ -1,4 +1,4 @@
-import { faCode, faDesktop, faFileLines, faFolderOpen, faPen, faTableColumns } from '@fortawesome/free-solid-svg-icons';
+import { faCode, faDesktop, faFileLines, faFolderOpen, faPen, faTableColumns, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import logo from '../../../logo-2.png';
@@ -8,9 +8,10 @@ import { openSpotlightEdit } from '../../services/spotlightEdit';
 import { useCooldeskItems } from '../../shared/hooks/useCooldeskItems.js';
 import { fileStack, stackLogo, useFolderIdentity } from '../../shared/hooks/useFolderIdentity.js';
 import { LayoutSwitchButton } from './LayoutSwitchButton';
-import { useLiveItems } from './useLiveItems';
+import { closeLiveItem, useLiveItems } from './useLiveItems';
 import '../../styles/dockbar.css';
 import { recordFeature } from '../../services/analytics';
+import { useT } from '../../shared/i18n';
 
 // Favicon resolution as an ordered fallback chain rather than a single source:
 // stored workspace URLs are often missing their protocol (so `new URL()` throws)
@@ -63,6 +64,18 @@ const hostOf = (rawUrl) => {
   } catch { return String(rawUrl || ''); }
 };
 
+// A chip's short site name: the host without its ending — "github.com" →
+// "github", "docs.google.com" → "docs.google", "bbc.co.uk" → "bbc". Display
+// only; localhost, IPs and single-label hosts are left as they are.
+const SECOND_LEVEL = new Set(['co', 'com', 'org', 'net', 'gov', 'ac', 'edu']);
+const siteName = (host) => {
+  if (!host || /^[\d.:[\]]+$/.test(host) || !host.includes('.')) return host;
+  const parts = host.split('.');
+  parts.pop();
+  if (parts.length > 1 && SECOND_LEVEL.has(parts[parts.length - 1])) parts.pop();
+  return parts.join('.') || host;
+};
+
 // Name + parent folder for a folder/file chip: "…/compute-mesh/web" →
 // { name: 'web', parent: 'compute-mesh' }. Files keep their extension — in a
 // labeled chip "notes.md" reads better than "notes".
@@ -80,10 +93,31 @@ const placeLabel = (app) => {
  * are skipped, since the bar has no room for a "not found locally" state.
  * Shared by the launcher row and the picker's item counts so they agree.
  */
+// What a link chip reads as: its page title, else the short site name.
+const linkLabel = (u) => {
+  const host = siteName(hostOf(u.url));
+  return u.title && u.title !== u.url ? u.title : host;
+};
+
+// Two links on the same site that would show the same name ("netflix.com"
+// and "netflix.com/browse" titled "Netflix") are one chip; the copy with a
+// real title wins. Different pages of one site (two GitHub repos) stay apart.
+function dedupeLinks(list) {
+  const out = [];
+  const at = new Map();
+  for (const u of list) {
+    const key = `${hostOf(u.url)}|${linkLabel(u).toLowerCase()}`;
+    if (!at.has(key)) { at.set(key, out.length); out.push(u); continue; }
+    const i = at.get(key);
+    if (!(out[i].title && out[i].title !== out[i].url) && u.title && u.title !== u.url) out[i] = u;
+  }
+  return out;
+}
+
 function useDockItems(workspace) {
   const { cdLinks, cdFolders, cdFiles, cdProjects } = useCooldeskItems(workspace);
   const urls = useMemo(
-    () => [...(workspace?.urls || []).filter((u) => u.status !== 'draft'), ...cdLinks],
+    () => dedupeLinks([...(workspace?.urls || []).filter((u) => u.status !== 'draft'), ...cdLinks]),
     [workspace, cdLinks]
   );
   const apps = useMemo(() => [
@@ -97,11 +131,39 @@ function useDockItems(workspace) {
   return { urls, apps };
 }
 
+// The × on an open chip. A span, not a button: the chip itself is a <button>.
+// Closes the tab / quits the app; never removes anything from a workspace.
+function CloseX({ label, onClose }) {
+  const act = (e) => { e.stopPropagation(); e.preventDefault(); onClose(); };
+  return (
+    <span
+      className="dockbar-close"
+      role="button"
+      tabIndex={-1}
+      title={label}
+      aria-label={label}
+      onClick={act}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') act(e); }}
+    >
+      <FontAwesomeIcon icon={faXmark} />
+    </span>
+  );
+}
+
 // One chip in the inline workspace picker. Its own component so each can
 // resolve its workspace's .cooldesk items for the count (a hook per chip).
 function WorkspaceOption({ ws, idx, isCurrent, onPick }) {
+  const t = useT();
   const { urls, apps } = useDockItems(ws);
   const count = urls.length + apps.length;
+  const previews = useMemo(() => [
+    ...urls.map((u) => {
+      const [src, ...rest] = faviconSources(u.url);
+      const { letter, color } = letterAvatar(/^https?:\/\//i.test(u.url) ? u.url : `https://${u.url}`);
+      return { src, fallback: rest.join('|'), letter, color };
+    }),
+    ...apps.filter((a) => a.icon).map((a) => ({ src: a.icon, fallback: '', letter: (a.name || '?')[0].toUpperCase(), color: '#64748b' })),
+  ].slice(0, 4), [urls, apps]);
   return (
     <button
       className={`dockbar-place dockbar-ws-option${isCurrent ? ' is-current' : ''} is-entering`}
@@ -109,12 +171,28 @@ function WorkspaceOption({ ws, idx, isCurrent, onPick }) {
       onClick={() => onPick(ws)}
       aria-current={isCurrent ? 'true' : undefined}
     >
-      <span className="dockbar-place-tile dockbar-ws-option-tile">
-        {(ws.name || '?').charAt(0).toUpperCase()}
-      </span>
+      {/* Up to four of the workspace's own icons (links first, then apps
+          that have one), like a phone's folder; the initial when it has none. */}
+      {previews.length > 0 ? (
+        <span className="dockbar-place-tile dockbar-ws-option-tile dockbar-ws-grid">
+          {previews.map((p, i) => (
+            <span key={i} className="dockbar-ws-cell">
+              {p.src ? (
+                <img src={p.src} alt="" data-fallback={p.fallback} onError={handleFaviconError} />
+              ) : null}
+              <span className="dockbar-ws-letter" style={{ display: p.src ? 'none' : 'flex', background: p.color }}>{p.letter}</span>
+            </span>
+          ))}
+          {Array.from({ length: 4 - previews.length }).map((_, i) => <span key={`e${i}`} className="dockbar-ws-cell is-empty" />)}
+        </span>
+      ) : (
+        <span className="dockbar-place-tile dockbar-ws-option-tile">
+          {(ws.name || '?').charAt(0).toUpperCase()}
+        </span>
+      )}
       <span className="dockbar-place-text">
-        <span className="dockbar-place-name">{ws.name || 'Untitled'}</span>
-        <span className="dockbar-place-parent">{count} item{count === 1 ? '' : 's'}</span>
+        <span className="dockbar-place-name">{ws.name || t('db.untitled')}</span>
+        <span className="dockbar-place-parent">{t(count === 1 ? 'db.items1' : 'db.itemsN', { n: count })}</span>
       </span>
     </button>
   );
@@ -141,6 +219,7 @@ const invokeDock = async (cmd, args) => {
  * everything must fit one row — no popovers).
  */
 export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWorkspace, side = 'bottom' }) {
+  const t = useT();
   // Two views, switched from the logo: 'active' (the default) is everything
   // open right now — running apps and browser tabs, workspace or not, like the
   // macOS Dock's running section; 'workspace' is the active workspace's own
@@ -419,7 +498,7 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
             const sources = faviconSources(item.url);
             const avatar = letterAvatar(item.url);
             const isOpen = !!resolved.get(item);
-            const host = hostOf(item.url);
+            const host = siteName(hostOf(item.url));
             const title = item.title && item.title !== item.url ? item.title : host;
             const key = `url-${idx}`;
             return (
@@ -447,8 +526,9 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
                 </span>
                 <span className="dockbar-place-text">
                   <span className="dockbar-place-name">{title}</span>
-                  {title !== host && <span className="dockbar-place-parent">{host}</span>}
+                  {title.toLowerCase() !== host.toLowerCase() && <span className="dockbar-place-parent">{host}</span>}
                 </span>
+                {isOpen && <CloseX label={t('db.close', { label: title })} onClose={() => closeLiveItem('tab', resolved.get(item))} />}
               </button>
             );
   };
@@ -477,9 +557,10 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
                 <span className="dockbar-place-text">
                   <span className="dockbar-place-name">{label}</span>
                   <span className={`dockbar-place-parent${isRunning ? ' is-running' : ''}`}>
-                    {isRunning ? 'Running' : isEditorApp(app) ? 'Editor' : 'App'}
+                    {isRunning ? t('db.running') : isEditorApp(app) ? t('db.editor') : t('db.app')}
                   </span>
                 </span>
+                {isRunning && <CloseX label={t('db.close', { label })} onClose={() => closeLiveItem('app', resolved.get(app))} />}
               </button>
             );
   };
@@ -534,12 +615,12 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
                         e.stopPropagation();
                         workspaceActivityService.activate({ url: `http://localhost:${port}`, title: `${name} :${port}` });
                       }}
-                      title={`Open localhost:${port}`}
+                      title={t('db.openLocalhost', { port })}
                     >
                       <i />:{port}{info.ports.length > 1 ? ` +${info.ports.length - 1}` : ''}
                     </span>
                   ) : info.branch ? (
-                    <span className="dockbar-place-parent is-branch" title={info.dirty ? 'Uncommitted changes' : undefined}>
+                    <span className="dockbar-place-parent is-branch" title={info.dirty ? t('db.uncommitted') : undefined}>
                       {info.dirty && <i />}{info.branch}
                     </span>
                   ) : (
@@ -561,15 +642,16 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
                     onClick={() => { bounce(key); focusLiveApp(app); }}
                     onMouseEnter={() => setHoverLabel(app.title && app.title !== label ? `${label} — ${app.title}` : label)}
                     title={app.path || label}
-                    aria-label={`${label} — running (click to focus)`}
+                    aria-label={t('db.runningFocus', { label })}
                   >
                     <span className="dockbar-place-tile">
                       {app.icon ? <img src={app.icon} alt="" /> : <FontAwesomeIcon icon={appFallbackIcon(app)} />}
                     </span>
                     <span className="dockbar-place-text">
                       <span className="dockbar-place-name">{label}</span>
-                      <span className="dockbar-place-parent is-running">Running</span>
+                      <span className="dockbar-place-parent is-running">{t('db.running')}</span>
                     </span>
+                    <CloseX label={t('db.close', { label })} onClose={() => closeLiveItem('app', app)} />
                   </button>
                 );
   };
@@ -579,7 +661,7 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
                   ? [tab.favIconUrl, ...faviconSources(tab.url)]
                   : faviconSources(tab.url);
                 const avatar = letterAvatar(tab.url);
-                const host = hostOf(tab.url);
+                const host = siteName(hostOf(tab.url));
                 const title = tab.title && tab.title !== tab.url ? tab.title : host;
                 const key = `live-tab-${tab.browser || ''}-${tab.id ?? idx}`;
                 return (
@@ -602,8 +684,9 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
                     </span>
                     <span className="dockbar-place-text">
                       <span className="dockbar-place-name">{title}</span>
-                      {title !== host && <span className="dockbar-place-parent">{host}</span>}
+                      {title.toLowerCase() !== host.toLowerCase() && <span className="dockbar-place-parent">{host}</span>}
                     </span>
+                    <CloseX label={t('db.close', { label: title })} onClose={() => closeLiveItem('tab', tab)} />
                   </button>
                 );
   };
@@ -612,7 +695,7 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
     <div
       className={`dockbar dockbar--${side}`}
       role="toolbar"
-      aria-label="Workspace dock"
+      aria-label={t('db.label')}
       onMouseEnter={() => { pointerInsideRef.current = true; }}
       onMouseLeave={() => {
         pointerInsideRef.current = false;
@@ -628,18 +711,18 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
           <button
             className="dockbar-ws-logo-btn"
             onClick={toggleMode}
-            title={isActiveMode ? 'Show workspace' : 'Show everything open'}
-            aria-label={isActiveMode ? 'Switch to workspace view' : 'Switch to active view'}
+            title={isActiveMode ? t('db.showWorkspace') : t('db.showEverything')}
+            aria-label={isActiveMode ? t('db.toWorkspaceView') : t('db.toActiveView')}
           >
             <img src={logo} alt="" className="dockbar-ws-logo" />
           </button>
           <button
             className={`dockbar-ws-name${hoverLabel ? ' is-hover-label' : ''}`}
             onClick={() => (workspaces.length > 1 ? setPicking((p) => !p) : pickWorkspace(workspace))}
-            title={workspaces.length > 1 ? 'Switch workspace (or scroll here)' : workspace?.name || 'CoolDesk'}
+            title={workspaces.length > 1 ? t('db.switchWorkspace') : workspace?.name || 'CoolDesk'}
             aria-expanded={picking}
           >
-            {picking ? 'Pick a workspace' : hoverLabel || (isActiveMode ? 'Active' : workspace?.name || 'CoolDesk')}
+            {picking ? t('db.pick') : hoverLabel || (isActiveMode ? t('db.active') : workspace?.name || 'CoolDesk')}
           </button>
         </div>
 
@@ -679,7 +762,7 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
                 kind === 'tab' ? renderLiveTab(item, idx, order) : renderLiveApp(item, idx, order)
               ))}
               {liveApps.length === 0 && liveTabs.length === 0 && (
-                <span className="dockbar-empty">Nothing open right now</span>
+                <span className="dockbar-empty">{t('db.nothingOpen')}</span>
               )}
             </>
           )}
@@ -690,7 +773,7 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
                 : renderApp(item, idx, order)
           ))}
           {!isActiveMode && !picking && urls.length === 0 && apps.length === 0 && (
-            <span className="dockbar-empty">This workspace has no links or apps yet</span>
+            <span className="dockbar-empty">{t('db.noItems')}</span>
           )}
         </div>
 
@@ -704,8 +787,8 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
             <button
               className="dockbar-ctrl"
               onClick={() => openSpotlightEdit(workspace)}
-              title={`Edit ${workspace.name || 'workspace'} — add links, apps, notes`}
-              aria-label="Edit workspace"
+              title={t('db.editTitle', { name: workspace.name || t('db.workspace') })}
+              aria-label={t('db.edit')}
             >
               <FontAwesomeIcon icon={faPen} />
             </button>
@@ -713,7 +796,7 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
           <button
             className="dockbar-ctrl"
             onClick={dockToSide}
-            title="Dock to side"
+            title={t('db.dockSide')}
           >
             <FontAwesomeIcon icon={faTableColumns} />
           </button>

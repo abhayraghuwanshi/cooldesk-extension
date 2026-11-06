@@ -157,7 +157,10 @@ const isDesktopApp = typeof window !== 'undefined' &&
   !!(window.__TAURI__ || window.__TAURI_INTERNALS__ || window.electronAPI);
 
 // Memoized WorkspaceCard to prevent unnecessary re-renders
-export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, fullView = false, isPinned = false, onPin, onDelete, onEditWorkspace, onUrlAction, deferAnalytics = false, readOnly = false, ...rest }) {
+export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, fullView = false, isPinned = false, onPin, onDelete, onEditWorkspace, onUrlAction, deferAnalytics = false, readOnly = false, onCloseItem, ...rest }) {
+  // Active card: the × closes the tab/app itself instead of removing it from a workspace.
+  const canRemove = !readOnly || !!onCloseItem;
+  const removeTitle = (label) => (onCloseItem ? `Close ${label}` : `Remove ${label}`);
   if (!workspace) return null;
 
   const [popoverState, setPopoverState] = useState({ index: null, rect: null });
@@ -684,11 +687,13 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
 
   const handleRemoveUrl = (e, urlObj) => {
     e.stopPropagation();
+    if (onCloseItem) { onCloseItem('tab', urlObj); return; }
     removeItem('urls', u => u.url === urlObj.url);
   };
 
   const handleRemoveApp = (e, app) => {
     e.stopPropagation();
+    if (onCloseItem) { onCloseItem('app', app); return; }
     // Apps are identified by path; fall back to name for records saved without one.
     removeItem('apps', a => (app.path ? a.path === app.path : a.name === app.name));
   };
@@ -941,13 +946,13 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                     )}
                     {/* Groups have no × — one chip stands for several links, so
                         a single cross would silently drop all of them. */}
-                    {!readOnly && !isGroup && !item._cd && (
+                    {canRemove && !isGroup && !item._cd && (
                       <button
                         type="button"
                         className="item-remove-btn"
                         onClick={(e) => handleRemoveUrl(e, item)}
-                        title={`Remove ${displayName}`}
-                        aria-label={`Remove ${displayName} from ${name}`}
+                        title={removeTitle(displayName)}
+                        aria-label={onCloseItem ? `Close ${displayName}` : `Remove ${displayName} from ${name}`}
                       >
                         <FontAwesomeIcon icon={faXmark} />
                       </button>
@@ -994,13 +999,13 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                     {showLabel && (
                       <span className="compact-icon-label" style={{ color: appColor }}>{app.name}</span>
                     )}
-                    {!readOnly && !app._cd && (
+                    {canRemove && !app._cd && (
                       <button
                         type="button"
                         className="item-remove-btn"
                         onClick={(e) => handleRemoveApp(e, app)}
-                        title={`Remove ${app.name}`}
-                        aria-label={`Remove ${app.name} from ${name}`}
+                        title={removeTitle(app.name)}
+                        aria-label={onCloseItem ? `Close ${app.name}` : `Remove ${app.name} from ${name}`}
                       >
                         <FontAwesomeIcon icon={faXmark} />
                       </button>
@@ -1068,8 +1073,8 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                         type="button"
                         className="item-remove-btn"
                         onClick={(e) => onRemove(e, item)}
-                        title={`Remove ${label}`}
-                        aria-label={`Remove ${label} from ${name}`}
+                        title={removeTitle(label)}
+                        aria-label={onCloseItem ? `Close ${label}` : `Remove ${label} from ${name}`}
                       >
                         <FontAwesomeIcon icon={faXmark} />
                       </button>
@@ -1080,7 +1085,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
               const placeRowForApp = (app, idx) => renderPlaceRow(app, `app-${idx}`, {
                 isFile: app.appType === 'file',
                 onOpen: () => activate(app),
-                removable: !readOnly && !app._cd,
+                removable: canRemove && !app._cd,
                 onRemove: handleRemoveApp,
               });
               const projectRow = (proj, idx) => renderPlaceRow(proj, `proj-${idx}`, {
@@ -1224,8 +1229,8 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                           type="button"
                           className="item-remove-btn"
                           onClick={(e) => onRemove(e, item)}
-                          title={`Remove ${label}`}
-                          aria-label={`Remove ${label} from ${name}`}
+                          title={removeTitle(label)}
+                          aria-label={onCloseItem ? `Close ${label}` : `Remove ${label} from ${name}`}
                         >
                           <FontAwesomeIcon icon={faXmark} />
                         </button>
@@ -1238,7 +1243,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                 glyph: app.appType === 'file' ? faFileLines : faFolderOpen,
                 isFile: app.appType === 'file',
                 onOpen: () => activate(app),
-                removable: !readOnly && !app._cd,
+                removable: canRemove && !app._cd,
                 onRemove: handleRemoveApp,
               });
               return (
@@ -1400,13 +1405,13 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                           triggerRect={popoverState.rect}
                         />
                       )}
-                      {!readOnly && !urlObj._cd && (
+                      {canRemove && !urlObj._cd && (
                         <button
                           type="button"
                           className="item-remove-btn is-inline"
                           onClick={(e) => handleRemoveUrl(e, urlObj)}
-                          title={`Remove ${urlObj.title || urlObj.url}`}
-                          aria-label={`Remove ${urlObj.title || urlObj.url} from ${name}`}
+                          title={removeTitle(urlObj.title || urlObj.url)}
+                          aria-label={onCloseItem ? `Close ${urlObj.title || urlObj.url}` : `Remove ${urlObj.title || urlObj.url} from ${name}`}
                         >
                           <FontAwesomeIcon icon={faXmark} />
                         </button>
@@ -1450,13 +1455,13 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                         <FontAwesomeIcon icon={appIcon} style={{ color: appColor, fontSize: '12px' }} />
                       )}
                       <span>{app.name}</span>
-                      {!readOnly && !app._cd && (
+                      {canRemove && !app._cd && (
                         <button
                           type="button"
                           className="item-remove-btn is-inline"
                           onClick={(e) => handleRemoveApp(e, app)}
-                          title={`Remove ${app.name}`}
-                          aria-label={`Remove ${app.name} from ${name}`}
+                          title={removeTitle(app.name)}
+                          aria-label={onCloseItem ? `Close ${app.name}` : `Remove ${app.name} from ${name}`}
                         >
                           <FontAwesomeIcon icon={faXmark} />
                         </button>
@@ -1499,13 +1504,13 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                         <FontAwesomeIcon icon={appIcon} style={{ color: appColor, fontSize: '12px' }} />
                       )}
                       <span>{app.name}</span>
-                      {!readOnly && !app._cd && (
+                      {canRemove && !app._cd && (
                         <button
                           type="button"
                           className="item-remove-btn is-inline"
                           onClick={(e) => handleRemoveApp(e, app)}
-                          title={`Remove ${app.name}`}
-                          aria-label={`Remove ${app.name} from ${name}`}
+                          title={removeTitle(app.name)}
+                          aria-label={onCloseItem ? `Close ${app.name}` : `Remove ${app.name} from ${name}`}
                         >
                           <FontAwesomeIcon icon={faXmark} />
                         </button>

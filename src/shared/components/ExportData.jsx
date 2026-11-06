@@ -4,12 +4,14 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useRef, useState } from 'react'
 import { DB_CONFIG, getUnifiedDB } from '../../db/index.js'
 import { storageGet } from '../../services/extensionApi'
+import { useT } from '../i18n'
 import { parseBackup, restoreBackup } from '../../services/backupRestore'
 
 
 // `compact`: a one-line row for narrow homes (the new tab's Customize panel)
 // — title only, no description, controls wrap instead of squeezing the text.
 export default function ExportData({ compact = false }) {
+    const t = useT()
     const fileInputRef = useRef(null)
     const [busy, setBusy] = useState(false)
     const [message, setMessage] = useState('')
@@ -185,10 +187,10 @@ export default function ExportData({ compact = false }) {
                 border: '1px solid rgba(255,255,255,0.06)',
             }}>
                 <div style={{ flex: 1, minWidth: compact ? 0 : undefined }}>
-                    <div style={{ fontSize: 13, fontWeight: compact ? 600 : 500, color: '#e5e7eb', whiteSpace: 'nowrap' }}>{compact ? 'Your data' : 'Export / Import'}</div>
+                    <div style={{ fontSize: 13, fontWeight: compact ? 600 : 500, color: '#e5e7eb', whiteSpace: 'nowrap' }}>{compact ? t('data.yours') : t('data.exportImport')}</div>
                     {!compact && (
                         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
-                            Download or restore all your data as JSON
+                            {t('data.hint')}
                         </div>
                     )}
                 </div>
@@ -200,7 +202,7 @@ export default function ExportData({ compact = false }) {
                         onChange={e => setReplaceMode(e.target.checked)}
                         style={{ accentColor: '#ef4444', width: 13, height: 13 }}
                     />
-                    Replace
+                    {t('data.replace')}
                 </label>
 
                 <button
@@ -214,7 +216,7 @@ export default function ExportData({ compact = false }) {
                     }}
                 >
                     <FontAwesomeIcon icon={faFileImport} style={{ marginRight: 4 }} />
-                    Import
+                    {t('data.import')}
                 </button>
 
                 <button
@@ -228,7 +230,7 @@ export default function ExportData({ compact = false }) {
                     }}
                 >
                     <FontAwesomeIcon icon={faFileExport} style={{ marginRight: 4 }} />
-                    {busy ? 'Working…' : 'Export'}
+                    {busy ? t('data.working') : t('data.export')}
                 </button>
 
                 <input ref={fileInputRef} type="file" accept="application/json" onChange={onFileSelected} style={{ display: 'none' }} />

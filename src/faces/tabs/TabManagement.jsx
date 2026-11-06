@@ -20,6 +20,7 @@ import { FileManager } from '../../features/file-manager/FileManager';
 import { WidgetBoard } from '../../features/widgets/WidgetBoard';
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
 import { usePendingRemoval } from '../../shared/hooks/usePendingRemoval.js';
+import { useT } from '../../shared/i18n';
 
 // The Tabs page gets its own widget strip (independent of the overview board).
 const TABS_WIDGET_DEFAULT = [
@@ -74,6 +75,7 @@ function debounce(func, wait) {
  *  @param hideOpen      leave out the open apps and tabs (sections 1–8) —
  *                      the docked sidebar's Active card already lists them. */
 export function TabManagement({ onOpenFolder, panel = false, hideOpen = false } = {}) {
+  const t = useT();
   const skipOpen = panel || hideOpen;
   const [tabs, setTabs] = useState([]);
   const [tabsLoading, setTabsLoading] = useState(true);
@@ -853,7 +855,7 @@ export function TabManagement({ onOpenFolder, panel = false, hideOpen = false } 
           fontSize: 'var(--font-xs, 11px)',
           color: '#CA8A04'
         }}>
-          <span>Browser sync disconnected — tabs may be outdated</span>
+          <span>{t('tm.syncLost')}</span>
           <button
             onClick={() => refreshTabs()}
             style={{
@@ -868,7 +870,7 @@ export function TabManagement({ onOpenFolder, panel = false, hideOpen = false } 
               whiteSpace: 'nowrap'
             }}
           >
-            Refresh
+            {t('tm.refresh')}
           </button>
         </div>
       )}
@@ -901,7 +903,7 @@ export function TabManagement({ onOpenFolder, panel = false, hideOpen = false } 
             height: '100%'
           }}>
             <FontAwesomeIcon icon={faSync} spin size="2x" style={{ opacity: 0.5 }} />
-            <div style={{ fontSize: 'var(--font-sm, 12px)' }}>Loading tabs...</div>
+            <div style={{ fontSize: 'var(--font-sm, 12px)' }}>{t('tm.loading')}</div>
           </div>
         ) : (
           <>
@@ -909,7 +911,7 @@ export function TabManagement({ onOpenFolder, panel = false, hideOpen = false } 
             {/* 1. Active Apps Section (desktop only) */}
             {runningApps.length > 0 && (
               <div>
-                <SectionHeader icon={faDesktop}>Active Apps ({runningApps.length})</SectionHeader>
+                <SectionHeader icon={faDesktop}>{t('tm.activeApps', { n: runningApps.length })}</SectionHeader>
                 <div className="tabs-grid">
                   {runningApps.map(app => (
                     <AppCard
@@ -947,7 +949,7 @@ export function TabManagement({ onOpenFolder, panel = false, hideOpen = false } 
             {/* 3. Local Dev Section (localhost / loopback / LAN dev servers) */}
             {partitionedTabs.localhost.length > 0 && (
               <div>
-                <SectionHeader icon={faCode}>Local Dev ({partitionedTabs.localhost.length})</SectionHeader>
+                <SectionHeader icon={faCode}>{t('tm.localDev', { n: partitionedTabs.localhost.length })}</SectionHeader>
                 <div className="tabs-grid">
                   {partitionedTabs.localhost.map(tab => (
                     <TabCard
@@ -969,12 +971,12 @@ export function TabManagement({ onOpenFolder, panel = false, hideOpen = false } 
             {/* 4. Chrome Native Tab Groups (Extension only) */}
             {!taskViewEnabled && partitionedTabs.hasChromeGroups && (
               <div>
-                <SectionHeader>Tab Groups ({partitionedTabs.chromeGroups.length})</SectionHeader>
+                <SectionHeader>{t('tm.tabGroups', { n: partitionedTabs.chromeGroups.length })}</SectionHeader>
                 <div className="tabs-grid">
                   {partitionedTabs.chromeGroups.map(({ group, tabs: groupTabs }) => {
                     const color = CHROME_GROUP_COLORS[group.color] || '#9AA0A6';
                     // Fall back to primary domain if group has no title
-                    const label = group.title || getGroupDomainFromUrl(groupTabs[0]?.url) || 'Group';
+                    const label = group.title || getGroupDomainFromUrl(groupTabs[0]?.url) || t('tm.group');
                     const groupKey = `chrome-${group.id}`;
                     return (
                       <TabGroupCard
@@ -996,7 +998,7 @@ export function TabManagement({ onOpenFolder, panel = false, hideOpen = false } 
             {/* 5. Grouped by Task Section (Task-First Tab Modeling) */}
             {taskViewEnabled && partitionedByTask && partitionedByTask.length > 0 && (
               <div>
-                <SectionHeader icon={faTasks}>Grouped by Task ({partitionedByTask.length})</SectionHeader>
+                <SectionHeader icon={faTasks}>{t('tm.byTask', { n: partitionedByTask.length })}</SectionHeader>
                 <div className="tabs-grid">
                   {partitionedByTask.map(({ task, tabs: taskTabs }) => (
                     <TaskGroupCard
@@ -1028,7 +1030,7 @@ export function TabManagement({ onOpenFolder, panel = false, hideOpen = false } 
             {/* 6. Grouped by Domain Section (only when task view is disabled) */}
             {!taskViewEnabled && partitionedTabs.hasGroups && (
               <div>
-                <SectionHeader>Grouped by Domain</SectionHeader>
+                <SectionHeader>{t('tm.byDomain')}</SectionHeader>
                 <div className="tabs-grid">
                   {Object.entries(partitionedTabs.grouped)
                     .sort(([domainA], [domainB]) => domainA.localeCompare(domainB))
@@ -1050,7 +1052,7 @@ export function TabManagement({ onOpenFolder, panel = false, hideOpen = false } 
             {/* 7. Recent (Ungrouped) Section - only when task view is disabled */}
             {!taskViewEnabled && partitionedTabs.recent.length > 0 && (
               <div>
-                <SectionHeader icon={faClock}>Recent</SectionHeader>
+                <SectionHeader icon={faClock}>{t('tm.recent')}</SectionHeader>
                 <div className="tabs-grid">
                   {partitionedTabs.recent.map(tab => (
                     <TabCard
@@ -1122,7 +1124,7 @@ export function TabManagement({ onOpenFolder, panel = false, hideOpen = false } 
             {/* In the panel, Browse shows these as chips at the top of Home. */}
             {frequentFolders.length > 0 && !panel && (
               <div>
-                <SectionHeader icon={faFolderOpen}>Popular Folders ({Math.min(frequentFolders.length, 8)})</SectionHeader>
+                <SectionHeader icon={faFolderOpen}>{t('tm.folders', { n: Math.min(frequentFolders.length, 8) })}</SectionHeader>
                 {/* Sidebar: one horizontally-scrolling row (like a workspace
                     card's icon row) so the browser below gets the height;
                     the full app keeps the wrapping grid. */}

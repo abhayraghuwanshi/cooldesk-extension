@@ -5,6 +5,7 @@ import { getPreviewItem } from '../../utils/filePreviewKind.js';
 import { IS_TAURI, startNativeDrag } from '../../utils/nativeDrag.js';
 import { copyImageFile, copyTextFile, shelfFileUrl } from './useShelf';
 import './shelf.css';
+import { t, useT } from '../../shared/i18n';
 
 // The Shelf, inside Browse's side panel. Things land here instead of on the
 // computer: downloads from in-app pages, ⌘V'd text and images, files dropped
@@ -25,22 +26,22 @@ function formatSize(bytes) {
 
 function ago(ms) {
   const s = Math.max(0, (Date.now() - ms) / 1000);
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
+  if (s < 60) return t('sh.justNow');
+  if (s < 3600) return t('sh.mAgo', { n: Math.floor(s / 60) });
+  if (s < 86400) return t('sh.hAgo', { n: Math.floor(s / 3600) });
+  return t('sh.dAgo', { n: Math.floor(s / 86400) });
 }
 
 function expiresIn(ms) {
   const d = Math.ceil((ms - Date.now()) / 86400000);
-  return d <= 1 ? 'expires today' : `expires in ${d}d`;
+  return d <= 1 ? t('sh.expiresToday') : t('sh.expiresIn', { n: d });
 }
 
 function sourceLabel(item) {
-  if (item.source === 'clipboard') return 'Pasted';
+  if (item.source === 'clipboard') return t('sh.pasted');
   const host = item.source && hostOf(item.source);
   if (host) return host;
-  return item.source ? 'Added' : '';
+  return item.source ? t('sh.added') : '';
 }
 
 function Thumb({ item }) {
@@ -84,6 +85,7 @@ function Action({ icon, label, onRun, danger = false, active = false }) {
  * @param onOpen  (path) → open an item as a main-view tab
  */
 export function ShelfView({ shelf, active, onOpen }) {
+  useT();
   const rootRef = useRef(null);
   const [dropHover, setDropHover] = useState(false);
   const [note, setNote] = useState(null);
@@ -108,7 +110,7 @@ export function ShelfView({ shelf, active, onOpen }) {
     e.preventDefault();
     for (const f of files) await shelf.addFile(f);
     if (!files.length && text) await shelf.addText(text);
-    flash(files.length ? `Added ${files.length} ${files.length === 1 ? 'item' : 'items'}` : 'Added text');
+    flash(files.length ? t(files.length === 1 ? 'sh.addedItems1' : 'sh.addedItemsN', { n: files.length }) : t('sh.addedText'));
   };
 
   // Paste button: the async clipboard (WebKit shows its own "Paste" bubble).
@@ -127,9 +129,9 @@ export function ShelfView({ shelf, active, onOpen }) {
           if (text.trim()) { await shelf.addText(text); added += 1; }
         }
       }
-      flash(added ? 'Added from clipboard' : 'Clipboard is empty');
+      flash(added ? t('sh.addedFromClipboard') : t('sh.clipboardEmpty'));
     } catch {
-      flash('Press ⌘V here to paste');
+      flash(t('sh.pressCmdV'));
       rootRef.current?.focus();
     }
   };
@@ -159,7 +161,7 @@ export function ShelfView({ shelf, active, onOpen }) {
           const fresh = (paths || []).filter(p => !own.has(p));
           if (inside(position) && fresh.length) {
             const added = await shelfRef.current.importPaths(fresh);
-            flash(added?.length ? `Added ${added.length} ${added.length === 1 ? 'file' : 'files'}` : 'Folders can’t go on the shelf');
+            flash(added?.length ? t(added.length === 1 ? 'sh.addedFiles1' : 'sh.addedFilesN', { n: added.length }) : t('sh.noFolders'));
           }
         }
       }))
@@ -176,7 +178,7 @@ export function ShelfView({ shelf, active, onOpen }) {
 
   const saveOut = async (item) => {
     const dest = await shelf.saveTo(item.id);
-    if (dest) flash(`Saved to ${dest.split(/[/\\]/).slice(-2, -1)[0] || 'Downloads'}`);
+    if (dest) flash(t('sh.savedTo', { folder: dest.split(/[/\\]/).slice(-2, -1)[0] || t('sh.downloads') }));
     return !!dest;
   };
 
@@ -188,12 +190,12 @@ export function ShelfView({ shelf, active, onOpen }) {
       onPaste={onPaste}
     >
       <div className="sh-bar">
-        <button className="browse-chip" onClick={pasteFromClipboard} title="Add what's on the clipboard (or press ⌘V here)">
-          <FontAwesomeIcon icon={faPaste} /> Paste
+        <button className="browse-chip" onClick={pasteFromClipboard} title={t('sh.pasteTitle')}>
+          <FontAwesomeIcon icon={faPaste} /> {t('sh.paste')}
         </button>
-        <span className="sh-hint">{note || 'Downloads land here · drop or paste anything · 7 days unless pinned'}</span>
+        <span className="sh-hint">{note || t('sh.hint')}</span>
         {items.length > 0 && (
-          <button className="bp-btn sh-act danger" onClick={() => shelf.clear(false)} title="Clear everything that isn't pinned">
+          <button className="bp-btn sh-act danger" onClick={() => shelf.clear(false)} title={t('sh.clearTitle')}>
             <FontAwesomeIcon icon={faTrashCan} />
           </button>
         )}
@@ -207,8 +209,8 @@ export function ShelfView({ shelf, active, onOpen }) {
                 icon={d.state === 'started' ? faSpinner : d.state === 'failed' ? faTriangleExclamation : faArrowDown}
                 spin={d.state === 'started'}
               />
-              <span className="sh-dl-name">{d.name || hostOf(d.url) || 'Download'}</span>
-              <span className="sh-dl-state">{d.state === 'started' ? 'Downloading…' : d.state === 'failed' ? 'Failed' : 'Saved'}</span>
+              <span className="sh-dl-name">{d.name || hostOf(d.url) || t('sh.download')}</span>
+              <span className="sh-dl-state">{d.state === 'started' ? t('sh.downloading') : d.state === 'failed' ? t('sh.failed') : t('sh.saved')}</span>
             </div>
           ))}
         </div>
@@ -218,8 +220,8 @@ export function ShelfView({ shelf, active, onOpen }) {
         {items.length === 0 && downloads.length === 0 && (
           <div className="sh-empty">
             <FontAwesomeIcon icon={faDownload} />
-            <strong>Your shelf is empty</strong>
-            <span>Downloads from pages in CoolDesk land here instead of your Downloads folder. You can also press ⌘V or drop files here.</span>
+            <strong>{t('sh.emptyTitle')}</strong>
+            <span>{t('sh.emptyText')}</span>
           </div>
         )}
         {items.map(item => (
@@ -229,7 +231,7 @@ export function ShelfView({ shelf, active, onOpen }) {
             onClick={() => onOpen?.(item.path)}
             draggable={IS_TAURI}
             onDragStart={IS_TAURI ? (e) => startNativeDrag(e, item.path, false) : undefined}
-            title={`${item.name}\nClick to open · drag onto a page or into Finder`}
+            title={`${item.name}\n${t('sh.itemTitle')}`}
           >
             <Thumb item={item} />
             <span className="sh-text">
@@ -237,15 +239,15 @@ export function ShelfView({ shelf, active, onOpen }) {
               <span className="sh-meta">
                 {[formatSize(item.size), sourceLabel(item), ago(item.added)].filter(Boolean).join(' · ')}
                 <span className={`sh-expiry ${item.pinned ? 'pinned' : ''}`}>
-                  {item.pinned ? 'Pinned' : expiresIn(item.expires)}
+                  {item.pinned ? t('sh.pinned') : expiresIn(item.expires)}
                 </span>
               </span>
             </span>
             <span className="sh-actions">
-              <Action icon={faThumbtack} label={item.pinned ? 'Unpin (expire again)' : 'Pin (keep)'} active={item.pinned} onRun={() => shelf.pin(item.id, !item.pinned)} />
-              <Action icon={faCopy} label={item.kind === 'image' ? 'Copy image' : item.kind === 'file' && getPreviewItem(item.path)?.previewKind !== 'code' ? 'Copy path' : 'Copy text'} onRun={() => copyItem(item)} />
-              <Action icon={faDownload} label="Save to Downloads" onRun={() => saveOut(item)} />
-              <Action icon={faTrashCan} label="Delete" danger onRun={() => shelf.remove(item.id)} />
+              <Action icon={faThumbtack} label={item.pinned ? t('sh.unpin') : t('sh.pin')} active={item.pinned} onRun={() => shelf.pin(item.id, !item.pinned)} />
+              <Action icon={faCopy} label={item.kind === 'image' ? t('sh.copyImage') : item.kind === 'file' && getPreviewItem(item.path)?.previewKind !== 'code' ? t('sh.copyPath') : t('sh.copyText')} onRun={() => copyItem(item)} />
+              <Action icon={faDownload} label={t('sh.saveDownloads')} onRun={() => saveOut(item)} />
+              <Action icon={faTrashCan} label={t('sh.delete')} danger onRun={() => shelf.remove(item.id)} />
             </span>
           </div>
         ))}

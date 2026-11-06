@@ -3,6 +3,7 @@ import { fontFamilies } from '../../../utils/fontUtils';
 import FontFamilyDropdown from './FontFamilyDropdown';
 import FontSizeDropdown from './FontSizeDropdown';
 import { FEATURED_WALLPAPERS, moreWallpapers } from '../../../shared/data/wallpapers';
+import { useT } from '../../../shared/i18n';
 const ThemesTab = ({
   selectedTheme,
   fontSize,
@@ -21,6 +22,7 @@ const ThemesTab = ({
   unsplashApiKey = '',
   onUnsplashApiKeyChange = () => { }
 }) => {
+  const t = useT();
   const [showAllThemes, setShowAllThemes] = useState(false);
   const [showUnsplash, setShowUnsplash] = useState(false);
   // Remember the last gradient theme so switching back from Wallpaper restores it
@@ -35,11 +37,11 @@ const ThemesTab = ({
   // Search Unsplash for wallpapers
   const searchUnsplash = useCallback(async (query) => {
     if (!unsplashApiKey) {
-      setUnsplashError('Please enter your Unsplash API key first');
+      setUnsplashError(t('ap.enterKeyFirst'));
       return;
     }
     if (!query.trim()) {
-      setUnsplashError('Please enter a search term');
+      setUnsplashError(t('ap.enterTerm'));
       return;
     }
 
@@ -75,7 +77,7 @@ const ThemesTab = ({
     } finally {
       setUnsplashLoading(false);
     }
-  }, [unsplashApiKey]);
+  }, [unsplashApiKey, t]);
 
 
 
@@ -320,7 +322,7 @@ const ThemesTab = ({
         fontSize: 'var(--font-2xl)',
         fontWeight: '600'
       }}>
-        Appearance
+        {t('st.tab.appearance')}
       </h4>
       <p style={{
         margin: '0 0 16px 0',
@@ -328,7 +330,7 @@ const ThemesTab = ({
         fontSize: 'var(--font-base)',
         lineHeight: '1.5'
       }}>
-        Pick a gradient theme or set your own wallpaper as the background. Changes apply instantly.
+        {t('ap.intro')}
       </p>
 
       {/* Background mode toggle — themes vs. wallpaper */}
@@ -342,8 +344,8 @@ const ThemesTab = ({
         marginBottom: '20px'
       }}>
         {[
-          { id: 'theme', label: '🎨 Gradient Themes' },
-          { id: 'wallpaper', label: '🖼️ Wallpaper' }
+          { id: 'theme', label: `🎨 ${t('ap.gradientThemes')}` },
+          { id: 'wallpaper', label: `🖼️ ${t('ap.wallpaper')}` }
         ].map(({ id, label }) => {
           const active = bgMode === id;
           return (
@@ -539,7 +541,7 @@ const ThemesTab = ({
             e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
           }}
         >
-          {showAllThemes ? 'Show Less Themes' : `Show All Themes (${gradientThemes.length})`}
+          {showAllThemes ? t('ap.showLess') : t('ap.showAll', { n: gradientThemes.length })}
         </button>
       </div>
       )}
@@ -558,14 +560,14 @@ const ThemesTab = ({
                 marginBottom: '12px',
                 fontSize: 'var(--font-base)'
               }}>
-                Choose a Wallpaper
+                {t('ap.chooseWallpaper')}
               </label>
               <div style={{ color: '#9ca3af', fontSize: 'var(--font-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>
-                Featured
+                {t('ap.featured')}
               </div>
               {renderWallpaperGrid(FEATURED_WALLPAPERS)}
               <div style={{ color: '#9ca3af', fontSize: 'var(--font-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '16px 0 8px' }}>
-                More photos
+                {t('ap.morePhotos')}
               </div>
               {renderWallpaperGrid(curatedWallpapers)}
               <div style={{
@@ -573,7 +575,7 @@ const ThemesTab = ({
                 color: 'rgba(255, 255, 255, 0.4)',
                 marginTop: '6px'
               }}>
-                Click any image to set as wallpaper
+                {t('ap.clickToSet')}
               </div>
             </div>
 
@@ -586,7 +588,7 @@ const ThemesTab = ({
                 marginBottom: '8px',
                 fontSize: 'var(--font-base)'
               }}>
-                Or Use Custom URL (Optional)
+                {t('ap.customUrl')}
               </label>
               <input
                 type="url"
@@ -618,7 +620,7 @@ const ThemesTab = ({
                 color: 'rgba(255, 255, 255, 0.4)',
                 marginTop: '6px'
               }}>
-                Try: source.unsplash.com/1920x1080/?nature or your own image URL
+                {t('ap.tryUrl', { example: 'source.unsplash.com/1920x1080/?nature' })}
               </div>
             </div>
 
@@ -647,10 +649,10 @@ const ThemesTab = ({
                 />
                 <div>
                   <div style={{ fontWeight: '500', fontSize: 'var(--font-base)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>✨ Intelligent Auto-Change</span>
+                    <span>✨ {t('ap.autoChange')}</span>
                   </div>
                   <div style={{ fontSize: 'var(--font-xs)', opacity: 0.6, marginTop: '2px' }}>
-                    Discover a new beautiful, curated wallpaper every time you open a new tab.
+                    {t('ap.autoChangeHint')}
                   </div>
                 </div>
               </label>
@@ -677,10 +679,10 @@ const ThemesTab = ({
                 }}
               >
                 <span>
-                  🔍 Search Unsplash photos
+                  🔍 {t('ap.searchUnsplash')}
                   {unsplashApiKey
-                    ? <span style={{ color: '#34C759', fontSize: 'var(--font-xs)', marginLeft: 8 }}>Connected</span>
-                    : <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 'var(--font-xs)', marginLeft: 8 }}>Connect to enable</span>}
+                    ? <span style={{ color: '#34C759', fontSize: 'var(--font-xs)', marginLeft: 8 }}>{t('ap.connected')}</span>
+                    : <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 'var(--font-xs)', marginLeft: 8 }}>{t('ap.connectToEnable')}</span>}
                 </span>
                 <span style={{
                   transform: showUnsplash ? 'rotate(180deg)' : 'rotate(0deg)',
@@ -696,7 +698,7 @@ const ThemesTab = ({
                     type="password"
                     value={unsplashApiKey}
                     onChange={(e) => onUnsplashApiKeyChange(e.target.value)}
-                    placeholder="Paste your Unsplash API key"
+                    placeholder={t('ap.pasteKey')}
                     style={{
                       width: '100%',
                       padding: '12px 14px',
@@ -722,7 +724,14 @@ const ThemesTab = ({
                     color: 'rgba(255, 255, 255, 0.4)',
                     marginTop: '6px'
                   }}>
-                    Get a free key at <a href="https://unsplash.com/developers" target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>unsplash.com/developers</a> to search millions of photos.
+                    {(() => {
+                      const [before, after = ''] = t('ap.getKey').split('{link}');
+                      return (
+                        <>
+                          {before}<a href="https://unsplash.com/developers" target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>unsplash.com/developers</a>{after}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
@@ -738,7 +747,7 @@ const ThemesTab = ({
                   marginBottom: '12px',
                   fontSize: 'var(--font-base)'
                 }}>
-                  Search Unsplash Wallpapers
+                  {t('ap.searchWallpapers')}
                 </label>
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
                   <input
@@ -750,7 +759,7 @@ const ThemesTab = ({
                         searchUnsplash(unsplashSearchQuery);
                       }
                     }}
-                    placeholder="Search for wallpapers (e.g., mountains, ocean, city)"
+                    placeholder={t('ap.searchPlaceholder')}
                     style={{
                       flex: 1,
                       padding: '12px 14px',
@@ -797,7 +806,7 @@ const ThemesTab = ({
                       }
                     }}
                   >
-                    {unsplashLoading ? 'Searching...' : 'Search'}
+                    {unsplashLoading ? t('ap.searching') : t('ap.search')}
                   </button>
                 </div>
 
@@ -885,10 +894,10 @@ const ThemesTab = ({
                           color: '#fff'
                         }}>
                           <div style={{ fontWeight: '500', marginBottom: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {photo.alt_description || 'Untitled'}
+                            {photo.alt_description || t('ap.untitled')}
                           </div>
                           <div style={{ opacity: 0.7, fontSize: '10px' }}>
-                            by {photo.user?.name || 'Unknown'}
+                            {t('ap.by', { name: photo.user?.name || t('ap.unknown') })}
                           </div>
                         </div>
                       </div>
@@ -901,7 +910,7 @@ const ThemesTab = ({
                   color: 'rgba(255, 255, 255, 0.4)',
                   marginTop: '8px'
                 }}>
-                  Press Enter or click Search to find wallpapers. Click any image to set as wallpaper.
+                  {t('ap.searchHelp')}
                 </div>
               </div>
             )}
@@ -920,10 +929,10 @@ const ThemesTab = ({
                 marginBottom: '10px'
               }}>
                 <span style={{ fontSize: 'var(--font-sm)', color: 'rgba(255,255,255,0.6)', fontWeight: '500' }}>
-                  Preview
+                  {t('ap.preview')}
                 </span>
                 <span style={{ fontSize: 'var(--font-sm)', color: '#34C759', fontWeight: '600' }}>
-                  {Math.round(wallpaperOpacity * 100)}% opacity
+                  {t('ap.opacity', { n: Math.round(wallpaperOpacity * 100) })}
                 </span>
               </div>
 
@@ -954,7 +963,7 @@ const ThemesTab = ({
                   fontSize: 'var(--font-base)',
                   fontWeight: '500'
                 }}>
-                  Your Dashboard Preview
+                  {t('ap.dashboardPreview')}
                 </div>
               </div>
 
@@ -965,7 +974,7 @@ const ThemesTab = ({
                 fontWeight: '500',
                 marginBottom: '8px'
               }}>
-                Background Opacity
+                {t('ap.bgOpacity')}
               </label>
               <input
                 type="range"
@@ -989,7 +998,7 @@ const ThemesTab = ({
                 color: 'rgba(255, 255, 255, 0.4)',
                 marginTop: '6px'
               }}>
-                Lower opacity fades the image so the interface stays readable.
+                {t('ap.opacityHint')}
               </div>
             </div>
           </>
@@ -1004,7 +1013,7 @@ const ThemesTab = ({
           fontSize: 'var(--font-lg)',
           fontWeight: '600'
         }}>
-          Typography
+          {t('ap.typography')}
         </h5>
 
         <p style={{
@@ -1013,7 +1022,7 @@ const ThemesTab = ({
           color: 'var(--text-secondary)',
           lineHeight: '1.5'
         }}>
-          Choose the typeface and text size used across the interface. Changes apply instantly.
+          {t('ap.typographyIntro')}
         </p>
 
         <div style={{
@@ -1030,7 +1039,7 @@ const ThemesTab = ({
               fontSize: 'var(--font-base)',
               fontWeight: '500'
             }}>
-              Font Family
+              {t('ap.fontFamily')}
             </label>
             <FontFamilyDropdown
               fontFamily={fontFamily}
@@ -1046,7 +1055,7 @@ const ThemesTab = ({
               fontSize: 'var(--font-base)',
               fontWeight: '500'
             }}>
-              Font Size
+              {t('ap.fontSize')}
             </label>
             <FontSizeDropdown
               fontSize={fontSize}
@@ -1068,7 +1077,7 @@ const ThemesTab = ({
           color: 'var(--text-secondary)',
           lineHeight: '1.5'
         }}>
-          <strong style={{ color: 'var(--text-primary)' }}>💡 Tip:</strong> Your theme, typography, and wallpaper preferences are automatically saved and will persist across browser sessions.
+          <strong style={{ color: 'var(--text-primary)' }}>💡 {t('ap.tip')}</strong> {t('ap.tipText')}
         </div>
       </div>
     </div>
