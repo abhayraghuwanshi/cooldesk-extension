@@ -25,7 +25,7 @@
         navigator.clipboard.writeText(hex).then(function () {
           document.getElementById("status").textContent = "Copied " + hex;
           setTimeout(function () {
-            document.getElementById("status").textContent = "Palette — click a color to copy";
+            document.getElementById("status").textContent = "Palette · click to copy";
           }, 1400);
         });
       };

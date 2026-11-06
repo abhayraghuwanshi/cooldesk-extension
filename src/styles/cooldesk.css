@@ -4501,6 +4501,26 @@ body.bg-white-cred .wgb-tile.has-accent {
 .search-hero-chip:focus-visible,
 .search-hero-clear:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.6); outline-offset: 2px; }
 
+/* Wallpaper mode forces every <span> near-white and input text via
+   -webkit-text-fill-color, both !important (wallpaper-enhancements.css) —
+   white on the light skins' panels (Retro OS, Brutalist). Inside the search
+   bar, text takes its row's colour and the quieter bits (subtitle, icon, ↵,
+   placeholder) dim that colour, so every skin stays readable without
+   restating each one. */
+/* Two-class selectors: .wallpaper-enabled span / input are one class + one
+   element and load later, so a tie would lose. */
+.search-hero .search-hero-panel span,
+.search-hero .search-hero-pill span { color: inherit !important; text-shadow: none !important; }
+.search-hero .search-hero-pill .search-hero-input {
+  color: var(--sh-input, var(--text-primary, #F8FAFC)) !important;
+  -webkit-text-fill-color: currentColor !important;
+  text-shadow: none !important;
+}
+.search-hero .search-hero-input::placeholder { -webkit-text-fill-color: currentColor; color: inherit; opacity: 0.5; }
+.search-hero .search-hero-item-sub { opacity: 0.62; }
+.search-hero .search-hero-item-icon { color: inherit; opacity: 0.7; }
+.search-hero .search-hero-enter { color: inherit; background: color-mix(in srgb, currentColor 14%, transparent); }
+
 /* Suggestion panel (SearchHero.jsx): floats under the pill, over the engine
    chips and any cards below. */
 .ocb .ocb-card.ocb-card-searchbar:focus-within { z-index: 30; }
@@ -5051,6 +5071,7 @@ body.bg-white-cred .wgb-tile.has-accent {
   border-color: rgba(61, 255, 143, 0.35);
   box-shadow: none;
 }
+.term-screen .search-hero { --sh-input: var(--term); }
 .term-screen .search-hero .search-hero-input,
 .term-screen .search-hero-icon { color: var(--term); font-family: inherit; font-size: 15px; }
 .term-screen .search-hero-input::placeholder { color: var(--term-dim); }
@@ -5298,6 +5319,7 @@ body.bg-white-cred .wgb-tile.has-accent {
 .tree-root { margin-top: 6px; color: #89b4fa !important; }
 .tree-box .ostage-search .search-hero { max-width: none; align-items: flex-start; }
 .tree-box .search-hero-pill { height: 46px; border-radius: 8px; background: #11111b; border-color: #45475a; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.tree-box .search-hero { --sh-input: #cdd6f4; }
 .tree-box .search-hero .search-hero-input, .tree-box .search-hero-icon { color: #cdd6f4; font-family: inherit; font-size: 15px; }
 .tree-box .search-hero-chip { border-radius: 6px; background: #313244; border-color: transparent; color: #bac2de; font-family: inherit; }
 .tree-box .search-hero-chip:hover { background: #45475a; }
@@ -5423,6 +5445,7 @@ body.bg-white-cred .wgb-tile.has-accent {
 .r95-window .ostage-search { width: 100%; }
 .r95-window .search-hero { max-width: none; }
 .r95-window .search-hero-pill { height: 34px; border-radius: 0; background: #fff; border: 2px solid; border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #404040; backdrop-filter: none; -webkit-backdrop-filter: none; padding: 0 8px; }
+.r95-window .search-hero { --sh-input: #000; }
 .r95-window .search-hero .search-hero-input { color: #000; font: 14px Tahoma, Verdana, sans-serif; }
 .r95-window .search-hero-icon { color: #000; }
 .r95-window .search-hero-chip { height: 24px; border-radius: 0; background: #c0c0c0; color: #000; border: 2px solid; border-color: #fff #404040 #404040 #fff; font: 12px Tahoma, Verdana, sans-serif; backdrop-filter: none; }
@@ -5430,7 +5453,8 @@ body.bg-white-cred .wgb-tile.has-accent {
 .r95-window .search-hero-panel { border-radius: 0; background: #fff; border: 1px solid #000; box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.4); backdrop-filter: none; }
 .r95-window .search-hero-item { border-radius: 0; color: #000; font: 13px Tahoma, Verdana, sans-serif; }
 .r95-window .search-hero-item.selected { background: #000080; color: #fff; }
-.r95-window .search-hero-item.selected .search-hero-item-sub { color: #ddd; }
+.r95-window .search-hero-clear { background: transparent; color: #000; }
+.r95-window .search-hero-group { color: #555; }
 .r95-taskbar {
   position: fixed;
   left: 0;
@@ -5532,6 +5556,7 @@ body.bg-white-cred .wgb-tile.has-accent {
 .brutal .ostage-date { align-self: flex-start; padding: 2px 10px; background: #ff0; color: #000; font: 700 20px ui-monospace, monospace; text-transform: uppercase; text-align: left; text-shadow: none; }
 .brutal .search-hero { max-width: none; align-items: flex-start; }
 .brutal .search-hero-pill { height: 58px; border-radius: 0; background: #fff; border: 3px solid #000; box-shadow: 8px 8px 0 #000; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.brutal .search-hero { --sh-input: #000; }
 .brutal .search-hero .search-hero-input { color: #000; font: 700 18px ui-monospace, monospace; text-transform: uppercase; }
 .brutal .search-hero-input::placeholder { color: rgba(0, 0, 0, 0.45); }
 .brutal .search-hero-icon { color: #000; opacity: 1; }
@@ -5541,7 +5566,8 @@ body.bg-white-cred .wgb-tile.has-accent {
 .brutal .search-hero-panel { border-radius: 0; background: #fff; border: 3px solid #000; box-shadow: 8px 8px 0 #000; backdrop-filter: none; }
 .brutal .search-hero-item { border-radius: 0; color: #000; font-family: ui-monospace, monospace; }
 .brutal .search-hero-item.selected { background: #ff0; }
-.brutal .search-hero-item-sub, .brutal .search-hero-group { color: #444; }
+.brutal .search-hero-group { color: #444; }
+.brutal .search-hero-clear { background: transparent; color: #000; border-radius: 0; }
 .ostage-shortcuts.is-links { align-items: stretch; }
 .ostage-shortcuts.is-links .favorites-scroll-container { justify-content: flex-start; gap: 8px 28px !important; }
 .ostage-shortcuts.is-links .fav-tile { --tile-w: auto; padding: 0; border-radius: 0; }

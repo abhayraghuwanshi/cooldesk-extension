@@ -1,4 +1,5 @@
-  // Rates: frankfurter.app (ECB data, no key). Last good rates cached for offline.
+  // Rates: Frankfurter (ECB data, no key) — api.frankfurter.dev/v1; the old
+  // api.frankfurter.app host only redirects there now. Last good rates cached for offline.
   var CURRENCIES = ["USD", "EUR", "GBP", "INR", "JPY", "AUD", "CAD", "CNY", "CHF", "SGD"];
   var from = document.getElementById("from"), to = document.getElementById("to");
   CURRENCIES.forEach(function (c) {
@@ -17,7 +18,7 @@
   function load() {
     if (from.value === to.value) { rate = 1; compute(); document.getElementById("status").textContent = ""; return; }
     var key = "rate:" + from.value + ":" + to.value;
-    fetch("https://api.frankfurter.app/latest?from=" + from.value + "&to=" + to.value)
+    fetch("https://api.frankfurter.dev/v1/latest?from=" + from.value + "&to=" + to.value)
       .then(function (r) { return r.json(); })
       .then(function (d) {
         rate = d.rates[to.value];

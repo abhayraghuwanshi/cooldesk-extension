@@ -11,7 +11,7 @@
 
 export const WIDGET_STORE_ORIGIN = 'https://cool-desk.com';
 export const WIDGET_STORE_URL = `${WIDGET_STORE_ORIGIN}/widgets`;
-const WIDGET_VERSION = '10';
+const WIDGET_VERSION = '11';
 
 export const WIDGET_CATEGORIES = ['CoolDesk', 'Time & Focus', 'Productivity', 'Data & Life', 'Dev Tools'];
 

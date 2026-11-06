@@ -22,9 +22,11 @@
   --tint-strength: 0%;
   --surface: color-mix(in srgb, var(--tint) var(--tint-strength), var(--surface-base));
   --fg: #fafafa;
-  --muted: rgba(255, 255, 255, 0.45);
-  --faint: rgba(255, 255, 255, 0.14);
-  --card: rgba(255, 255, 255, 0.05);
+  --muted: rgba(255, 255, 255, 0.52);
+  --faint: rgba(255, 255, 255, 0.13);
+  --card: rgba(255, 255, 255, 0.06);
+  --sans: ui-sans-serif, system-ui, -apple-system, "SF Pro Text", "Segoe UI", sans-serif;
+  --radius: 10px;
   --accent: #7cb3ff;
   --good: #4ade80;
   --bad: #f87171;
@@ -51,7 +53,7 @@ body {
      canvas, never the host's wallpaper, so it costs a compositing layer and
      buys nothing. The frosted look belongs to the host's tile, not here. */
   color: var(--fg);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--sans);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
@@ -100,12 +102,16 @@ html[data-center] .widget .row > .grow:not(input) { flex-grow: 0; }
 html[data-center] .widget .stack { align-items: flex-start !important; text-align: left; white-space: nowrap; }
 
 .label {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 10px;
-  letter-spacing: 0.22em;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .big {
@@ -128,20 +134,25 @@ html[data-center] .widget .stack { align-items: flex-start !important; text-alig
 .stack { display: flex; flex-direction: column; gap: 8px; }
 .hair { border-top: 1px solid var(--faint); }
 
+/* Sentence-case sans buttons with a soft fill — the old tracked monospace
+   caps read as a terminal next to the host's glass cards. */
 button, .btn {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
   color: var(--fg);
-  background: transparent;
+  background: var(--card);
   border: 1px solid var(--faint);
-  border-radius: 7px;
-  padding: 6px 10px;
+  border-radius: var(--radius);
+  padding: 6px 12px;
+  white-space: nowrap;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s, background-color 0.15s, transform 0.1s;
 }
-button:hover, .btn:hover { border-color: var(--accent); }
+button:hover, .btn:hover { background: color-mix(in srgb, var(--fg) 11%, transparent); border-color: color-mix(in srgb, var(--fg) 24%, transparent); }
+button:active, .btn:active { transform: scale(0.97); }
+button:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 button.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 
 /* See-through tiles (?embed=host): a solid white primary is the one opaque
@@ -159,8 +170,8 @@ html[data-embed="host"] button.primary:hover {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.18));
   border-color: rgba(255, 255, 255, 0.4);
 }
-button.ghost { border-color: transparent; color: var(--muted); }
-button.ghost:hover { color: var(--fg); }
+button.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+button.ghost:hover { background: var(--card); color: var(--fg); border-color: transparent; }
 
 input, select, textarea {
   font: inherit;
@@ -168,12 +179,17 @@ input, select, textarea {
   color: var(--fg);
   background: var(--card);
   border: 1px solid var(--faint);
-  border-radius: 7px;
-  padding: 7px 9px;
+  border-radius: var(--radius);
+  padding: 7px 11px;
   outline: none;
   min-width: 0;
+  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
 }
-input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+input:focus, select:focus, textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+input[type="checkbox"] { accent-color: var(--accent); }
 input::placeholder, textarea::placeholder { color: var(--muted); }
 select { appearance: none; }
 
@@ -181,7 +197,7 @@ select { appearance: none; }
 .bar > i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width 0.4s ease; }
 
 .list { flex: 1; overflow-y: auto; min-height: 0; }
-.card { background: var(--card); border: 1px solid var(--faint); border-radius: 9px; padding: 9px 11px; }
+.card { background: var(--card); border: 1px solid var(--faint); border-radius: var(--radius); padding: 9px 11px; }
 
 a { color: inherit; text-decoration: none; }
 ::-webkit-scrollbar { width: 0; height: 0; }

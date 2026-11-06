@@ -16,7 +16,19 @@
       a.rel = "noopener";
       var glyph = document.createElement("div");
       glyph.className = "glyph";
-      glyph.textContent = (l.name || "?").slice(0, 1).toUpperCase();
+      var letter = (l.name || "?").slice(0, 1).toUpperCase();
+      // The site's icon (Google's favicon service, by origin); the letter
+      // stays as the fallback when there isn't one.
+      try {
+        var img = document.createElement("img");
+        img.alt = "";
+        img.src = "https://www.google.com/s2/favicons?domain_url=" + encodeURIComponent(new URL(l.url).origin) + "&sz=64";
+        img.onload = function () { if (img.naturalWidth < 32) glyph.textContent = letter; };
+        img.onerror = function () { glyph.textContent = letter; };
+        glyph.appendChild(img);
+      } catch (err) {
+        glyph.textContent = letter;
+      }
       var span = document.createElement("span");
       span.textContent = l.name;
       var del = document.createElement("button");

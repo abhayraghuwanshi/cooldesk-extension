@@ -13,5 +13,7 @@
 
   document.getElementById("icon").textContent = PHASES[idx][0];
   document.getElementById("name").textContent = PHASES[idx][1];
-  document.getElementById("detail").textContent =
-    illumination + "% lit · " + Math.round(toFull) + "d to full moon";
+  document.getElementById("lit").textContent = illumination + "% illuminated";
+  var days = Math.round(toFull);
+  document.getElementById("tofull").textContent =
+    days < 1 || days >= 29 ? "Full moon tonight" : days + (days === 1 ? " day" : " days") + " to full moon";
