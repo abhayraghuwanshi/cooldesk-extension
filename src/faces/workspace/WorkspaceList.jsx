@@ -6,7 +6,7 @@ import { deleteWorkspace } from '../../db/index.js';
 import { clearWorkspaceSuggestions } from '../../services/appCategorizationService.js';
 import { itemRankingService } from '../../services/itemRankingService.js';
 import { workspaceActivityService } from '../../services/workspaceActivityService.js';
-import { useLiveItems } from '../../features/dock/useLiveItems.js';
+import { closeLiveItem, useLiveItems } from '../../features/dock/useLiveItems.js';
 import '../../styles/cooldesk.css';
 import { defaultFontFamily } from '../../utils/fontUtils';
 import { ShareToTeamModal } from '../team/ShareToTeamModal';
@@ -14,6 +14,7 @@ import { WorkspaceCard } from './parts/WorkspaceCard';
 import { WorkspaceContextPanel } from './parts/WorkspaceContextPanel.jsx';
 import { AppGrid } from './parts/AppGrid';
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
+import { useLanguage, useT } from '../../shared/i18n';
 
 // Shared with Browse's side panel (Home → Notes, to-dos & commands).
 export { WorkspaceContextPanel };
@@ -130,14 +131,19 @@ export function WorkspaceList({
     // pin or drop onto), and its detail view has no notes/tasks panel. Opened
     // here rather than through onWorkspaceClick, which would make it the
     // current workspace.
+    const t = useT();
+    const language = useLanguage();
     const { liveApps, liveTabs } = useLiveItems(showActive);
     const activeWorkspace = useMemo(() => showActive ? {
         id: '__active__',
-        name: 'Active',
+        name: t('db.active'),
         icon: 'folder-open',
-        urls: liveTabs.map(t => ({ url: t.url, title: t.title })),
+        // Tab identity rides along so the card's × can close the real tab.
+        urls: liveTabs.map(t => ({ url: t.url, title: t.title, tabId: t.tabId ?? t.id, _deviceId: t._deviceId, browser: t.browser })),
         apps: liveApps,
-    } : null, [showActive, liveApps, liveTabs]);
+    // `language` re-runs this on a language switch (t itself never changes identity).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    } : null, [showActive, liveApps, liveTabs, language]);
     const [activeOpen, setActiveOpen] = useState(false);
     useEffect(() => {
         if (expandedWorkspaceId) setActiveOpen(false);
@@ -354,7 +360,7 @@ export function WorkspaceList({
                             onClick={() => setActiveOpen(false)}
                         >
                             <FontAwesomeIcon icon={faChevronLeft} />
-                            All Workspaces
+                            {t('wl.all')}
                         </button>
                         <WorkspaceCard
                             workspace={activeWorkspace}
@@ -363,6 +369,7 @@ export function WorkspaceList({
                             compact={true}
                             fullView={true}
                             readOnly
+                            onCloseItem={closeLiveItem}
                         />
                     </div>
                 ) : expandedDetailWorkspace ? (
@@ -380,7 +387,7 @@ export function WorkspaceList({
                             onClick={() => onWorkspaceClick?.(expandedDetailWorkspace)}
                         >
                             <FontAwesomeIcon icon={faChevronLeft} />
-                            All Workspaces
+                            {t('wl.all')}
                         </button>
                         <WorkspaceCard
                             workspace={expandedDetailWorkspace}
@@ -454,7 +461,7 @@ export function WorkspaceList({
                                             fontSize: '11px',
                                             cursor: 'pointer'
                                         }}
-                                        title="Dismiss"
+                                        title={t('wl.dismiss')}
                                     >
                                         <FontAwesomeIcon icon={faTimes} />
                                     </button>
@@ -481,6 +488,7 @@ export function WorkspaceList({
                             onClick={() => setActiveOpen(true)}
                             compact={viewMode === 'list'}
                             readOnly
+                            onCloseItem={closeLiveItem}
                         />
                     </div>
                 )}
@@ -555,7 +563,7 @@ export function WorkspaceList({
                                         alignItems: 'center',
                                         gap: '8px'
                                     }}>
-                                        {activeMode === 'all' ? 'All Workspaces' : modeConfigs[activeMode].label}
+                                        {activeMode === 'all' ? t('wl.all') : t(`wl.mode.${activeMode}`)}
                                         ({filteredUnpinned.length})
                                     </h3>
                                 </div>
@@ -590,11 +598,11 @@ export function WorkspaceList({
                                 </div>
                                 {filteredUnpinned.length > workspaceLimit ? (
                                     <button className="ws-show-all" onClick={() => setWorkspaceLimit(Infinity)}>
-                                        Show all {filteredUnpinned.length} workspaces
+                                        {t('wl.showAll', { n: filteredUnpinned.length })}
                                     </button>
                                 ) : filteredUnpinned.length > initialLimit && (
                                     <button className="ws-show-all" onClick={() => setWorkspaceLimit(initialLimit)}>
-                                        Show fewer
+                                        {t('wl.showFewer')}
                                     </button>
                                 )}
 
@@ -621,10 +629,10 @@ export function WorkspaceList({
                                 fontWeight: 500,
                                 marginBottom: '4px'
                             }}>
-                                No Workspaces Yet
+                                {t('wl.none')}
                             </div>
                             <div style={{ fontSize: 'var(--font-sm, 12px)' }}>
-                                Create your first workspace to get started!
+                                {t('wl.noneHint')}
                             </div>
                         </div>
                     </div>
@@ -660,10 +668,10 @@ export function WorkspaceList({
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div style={{ fontSize: 16, fontWeight: 600, color: '#fff', marginBottom: 8 }}>
-                            Delete "{deleteTarget.name}"?
+                            {t('wl.deleteQ', { name: deleteTarget.name })}
                         </div>
                         <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 1.5 }}>
-                            This action cannot be undone.
+                            {t('wl.cantUndo')}
                         </div>
                         {deleteError && (
                             <div style={{ fontSize: 12.5, color: '#f87171', marginTop: 12 }}>{deleteError}</div>
@@ -679,7 +687,7 @@ export function WorkspaceList({
                                     fontWeight: 500, cursor: isDeleting ? 'default' : 'pointer',
                                 }}
                             >
-                                Cancel
+                                {t('wl.cancel')}
                             </button>
                             <button
                                 type="button"
@@ -691,7 +699,7 @@ export function WorkspaceList({
                                     cursor: isDeleting ? 'default' : 'pointer', opacity: isDeleting ? 0.7 : 1,
                                 }}
                             >
-                                {isDeleting ? 'Deleting…' : 'Delete'}
+                                {isDeleting ? t('wl.deleting') : t('wl.delete')}
                             </button>
                         </div>
                     </div>

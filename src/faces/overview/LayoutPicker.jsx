@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { DEFAULT_VISIBLE } from './overviewLayouts';
 import { ALL_OPTIONS, GROUPS, groupOf } from './layoutOptions';
+import { useT } from '../../shared/i18n';
 
 // The layout chooser, as it sits inside the Customize panel's Layout tab:
 // group chips (one group at a time), a search that spans every group, Shuffle,
@@ -34,6 +35,7 @@ export function LayoutPreview({ cells, extra, rects, show = { w: true, f: true }
 }
 
 export function LayoutBrowser({ layout, onChange, visible = DEFAULT_VISIBLE }) {
+    const t = useT();
     const [tab, setTab] = useState(() => groupOf(layout));
     const [query, setQuery] = useState('');
     const show = { w: visible.widgets || visible.summary, f: visible.feed };
@@ -60,7 +62,7 @@ export function LayoutBrowser({ layout, onChange, visible = DEFAULT_VISIBLE }) {
                         className={`lb-group ${!q && tab === g.key ? 'on' : ''} ${groupOf(layout) === g.key ? 'has-current' : ''}`}
                         onClick={() => { setTab(g.key); setQuery(''); }}
                     >
-                        {g.label}
+                        {t(`lb.group.${g.key}`)}
                     </button>
                 ))}
             </div>
@@ -71,16 +73,16 @@ export function LayoutBrowser({ layout, onChange, visible = DEFAULT_VISIBLE }) {
                         value={query}
                         onChange={e => setQuery(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Escape' && query) { e.stopPropagation(); setQuery(''); } }}
-                        placeholder={`Search all ${ALL_OPTIONS.length} layouts`}
-                        aria-label="Search layouts"
+                        placeholder={t('lb.search', { n: ALL_OPTIONS.length })}
+                        aria-label={t('lb.searchLabel')}
                         spellCheck={false}
                     />
                 </label>
-                <button type="button" className="lb-shuffle" onClick={shuffle} title="Random layout" aria-label="Random layout">
+                <button type="button" className="lb-shuffle" onClick={shuffle} title={t('lb.random')} aria-label={t('lb.random')}>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5" /></svg>
                 </button>
             </div>
-            <div className="lb-grid" role="radiogroup" aria-label="Layouts">
+            <div className="lb-grid" role="radiogroup" aria-label={t('lb.group.layout')}>
                 {options.map(o => (
                     <button
                         key={o.key}
@@ -95,7 +97,7 @@ export function LayoutBrowser({ layout, onChange, visible = DEFAULT_VISIBLE }) {
                         <span className="lb-label">{o.label}</span>
                     </button>
                 ))}
-                {options.length === 0 && <div className="lb-empty">No layouts match “{query}”.</div>}
+                {options.length === 0 && <div className="lb-empty">{t('lb.none', { q: query })}</div>}
             </div>
         </div>
     );

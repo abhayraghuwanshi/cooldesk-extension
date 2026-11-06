@@ -1,0 +1,11 @@
+{
+  "extName": {
+    "message": "Nueva pestaña de Cooldesk"
+  },
+  "extDescription": {
+    "message": "Convierte tu navegación dispersa en un espacio de trabajo productivo y organizado."
+  },
+  "actionTitle": {
+    "message": "Abrir CoolDesk"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "extName": {
+    "message": "Cooldesk 새 탭"
+  },
+  "extDescription": {
+    "message": "흩어진 브라우징을 정돈된 생산성 작업 공간으로 바꿔 보세요."
+  },
+  "actionTitle": {
+    "message": "CoolDesk 열기"
+  }
+}

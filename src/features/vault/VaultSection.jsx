@@ -1,10 +1,11 @@
-import { faArrowRight, faArrowUpRightFromSquare, faCheck, faChevronDown, faChevronRight, faEye, faEyeSlash, faKey, faLock, faPen, faPlus, faRotate, faShieldHalved, faUser, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faArrowRight, faArrowUpRightFromSquare, faCheck, faChevronDown, faChevronRight, faEye, faEyeSlash, faLock, faPen, faPlus, faRotate, faShieldHalved, faUser, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { workspaceActivityService } from '../../services/workspaceActivityService';
 import { generatePassword, useVaultEntries, useVaultStatus } from './useVault';
 import '../clipboard/clipboard.css';
 import './vault.css';
+import { t, useT } from '../../shared/i18n';
 
 // Password vault in the side dock, under the clipboard card. Set a master
 // password once, then unlock to see logins: click a row to copy its password
@@ -58,6 +59,7 @@ function IconBtn({ icon, label, onClick, active = false }) {
 
 /** Master password form, for both first-time setup and unlocking. */
 function MasterForm({ creating, onSubmit }) {
+  useT();
   const [master, setMaster] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
@@ -66,7 +68,7 @@ function MasterForm({ creating, onSubmit }) {
   const submit = async (e) => {
     e.preventDefault();
     if (busy || !master) return;
-    if (creating && master !== confirm) { setError('Passwords don’t match'); return; }
+    if (creating && master !== confirm) { setError(t('vt.mismatch')); return; }
     setBusy(true);
     setError('');
     try {
@@ -80,17 +82,17 @@ function MasterForm({ creating, onSubmit }) {
   return (
     <form className="vt-lock" onSubmit={submit}>
       <div className="vt-lock-icon"><FontAwesomeIcon icon={creating ? faShieldHalved : faLock} /></div>
-      <div className="vt-lock-title">{creating ? 'Set up your vault' : 'Vault locked'}</div>
+      <div className="vt-lock-title">{creating ? t('vt.setup') : t('vt.locked')}</div>
       <p className="vt-note">
         {creating
-          ? 'Pick a master password. It encrypts everything here and can’t be recovered if you forget it.'
-          : 'Enter your master password to see your logins.'}
+          ? t('vt.setupNote')
+          : t('vt.lockedNote')}
       </p>
       <div className={`vt-input-wrap${creating ? '' : ' has-1'}`}>
         <input
           className="vt-input"
           type="password"
-          placeholder={creating ? 'New master password' : 'Master password'}
+          placeholder={creating ? t('vt.newMaster') : t('vt.master')}
           value={master}
           onChange={e => setMaster(e.target.value)}
           autoComplete={creating ? 'new-password' : 'current-password'}
@@ -98,7 +100,7 @@ function MasterForm({ creating, onSubmit }) {
         />
         {!creating && (
           <div className="vt-inline-actions">
-            <button type="submit" className="vt-inline-btn vt-go" disabled={busy || !master} aria-label="Unlock" title="Unlock">
+            <button type="submit" className="vt-inline-btn vt-go" disabled={busy || !master} aria-label={t('vt.unlock')} title={t('vt.unlock')}>
               {busy ? <span className="vt-spinner" /> : <FontAwesomeIcon icon={faArrowRight} />}
             </button>
           </div>
@@ -109,7 +111,7 @@ function MasterForm({ creating, onSubmit }) {
           <input
             className="vt-input"
             type="password"
-            placeholder="Confirm master password"
+            placeholder={t('vt.confirmMaster')}
             value={confirm}
             onChange={e => setConfirm(e.target.value)}
             autoComplete="new-password"
@@ -119,7 +121,7 @@ function MasterForm({ creating, onSubmit }) {
       {error && <div className="vt-error">{error}</div>}
       {creating && (
         <button type="submit" className="vt-primary vt-block" disabled={busy || !master || !confirm}>
-          {busy ? 'Creating…' : 'Create vault'}
+          {busy ? t('vt.creating') : t('vt.create')}
         </button>
       )}
     </form>
@@ -129,6 +131,7 @@ function MasterForm({ creating, onSubmit }) {
 const EMPTY = { id: null, title: '', username: '', password: '', url: '', notes: '' };
 
 function EntryForm({ initial, vault, onDone }) {
+  useT();
   const [entry, setEntry] = useState(initial);
   const [show, setShow] = useState(!initial.id);
   const [error, setError] = useState('');
@@ -166,16 +169,16 @@ function EntryForm({ initial, vault, onDone }) {
     <form className="vt-form" onSubmit={submit}>
       <div className="vt-form-head">
         <span className="cb-thumb vt-avatar" style={avatarStyle(entry.title)}>{(entry.title.trim()[0] || '?').toUpperCase()}</span>
-        <span className="vt-form-title">{initial.id ? 'Edit login' : 'New login'}</span>
-        <IconBtn icon={faXmark} label="Close" onClick={onDone} />
+        <span className="vt-form-title">{initial.id ? t('vt.editLogin') : t('vt.newLogin')}</span>
+        <IconBtn icon={faXmark} label={t('vt.close')} onClick={onDone} />
       </div>
-      <Field label="Name">
+      <Field label={t('vt.name')}>
         <input className="vt-input" placeholder="GitHub" value={entry.title} onChange={set('title')} autoFocus />
       </Field>
-      <Field label="Username">
+      <Field label={t('vt.username')}>
         <input className="vt-input" placeholder="you@example.com" value={entry.username} onChange={set('username')} autoComplete="off" spellCheck={false} />
       </Field>
-      <Field label="Password">
+      <Field label={t('vt.password')}>
         <div className="vt-input-wrap has-2">
           <input
             className="vt-input vt-mono"
@@ -186,14 +189,14 @@ function EntryForm({ initial, vault, onDone }) {
             spellCheck={false}
           />
           <div className="vt-inline-actions">
-            <button type="button" className={`vt-inline-btn${show ? ' is-active' : ''}`} title={show ? 'Hide' : 'Show'} aria-label={show ? 'Hide password' : 'Show password'} onClick={() => setShow(v => !v)}>
+            <button type="button" className={`vt-inline-btn${show ? ' is-active' : ''}`} title={show ? t('vt.hide') : t('vt.show')} aria-label={show ? t('vt.hidePw') : t('vt.showPw')} onClick={() => setShow(v => !v)}>
               <FontAwesomeIcon icon={show ? faEyeSlash : faEye} />
             </button>
             <button
               type="button"
               className="vt-inline-btn"
-              title="Generate a new password"
-              aria-label="Generate a new password"
+              title={t('vt.generate')}
+              aria-label={t('vt.generate')}
               onClick={() => generatePassword().then(p => { setEntry(prev => ({ ...prev, password: p })); setShow(true); }).catch(() => { })}
             >
               <FontAwesomeIcon icon={faRotate} />
@@ -201,28 +204,29 @@ function EntryForm({ initial, vault, onDone }) {
           </div>
         </div>
       </Field>
-      <Field label="Website">
+      <Field label={t('vt.website')}>
         <input className="vt-input" placeholder="github.com" value={entry.url} onChange={set('url')} autoComplete="off" spellCheck={false} />
       </Field>
-      <Field label="Notes">
+      <Field label={t('vt.notes')}>
         <textarea className="vt-input vt-notes" value={entry.notes} onChange={set('notes')} rows={2} />
       </Field>
       {error && <div className="vt-error">{error}</div>}
       <div className="vt-form-actions">
         {entry.id && (
           <button type="button" className={`vt-ghost is-danger${confirmDelete ? ' is-armed' : ''}`} onClick={remove}>
-            {confirmDelete ? 'Click again to delete' : 'Delete'}
+            {confirmDelete ? t('vt.deleteConfirm') : t('vt.delete')}
           </button>
         )}
         <span style={{ flex: 1 }} />
-        <button type="button" className="vt-ghost" onClick={onDone}>Cancel</button>
-        <button type="submit" className="vt-primary" disabled={!entry.title.trim()}>Save</button>
+        <button type="button" className="vt-ghost" onClick={onDone}>{t('vt.cancel')}</button>
+        <button type="submit" className="vt-primary" disabled={!entry.title.trim()}>{t('vt.save')}</button>
       </div>
     </form>
   );
 }
 
 function EntryRow({ item, vault, onEdit }) {
+  useT();
   const [copied, setCopied] = useState(null); // 'password' | 'username'
   const [error, setError] = useState('');
   const timer = useRef(null);
@@ -242,7 +246,7 @@ function EntryRow({ item, vault, onEdit }) {
   };
 
   const sub = item.username || (item.url ? hostOf(item.url) : '');
-  const title = error || (copied === 'password' ? 'Password copied · clears in 30s' : copied === 'username' ? 'Username copied' : item.title);
+  const title = error || (copied === 'password' ? t('vt.pwCopied') : copied === 'username' ? t('vt.userCopied') : item.title);
   return (
     <li className="cb-row">
       <div
@@ -251,7 +255,7 @@ function EntryRow({ item, vault, onEdit }) {
         tabIndex={0}
         onClick={() => copy('password')}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); copy('password'); } }}
-        title="Click to copy the password"
+        title={t('vt.rowTitle')}
       >
         <span className="cb-thumb vt-avatar" style={avatarStyle(item.title)}>{(item.title[0] || '?').toUpperCase()}</span>
         <div className="cb-row-text">
@@ -262,15 +266,15 @@ function EntryRow({ item, vault, onEdit }) {
           ? <FontAwesomeIcon icon={faCheck} className="cb-copied" />
           : (
             <div className="cb-row-actions">
-              {item.username && <IconBtn icon={faUser} label="Copy username" onClick={() => copy('username')} />}
+              {item.username && <IconBtn icon={faUser} label={t('vt.copyUser')} onClick={() => copy('username')} />}
               {item.url && (
                 <IconBtn
                   icon={faArrowUpRightFromSquare}
-                  label="Open site"
+                  label={t('vt.openSite')}
                   onClick={() => workspaceActivityService.activate({ url: /^[a-z]+:\/\//i.test(item.url) ? item.url : `https://${item.url}` })}
                 />
               )}
-              <IconBtn icon={faPen} label="Edit" onClick={onEdit} />
+              <IconBtn icon={faPen} label={t('vt.edit')} onClick={onEdit} />
             </div>
           )}
       </div>
@@ -279,6 +283,7 @@ function EntryRow({ item, vault, onEdit }) {
 }
 
 export function VaultSection() {
+  useT();
   const { status, create, unlock, lock } = useVaultStatus();
   const unlocked = !!status?.unlocked;
   const vault = useVaultEntries({ active: unlocked });
@@ -322,7 +327,7 @@ export function VaultSection() {
           <input
             className="cb-filter vt-search"
             type="search"
-            placeholder="Search passwords…"
+            placeholder={t('vt.search')}
             value={filter}
             onChange={e => setFilter(e.target.value)}
           />
@@ -333,16 +338,16 @@ export function VaultSection() {
           </ul>
         ) : (
           <div className="vt-empty">
-            {vault.items.length ? 'No matches' : 'No logins yet. Add one and it’s encrypted with your master password.'}
+            {vault.items.length ? t('vt.noMatches') : t('vt.empty')}
           </div>
         )}
         <div className="vt-footer">
           <button type="button" className="vt-add" onClick={() => setEditing({ ...EMPTY })}>
-            <FontAwesomeIcon icon={faPlus} /> Add login
+            <FontAwesomeIcon icon={faPlus} /> {t('vt.add')}
           </button>
           {vault.items.length > PEEK && !filter && (
             <button type="button" className="cb-link-btn" onClick={() => setShowAll(s => !s)}>
-              {showAll ? 'Show less' : `Show all (${vault.items.length})`}
+              {showAll ? t('cb.showLess') : t('cb.showAll', { n: vault.items.length })}
             </button>
           )}
         </div>
@@ -362,14 +367,13 @@ export function VaultSection() {
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCollapsed(); } }}
         >
           <h3 className="cb-title">
-            <FontAwesomeIcon icon={faKey} style={{ opacity: 0.6 }} />
-            Passwords{unlocked && vault.items.length ? ` (${vault.items.length})` : ''}
+            {t('vt.title')}{unlocked && vault.items.length ? ` (${vault.items.length})` : ''}
             <FontAwesomeIcon icon={collapsed ? faChevronRight : faChevronDown} className="cb-chevron" />
           </h3>
         </div>
         {unlocked && (
           <div className="cb-header-actions">
-            <IconBtn icon={faLock} label="Lock now" onClick={() => lock().catch(() => { })} />
+            <IconBtn icon={faLock} label={t('vt.lockNow')} onClick={() => lock().catch(() => { })} />
           </div>
         )}
       </div>

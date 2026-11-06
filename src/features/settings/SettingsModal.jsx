@@ -29,6 +29,8 @@ import FolderIndexTab from './parts/FolderIndexTab';
 import TeamsTab from './parts/TeamsTab';
 import ThemesTab from './parts/ThemesTab';
 import WorkspaceCleanupSettings from './parts/WorkspaceCleanupSettings';
+import { getLocale, useT } from '../../shared/i18n';
+import { LanguageSelect } from '../../shared/i18n/LanguageSelect';
 
 export function SettingsModal({
   show,
@@ -47,6 +49,7 @@ export function SettingsModal({
   onWallpaperOpacityChange,
   onWallpaperAutoRotateChange
 }) {
+  const t = useT();
   const { syncStatus: globalSyncStatus, triggerSync, lastSyncTime: globalLastSyncTime } = useSync();
 
   const [localSettings, setLocalSettings] = useState(settings || {});
@@ -96,13 +99,13 @@ export function SettingsModal({
   const isDesktopApp = isElectronApp();
 
   const TABS = [
-    { id: 'general',    label: 'General',    icon: faCog     },
-    { id: 'appearance', label: 'Appearance', icon: faPalette },
+    { id: 'general',    label: t('st.tab.general'),    icon: faCog     },
+    { id: 'appearance', label: t('st.tab.appearance'), icon: faPalette },
     // Local AI configures the desktop app's sidecar (models, cloud keys); in
     // the browser extension there's nothing behind it, so desktop only.
-    ...(isDesktopApp ? [{ id: 'local-ai', label: 'Local AI', icon: faRocket }] : []),
-    ...(isTauri ? [{ id: 'folders', label: 'Folders & Index', icon: faFolderOpen }] : []),
-    ...(isDesktopApp && TEAM_FEATURE_ENABLED ? [{ id: 'team', label: 'Team', icon: faUsers }] : []),
+    ...(isDesktopApp ? [{ id: 'local-ai', label: t('st.tab.localAi'), icon: faRocket }] : []),
+    ...(isTauri ? [{ id: 'folders', label: t('st.tab.folders'), icon: faFolderOpen }] : []),
+    ...(isDesktopApp && TEAM_FEATURE_ENABLED ? [{ id: 'team', label: t('st.tab.team'), icon: faUsers }] : []),
   ];
 
   const themes = [
@@ -661,7 +664,7 @@ export function SettingsModal({
             />
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1.2 }}>CoolDesk</div>
-              <div style={{ fontSize: 10, opacity: 0.4, color: '#fff' }}>Settings</div>
+              <div style={{ fontSize: 10, opacity: 0.4, color: '#fff' }}>{t('st.title')}</div>
             </div>
           </div>
 
@@ -708,7 +711,7 @@ export function SettingsModal({
                 onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
                 onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.35)'; e.currentTarget.style.background = 'transparent'; }}
               >
-                Getting Started →
+                {t('st.gettingStarted')}
               </button>
             )}
             <button
@@ -722,7 +725,7 @@ export function SettingsModal({
               onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = '#fff'; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.15)'; e.currentTarget.style.color = '#9ca3af'; }}
             >
-              Close
+              {t('st.close')}
             </button>
           </div>
         </div>
@@ -737,7 +740,7 @@ export function SettingsModal({
             flexShrink: 0
           }}>
             <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#fff' }}>
-              {TABS.find(t => t.id === activeTabId)?.label}
+              {TABS.find(tab => tab.id === activeTabId)?.label}
             </h2>
             {error && (
               <div style={{
@@ -758,14 +761,33 @@ export function SettingsModal({
             {activeTabId === 'general' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
+                {/* Language — same preference as the new tab's Customize panel */}
+                <section>
+                  <SectionHeader title={t('st.language')} />
+                  <Card>
+                    <SettingRow
+                      label={t('st.language')}
+                      hint={t('st.languageHint')}
+                      right={
+                        <LanguageSelect style={{
+                          height: 30, padding: '0 8px', borderRadius: 6, fontSize: 12,
+                          border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)',
+                          color: '#e5e7eb', cursor: 'pointer', outline: 'none', maxWidth: 190,
+                        }} />
+                      }
+                      last
+                    />
+                  </Card>
+                </section>
+
                 {/* Spotlight — desktop only */}
                 {isDesktopApp && (
                   <section>
-                    <SectionHeader title="Spotlight Shortcut" />
+                    <SectionHeader title={t('st.spotlightShortcut')} />
                     <Card>
                       <SettingRow
-                        label="Hotkey"
-                        hint={isRecordingShortcut ? 'Press your new key combination now…' : 'Global shortcut to open Spotlight'}
+                        label={t('st.hotkey')}
+                        hint={isRecordingShortcut ? t('st.hotkeyRecording') : t('st.hotkeyHint')}
                         right={
                           isRecordingShortcut ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -775,9 +797,9 @@ export function SettingsModal({
                                 background: 'rgba(59,130,246,0.1)', color: '#93c5fd',
                                 animation: 'pulse 1.2s ease-in-out infinite'
                               }}>
-                                Waiting for keys…
+                                {t('st.waitingKeys')}
                               </div>
-                              <SmallBtn onClick={() => setIsRecordingShortcut(false)}>Cancel</SmallBtn>
+                              <SmallBtn onClick={() => setIsRecordingShortcut(false)}>{t('st.cancel')}</SmallBtn>
                             </div>
                           ) : (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -791,7 +813,7 @@ export function SettingsModal({
                                   }}>{part}</span>
                                 ))}
                               </div>
-                              <SmallBtn onClick={() => setIsRecordingShortcut(true)}>Change</SmallBtn>
+                              <SmallBtn onClick={() => setIsRecordingShortcut(true)}>{t('st.change')}</SmallBtn>
                             </div>
                           )
                         }
@@ -803,41 +825,41 @@ export function SettingsModal({
 
                 {/* Behaviour */}
                 <section>
-                  <SectionHeader title="Behaviour" />
+                  <SectionHeader title={t('st.behaviour')} />
                   <Card>
                     <SettingRow
-                      label="Auto-Group Tabs"
-                      hint="Group tabs from the same domain together"
+                      label={t('st.autoGroup')}
+                      hint={t('st.autoGroupHint')}
                       right={<Toggle checked={autoGroupEnabled} onChange={handleToggleAutoGroup} accentColor="#22c55e" />}
                       onClick={() => handleToggleAutoGroup(!autoGroupEnabled)}
                     />
                     <SettingRow
-                      label="Session Tracking"
-                      hint="Auto-categorize visited URLs into workspaces"
+                      label={t('st.sessionTracking')}
+                      hint={t('st.sessionTrackingHint')}
                       right={<Toggle checked={sessionTrackingEnabled} onChange={handleToggleSessionTracking} />}
                       onClick={() => handleToggleSessionTracking(!sessionTrackingEnabled)}
                       last={!isTauri}
                     />
                     {isTauri && (
                       <SettingRow
-                        label="Launch at Login"
-                        hint="Start CoolDesk automatically on login"
+                        label={t('st.launchAtLogin')}
+                        hint={t('st.launchAtLoginHint')}
                         right={<Toggle checked={autostartEnabled} onChange={handleAutostartToggle} accentColor="#22c55e" />}
                         onClick={() => handleAutostartToggle(!autostartEnabled)}
                       />
                     )}
                     {isTauri && (
                       <SettingRow
-                        label="Passwords"
-                        hint="A small encrypted password vault in the side dock, locked with a master password. Stays on this device."
+                        label={t('st.passwords')}
+                        hint={t('st.passwordsHint')}
                         right={<Toggle checked={!!vaultStatus?.enabled} onChange={handleVaultToggle} accentColor="#22c55e" />}
                         onClick={() => handleVaultToggle(!vaultStatus?.enabled)}
                       />
                     )}
                     {isTauri && (
                       <SettingRow
-                        label="Clipboard History"
-                        hint="Keep what you copy in the side dock. Stays on this device; password-manager copies are skipped."
+                        label={t('st.clipboard')}
+                        hint={t('st.clipboardHint')}
                         right={<Toggle checked={!!clipboardStatus?.enabled} onChange={handleClipboardToggle} accentColor="#22c55e" />}
                         onClick={() => handleClipboardToggle(!clipboardStatus?.enabled)}
                         last={!clipboardStatus?.enabled}
@@ -846,16 +868,16 @@ export function SettingsModal({
                     {isTauri && clipboardStatus?.enabled && (
                       <>
                         <SettingRow
-                          label="Skip passwords & keys"
-                          hint="Don’t record text that looks like a password, API key, token, private key or card number"
+                          label={t('st.skipSecrets')}
+                          hint={t('st.skipSecretsHint')}
                           right={<Toggle checked={clipboardSkipSecrets} onChange={v => updateClipboardFilters({ skipSecrets: v })} accentColor="#22c55e" />}
                           onClick={() => updateClipboardFilters({ skipSecrets: !clipboardSkipSecrets })}
                           style={{ paddingLeft: 28 }}
                         />
                         {[
-                          ['image', 'Record images', 'Screenshots and copied pictures. Turning this off also removes unpinned image clips.'],
-                          ['code', 'Record code', 'Snippets and shell commands'],
-                          ['files', 'Record copied files', 'Files copied in Finder / Explorer'],
+                          ['image', t('st.recordImages'), t('st.recordImagesHint')],
+                          ['code', t('st.recordCode'), t('st.recordCodeHint')],
+                          ['files', t('st.recordFiles'), t('st.recordFilesHint')],
                         ].map(([kind, label, hint], i, arr) => (
                           <SettingRow
                             key={kind}
@@ -874,30 +896,30 @@ export function SettingsModal({
 
                 {/* Sync */}
                 <section>
-                  <SectionHeader title="Sync" />
+                  <SectionHeader title={t('st.sync')} />
                   <Card>
                     <SettingRow
-                      label="Desktop Sync"
-                      hint="Connect to the CoolDesk desktop app on port 4545"
+                      label={t('st.desktopSync')}
+                      hint={t('st.desktopSyncHint')}
                       right={<Toggle checked={hostSyncEnabled} onChange={handleToggleHostSync} />}
                       onClick={() => handleToggleHostSync(!hostSyncEnabled)}
                     />
                     <SettingRow
                       label={
                         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          Status
+                          {t('st.status')}
                           <span style={{
                             width: 6, height: 6, borderRadius: '50%', display: 'inline-block',
                             background: !hostSyncEnabled ? '#475569' : syncStatus?.hostAvailable ? '#4ade80' : syncStatus?.hostAvailable === false ? '#ef4444' : '#fbbf24'
                           }} />
                         </span>
                       }
-                      hint={!hostSyncEnabled ? 'Sync disabled' : syncStatus?.hostAvailable ? 'App connected' : syncStatus?.hostAvailable === false ? 'App not found — is it running?' : 'Checking…'}
+                      hint={!hostSyncEnabled ? t('st.syncDisabled') : syncStatus?.hostAvailable ? t('st.appConnected') : syncStatus?.hostAvailable === false ? t('st.appNotFound') : t('st.checking')}
                       right={
                         <div style={{ display: 'flex', gap: 6 }}>
                           {hostSyncEnabled && !syncStatus?.hostAvailable && (
                             <SmallBtn onClick={() => loadSettingsSync(true)} disabled={syncConfigLoading}>
-                              {syncConfigLoading ? 'Checking…' : 'Retry'}
+                              {syncConfigLoading ? t('st.checking') : t('st.retry')}
                             </SmallBtn>
                           )}
                           <SmallBtn
@@ -906,7 +928,7 @@ export function SettingsModal({
                             accent
                           >
                             <FontAwesomeIcon icon={faDatabase} spin={globalSyncStatus === 'syncing'} style={{ marginRight: 4 }} />
-                            {globalSyncStatus === 'syncing' ? 'Syncing…' : globalLastSyncTime ? `Synced ${new Date(globalLastSyncTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Sync Now'}
+                            {globalSyncStatus === 'syncing' ? t('st.syncing') : globalLastSyncTime ? t('st.syncedAt', { time: new Date(globalLastSyncTime).toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit' }) }) : t('st.syncNow')}
                           </SmallBtn>
                         </div>
                       }
@@ -919,14 +941,14 @@ export function SettingsModal({
                     worker can't hold a reliable schedule, so auto-backup only
                     runs in the app; ExportData stays available in both. */}
                 <section>
-                  <SectionHeader title="Data" />
+                  <SectionHeader title={t('st.data')} />
                   {isTauri && (
                   <Card>
                     <SettingRow
-                      label="Backup"
+                      label={t('st.backup')}
                       hint={lastBackupTime
-                        ? `Last backup ${new Date(lastBackupTime).toLocaleDateString()} · keeps the 10 most recent`
-                        : 'Saves a snapshot of all your data to this device'}
+                        ? t('st.lastBackup', { date: new Date(lastBackupTime).toLocaleDateString(getLocale()) })
+                        : t('st.backupHint')}
                       last
                       right={
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -939,17 +961,17 @@ export function SettingsModal({
                                   border: backupFrequency === f ? '1px solid #3b82f6' : '1px solid rgba(255,255,255,0.1)',
                                   background: backupFrequency === f ? 'rgba(59,130,246,0.2)' : 'transparent',
                                   color: backupFrequency === f ? '#60a5fa' : 'rgba(255,255,255,0.4)',
-                                  cursor: 'pointer', textTransform: 'capitalize'
-                                }}>{f}</button>
+                                  cursor: 'pointer'
+                                }}>{t(`st.freq.${f}`)}</button>
                               ))}
                             </div>
                           )}
                           <SmallBtn onClick={toggleBackupList}>
-                            {showBackupList ? 'Hide' : 'Restore…'}
+                            {showBackupList ? t('st.hide') : t('st.restoreMenu')}
                           </SmallBtn>
-                          <SmallBtn onClick={openBackupsFolder}>Folder</SmallBtn>
+                          <SmallBtn onClick={openBackupsFolder}>{t('st.folder')}</SmallBtn>
                           <SmallBtn onClick={performManualBackup} disabled={backupInProgress}>
-                            {backupInProgress ? '…' : 'Backup Now'}
+                            {backupInProgress ? '…' : t('st.backupNow')}
                           </SmallBtn>
                         </div>
                       }
@@ -965,7 +987,7 @@ export function SettingsModal({
                     }}>
                       {savedBackups.length === 0 ? (
                         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
-                          No saved backups yet — use Backup Now to create one.
+                          {t('st.noBackups')}
                         </div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -979,7 +1001,7 @@ export function SettingsModal({
                               }}>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <div style={{ color: '#cbd5e1' }}>
-                                    {new Date(b.modified).toLocaleString([], {
+                                    {new Date(b.modified).toLocaleString(getLocale(), {
                                       year: 'numeric', month: 'short', day: 'numeric',
                                       hour: '2-digit', minute: '2-digit',
                                     })}
@@ -992,22 +1014,22 @@ export function SettingsModal({
                                 {confirming ? (
                                   <>
                                     <span style={{ color: '#fbbf24', fontSize: 10 }}>
-                                      Replaces current data (saved first)
+                                      {t('st.replacesData')}
                                     </span>
                                     <SmallBtn onClick={() => handleRestore(b.path)} disabled={restoreBusy} accent>
-                                      {restoreBusy ? '…' : 'Confirm'}
+                                      {restoreBusy ? '…' : t('st.confirm')}
                                     </SmallBtn>
                                     <SmallBtn onClick={() => setConfirmRestorePath(null)} disabled={restoreBusy}>
-                                      Cancel
+                                      {t('st.cancel')}
                                     </SmallBtn>
                                   </>
                                 ) : (
                                   <>
                                     <SmallBtn onClick={() => setConfirmRestorePath(b.path)} disabled={restoreBusy}>
-                                      Restore
+                                      {t('st.restore')}
                                     </SmallBtn>
                                     <SmallBtn onClick={() => handleDeleteBackup(b.path)} disabled={restoreBusy}>
-                                      Delete
+                                      {t('st.delete')}
                                     </SmallBtn>
                                   </>
                                 )}
@@ -1019,17 +1041,17 @@ export function SettingsModal({
 
                       {restoreResult && (
                         <div style={{ marginTop: 8, fontSize: 11, lineHeight: 1.6, color: 'rgba(255,255,255,0.5)' }}>
-                          <div>{restoreResult.written} rows restored{restoreResult.skipped ? `, ${restoreResult.skipped} skipped` : ''}</div>
+                          <div>{t('st.rowsRestored', { n: restoreResult.written })}{restoreResult.skipped ? t('st.rowsSkipped', { n: restoreResult.skipped }) : ''}</div>
                           {restoreResult.compatibility === 'upgrade' && (
-                            <div>Migrated from schema v{restoreResult.dbVersion} to v{restoreResult.currentVersion}</div>
+                            <div>{t('st.migrated', { from: restoreResult.dbVersion, to: restoreResult.currentVersion })}</div>
                           )}
                           {restoreResult.compatibility === 'newer' && (
                             <div style={{ color: '#fbbf24' }}>
-                              Backup is newer (v{restoreResult.dbVersion}) than this build (v{restoreResult.currentVersion}) — unsupported data skipped
+                              {t('st.backupNewer', { from: restoreResult.dbVersion, to: restoreResult.currentVersion })}
                             </div>
                           )}
                           {restoreResult.unknownStores?.length > 0 && (
-                            <div style={{ color: '#fbbf24' }}>Skipped: {restoreResult.unknownStores.join(', ')}</div>
+                            <div style={{ color: '#fbbf24' }}>{t('st.skippedStores', { list: restoreResult.unknownStores.join(', ') })}</div>
                           )}
                           {restoreResult.errors?.map((e, i) => (
                             <div key={i} style={{ color: '#f87171' }}>{e}</div>
@@ -1046,22 +1068,22 @@ export function SettingsModal({
 
                 {/* Updates */}
                 <section>
-                  <SectionHeader title="Updates" />
+                  <SectionHeader title={t('st.updates')} />
                   <Card>
                     <SettingRow
-                      label={<span>Version <span style={{ opacity: 0.45, fontWeight: 400 }}>v{extensionVersion}</span></span>}
-                      hint={updateAvailable ? (latestVersion ? `v${latestVersion} is available` : 'A new version is ready') : 'You are up to date'}
+                      label={<span>{t('st.version')} <span style={{ opacity: 0.45, fontWeight: 400 }}>v{extensionVersion}</span></span>}
+                      hint={updateAvailable ? (latestVersion ? t('st.updateAvailable', { v: latestVersion }) : t('st.newVersionReady')) : t('st.upToDate')}
                       right={
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                          {updateAvailable && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid currentColor' }}>New</span>}
-                          <SmallBtn onClick={handleCheckForUpdates} disabled={checkingUpdate}>{checkingUpdate ? 'Checking…' : 'Check'}</SmallBtn>
-                          {updateAvailable && <SmallBtn accent onClick={handleInstallUpdate}>{isTauri ? 'Update' : 'Install'}</SmallBtn>}
+                          {updateAvailable && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid currentColor' }}>{t('st.new')}</span>}
+                          <SmallBtn onClick={handleCheckForUpdates} disabled={checkingUpdate}>{checkingUpdate ? t('st.checking') : t('st.check')}</SmallBtn>
+                          {updateAvailable && <SmallBtn accent onClick={handleInstallUpdate}>{isTauri ? t('st.update') : t('st.install')}</SmallBtn>}
                         </div>
                       }
                     />
                     <SettingRow
-                      label="Auto-Update"
-                      hint={isTauri ? "Install updates automatically in the background" : "Restart into a new version when no CoolDesk tab is open"}
+                      label={t('st.autoUpdate')}
+                      hint={isTauri ? t('st.autoUpdateHintApp') : t('st.autoUpdateHintExt')}
                       right={<Toggle checked={autoUpdateEnabled} onChange={handleToggleAutoUpdate} />}
                       onClick={() => handleToggleAutoUpdate(!autoUpdateEnabled)}
                       last={!isTauri}
@@ -1069,10 +1091,10 @@ export function SettingsModal({
                     {/* Analytics ping is a desktop-app feature — hide in the extension */}
                     {isTauri && (
                       <SettingRow
-                        label="Anonymous Usage Stats"
+                        label={t('st.analytics')}
                         hint={
                           <span>
-                            Share anonymous counts — days used, active minutes, which features get used — to help improve CoolDesk. No search queries, URLs, file names or personal data.{' '}
+                            {t('st.analyticsHint')}{' '}
                             <a
                               href="https://cool-desk.com/privacy-details"
                               target="_blank"
@@ -1080,7 +1102,7 @@ export function SettingsModal({
                               onClick={e => e.stopPropagation()}
                               style={{ color: '#60a5fa', textDecoration: 'none' }}
                             >
-                              Learn more
+                              {t('st.learnMore')}
                             </a>
                           </span>
                         }
@@ -1122,7 +1144,7 @@ export function SettingsModal({
             {activeTabId === 'local-ai' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                 <section>
-                  <SectionHeader title="AI Models" description="On-device AI for categorization, summarization, and smart features." />
+                  <SectionHeader title={t('st.aiModels')} description={t('st.aiModelsDesc')} />
                   <AIModelsTab />
                 </section>
               </div>
@@ -1132,7 +1154,7 @@ export function SettingsModal({
             {activeTabId === 'folders' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                 <section>
-                  <SectionHeader title="Folders & Index" description="Link folders outside your home directory so file search covers them too, and control how often each one gets reindexed." />
+                  <SectionHeader title={t('st.tab.folders')} description={t('st.foldersDesc')} />
                   <FolderIndexTab />
                 </section>
               </div>
@@ -1142,7 +1164,7 @@ export function SettingsModal({
             {activeTabId === 'team' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                 <section>
-                  <SectionHeader title="Team (P2P)" description="Share workspaces and resources directly with teammates over encrypted peer-to-peer." />
+                  <SectionHeader title={t('st.teamTitle')} description={t('st.teamDesc')} />
                   <TeamsTab />
                 </section>
               </div>

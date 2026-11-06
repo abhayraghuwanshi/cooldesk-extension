@@ -5,6 +5,7 @@ import { ActivityOverview } from '../../features/activity/ActivityOverview';
 import { WidgetEmbed } from '../../features/widgets/WidgetBoard';
 import { AnalogClock, BinaryClock, CodeRain, FlipClock, ProgressBars, SkyArc, SkyBackground, WordClock } from './stagePieces';
 import { useNow } from './useNow';
+import { getLocale, t, useT } from '../../shared/i18n';
 
 // "Start pages" and the just-for-fun layouts: classic and not-so-classic
 // new-tab arrangements built only from pieces the page already has. Unlike the
@@ -31,8 +32,9 @@ const NO_TABS = ['all', 'tabs', 'local', 'suites', 'search', 'media'];
 
 
 function TimeText({ p }) {
+    useT();
     const now = useNow(p.seconds ? 1000 : 10_000);
-    const full = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', ...(p.h24 ? { hourCycle: 'h23' } : {}) });
+    const full = now.toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit', ...(p.h24 ? { hourCycle: 'h23' } : {}) });
     const ampm = (full.match(/[AP]M/i) || [''])[0];
     const hm = full.replace(/\s?[AP]M$/i, '');
     return (
@@ -54,15 +56,16 @@ function formatDate(now, p) {
     switch (p.format) {
         case 'ja': return now.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'long' });
         case 'iso': return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-        case 'week': return `Week ${isoWeek(now)}`;
-        case 'dm': return now.toLocaleDateString([], { day: '2-digit', month: 'short' }).toUpperCase();
-        default: return now.toLocaleDateString([], p.long
+        case 'week': return t('date.week', { n: isoWeek(now) });
+        case 'dm': return now.toLocaleDateString(getLocale(), { day: '2-digit', month: 'short' }).toUpperCase();
+        default: return now.toLocaleDateString(getLocale(), p.long
             ? { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }
             : { weekday: 'long', month: 'long', day: 'numeric' });
     }
 }
 
 function DateText({ p }) {
+    useT();
     const now = useNow(60_000);
     const text = formatDate(now, p);
     // Vertical Japanese: each number sits upright as one glyph (縦中横).
@@ -77,14 +80,15 @@ function DateText({ p }) {
 }
 
 function greetingFor(hour) {
-    if (hour < 5) return 'Good night';
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    if (hour < 22) return 'Good evening';
-    return 'Good night';
+    if (hour < 5) return t('greet.night');
+    if (hour < 12) return t('greet.morning');
+    if (hour < 17) return t('greet.afternoon');
+    if (hour < 22) return t('greet.evening');
+    return t('greet.night');
 }
 
 function Greeting() {
+    useT();
     const now = useNow(60_000);
     return <div className="ostage-greeting">{greetingFor(now.getHours())}.</div>;
 }

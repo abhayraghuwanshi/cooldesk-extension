@@ -22,6 +22,7 @@ import { getDeviceId, getHostUrl, isSyncFeatureEnabled, loadSyncConfig } from '.
 import '../../../styles/cooldesk.css';
 import { LocalServers } from './LocalServers.jsx';
 import { TileIcon } from './TileIcon.jsx';
+import { useT } from '../../../shared/i18n';
 import {
     enrichRunningAppsWithIcons,
     getBaseDomainFromUrl,
@@ -245,6 +246,7 @@ const RECENT_MEDIA_LIMIT = 20;
 const NO_HIDDEN_TABS = [];
 
 export function ActivityFeed({ showFavorites = true, hiddenTabs = NO_HIDDEN_TABS, showList = true }) {
+    const t = useT();
     // Detect if running in Tauri/Electron app
     const isDesktopApp = isElectronApp();
 
@@ -2227,7 +2229,7 @@ export function ActivityFeed({ showFavorites = true, hiddenTabs = NO_HIDDEN_TABS
                     alignItems: 'center',
                     gap: '8px'
                 }}>
-                    <FontAwesomeIcon icon={faBookmark} /> Favorites
+                    <FontAwesomeIcon icon={faBookmark} /> {t('feed.favorites')}
                 </div>
                 {/* Favorites Container */}
                 <div
@@ -2253,7 +2255,7 @@ export function ActivityFeed({ showFavorites = true, hiddenTabs = NO_HIDDEN_TABS
                             <TileIcon item={link} label={link.title} />
                         </button>
                     )) : (
-                        <div style={{ color: '#64748B', fontSize: '12px' }}>No favorites yet</div>
+                        <div style={{ color: '#64748B', fontSize: '12px' }}>{t('feed.noFavorites')}</div>
                     )}
                 </div>
             </div>}
@@ -2277,7 +2279,7 @@ export function ActivityFeed({ showFavorites = true, hiddenTabs = NO_HIDDEN_TABS
                                     className={`feed-tab${isActive ? ' is-active' : ''}`}
                                     onClick={() => setActiveTab(tab)}
                                 >
-                                    {tab === 'all' ? 'All Activity' : tab === 'tabs' ? 'Browsing' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                    {t(tab === 'all' ? 'feed.allActivity' : `feed.${tab}`)}
                                 </button>
                             );
                         })}

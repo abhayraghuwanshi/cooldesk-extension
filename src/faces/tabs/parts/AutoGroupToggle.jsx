@@ -1,9 +1,11 @@
 import { faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { useT } from '../../../shared/i18n';
 
 // Persisting the toggle (chrome.storage + background message) stays the
 // caller's job via onToggle — this only owns the pill's own look/hover state.
 export function AutoGroupToggle({ enabled, onToggle }) {
+  const t = useT();
   return (
     <button
       onClick={onToggle}
@@ -47,16 +49,14 @@ export function AutoGroupToggle({ enabled, onToggle }) {
           e.currentTarget.style.transform = 'translateY(0)';
         }
       }}
-      title={enabled
-        ? "Auto-grouping enabled - Click to disable and ungroup all tabs"
-        : "Auto-grouping disabled - Click to enable automatic grouping by domain"}
+      title={enabled ? t('tm.autoOn') : t('tm.autoOff')}
     >
       <FontAwesomeIcon
         icon={enabled ? faToggleOn : faToggleOff}
         size="lg"
         style={{ pointerEvents: 'none' }}
       />
-      <span style={{ pointerEvents: 'none' }}>Auto Group</span>
+      <span style={{ pointerEvents: 'none' }}>{t('tm.autoGroup')}</span>
     </button>
   );
 }

@@ -1,4 +1,4 @@
-import { faChevronDown, faChevronRight, faTerminal } from '@fortawesome/free-solid-svg-icons';
+import { faChevronDown, faChevronRight } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useRef, useState } from 'react';
 import { workspaceActivityService } from '../../services/workspaceActivityService';
@@ -8,6 +8,7 @@ import { TerminalTab } from './TerminalTab';
 import '../../styles/browse.css';
 import '../clipboard/clipboard.css';
 import './terminal.css';
+import { useT } from '../../shared/i18n';
 
 // A shell in the side dock, below the clipboard: the docked sidebar has no
 // room for Browse's terminal tabs, so it gets one shell of its own. It starts
@@ -23,6 +24,7 @@ function readCollapsed() {
 }
 
 export function ShellSection() {
+  const t = useT();
   const [collapsed, setCollapsedState] = useState(readCollapsed);
   const [started, setStarted] = useState(() => !collapsed);
   const [input, setInput] = useState(null);
@@ -59,8 +61,7 @@ export function ShellSection() {
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCollapsed(!collapsed); } }}
         >
           <h3 className="cb-title">
-            <FontAwesomeIcon icon={faTerminal} style={{ opacity: 0.6 }} />
-            Shell
+            {t('dk.shell')}
             <FontAwesomeIcon icon={collapsed ? faChevronRight : faChevronDown} className="cb-chevron" />
           </h3>
         </div>

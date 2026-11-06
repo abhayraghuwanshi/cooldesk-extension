@@ -6600,6 +6600,7 @@ body.bg-white-cred .wgb-tile.has-accent {
   color: #fff; -webkit-text-fill-color: #fff; font: inherit; font-size: 13px; outline: 0; box-shadow: none;
 }
 .cz-panel .cz-select option, .cz-panel .cz-select optgroup { color: #111; -webkit-text-fill-color: #111; }
+.cz-panel .cz-select.cz-lang { flex: none; width: auto; max-width: 170px; height: 30px; font-size: 12.5px; }
 .cz-seg { display: flex; flex: none; padding: 3px; gap: 2px; border-radius: 10px; background: rgba(255, 255, 255, 0.06); }
 .cz-panel .cz-seg button {
   width: 34px; height: 28px; border: 0; border-radius: 7px; background: transparent;
