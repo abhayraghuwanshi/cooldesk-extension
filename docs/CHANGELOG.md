@@ -2,6 +2,29 @@
 
 All notable changes to CoolDesk (desktop app + Chrome extension) are documented here.
 
+## [2.0.18] — 2026-11-06
+
+### Added
+- **49 new-tab layouts, in five groups** (extension):
+  - **Vibes** — Search, Zen, Deep work, Fun, Morning, Dev.
+  - **Start pages**, after popular new tabs — Greeting (big clock, greeting, today's focus, quote), Shortcuts, Start Page, Minimal, Launchpad, Columns.
+  - **Just for fun** — Poster, Orbit (shortcuts circling the clock), Desktop (magnifying dock), Terminal, Newspaper, Scrapbook, Night, Corners, Sidebar, Bento, Cockpit.
+  - **Designs** — Word Clock, Analog, Flip Clock, Binary, Tree, Code Rain, Synthwave, Retro OS, Neon, Swiss, Bauhaus, Brutalist, Blueprint, Chalkboard, Receipt, Boarding Pass, Aurora, Day Cycle, Ink, Progress.
+  Card-board layouts keep their own boards (Customize cards still works), so picking one never overwrites your Custom layout.
+- **Search bar with suggestions.** Web suggestions from the chosen engine (Google, DuckDuckGo, Bing) plus your open tabs, bookmarks and history as you type; Enter only ever runs the row you picked, Cmd/Ctrl+Enter opens a new tab, typing a site goes straight to it. Open tabs switch instead of duplicating.
+- **One Customize panel** (bottom-right) for the whole new tab: **Layout** (all 49 with search and shuffle, plus what to show), **Look** (40 wallpapers or your own image URL, gradient themes, brightness, rotation, font, text size) and **Settings** (auto-group tabs, session tracking, desktop sync, auto-update, export/import, replay the tour). Everything applies instantly.
+
+### Changed
+- **The corner buttons and the Settings window are gone from the new tab** — everything lives in the Customize panel. The desktop app keeps its Settings window.
+- **Widgets refreshed** — cleaner labels, buttons and inputs across all 39; Water fills real glasses, Breathe glows, Quick Links show site icons, Web Search is one pill.
+- **Local AI** settings appear only in the desktop app (they configure the app's sidecar; the extension had nothing behind them).
+
+### Fixed
+- **Currency widget was always "Offline".** Its rate service moved to `api.frankfurter.dev`; the old address redirected there, which the extension blocked.
+- **Year in Dots, Color Palette, Decision Maker, Moon Phase and Timer** no longer overflow or clip their cards.
+- **Text inside the new-tab pieces went white-on-white** on light designs with a wallpaper on (wallpaper mode forced every span and input white).
+- **Theme changes made in Settings now apply to the whole page right away**, not only after a reload.
+
 ## [2.0.17] — 2026-11-03
 
 ### Added
