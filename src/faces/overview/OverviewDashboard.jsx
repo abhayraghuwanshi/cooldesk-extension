@@ -2,6 +2,8 @@ import { memo } from 'react';
 import '../../styles/cooldesk.css';
 import { ActivityFeed } from './parts/ActivityFeed';
 import { CardBoard } from './CardBoard';
+import { getVibe, isBoardLayout, isStageLayout } from './overviewLayouts';
+import { StageBoard } from './StageBoard';
 import { ActivityOverview } from '../../features/activity/ActivityOverview';
 import { WidgetBoard } from '../../features/widgets/WidgetBoard';
 import { TRANSPARENT_ACCENT } from '../../shared/components/AccentColorPicker.jsx';
@@ -34,11 +36,21 @@ const OverviewDashboard = memo(function OverviewDashboard({ layout = 'classic', 
     const wall = useWallpaperBacking();
     const showLeft = visible.widgets || visible.summary;
 
-    // Custom layout: the user's own card grid instead of the two columns.
-    if (layout === 'custom') {
+    // Start pages: fixed arrangements of the same pieces.
+    if (isStageLayout(layout)) {
         return (
             <div className="overview-scope">
-                <CardBoard editing={cardEditing} onDone={onCardEditingDone} wall={wall} />
+                <StageBoard key={layout} vibe={getVibe(layout)} />
+            </div>
+        );
+    }
+
+    // Custom layout and the vibes: a card grid instead of the two columns.
+    // Keyed by board so switching vibes loads that vibe's own cards.
+    if (isBoardLayout(layout)) {
+        return (
+            <div className="overview-scope">
+                <CardBoard key={layout} board={layout} editing={cardEditing} onDone={onCardEditingDone} wall={wall} />
             </div>
         );
     }

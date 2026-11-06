@@ -1,9 +1,26 @@
-import { useEffect, useRef, useState } from 'react';
-import { DEFAULT_VISIBLE, FEED_TABS, OVERVIEW_LAYOUTS, OVERVIEW_PARTS } from './overviewLayouts';
+import { useMemo, useState } from 'react';
+import { DEFAULT_VISIBLE } from './overviewLayouts';
+import { ALL_OPTIONS, GROUPS, groupOf } from './layoutOptions';
 
-// `show` dims the cells for hidden columns, so the corner button's icon
-// reflects what's actually on the page.
-function LayoutPreview({ cells, extra, show = { w: true, f: true } }) {
+// The layout chooser, as it sits inside the Customize panel's Layout tab:
+// group chips (one group at a time), a search that spans every group, Shuffle,
+// and a compact grid that scrolls within the tab. Picking applies instantly and
+// keeps the panel open, so clicking through is a live preview.
+
+// `show` dims the cells for hidden columns, so a column layout's thumbnail
+// reflects what's actually on the page. `rects`: a vibe / start page's own
+// thumbnail, drawn as-is instead of two columns.
+export function LayoutPreview({ cells, extra, rects, show = { w: true, f: true } }) {
+    if (rects) {
+        return (
+            <svg width="40" height="28" viewBox="0 0 40 28" aria-hidden="true">
+                <rect x="0.5" y="0.5" width="39" height="27" rx="4" fill="none" stroke="currentColor" strokeOpacity="0.25" />
+                {rects.map(([x, y, w, h], i) => (
+                    <rect key={i} x={x} y={y} width={w} height={h} rx="1.5" fill="currentColor" fillOpacity={i % 2 ? 0.4 : 0.65} />
+                ))}
+            </svg>
+        );
+    }
     return (
         <svg width="40" height="28" viewBox="0 0 40 28" aria-hidden="true">
             <rect x="0.5" y="0.5" width="39" height="27" rx="4" fill="none" stroke="currentColor" strokeOpacity="0.25" />
@@ -16,144 +33,70 @@ function LayoutPreview({ cells, extra, show = { w: true, f: true } }) {
     );
 }
 
-export function LayoutPicker({ layout, onChange, visible = DEFAULT_VISIBLE, onVisibleChange, onCustomize }) {
-    const [open, setOpen] = useState(false);
-    const rootRef = useRef(null);
-
-    useEffect(() => {
-        if (!open) return;
-        const dismiss = (e) => {
-            if (rootRef.current?.contains(e.target)) return;
-            setOpen(false);
-        };
-        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
-        window.addEventListener('mousedown', dismiss);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', dismiss);
-            window.removeEventListener('keydown', onKey);
-        };
-    }, [open]);
-
-    const current = OVERVIEW_LAYOUTS.find(l => l.key === layout) || OVERVIEW_LAYOUTS[0];
+export function LayoutBrowser({ layout, onChange, visible = DEFAULT_VISIBLE }) {
+    const [tab, setTab] = useState(() => groupOf(layout));
+    const [query, setQuery] = useState('');
     const show = { w: visible.widgets || visible.summary, f: visible.feed };
-    const allHidden = OVERVIEW_PARTS.every(p => !visible[p.key]);
-    const hiddenTabs = visible.hiddenFeedTabs || [];
-    const toggleFeedTab = (key) => {
-        const next = hiddenTabs.includes(key) ? hiddenTabs.filter(k => k !== key) : [...hiddenTabs, key];
-        if (next.length >= FEED_TABS.length) return; // keep at least one tab
-        onVisibleChange({ ...visible, hiddenFeedTabs: next });
+
+    const q = query.trim().toLowerCase();
+    const options = useMemo(() => (q
+        ? ALL_OPTIONS.filter(o => o.label.toLowerCase().includes(q) || (o.hint || '').toLowerCase().includes(q))
+        : ALL_OPTIONS.filter(o => o.group === tab)), [q, tab]);
+
+    const shuffle = () => {
+        const pool = options.filter(o => o.key !== layout);
+        if (pool.length) onChange(pool[Math.floor(Math.random() * pool.length)].key);
     };
 
     return (
-        <div className="overview-layout-picker" ref={rootRef}>
-            <button
-                className={`cooldesk-settings-btn ${open ? 'active' : ''}`}
-                onClick={() => setOpen(o => !o)}
-                title={`Layout: ${current.label}`}
-                aria-label="Change layout"
-                aria-expanded={open}
-            >
-                <LayoutPreview cells={current.cells} extra={current.extra} show={current.key === 'custom' ? undefined : show} />
-            </button>
-            {open && (
-                <div className="overview-layout-menu" role="menu">
-                    <div className="context-menu-label">Layout</div>
-                    <div className="overview-layout-options">
-                        {OVERVIEW_LAYOUTS.map(l => (
-                            <button
-                                key={l.key}
-                                role="menuitemradio"
-                                aria-checked={l.key === layout}
-                                className={`overview-layout-option ${l.key === layout ? 'active' : ''}`}
-                                title={l.hint}
-                                onClick={() => onChange(l.key)}
-                            >
-                                <LayoutPreview cells={l.cells} extra={l.extra} show={l.key === 'custom' ? undefined : show} />
-                                <span>{l.label}</span>
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Custom has no fixed parts to show/hide — it's edited as cards. */}
-                    {layout === 'custom' && onCustomize && (
-                        <>
-                            <div className="context-menu-divider" />
-                            <button
-                                className="overview-layout-zen overview-layout-customize"
-                                onClick={() => {
-                                    onCustomize();
-                                    setOpen(false);
-                                }}
-                            >
-                                Customize cards — move, resize, add
-                            </button>
-                        </>
-                    )}
-
-                    {onVisibleChange && layout !== 'custom' && (
-                        <>
-                            <div className="context-menu-divider" />
-                            <div className="context-menu-label">Show</div>
-                            <div className="overview-layout-toggles">
-                                {OVERVIEW_PARTS.map(p => (
-                                    <label key={p.key} className="overview-layout-toggle">
-                                        <span>{p.label}</span>
-                                        <input
-                                            type="checkbox"
-                                            checked={visible[p.key]}
-                                            onChange={e => onVisibleChange({ ...visible, [p.key]: e.target.checked })}
-                                        />
-                                        <span className="overview-layout-switch" aria-hidden="true" />
-                                    </label>
-                                ))}
-                            </div>
-                            {visible.feed && (
-                                <>
-                                    <div className="context-menu-divider" />
-                                    <div className="context-menu-label">Feed</div>
-                                    <div className="overview-layout-toggles">
-                                        <label className="overview-layout-toggle">
-                                            <span>Favorites</span>
-                                            <input
-                                                type="checkbox"
-                                                checked={visible.favorites !== false}
-                                                onChange={e => onVisibleChange({ ...visible, favorites: e.target.checked })}
-                                            />
-                                            <span className="overview-layout-switch" aria-hidden="true" />
-                                        </label>
-                                    </div>
-                                    <div className="overview-layout-pills">
-                                        {FEED_TABS.map(t => {
-                                            const on = !hiddenTabs.includes(t.key);
-                                            return (
-                                                <button
-                                                    key={t.key}
-                                                    className={`overview-layout-pill ${on ? 'active' : ''}`}
-                                                    aria-pressed={on}
-                                                    title={on ? `Hide ${t.label} tab` : `Show ${t.label} tab`}
-                                                    disabled={on && hiddenTabs.length === FEED_TABS.length - 1}
-                                                    onClick={() => toggleFeedTab(t.key)}
-                                                >
-                                                    {t.label}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </>
-                            )}
-                            <button
-                                className={`overview-layout-zen ${allHidden ? 'active' : ''}`}
-                                onClick={() => onVisibleChange(allHidden
-                                    ? { ...visible, ...Object.fromEntries(OVERVIEW_PARTS.map(p => [p.key, true])) }
-                                    : { ...visible, ...Object.fromEntries(OVERVIEW_PARTS.map(p => [p.key, false])) })}
-                            >
-                                {allHidden ? 'Show everything' : 'Zen — wallpaper only'}
-                            </button>
-                        </>
-                    )}
-                </div>
-            )}
+        <div className="lb">
+            <div className="lb-groups" role="tablist">
+                {GROUPS.map(g => (
+                    <button
+                        key={g.key}
+                        type="button"
+                        role="tab"
+                        aria-selected={!q && tab === g.key}
+                        className={`lb-group ${!q && tab === g.key ? 'on' : ''} ${groupOf(layout) === g.key ? 'has-current' : ''}`}
+                        onClick={() => { setTab(g.key); setQuery(''); }}
+                    >
+                        {g.label}
+                    </button>
+                ))}
+            </div>
+            <div className="lb-tools">
+                <label className="lb-search">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+                    <input
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Escape' && query) { e.stopPropagation(); setQuery(''); } }}
+                        placeholder={`Search all ${ALL_OPTIONS.length} layouts`}
+                        aria-label="Search layouts"
+                        spellCheck={false}
+                    />
+                </label>
+                <button type="button" className="lb-shuffle" onClick={shuffle} title="Random layout" aria-label="Random layout">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5" /></svg>
+                </button>
+            </div>
+            <div className="lb-grid" role="radiogroup" aria-label="Layouts">
+                {options.map(o => (
+                    <button
+                        key={o.key}
+                        type="button"
+                        role="radio"
+                        aria-checked={o.key === layout}
+                        className={`lb-option ${o.key === layout ? 'on' : ''}`}
+                        title={o.hint}
+                        onClick={() => onChange(o.key)}
+                    >
+                        <LayoutPreview cells={o.cells} extra={o.extra} rects={o.rects} show={o.key === 'custom' || o.rects ? undefined : show} />
+                        <span className="lb-label">{o.label}</span>
+                    </button>
+                ))}
+                {options.length === 0 && <div className="lb-empty">No layouts match “{query}”.</div>}
+            </div>
         </div>
     );
 }

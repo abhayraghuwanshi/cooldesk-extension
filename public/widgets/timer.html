@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Timer & Stopwatch — CoolDesk Widget</title>
-<link rel="stylesheet" href="base.css?v=7">
-<script src="cooldesk.js?v=6"></script>
+<link rel="stylesheet" href="base.css?v=9">
+<script src="cooldesk.js?v=7"></script>
 <link rel="icon" href="/favicon.ico"></head>
 <body>
 <main class="widget">
@@ -16,11 +16,12 @@
   <div class="grow center">
     <span class="big mono" id="display" style="font-size:46px">05:00</span>
   </div>
+  <style>#presets { gap: 6px; } #presets button { flex: 1; min-width: 0; padding: 6px 4px; }</style>
   <div class="row" id="presets">
     <button data-min="5">5m</button>
     <button data-min="10">10m</button>
     <button data-min="25">25m</button>
-    <input id="custom" type="number" min="1" max="720" placeholder="min" style="width:64px">
+    <input id="custom" type="number" min="1" max="720" placeholder="min" style="flex:none;width:58px;padding:6px 6px;text-align:center">
   </div>
   <div class="row">
     <button class="primary grow" id="toggle">Start</button>

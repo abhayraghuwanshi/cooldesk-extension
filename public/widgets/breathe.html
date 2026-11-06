@@ -4,18 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Breathe — CoolDesk Widget</title>
-<link rel="stylesheet" href="base.css?v=7">
+<link rel="stylesheet" href="base.css?v=9">
 <style>
   .orb {
-    width: 90px; height: 90px; border-radius: 50%;
-    border: 2px solid var(--accent);
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
-    transition: transform 3.8s ease-in-out;
-    transform: scale(0.6);
+    width: 108px; height: 108px; border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 30%, rgba(255,255,255,.55), transparent 42%),
+      radial-gradient(circle, color-mix(in srgb, var(--accent) 75%, transparent) 0%, color-mix(in srgb, var(--accent) 28%, transparent) 62%, transparent 72%);
+    box-shadow: 0 0 36px color-mix(in srgb, var(--accent) 40%, transparent);
+    transition: transform 3.8s ease-in-out, box-shadow 3.8s ease-in-out;
+    transform: scale(0.62);
   }
-  .orb.in { transform: scale(1); }
+  .orb.in { transform: scale(1); box-shadow: 0 0 60px color-mix(in srgb, var(--accent) 55%, transparent); }
 </style>
-<script src="cooldesk.js?v=6"></script>
+<script src="cooldesk.js?v=7"></script>
 <link rel="icon" href="/favicon.ico"></head>
 <body>
 <main class="widget" style="align-items:center;justify-content:center;gap:14px">

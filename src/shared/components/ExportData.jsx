@@ -1,12 +1,15 @@
+/* global chrome */
 import { faCheckCircle, faFileExport, faFileImport, faTimesCircle } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useRef, useState } from 'react'
-import { DB_CONFIG, getUnifiedDB } from '../../../db/index.js'
-import { storageGet } from '../../../services/extensionApi'
-import { parseBackup, restoreBackup } from '../../../services/backupRestore'
+import { DB_CONFIG, getUnifiedDB } from '../../db/index.js'
+import { storageGet } from '../../services/extensionApi'
+import { parseBackup, restoreBackup } from '../../services/backupRestore'
 
 
-export default function ExportData() {
+// `compact`: a one-line row for narrow homes (the new tab's Customize panel)
+// — title only, no description, controls wrap instead of squeezing the text.
+export default function ExportData({ compact = false }) {
     const fileInputRef = useRef(null)
     const [busy, setBusy] = useState(false)
     const [message, setMessage] = useState('')
@@ -27,7 +30,6 @@ export default function ExportData() {
                 const tx = db.transaction(storeName, 'readonly')
                 const store = tx.objectStore(storeName)
                 const request = store.getAll()
-                // eslint-disable-next-line no-await-in-loop
                 const rows = await new Promise((resolve, reject) => {
                     request.onsuccess = () => resolve(request.result || [])
                     request.onerror = () => reject(request.error)
@@ -176,16 +178,19 @@ export default function ExportData() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{
                 display: 'flex', alignItems: 'center', gap: 8,
-                padding: '11px 14px',
+                flexWrap: compact ? 'wrap' : 'nowrap',
+                padding: compact ? '10px 12px' : '11px 14px',
                 background: 'rgba(255,255,255,0.03)',
                 borderRadius: 12,
                 border: '1px solid rgba(255,255,255,0.06)',
             }}>
-                <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: '#e5e7eb' }}>Export / Import</div>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
-                        Download or restore all your data as JSON
-                    </div>
+                <div style={{ flex: 1, minWidth: compact ? 0 : undefined }}>
+                    <div style={{ fontSize: 13, fontWeight: compact ? 600 : 500, color: '#e5e7eb', whiteSpace: 'nowrap' }}>{compact ? 'Your data' : 'Export / Import'}</div>
+                    {!compact && (
+                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
+                            Download or restore all your data as JSON
+                        </div>
+                    )}
                 </div>
 
                 <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'rgba(255,255,255,0.4)', cursor: 'pointer', marginRight: 4 }}>

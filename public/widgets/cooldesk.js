@@ -49,6 +49,10 @@
     window.addEventListener("resize", applyFit);
   }
 
+  // `?center=1` — center the content (start pages put widgets alone in the
+  // middle of the screen, where left-aligned text looks off-center).
+  if (params.get("center") === "1") document.documentElement.dataset.center = "";
+
   var pending = new Map();
   var seq = 0;
 

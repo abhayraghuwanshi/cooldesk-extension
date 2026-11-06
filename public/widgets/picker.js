@@ -1,5 +1,6 @@
   var result = document.getElementById("result");
   function reveal(final, pool) {
+    result.className = "big";
     // quick shuffle animation, then land on the answer
     var n = 0;
     var spin = setInterval(function () {
@@ -11,7 +12,7 @@
     e.preventDefault();
     var opts = document.getElementById("options").value.split(",")
       .map(function (s) { return s.trim(); }).filter(Boolean);
-    if (opts.length < 2) { result.textContent = "Give me at least two options"; return; }
+    if (opts.length < 2) { result.className = "hint"; result.textContent = "Give me at least two options, comma-separated"; return; }
     reveal(opts[Math.floor(Math.random() * opts.length)], opts);
   };
   document.getElementById("coin").onclick = function () {
