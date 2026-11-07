@@ -9,7 +9,8 @@
 //!
 //! Only CoolDesk's own UI may drive a shell: `guard_remote_webviews` already
 //! rejects every app command from web content, and each command here also
-//! checks the caller is the main window.
+//! checks the caller is one of CoolDesk's own windows — the main window
+//! (Browse tabs, the docked sidebar's shell) or the spotlight (`/shell`).
 
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use std::collections::HashMap;
@@ -29,11 +30,14 @@ fn sessions() -> &'static Mutex<HashMap<String, Session>> {
     SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// Windows allowed to run a shell: both load CoolDesk's own bundled pages.
+const TERMINAL_WINDOWS: &[&str] = &["main", "spotlight"];
+
 fn require_main(webview: &tauri::Webview) -> Result<(), String> {
-    if webview.label() == "main" {
+    if TERMINAL_WINDOWS.contains(&webview.label()) {
         Ok(())
     } else {
-        Err("Terminal is only available in the main window".into())
+        Err("Terminal is only available in CoolDesk's own windows".into())
     }
 }
 

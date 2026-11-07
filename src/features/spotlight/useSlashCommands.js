@@ -141,6 +141,10 @@ export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavi
             const entries = [
                 { command: '/new-workspace', title: 'New Workspace', description: 'Guided setup: name, pick folders, optionally scaffold .cooldesk/', category: 'Workspace', insert: '/new-workspace ' },
                 { command: '/agent', title: 'Agent', description: 'Chat with Claude Code — search/add links, scaffold a shared .cooldesk/ workspace, /name to rename', category: 'AI', insert: '/agent ' },
+                { command: '/help', title: 'Help', description: 'What Spotlight can do, and what’s running right now', category: 'Help', insert: '/help' },
+                { command: '/todo', title: 'Todos', description: 'Todos in Active (or pick a workspace) — type to add', category: 'Workspace', insert: '/todo ' },
+                { command: '/notes', title: 'Notes', description: 'Notes in Active (or pick a workspace) — type to jot one', category: 'Workspace', insert: '/notes ' },
+                ...(isDesktopApp ? [{ command: '/shell', title: 'Shell', description: 'A terminal right here — keeps running when Spotlight closes', category: 'Terminal', insert: '/shell' }] : []),
                 { command: '/u', title: 'Search URLs', description: 'Scope search to tabs, history, bookmarks', category: 'Scope', insert: '/u ' },
                 { command: '/a', title: 'Search Apps', description: 'Scope search to applications', category: 'Scope', insert: '/a ' },
                 { command: '/f', title: 'Search Files', description: 'Scope search to files and folders', category: 'Scope', insert: '/f ' },
@@ -174,7 +178,7 @@ export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavi
         }
 
         return null;
-    }, [enabled, navMaps]);
+    }, [enabled, navMaps, isDesktopApp]);
 
     // Stable identity so hosts can use the hook result as an effect dependency
     return useMemo(

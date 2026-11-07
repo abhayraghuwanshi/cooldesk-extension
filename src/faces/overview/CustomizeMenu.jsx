@@ -9,6 +9,7 @@ import { fontFamilies, fontSizes, getCurrentFontFamily, setAndSaveFontFamily } f
 import ExportData from '../../shared/components/ExportData';
 import { useT } from '../../shared/i18n';
 import { LanguageSelect } from '../../shared/i18n/LanguageSelect';
+import { getWebSuggestEnabled, setWebSuggestEnabled } from '../../shared/searchEngines';
 
 // Everything about the new tab, in one panel behind the bottom-right
 // Customize button — three tabs, no other windows:
@@ -272,6 +273,7 @@ function LookTab({ wallpaper, onWallpaperChange, fontSize, onFontSizeChange }) {
 function SettingsTab({ onStartTour, closePanel }) {
     const t = useT();
     const s = useQuickSettings();
+    const [webSuggest, setWebSuggest] = useState(getWebSuggestEnabled);
     const syncHint = !s.hostSync
         ? t('cz.off')
         : s.hostAvailable === null ? t('cz.checking')
@@ -280,6 +282,9 @@ function SettingsTab({ onStartTour, closePanel }) {
         <>
             <Row title={t('cz.language')} hint={t('cz.languageHint')}>
                 <LanguageSelect className="cz-select cz-lang" />
+            </Row>
+            <Row title={t('cz.webSuggest')} hint={t('cz.webSuggestHint')}>
+                <Switch checked={webSuggest} onChange={v => { setWebSuggest(v); setWebSuggestEnabled(v); }} label={t('cz.webSuggest')} />
             </Row>
             <Row title={t('cz.autoGroup')} hint={t('cz.autoGroupHint')}>
                 <Switch checked={s.autoGroup} onChange={s.setAutoGroup} label={t('cz.autoGroup')} />

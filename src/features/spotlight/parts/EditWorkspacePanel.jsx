@@ -22,8 +22,13 @@ export function EditWorkspacePanel({
 
     // Links/apps lead editWorkspaceItems — the workspace's own, then its
     // project's .cooldesk ones — so count them from the list itself.
+    // /todo and /notes (focus) show just that list; the indices below stay
+    // in step with editWorkspaceItems, which is filtered the same way.
+    const focus = editWorkspace.focus;
+    const showTodos = focus !== 'notes';
+    const showNotes = focus !== 'todo';
     const itemsCount = editWorkspaceItems.filter(it => it.kind === 'url' || it.kind === 'app').length;
-    const todosCount = editWorkspace.todos.length;
+    const todosCount = showTodos ? editWorkspace.todos.length : 0;
     const items = editWorkspaceItems.slice(0, itemsCount);
     const activeNote = editWorkspace.activeNoteId
         ? editWorkspace.notes.find(n => n.id === editWorkspace.activeNoteId)
@@ -140,8 +145,14 @@ export function EditWorkspacePanel({
                 Items are always the first `itemsCount` entries of
                 editWorkspaceItems, so index i here already is the
                 combined ↑↓ index. */}
-            {items.length === 0 && (
+            {!focus && items.length === 0 && (
                 <div className="spotlight-ai-hint">No links or apps yet — search above to add one.</div>
+            )}
+            {focus === 'todo' && editWorkspace.todos.length === 0 && (
+                <div className="spotlight-ai-hint">No todos in {editWorkspace.workspace?.name} yet — type one above and press Enter.</div>
+            )}
+            {focus === 'notes' && editWorkspace.notes.length === 0 && (
+                <div className="spotlight-ai-hint">No notes in {editWorkspace.workspace?.name} yet — type one above and press Enter.</div>
             )}
             {items.map((it, i) => {
                 const resultItem = it.kind === 'url'
@@ -172,7 +183,7 @@ export function EditWorkspacePanel({
             {/* Todos — the "Todo"/"Done" badge (see getBadgeLabel)
                 already identifies these rows; Enter edits the text
                 inline, Space toggles done. */}
-            {editWorkspace.todos.map((t, tIdx) => {
+            {showTodos && editWorkspace.todos.map((t, tIdx) => {
                 const combinedIdx = itemsCount + tIdx;
                 const isEditing = editWorkspace.editingTodoId === t.id;
                 // Same shell (icon box, padding, left accent) as
@@ -213,7 +224,7 @@ export function EditWorkspacePanel({
 
             {/* Notes — the "Note" badge already identifies these
                 rows; Enter opens the Tiptap editor above. */}
-            {editWorkspace.notes.map((n, nIdx) => {
+            {showNotes && editWorkspace.notes.map((n, nIdx) => {
                 const combinedIdx = itemsCount + todosCount + nIdx;
                 return (
                     <ResultItem

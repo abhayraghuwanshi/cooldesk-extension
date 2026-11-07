@@ -12,8 +12,18 @@ export function handleEditWorkspaceKeydown(e, {
         // Close the innermost thing first: the note editor, then the
         // whole mode — same hierarchy Esc already follows elsewhere
         // (workspace picker → add mode → spotlight).
-        if (editWorkspace.activeNoteId) editWorkspace.closeNote();
+        // /todo · /notes keep the note beside the list, so there's no
+        // editor to close first — Esc just leaves.
+        if (editWorkspace.activeNoteId && !editWorkspace.focus) editWorkspace.closeNote();
         else editWorkspace.exit();
+        return;
+    }
+    // /todo · /notes, empty box: ⌘/Ctrl+⌫ deletes the selected row.
+    if (editWorkspace.focus && !query && e.key === 'Backspace' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        const it = editWorkspaceItems[selectedIndex];
+        if (it?.kind === 'todo') editWorkspace.removeTodo(it.id);
+        else if (it?.kind === 'note') editWorkspace.removeNote(it.id);
         return;
     }
     // Backspace on an empty box closes it too — same grammar as
@@ -29,14 +39,15 @@ export function handleEditWorkspaceKeydown(e, {
     // list) — the same "browse what's already here" the idle
     // workspace section supports, just inside this mode too.
     if (!query.trim()) {
-        if (e.key === 'ArrowDown' && editWorkspaceItems.length > 0) {
+        if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && editWorkspaceItems.length > 0) {
             e.preventDefault();
-            setSelectedIndex(prev => (prev + 1) % editWorkspaceItems.length);
-            return;
-        }
-        if (e.key === 'ArrowUp' && editWorkspaceItems.length > 0) {
-            e.preventDefault();
-            setSelectedIndex(prev => (prev <= 0 ? editWorkspaceItems.length - 1 : prev - 1));
+            const n = editWorkspaceItems.length;
+            setSelectedIndex(prev => (e.key === 'ArrowDown'
+                ? (prev + 1) % n
+                : (prev <= 0 ? n - 1 : prev - 1)));
+            // /notes shows the picked note beside the list: let the keyboard
+            // row decide which one again.
+            if (editWorkspace.focus === 'notes') editWorkspace.closeNote();
             return;
         }
         // Space *or* Shift+Enter toggles a todo's done state —
@@ -61,6 +72,24 @@ export function handleEditWorkspaceKeydown(e, {
         }
         return;
     }
+
+    // /todo and /notes: the box is for adding to that list — Enter adds the
+    // text as typed (no prefix needed), there's no search to attach from.
+    // "/name …" still renames; "/todo …" / "/notes …" still add to that list.
+    if (editWorkspace.focus && e.key === 'Enter' && !e.shiftKey && !/^\/(name|todo|notes?)\s/i.test(query.trim())) {
+        e.preventDefault();
+        if (editWorkspace.focus === 'todo') {
+            editWorkspace.addTodo(query);
+        } else {
+            // A new note opens beside the list, ready to keep writing.
+            Promise.resolve(editWorkspace.addNote(query)).then(id => {
+                if (id) { editWorkspace.openNote(id); setSelectedIndex(0); }
+            });
+        }
+        setQuery('');
+        return;
+    }
+    if (editWorkspace.focus && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) return;
 
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();

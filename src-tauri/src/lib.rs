@@ -1702,6 +1702,49 @@ fn analytics_payload(
     })
 }
 
+/// Web query suggestions for the spotlight ("react hoo" → "react hooks", …)
+/// from the user's chosen engine — the same feeds the new-tab search box uses
+/// (src/shared/searchEngines.js; keep the engine keys in step). Fetched here
+/// rather than from the webview because none of them send CORS headers.
+/// `engine` picks from a fixed list, so this can't be pointed at any other
+/// URL. Best-effort: any failure is just an empty list.
+#[tauri::command]
+async fn web_suggest(query: String, engine: Option<String>) -> Vec<String> {
+    let q = query.trim();
+    if q.is_empty() || q.len() > 200 {
+        return Vec::new();
+    }
+    let enc = urlencoding::encode(q);
+    let url = match engine.as_deref().unwrap_or("google") {
+        "google" => format!("https://suggestqueries.google.com/complete/search?client=chrome&ie=utf-8&oe=utf-8&q={enc}"),
+        "youtube" => format!("https://suggestqueries.google.com/complete/search?client=chrome&ie=utf-8&oe=utf-8&ds=yt&q={enc}"),
+        "bing" => format!("https://api.bing.com/osjson.aspx?query={enc}"),
+        "ddg" => format!("https://duckduckgo.com/ac/?type=list&q={enc}"),
+        "brave" => format!("https://search.brave.com/api/suggest?q={enc}"),
+        "ecosia" => format!("https://ac.ecosia.org/autocomplete?type=list&q={enc}"),
+        _ => return Vec::new(),
+    };
+    let res = reqwest::Client::new()
+        .get(url)
+        .header("User-Agent", "CoolDesk")
+        .timeout(std::time::Duration::from_secs(4))
+        .send()
+        .await;
+    let Ok(res) = res else { return Vec::new() };
+    let Ok(data) = res.json::<serde_json::Value>().await else { return Vec::new() };
+    data.get(1)
+        .and_then(|v| v.as_array())
+        .map(|list| {
+            list.iter()
+                .filter_map(|s| s.as_str())
+                .filter(|s| !s.eq_ignore_ascii_case(q))
+                .take(8)
+                .map(String::from)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Sent once, from `setup`, on the launch that created the install id — before
 /// any window exists, so an install whose UI never comes up (a missing
 /// runtime, a crash on load) is still counted. The worker records it with
@@ -3656,6 +3699,7 @@ pub fn run() {
         Some(vec![ARG_AUTOSTART]),
     ))
     .invoke_handler(guard_remote_webviews(tauri::generate_handler![
+        web_suggest,
         get_running_apps,
         get_installed_apps,
         categorize_app,

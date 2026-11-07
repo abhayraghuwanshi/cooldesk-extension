@@ -15,6 +15,7 @@ import { WorkspaceContextPanel } from './parts/WorkspaceContextPanel.jsx';
 import { AppGrid } from './parts/AppGrid';
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
 import { useLanguage, useT } from '../../shared/i18n';
+import { ACTIVE_SPACE_ID } from '../../shared/activeSpace';
 
 // Shared with Browse's side panel (Home → Notes, to-dos & commands).
 export { WorkspaceContextPanel };
@@ -128,14 +129,15 @@ export function WorkspaceList({
     // Active: everything open right now (running apps, open tabs) as one more
     // workspace card, always on top — the dock bar's Active view, sidebar
     // shaped. Not a saved workspace: read-only card (nothing to remove, edit,
-    // pin or drop onto), and its detail view has no notes/tasks panel. Opened
-    // here rather than through onWorkspaceClick, which would make it the
-    // current workspace.
+    // pin or drop onto). Its detail view does have to-dos and notes of its
+    // own (stored under ACTIVE_SPACE_ID — the spotlight's /todo and /notes
+    // land there by default). Opened here rather than through
+    // onWorkspaceClick, which would make it the current workspace.
     const t = useT();
     const language = useLanguage();
     const { liveApps, liveTabs } = useLiveItems(showActive);
     const activeWorkspace = useMemo(() => showActive ? {
-        id: '__active__',
+        id: ACTIVE_SPACE_ID,
         name: t('db.active'),
         icon: 'folder-open',
         // Tab identity rides along so the card's × can close the real tab.
@@ -371,6 +373,9 @@ export function WorkspaceList({
                             readOnly
                             onCloseItem={closeLiveItem}
                         />
+                        {isDesktopApp && (
+                            <WorkspaceContextPanel workspace={activeWorkspace} compact={isSidebarWidth} />
+                        )}
                     </div>
                 ) : expandedDetailWorkspace ? (
                     /* Sidebar width: single workspace opened in full, in-depth view.

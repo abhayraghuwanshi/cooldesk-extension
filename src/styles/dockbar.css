@@ -161,17 +161,32 @@ button.dockbar-ws-name {
 .dockbar-ws-name.is-hover-label {
   font-weight: 500;
   color: rgba(255, 255, 255, 0.92);
-  /* Item names ("Hosted app (computemesh.pages.dev)", a file path…) run
-     longer than a workspace name: wrap onto a second line inside the fixed
-     box instead of cutting off after a dozen characters. Breaks at spaces
-     first; `anywhere` only splits a single token too long for a line. */
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+/* The text sits in a span: a <button> ignores -webkit-box line clamping, so
+   long labels used to spill onto a third line past the pill. */
+.dockbar-ws-name-text {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Item names ("Hosted app (computemesh.pages.dev)", a path…) run longer than
+   a workspace name: wrap onto at most two lines inside the fixed box. Breaks
+   at spaces first; `anywhere` only splits a single token too long for a line.
+   Paths are already shortened to their last two folders (shortPath). */
+.dockbar-ws-name.is-hover-label .dockbar-ws-name-text {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
+  max-height: calc(2 * 1.25em);
   white-space: normal;
   overflow-wrap: anywhere;
-  font-size: 11px;
-  line-height: 1.25;
+  text-align: left;
 }
 
 /* Hairline dividers between the pill's three zones. */

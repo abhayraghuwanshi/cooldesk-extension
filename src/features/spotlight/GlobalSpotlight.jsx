@@ -1,7 +1,8 @@
 import { faChrome, faDiscord, faEdge, faFirefox, faGithub, faSlack, faSpotify } from '@fortawesome/free-brands-svg-icons';
-import { faCalculator, faCode, faCog, faComments, faDesktop, faEnvelope, faFile, faFileLines, faFolder, faFolderOpen, faGamepad, faGlobe, faImage, faMicrophone, faMusic, faPen, faPlus, faTerminal, faTimes, faVideo } from '@fortawesome/free-solid-svg-icons';
+import { faCalculator, faCircleQuestion, faCode, faCog, faComments, faDesktop, faEnvelope, faFile, faFileLines, faFolder, faFolderOpen, faGamepad, faGlobe, faImage, faMicrophone, faMusic, faListCheck, faNoteSticky, faPen, faPlus, faTerminal, faTimes, faVideo } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { engineFor, fetchWebSuggestions, getEngineKey, getWebSuggestEnabled, searchUrl } from '../../shared/searchEngines';
 import { storageGet, storageSet } from '../../services/extensionApi';
 import { syncWebSocket } from '../../services/syncWebSocket';
 import { isHostSyncEnabled } from '../../services/syncConfig';
@@ -52,6 +53,12 @@ import { NewWorkspacePanel } from './parts/NewWorkspacePanel';
 import { EditWorkspacePanel } from './parts/EditWorkspacePanel';
 import { buildCooldeskAttachment } from './cooldeskContext';
 import { runFromSpotlight } from '../terminal/runInTerminal';
+import { ShellPanel } from './parts/ShellPanel';
+import { TodoNotesPanel } from './parts/TodoNotesPanel';
+import { HelpPanel } from './parts/HelpPanel';
+import { orderedTodos } from './parts/todoOrder';
+import { ACTIVE_SPACE_ID } from '../../shared/activeSpace';
+import { shellLabel } from './parts/shellLabel';
 import './GlobalSpotlight.css';
 
 
@@ -285,13 +292,15 @@ function workspaceNameMatchesTyped(name, typedLower) {
 // Search a query in the user's own browser instead of the agent/local index —
 // chrome.search.query opens it through whatever engine is set as default in
 // Chrome (Google, Bing, DuckDuckGo, …), which is the "search my browser"
-// behavior people expect and this spotlight didn't otherwise offer. Falls
-// back to a plain google.com tab/window on the desktop app (no chrome.search
-// there) or if the call itself fails.
+// behavior people expect and this spotlight didn't otherwise offer. Uses the
+// engine picked in Settings (shared/searchEngines.js); "Default" hands it to
+// chrome.search, falling back to Google where that's missing (desktop app)
+// or the call fails.
 function searchInBrowser(query) {
     const trimmed = (query || '').trim();
     if (!trimmed) return;
-    if (typeof chrome !== 'undefined' && chrome?.search?.query) {
+    const engineKey = getEngineKey();
+    if (engineKey === 'default' && typeof chrome !== 'undefined' && chrome?.search?.query) {
         try {
             chrome.search.query({ text: trimmed, disposition: 'NEW_TAB' });
             return;
@@ -299,13 +308,17 @@ function searchInBrowser(query) {
             console.warn('[Spotlight] chrome.search.query failed, falling back to Google:', e);
         }
     }
-    const url = `https://www.google.com/search?q=${encodeURIComponent(trimmed)}`;
+    const url = searchUrl(engineKey, trimmed);
     if (window.electronAPI?.openExternal) {
         window.electronAPI.openExternal(url);
     } else {
         window.open(url, '_blank');
     }
 }
+
+// Where /todo and /notes go by default — see openFocusedList. Not a saved
+// workspace, just the id its todos/notes are stored under.
+const ACTIVE_SPACE = { id: ACTIVE_SPACE_ID, name: 'Active', urls: [], apps: [] };
 
 // Get icon for app by name
 function getAppIcon(appName) {
@@ -334,13 +347,21 @@ function useOnClickOutside(ref, handler) {
             if (!ref.current || ref.current.contains(event.target)) {
                 return;
             }
+            // A click on something that's no longer on the page wasn't
+            // outside — it was on a control that removed itself (a mode
+            // chip's ×, which leaves the mode on mousedown).
+            if (!event.target?.isConnected) return;
             handler(event);
         };
-        document.addEventListener('mousedown', listener);
-        document.addEventListener('touchstart', listener);
+        // Capture phase: decide before React handles the press. Bubbling, it
+        // ran after — after a mode chip's × had already left the mode and
+        // React had re-attached this listener with "no mode" — so the same
+        // press counted as a click outside and closed the spotlight.
+        document.addEventListener('mousedown', listener, true);
+        document.addEventListener('touchstart', listener, true);
         return () => {
-            document.removeEventListener('mousedown', listener);
-            document.removeEventListener('touchstart', listener);
+            document.removeEventListener('mousedown', listener, true);
+            document.removeEventListener('touchstart', listener, true);
         };
     }, [ref, handler]);
 }
@@ -520,6 +541,17 @@ export function GlobalSpotlight({
         showFeedback, setCommandMode, setQuery, setWorkspaces, onExit: onExitEditMode,
     });
     editWorkspaceRef.current = editWorkspace;
+
+    // `/todo [text]` / `/notes [text]`: todos or notes on their own, in
+    // Active by default — the dock's and sidebar's Active (everything open
+    // right now), a place for ones that don't belong to any workspace; the
+    // sidebar's Active card shows them. The chip's picker moves to a saved
+    // workspace. Text after the command is added straight away.
+    const openFocusedList = useCallback((focus, text = '') => {
+        setResults([]);
+        setSelectedIndex(-1);
+        editWorkspace.enter(ACTIVE_SPACE, { focus, add: text });
+    }, [editWorkspace]);
 
     // Closing the note editor or an inline todo edit unmounts whatever DOM
     // node had focus (the Tiptap contenteditable, or the todo's <input>) —
@@ -794,6 +826,87 @@ export function GlobalSpotlight({
         setAgentContext([]);
         setAgentOriginWorkspace(null);
     }, [aiCli]);
+
+    // /shell (desktop only): real shells in the spotlight — see ShellPanel.
+    // Each is { id, command, title, exited, input }: `command` is what it was
+    // started with (run on start and on Restart), `title` the folder its shell
+    // reports, `exited` null while running, `input` ({ text, n }) a line typed
+    // in from the search box. They stay mounted after the mode is left, so
+    // they keep running; the idle "Shells" row and search lead back to them.
+    const [shells, setShells] = useState([]);
+    const [activeShellId, setActiveShellId] = useState(null);
+    const shellsRef = useRef(shells);
+    shellsRef.current = shells;
+    const shellSeqRef = useRef(0);
+    const openShellMode = useCallback(() => {
+        setCommandMode('shell');
+        setResults([]);
+        setSelectedIndex(-1);
+        setSelectedPinIndex(-1);
+        setQuery('');
+    }, []);
+    // A command always gets a shell of its own, so it never lands on top of
+    // something already running; no command reopens the last shell used.
+    const newShell = useCallback((command) => {
+        const id = `spotlight-sh-${++shellSeqRef.current}`;
+        setShells(prev => [...prev, { id, command: (command || '').trim() || null, title: null, exited: null, input: null }]);
+        setActiveShellId(id);
+        openShellMode();
+    }, [openShellMode]);
+    const enterShellMode = useCallback((command) => {
+        const text = (command || '').trim();
+        if (text || shellsRef.current.length === 0) {
+            newShell(text);
+            return;
+        }
+        if (!shellsRef.current.some(sh => sh.id === activeShellId)) {
+            setActiveShellId(shellsRef.current[shellsRef.current.length - 1].id);
+        }
+        openShellMode();
+    }, [activeShellId, newShell, openShellMode]);
+    const openShell = useCallback((id) => {
+        setActiveShellId(id);
+        openShellMode();
+    }, [openShellMode]);
+    const exitShellMode = useCallback(() => {
+        setCommandMode(null);
+        setQuery('');
+        requestAnimationFrame(() => inputRef.current?.focus());
+    }, []);
+    const sendToShell = useCallback((text) => {
+        setShells(prev => prev.map(sh => (sh.id === activeShellId
+            ? { ...sh, input: { text, n: (sh.input?.n || 0) + 1 } }
+            : sh)));
+    }, [activeShellId]);
+    // Closing unmounts its TerminalTab, which ends the shell (terminal_close).
+    const closeShell = useCallback((id) => {
+        const rest = shellsRef.current.filter(sh => sh.id !== id);
+        setShells(rest);
+        if (id === activeShellId) setActiveShellId(rest.length ? rest[rest.length - 1].id : null);
+        if (!rest.length && commandMode === 'shell') exitShellMode();
+    }, [activeShellId, commandMode, exitShellMode]);
+    // Ending a running shell takes two clicks: the first arms its × (shown as
+    // "End") for a moment, the second ends it — a stray click on × used to
+    // kill a dev server outright. An exited shell closes on the first click.
+    const [confirmCloseShellId, setConfirmCloseShellId] = useState(null);
+    const confirmCloseTimerRef = useRef(null);
+    useEffect(() => () => clearTimeout(confirmCloseTimerRef.current), []);
+    const requestCloseShell = useCallback((id) => {
+        const sh = shellsRef.current.find(x => x.id === id);
+        clearTimeout(confirmCloseTimerRef.current);
+        if (!sh || sh.exited != null || confirmCloseShellId === id) {
+            setConfirmCloseShellId(null);
+            closeShell(id);
+            return;
+        }
+        setConfirmCloseShellId(id);
+        confirmCloseTimerRef.current = setTimeout(() => setConfirmCloseShellId(null), 3000);
+    }, [closeShell, confirmCloseShellId]);
+    const updateShell = useCallback((id, patch) => {
+        setShells(prev => prev.map(sh => (sh.id === id ? { ...sh, ...patch } : sh)));
+    }, []);
+    const onShellTitle = useCallback((id, title) => updateShell(id, { title }), [updateShell]);
+    const onShellExit = useCallback((id, exited) => updateShell(id, { exited }), [updateShell]);
 
     // Entering add mode hands the user straight to the input with the panel
     // down — the card's "+" is the click that starts this, so a second click
@@ -1426,6 +1539,39 @@ export function GlobalSpotlight({
         // and only the chip's × or Esc leaves.
         if (commandMode === 'agent') return;
 
+        // /help (or a lone "?") — what the spotlight can do, and what's going on.
+        if (!addTarget && (trimmedQuery === '/help' || trimmedQuery === '?')) {
+            setCommandMode('help');
+            setResults([]);
+            setSelectedIndex(-1);
+            setQuery('');
+            return;
+        }
+        // Empty box: stay on the help page. Anything typed leaves it — a
+        // command is picked up below, plain text ends up a normal search
+        // (the "not a command" clear at the end of this effect).
+        if (commandMode === 'help' && !trimmedQuery) return;
+
+        // /shell — a shell inside the spotlight (desktop app). Anything after
+        // it ("/shell npm run dev") is run there straight away.
+        if (isDesktopApp && (trimmedQuery === '/shell' || trimmedQuery.startsWith('/shell '))) {
+            enterShellMode(query.replace(/^\s*\/shell\s*/i, ''));
+            return;
+        }
+        // In the mode, the box is the shell's command line (Enter sends it).
+        if (commandMode === 'shell') return;
+
+        // /todos, /notes, or /todo · /note followed by a space — the short
+        // forms need the space since they're the start of the long ones
+        // (bare "/todo" + Enter is handled in handleKeyDown).
+        if ((!commandMode || commandMode === 'help') && !addTarget) {
+            const m = /^\s*\/(todos|notes)\s*$/i.exec(query) || /^\s*\/(todos?|notes?)\s+([\s\S]*)$/i.exec(query);
+            if (m) {
+                openFocusedList(/^todo/i.test(m[1]) ? 'todo' : 'notes', m[2] || '');
+                return;
+            }
+        }
+
         // Detect /new-workspace — a guided form (name → folders → confirm)
         // instead of a bang command with syntax to remember. See
         // useNewWorkspaceMode.js.
@@ -1531,8 +1677,10 @@ export function GlobalSpotlight({
         // folders step and /edit-workspace are item *pickers*, so they
         // search too. /ai and /model, and /new-workspace's name/confirm
         // steps, take the input over completely, so they still skip.
+        // /todo and /notes (edit-workspace with a focus) take text to add, not
+        // a search — so they're not a picker.
         const isItemPickerStep = (commandMode === 'new-workspace' && newWorkspace.step === 'folders')
-            || commandMode === 'edit-workspace';
+            || (commandMode === 'edit-workspace' && !editWorkspaceRef.current?.focus);
         if (commandMode && commandMode !== 'agent' && !isItemPickerStep) {
             return;
         }
@@ -1582,7 +1730,7 @@ export function GlobalSpotlight({
                 id: `terminal-run:${command}`,
                 type: 'terminal-run',
                 title: command,
-                description: 'Run in terminal — in the current tab\'s folder',
+                description: 'Run in a Spotlight shell · ⌘↵ in a CoolDesk terminal tab instead',
                 command,
             }] : [];
             setResults(rows);
@@ -1791,7 +1939,23 @@ export function GlobalSpotlight({
                     }]
                     : [];
 
-                searchResults = [...(searchResults || []), ...mappedFiles, ...settingsResults, ...toolsResults, ...urlGuessResults]
+                // Spotlight shells (/shell) whose command or folder matches —
+                // "dev" finds the shell running `npm run dev`. Read through the
+                // ref so a shell retitling itself doesn't re-run the search.
+                const shellResults = (!isAgent && !isItemPicker && !scope)
+                    ? shellsRef.current
+                        .filter(sh => `${sh.command || ''} ${sh.title || ''}`.toLowerCase().includes(qLower))
+                        .map(sh => ({
+                            id: `shell-session:${sh.id}`,
+                            type: 'shell-session',
+                            shellId: sh.id,
+                            title: shellLabel(sh),
+                            description: sh.exited == null ? 'Shell — running' : 'Shell — exited',
+                            score: 94,
+                        }))
+                    : [];
+
+                searchResults = [...(searchResults || []), ...mappedFiles, ...settingsResults, ...toolsResults, ...urlGuessResults, ...shellResults]
                     .sort((a, b) => (b.score || 0) - (a.score || 0));
 
                 // Independent sources can surface the *same* folder/file/app or
@@ -1902,7 +2066,9 @@ export function GlobalSpotlight({
                     fallbackRows.push({
                         id: `websearch-suggest-${searchTerm}`,
                         title: `Search the web for "${searchTerm}"`,
-                        description: 'Open a search with your default browser search engine',
+                        description: engineFor(getEngineKey()).key === 'default'
+                            ? 'Open a search with your default browser search engine'
+                            : `Search ${engineFor(getEngineKey()).label} in your browser`,
                         type: 'websearch-suggest',
                         query: searchTerm,
                     });
@@ -1980,6 +2146,46 @@ export function GlobalSpotlight({
                 _aiSuggested: true,
             }));
     }, [commandMode, newWorkspace.step, newWorkspace.urls, newWorkspace.aiSuggestions, query]);
+
+    // Web query suggestions, shown as "Web" rows in their own block under the
+    // local results and the "+N more" row (type 'websearch-suggest', so
+    // picking one searches it in the browser). Keyboard slots come after the
+    // show-more row: see webRowsStart in handleKeyDown.
+    // Own state and debounce: local results never wait on the network. Plain
+    // searches only — not scoped (/u /a /f), commands, URLs, or any mode.
+    const [webSuggestions, setWebSuggestions] = useState([]);
+    useEffect(() => {
+        const term = query.trim();
+        const wanted = term.length >= 2 && !commandMode && !addTarget && !scopeKey
+            && !/^[/!>]/.test(term) && !looksLikeUrl(term) && getWebSuggestEnabled();
+        if (!wanted) {
+            setWebSuggestions([]);
+            return;
+        }
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => {
+            fetchWebSuggestions(getEngineKey(), term, { signal: ctrl.signal, max: 4 }).then(list => {
+                if (!ctrl.signal.aborted) setWebSuggestions(list.map(s => ({ term, text: s })));
+            });
+        }, 150);
+        return () => { clearTimeout(timer); ctrl.abort(); };
+    }, [query, commandMode, addTarget, scopeKey]);
+
+    const webRows = useMemo(() => {
+        const term = query.trim();
+        // Drop a stale batch from a previous query; skip one that repeats the
+        // "Search the web for …" fallback row already in the results.
+        return webSuggestions
+            .filter(w => w.term === term)
+            .map(w => ({
+                id: `web-suggest-${w.text}`,
+                title: w.text,
+                description: `Search ${engineFor(getEngineKey()).key === 'default' ? 'the web' : engineFor(getEngineKey()).label}`,
+                type: 'websearch-suggest',
+                query: w.text,
+            }))
+            .filter(r => !results.some(x => x.type === 'websearch-suggest' && x.query?.toLowerCase() === r.query.toLowerCase()));
+    }, [webSuggestions, query, results]);
 
     const baseRows = useMemo(
         () => (aiLinkRows.length > 0 ? aiLinkRows : results.slice(0, showAllResults ? results.length : 10)),
@@ -2081,8 +2287,18 @@ export function GlobalSpotlight({
             visibleList.push({ type: 'expand-tabs', expanded: showAllTabs, hiddenCount: tabs.length - visibleTabs.length });
         }
         const tabsBlockLen = visibleList.length - appsBlockLen; // tabs + their expand chip
-        return { apps, tabs, visibleApps, visibleTabs, visibleList, appsBlockLen, tabsBlockLen };
-    }, [contextItems, showAllApps, showAllTabs]);
+        // Spotlight shells (/shell) last, so the apps/tabs offsets above —
+        // which the expand chips' keyboard handling relies on — don't move.
+        const shellItems = sections.context ? shells.map(sh => ({
+            type: 'shell-session',
+            id: sh.id,
+            title: shellLabel(sh),
+            running: sh.exited == null,
+        })) : [];
+        visibleList.push(...shellItems);
+        const shellsBlockLen = shellItems.length;
+        return { apps, tabs, visibleApps, visibleTabs, shellItems, visibleList, appsBlockLen, tabsBlockLen, shellsBlockLen };
+    }, [contextItems, showAllApps, showAllTabs, shells]);
 
     // Active workspace entries (urls then apps) with their live tab/app
     // lookups, shared by the render and the keyboard handler so Enter opens
@@ -2143,8 +2359,14 @@ export function GlobalSpotlight({
             kind: 'note', id: n.id,
             name: n.title || editWorkspace.stripHtml(n.text).slice(0, 40) || 'Untitled',
         }));
+        // /todo and /notes show just that list (and ↑↓ walks just that), in
+        // the panel's order — open todos, then done ones.
+        if (editWorkspace.focus === 'todo') {
+            return orderedTodos(editWorkspace.todos).map(t => ({ kind: 'todo', name: t.text, id: t.id, done: t.done }));
+        }
+        if (editWorkspace.focus === 'notes') return notes;
         return [...urls, ...apps, ...cdItems, ...todos, ...notes];
-    }, [editWorkspace.workspace, editWorkspace.todos, editWorkspace.notes, editWorkspace.stripHtml,
+    }, [editWorkspace.workspace, editWorkspace.todos, editWorkspace.notes, editWorkspace.stripHtml, editWorkspace.focus,
         cd.cdLinks, cd.cdProjects, cd.cdFolders, cd.cdFiles]);
 
     const openExistingWorkspaceItem = useCallback((item) => {
@@ -2166,6 +2388,34 @@ export function GlobalSpotlight({
 
     // Handle Keyboard Navigation
     const handleKeyDown = (e) => {
+        // /help: Esc leaves; anything typed leaves help for it (see the
+        // detection effect), so other keys need nothing here.
+        if (commandMode === 'help' && !query) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                leaveMode();
+            }
+            return;
+        }
+
+        // /shell: the box is the shell's command line. Enter types it into the
+        // shell; Esc on an empty line leaves the mode (the shell keeps running).
+        if (commandMode === 'shell') {
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                if (query.trim()) {
+                    if (activeShellId) sendToShell(query);
+                    else newShell(query);
+                    setQuery('');
+                }
+            } else if (e.key === 'Escape' && !query) {
+                e.preventDefault();
+                e.stopPropagation();
+                exitShellMode();
+            }
+            return;
+        }
+
         if (commandMode === 'edit-workspace') {
             handleEditWorkspaceKeydown(e, {
                 query, editWorkspace, editWorkspaceItems, selectedIndex, setSelectedIndex,
@@ -2224,7 +2474,9 @@ export function GlobalSpotlight({
         // expand-tabs chips above) — without it, arrow-key nav dead-ends at
         // row 10 and the rest of the results are only reachable by clicking.
         const hasMoreResultsRow = !showAllResults && results.length > 10;
-        const totalResults = flatRows.length + (hasMoreResultsRow ? 1 : 0); // results section is the (expandable) folder tree [+ show-more row]
+        // results section: the (expandable) folder tree [+ show-more row] + web suggestions
+        const webRowsStart = flatRows.length + (hasMoreResultsRow ? 1 : 0);
+        const totalResults = webRowsStart + webRows.length;
         const totalItems = totalContext + totalPins + totalWs + totalResults;
 
         // selectedPinIndex encodes idle-mode selection:
@@ -2272,6 +2524,7 @@ export function GlobalSpotlight({
                 const sections = [
                     { start: 0, len: contextGroups.appsBlockLen },
                     { start: contextGroups.appsBlockLen, len: contextGroups.tabsBlockLen },
+                    { start: contextGroups.appsBlockLen + contextGroups.tabsBlockLen, len: contextGroups.shellsBlockLen },
                     { start: totalContext, len: totalPins },
                     { start: totalContext + totalPins, len: totalWs },
                 ].filter(s => s.len > 0);
@@ -2338,6 +2591,15 @@ export function GlobalSpotlight({
         } else if (e.key === 'ArrowUp' && totalItems > 0) {
             e.preventDefault();
             selectVisualIndex(currentIndex === -1 ? totalItems - 1 : currentIndex - 1);
+        } else if (e.key === 'Enter' && !commandMode && /^\/(todo|note)$/i.test(query.trim())) {
+            // Bare "/todo" or "/note" (the long forms open as they're typed).
+            e.preventDefault();
+            openFocusedList(/^\/todo/i.test(query.trim()) ? 'todo' : 'notes');
+        } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && results[0]?.type === 'terminal-run') {
+            // "> cmd" with ⌘/Ctrl: the main window's terminal tab instead of
+            // a spotlight shell (one row for both — see the shellCommand block).
+            e.preventDefault();
+            handleSelect({ ...results[0], type: 'terminal-run-main' });
         } else if (e.key === 'Enter') {
             e.preventDefault();
             // A fully typed command runs as typed — it beats the highlighted
@@ -2380,6 +2642,8 @@ export function GlobalSpotlight({
                     // Enter on it reveals the rest, same as clicking it.
                     if (hasMoreResultsRow && resultIndex === flatRows.length) {
                         setShowAllResults(true);
+                    } else if (resultIndex >= webRowsStart) {
+                        handleSelect(webRows[resultIndex - webRowsStart]);
                     } else {
                         handleSelect(flatRows[resultIndex]?.item);
                     }
@@ -2480,7 +2744,19 @@ export function GlobalSpotlight({
             return;
         }
 
+        // A /shell session (idle Shells row, or a search match): reopen it.
+        if (item.type === 'shell-session') {
+            openShell(item.shellId || item.id);
+            return;
+        }
+
+        // "> cmd": run it in the spotlight's own shell (/shell)…
         if (item.type === 'terminal-run') {
+            enterShellMode(item.command);
+            return;
+        }
+        // …or hand it to the main window's terminal.
+        if (item.type === 'terminal-run-main') {
             handleClose();
             runFromSpotlight(item.command).catch((e) => {
                 console.error('[Spotlight] Run in terminal failed:', e);
@@ -2931,6 +3207,18 @@ export function GlobalSpotlight({
         if (ok) setTimeout(() => handleClose(), 500);
     }, [loadModel, handleClose]);
 
+    // Leave whatever mode the box is in — /shell, /agent, /todo · /notes,
+    // /new-workspace, edit workspace, /ai, /model — the way its own chip ×
+    // does (shells keep running). Shared by Esc and the box's × button.
+    const leaveMode = useCallback(() => {
+        if (commandMode === 'shell') exitShellMode();
+        else if (commandMode === 'agent') exitAgentMode();
+        else if (commandMode === 'new-workspace') newWorkspace.exit();
+        else if (commandMode === 'edit-workspace') editWorkspace.exit();
+        else { setCommandMode(null); setQuery(''); setAiMessages([]); }
+        requestAnimationFrame(() => inputRef.current?.focus());
+    }, [commandMode, exitShellMode, exitAgentMode, newWorkspace, editWorkspace]);
+
     // Handle Escape key to close (workspace picker first, then add mode, then
     // the spotlight). Add mode outranks closing: Escape should put the search
     // back to being a search, not dismiss it and leave the mode armed.
@@ -2941,15 +3229,25 @@ export function GlobalSpotlight({
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (e.key === 'Escape') {
-                if (commandMode === 'edit-workspace' && editWorkspace.activeNoteId) editWorkspace.closeNote();
+                // Already handled by the box's own key handler (each mode's
+                // Esc calls preventDefault) — closing the spotlight on top of
+                // that is what made Esc in /todo, /agent… shut everything.
+                if (e.defaultPrevented) return;
+                // /notes keeps the note beside the list: Esc in its editor
+                // goes back to the box.
+                if (commandMode === 'edit-workspace' && editWorkspace.focus && document.activeElement !== inputRef.current) inputRef.current?.focus();
+                else if (commandMode === 'edit-workspace' && editWorkspace.activeNoteId) editWorkspace.closeNote();
                 else if (wsDropdownOpen) setWsDropdownOpen(false);
                 else if (addTarget && onExitAddMode) onExitAddMode();
+                // Focus outside the box (a button in a mode's panel): leave
+                // the mode, don't close the spotlight.
+                else if (commandMode) leaveMode();
                 else if (!isEmbedded || panelOpen) handleClose();
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [handleClose, wsDropdownOpen, isEmbedded, panelOpen, addTarget, onExitAddMode, commandMode, editWorkspace]);
+    }, [handleClose, wsDropdownOpen, isEmbedded, panelOpen, addTarget, onExitAddMode, commandMode, editWorkspace, leaveMode]);
 
     // Embedded: '/' anywhere on the page focuses the search (like the old header search)
     useEffect(() => {
@@ -2971,6 +3269,26 @@ export function GlobalSpotlight({
     // A command mode holds the panel open: /agent runs for tens of seconds and
     // carries a transcript, so a stray click anywhere else used to throw away a
     // conversation mid-answer. The chip's × and Esc are the ways out.
+    // The × at the end of the box. In a mode (/shell, /todo, /notes, /agent…)
+    // it only clears what's typed — and isn't shown when there's nothing to
+    // clear; leaving the mode is the mode chip's ×, so this one never folds a
+    // panel away or closes the spotlight mid-task. Outside a mode: clear the
+    // text first, then close.
+    const handleCloseButton = () => {
+        if (commandMode) {
+            setQuery('');
+            requestAnimationFrame(() => inputRef.current?.focus());
+            return;
+        }
+        if (query || scopeKey) {
+            setQuery('');
+            setScopeKey(null);
+            requestAnimationFrame(() => inputRef.current?.focus());
+            return;
+        }
+        handleClose();
+    };
+
     const handleClickOutside = useCallback(() => {
         if (isEmbedded && !panelOpen) return;
         if (commandMode) return;
@@ -3003,7 +3321,8 @@ export function GlobalSpotlight({
         if (item.type === 'agent-suggest') return 'Agent';
         if (item.type === 'websearch-suggest') return 'Web';
         if (item.type === 'workspace-edit') return 'Workspace';
-        if (item.type === 'terminal-run') return 'Terminal';
+        if (item.type === 'terminal-run' || item.type === 'shell-session') return 'Shell';
+        if (item.type === 'terminal-run-main') return 'Terminal';
         if (item.type === 'todo') return item.done ? 'Done' : 'Todo';
         if (item.type === 'note') return 'Note';
         return item.category || 'Link';
@@ -3072,6 +3391,36 @@ export function GlobalSpotlight({
                             </button>
                         </span>
                     )}
+                    {commandMode === 'help' && (
+                        <span className="spotlight-add-badge spotlight-mode-badge is-compact is-quiet" title="Help">
+                            <FontAwesomeIcon icon={faCircleQuestion} />
+                            <span>Help</span>
+                            <button
+                                type="button"
+                                className="spotlight-add-badge-exit"
+                                onMouseDown={(e) => { e.preventDefault(); leaveMode(); }}
+                                title="Close help (Esc)"
+                                aria-label="Close help"
+                            >
+                                <FontAwesomeIcon icon={faTimes} />
+                            </button>
+                        </span>
+                    )}
+                    {commandMode === 'shell' && (
+                        <span className="spotlight-add-badge spotlight-mode-badge is-compact is-quiet" title="Shell — the box sends commands to it">
+                            <FontAwesomeIcon icon={faTerminal} />
+                            <span>Shell</span>
+                            <button
+                                type="button"
+                                className="spotlight-add-badge-exit"
+                                onMouseDown={(e) => { e.preventDefault(); exitShellMode(); }}
+                                title="Leave shell mode (Esc) — it keeps running"
+                                aria-label="Leave shell mode"
+                            >
+                                <FontAwesomeIcon icon={faTimes} />
+                            </button>
+                        </span>
+                    )}
                     {commandMode === 'new-workspace' && (
                         <span className="spotlight-add-badge spotlight-mode-badge is-compact is-quiet" title="New workspace">
                             <FontAwesomeIcon icon={faPlus} />
@@ -3087,7 +3436,24 @@ export function GlobalSpotlight({
                             </button>
                         </span>
                     )}
-                    {commandMode === 'edit-workspace' && (
+                    {commandMode === 'edit-workspace' && editWorkspace.focus && (
+                        // Just the list's name — switching list or place is
+                        // the strip under the box (TodoNotesPanel).
+                        <span className="spotlight-add-badge spotlight-mode-badge is-compact is-quiet">
+                            <FontAwesomeIcon icon={editWorkspace.focus === 'todo' ? faListCheck : faNoteSticky} />
+                            <span>{editWorkspace.focus === 'todo' ? 'Todos' : 'Notes'}</span>
+                            <button
+                                type="button"
+                                className="spotlight-add-badge-exit"
+                                onMouseDown={(e) => { e.preventDefault(); editWorkspace.exit(); }}
+                                title="Close (Esc)"
+                                aria-label="Close"
+                            >
+                                <FontAwesomeIcon icon={faTimes} />
+                            </button>
+                        </span>
+                    )}
+                    {commandMode === 'edit-workspace' && !editWorkspace.focus && (
                         // A quiet label, not a pill: the name is the useful part.
                         <span
                             className="spotlight-add-badge spotlight-mode-badge is-compact is-quiet"
@@ -3125,12 +3491,20 @@ export function GlobalSpotlight({
                         className="spotlight-input"
                         placeholder={commandMode === 'agent'
                             ? (aiCli.turns.length ? 'Ask a follow-up…' : 'Describe how to reorganise your workspaces…')
+                            : commandMode === 'shell'
+                                ? 'Type a command and press Enter — or click into the shell'
+                            : commandMode === 'help'
+                                ? 'Type a command to try it, or Esc to go back'
                             : commandMode === 'new-workspace'
                                 ? (newWorkspace.step === 'name'
                                     ? 'Name this workspace…'
                                     : newWorkspace.step === 'folders'
                                         ? 'Search for a folder, app, or link to add (Enter to skip)…'
                                         : 'Press Enter to create…')
+                                : commandMode === 'edit-workspace' && editWorkspace.focus === 'todo'
+                                    ? `New todo in ${editWorkspace.workspace?.name || 'Active'}…`
+                                : commandMode === 'edit-workspace' && editWorkspace.focus === 'notes'
+                                    ? `New note in ${editWorkspace.workspace?.name || 'Active'}…`
                                 : commandMode === 'edit-workspace'
                                     ? 'Search to add a link/folder, or /name, /todo, /notes…'
                                     : addTarget
@@ -3217,12 +3591,12 @@ export function GlobalSpotlight({
                             )}
                         </button>
                     )}
-                    {!isEmbedded && (
+                    {!isEmbedded && (!commandMode || query) && (
                         <button
                             className="spotlight-close-btn"
-                            onClick={handleClose}
+                            onClick={handleCloseButton}
                             onKeyDown={handleButtonKeyDown}
-                            title="Close (Esc)"
+                            title={commandMode || query ? 'Clear' : 'Close (Esc)'}
                         >
                             ×
                         </button>
@@ -3263,6 +3637,40 @@ export function GlobalSpotlight({
                     />
                 )}
 
+                {commandMode === 'help' && (
+                    <HelpPanel
+                        isDesktopApp={isDesktopApp}
+                        shells={shells.map(sh => ({ ...sh, label: shellLabel(sh) }))}
+                        currentWorkspaceName={(() => {
+                            let id = null;
+                            try { id = localStorage.getItem('cooldesk.currentWorkspaceId'); } catch { /* none */ }
+                            return workspaces.find(w => w.id === id)?.name || null;
+                        })()}
+                        onPick={(text) => {
+                            setCommandMode(null);
+                            setQuery(text);
+                            requestAnimationFrame(() => inputRef.current?.focus());
+                        }}
+                    />
+                )}
+
+                {/* /shell — kept mounted while any shell exists (hidden outside
+                    the mode) so its processes outlive the mode and the spotlight. */}
+                {shells.length > 0 && (
+                    <ShellPanel
+                        shells={shells}
+                        activeId={activeShellId}
+                        visible={commandMode === 'shell'}
+                        onActivate={setActiveShellId}
+                        onCloseShell={requestCloseShell}
+                        confirmCloseId={confirmCloseShellId}
+                        onNewShell={() => newShell('')}
+                        onShellTitle={onShellTitle}
+                        onShellExit={onShellExit}
+                        inputRef={inputRef}
+                    />
+                )}
+
                 {/* /new-workspace — a guided form (name → folders → confirm)
                     instead of a bang command with syntax to remember. Folder
                     picking reuses the exact click/Enter-to-attach interaction
@@ -3277,7 +3685,16 @@ export function GlobalSpotlight({
                     box to add more, same interaction as /new-workspace's
                     folder step), notes and todos with their own small inputs
                     (the main box stays dedicated to "search to add an item"). */}
-                {commandMode === 'edit-workspace' && editWorkspace.workspace && (
+                {commandMode === 'edit-workspace' && editWorkspace.workspace && editWorkspace.focus && (
+                    <TodoNotesPanel
+                        editWorkspace={editWorkspace}
+                        places={[ACTIVE_SPACE, ...workspaces]}
+                        selectedIndex={query.trim() ? -1 : selectedIndex}
+                        setSelectedIndex={setSelectedIndex}
+                        inputRef={inputRef}
+                    />
+                )}
+                {commandMode === 'edit-workspace' && editWorkspace.workspace && !editWorkspace.focus && (
                     <EditWorkspacePanel
                         editWorkspace={editWorkspace}
                         editWorkspaceItems={editWorkspaceItems}
@@ -3309,9 +3726,9 @@ export function GlobalSpotlight({
                 )}
 
                 {/* Recommendations Section - Shows when query is empty */}
-                {sections.context && !scopedQuery.trim() && !commandMode && contextItems.length > 0 && (() => {
+                {sections.context && !scopedQuery.trim() && !commandMode && (contextItems.length > 0 || contextGroups.shellItems.length > 0) && (() => {
                     // Grouped/sliced in contextGroups so keyboard nav walks the same visible list
-                    const { apps, tabs, visibleApps, visibleTabs } = contextGroups;
+                    const { apps, tabs, visibleApps, visibleTabs, shellItems } = contextGroups;
                     let flatIndex = pinnedItems.length; // Start after pinned items
 
                     console.log('[Spotlight] Rendering context - apps:', apps.length, 'tabs:', tabs.length);
@@ -3394,6 +3811,44 @@ export function GlobalSpotlight({
                                                 </div>
                                             );
                                         })()}
+                                    </div>
+                                </div>
+                            )}
+                            {/* Shells Row — /shell sessions still around (running or
+                                exited); a click goes straight back to that one. */}
+                            {shellItems.length > 0 && (
+                                <div className="context-section">
+                                    <div className="context-section-header">
+                                        <div className="context-section-label">Shells</div>
+                                    </div>
+                                    <div className="context-row context-row--grid">
+                                        {shellItems.map(item => {
+                                            const itemIndex = flatIndex++;
+                                            return (
+                                                <div
+                                                    key={item.id}
+                                                    className={`context-item context-shell${itemIndex === selectedPinIndex ? ' pin-selected' : ''}`}
+                                                    onClick={() => handleSelect(item)}
+                                                    onMouseEnter={() => setSelectedPinIndex(itemIndex)}
+                                                    title={`${item.title}${item.running ? ' — running' : ' — exited'}`}
+                                                >
+                                                    <div className="pin-icon">
+                                                        <FontAwesomeIcon icon={faTerminal} style={{ color: item.running ? '#4ade80' : '#94a3b8' }} />
+                                                    </div>
+                                                    <span className="pin-label">{item.title}</span>
+                                                    {item.running && <span className="running-dot" />}
+                                                    <span
+                                                        className={`context-close${confirmCloseShellId === item.id ? ' is-confirm' : ''}`}
+                                                        onClick={(e) => { e.stopPropagation(); requestCloseShell(item.id); }}
+                                                        title={confirmCloseShellId === item.id ? 'Click again to end this shell' : (item.running ? 'End this shell' : 'Close')}
+                                                        role="button"
+                                                        aria-label={`Close ${item.title}`}
+                                                    >
+                                                        {confirmCloseShellId === item.id ? 'End' : '×'}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}
@@ -3550,7 +4005,7 @@ export function GlobalSpotlight({
                     doesn't cost you the ordinary search: Enter goes to the
                     agent, clicking a row opens it as usual. Same for
                     /new-workspace's folder-picker step and /edit-workspace. */}
-                {flatRows.length > 0 && (!commandMode || commandMode === 'agent' || commandMode === 'edit-workspace' ||
+                {(flatRows.length > 0 || webRows.length > 0) && (!commandMode || commandMode === 'agent' || commandMode === 'edit-workspace' ||
                     (commandMode === 'new-workspace' && newWorkspace.step === 'folders')) && (
                     <div className={`spotlight-results-row${previewItem ? ' has-preview' : ''}`}>
                         <div className="spotlight-results">
@@ -3580,6 +4035,24 @@ export function GlobalSpotlight({
                                     onHover={() => setSelectedIndex(flatRows.length)}
                                 />
                             )}
+                            {webRows.map((item, i) => {
+                                const index = flatRows.length + (!showAllResults && results.length > 10 ? 1 : 0) + i;
+                                return (
+                                    <ResultItem
+                                        key={item.id}
+                                        item={item}
+                                        index={index}
+                                        depth={0}
+                                        isSelected={index === selectedIndex}
+                                        onSelect={handleSelect}
+                                        onHover={setSelectedIndex}
+                                        onTogglePin={togglePin}
+                                        formatUrl={formatUrl}
+                                        getBadgeLabel={getBadgeLabel}
+                                        getAppIcon={getAppIcon}
+                                    />
+                                );
+                            })}
                         </div>
                         {previewItem && (
                             <Suspense fallback={<div className="preview-pane" />}>
@@ -3623,7 +4096,18 @@ export function GlobalSpotlight({
                         <div className="shortcut-hint"><span className="shortcut-key">Esc</span> Cancel</div>
                     </div>
                 )}
-                {sections.footer && commandMode === 'edit-workspace' && (
+                {sections.footer && commandMode === 'edit-workspace' && editWorkspace.focus && (
+                    <div className="spotlight-footer">
+                        <div className="shortcut-hint"><span className="shortcut-key">↵</span> {editWorkspace.focus === 'todo' ? 'Add' : 'New note'}</div>
+                        <div className="shortcut-hint"><span className="shortcut-key">↑↓</span> Select</div>
+                        {editWorkspace.focus === 'todo' && (
+                            <div className="shortcut-hint"><span className="shortcut-key">Space</span> Done</div>
+                        )}
+                        <div className="shortcut-hint"><span className="shortcut-key">⌘⌫</span> Delete</div>
+                        <div className="shortcut-hint"><span className="shortcut-key">Esc</span> Close</div>
+                    </div>
+                )}
+                {sections.footer && commandMode === 'edit-workspace' && !editWorkspace.focus && (
                     <div className="spotlight-footer">
                         <div className="shortcut-hint"><span className="shortcut-key">↑↓</span> Browse</div>
                         <div className="shortcut-hint"><span className="shortcut-key">↵</span> Open / Add</div>

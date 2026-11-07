@@ -57,8 +57,10 @@ function themeFor(el) {
  *                    Enter) each time n changes; held until the shell starts
  * @param compact     a very narrow terminal (the docked sidebar): smaller
  *                    text and a short `folder %` prompt (terminal.rs)
+ * @param onExit      (code | null) → the shell ended with `code`; null when a
+ *                    (new) shell starts — lets a host show running vs exited
  */
-export function TerminalTab({ tabId, cwd, run = null, input = null, compact = false, active, onTitle, onOpenUrl, onOpenPath, onOpenShell, onShowInFiles, variant = 'tab', filesPath = null, onPopOut, onHide, toolbarStart = null, toolbarEnd = null }) {
+export function TerminalTab({ tabId, cwd, run = null, input = null, compact = false, active, onTitle, onOpenUrl, onOpenPath, onOpenShell, onShowInFiles, variant = 'tab', filesPath = null, onPopOut, onHide, onExit, toolbarStart = null, toolbarEnd = null }) {
   const hostRef = useRef(null);
   const termRef = useRef(null);
   const fitRef = useRef(null);
@@ -72,6 +74,8 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
   onTitleRef.current = onTitle;
   const onOpenUrlRef = useRef(onOpenUrl);
   onOpenUrlRef.current = onOpenUrl;
+  const onExitRef = useRef(onExit);
+  onExitRef.current = onExit;
 
   // xterm itself: once per tab.
   useEffect(() => {
@@ -154,6 +158,7 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
     let alive = true;
     setExited(null);
     setError(null);
+    onExitRef.current?.(null);
     const subs = [];
     (async () => {
       const { Channel } = await import('@tauri-apps/api/core');
@@ -164,6 +169,7 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
         else if (msg && typeof msg.exit === 'number') {
           term.write(`\r\n\x1b[2m[Process exited${msg.exit ? ` with code ${msg.exit}` : ''} — press Enter to start a new shell]\x1b[0m\r\n`);
           setExited(msg.exit);
+          onExitRef.current?.(msg.exit);
         }
       };
       try {
