@@ -20,6 +20,11 @@
   // is used. Standalone/store use omits it and keeps the self-contained surface.
   if (params.get("embed") === "host") document.documentElement.dataset.embed = "host";
 
+  // `?skin=name` — the host board's Workflow skin (terminal, notebook, …).
+  // base.css re-tokens the widget (font, accent, radius, controls) to match.
+  var skin = params.get("skin") || "";
+  if (/^[a-z]+$/.test(skin)) document.documentElement.dataset.skin = skin;
+
   // `?tint=RRGGBB` — the embedding board's per-widget accent. The card tints
   // itself rather than the host tinting it from outside, because the host can't
   // paint through an opaque iframe canvas. Also drives --accent so the widget's

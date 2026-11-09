@@ -1,11 +1,12 @@
 import { OVERVIEW_LAYOUTS, OVERVIEW_VIBES, vibePreview } from './overviewLayouts';
 
 // Every layout the switcher offers, as { key, label, hint, group, preview
-// props }, in the picker's five groups. Shared by LayoutPicker and the
+// props }, in the picker's six groups. Shared by LayoutPicker and the
 // Customize menu (which shows the current layout's thumbnail and name).
 
 export const GROUPS = [
     { key: 'layout', label: 'Layouts' },
+    { key: 'work', label: 'Workflows' },
     { key: 'vibe', label: 'Vibes' },
     { key: 'start', label: 'Start pages' },
     { key: 'fun', label: 'Fun' },

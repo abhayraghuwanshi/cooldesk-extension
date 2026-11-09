@@ -201,3 +201,206 @@ select { appearance: none; }
 
 a { color: inherit; text-decoration: none; }
 ::-webkit-scrollbar { width: 0; height: 0; }
+
+/* ════ Workflow skins (?skin=, set by cooldesk.js) ════
+   A widget on a skinned Workflow board (src/faces/overview/boardSkins.js)
+   wears that skin too: the same tokens above, re-set per skin, plus the few
+   primitives whose *shape* carries the look (labels, buttons, inputs, big
+   numbers). Only ever sent by the extension's Workflow boards — the store and
+   every other layout never pass ?skin, so nothing here applies to them. */
+html[data-skin] { --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+html[data-skin] .mono { font-family: var(--mono); }
+/* The host-glass hover on primaries (above) is as specific as a skin's own
+   primary rule, so each skin lists :hover with it; this adds the feedback. */
+html[data-skin] button.primary:hover { filter: brightness(1.08); }
+/* Skins that prefix labels (// ▸ ›) skip empty ones — status slots that
+   stay blank until used. */
+html[data-skin] .label:empty::before { content: none !important; }
+
+/* ── ide: an editor — comment-green labels, code font, VS Code blue ── */
+html[data-skin="ide"] {
+  --mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  --fg: #d4d4d4; --muted: #8b8f98; --accent: #3b8eea;
+  --card: rgba(255, 255, 255, 0.035); --faint: #2d2f36; --radius: 4px;
+  --good: #89d185; --bad: #f48771;
+}
+html[data-skin="ide"] .label { font-family: var(--mono); text-transform: none; letter-spacing: 0; font-weight: 500; color: #6a9955; }
+html[data-skin="ide"] .label::before { content: "// "; opacity: 0.8; }
+html[data-skin="ide"] .big { font-family: var(--mono); font-weight: 600; letter-spacing: -0.04em; color: #9cdcfe; }
+html[data-skin="ide"] :is(input, select, textarea) { font-family: var(--mono); font-size: 12px; background: #121317; }
+html[data-skin="ide"] button { font-family: var(--mono); font-weight: 500; border-radius: 3px; }
+html[data-skin="ide"] button.primary { background: #0e639c; border-color: #1177bb; color: #fff; box-shadow: none; }
+html[data-skin="ide"] button.primary:hover { background: #1177bb; }
+
+/* ── devtools: Chrome's dark DevTools palette ── */
+html[data-skin="devtools"] {
+  --mono: "SF Mono", Menlo, Consolas, ui-monospace, monospace;
+  --fg: #e8eaed; --muted: #9aa0a6; --accent: #8ab4f8;
+  --card: #292a2d; --faint: #3c4043; --radius: 2px;
+  --good: #81c995; --bad: #f28b82;
+}
+html[data-skin="devtools"] .label { font-family: var(--mono); text-transform: none; letter-spacing: 0; font-weight: 500; color: #9aa0a6; }
+html[data-skin="devtools"] .label::before { content: "▸ "; color: #8ab4f8; }
+html[data-skin="devtools"] .big { font-family: var(--mono); font-weight: 600; color: #fdd663; letter-spacing: -0.03em; }
+html[data-skin="devtools"] :is(input, select, textarea) { font-family: var(--mono); font-size: 12px; background: #202124; }
+html[data-skin="devtools"] button { border-radius: 2px; font-weight: 500; }
+html[data-skin="devtools"] button.primary { background: #8ab4f8; border-color: #8ab4f8; color: #202124; box-shadow: none; }
+html[data-skin="devtools"] button.primary:hover { background: #aecbfa; }
+
+/* ── mission: green phosphor HUD ── */
+html[data-skin="mission"] {
+  --sans: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  --fg: #c4ffe6; --muted: rgba(93, 255, 179, 0.55); --accent: #5dffb3;
+  --card: rgba(93, 255, 179, 0.05); --faint: rgba(93, 255, 179, 0.22); --radius: 0;
+  --good: #5dffb3; --bad: #ff6b5d;
+}
+html[data-skin="mission"] .label { letter-spacing: 0.2em; color: #5dffb3; }
+html[data-skin="mission"] .label::before { content: "› "; }
+html[data-skin="mission"] .big { color: #dfffee; text-shadow: 0 0 14px rgba(93, 255, 179, 0.55); font-weight: 600; }
+html[data-skin="mission"] button { text-transform: uppercase; letter-spacing: 0.14em; font-size: 10.5px; border-color: rgba(93, 255, 179, 0.4); }
+html[data-skin="mission"] button.primary { background: #5dffb3; border-color: #5dffb3; color: #00170e; box-shadow: 0 0 18px -4px rgba(93, 255, 179, 0.7); }
+html[data-skin="mission"] button.primary:hover { background: #8dffcb; }
+html[data-skin="mission"] :is(input, select, textarea) { background: rgba(0, 20, 14, 0.6); caret-color: #5dffb3; }
+html[data-skin="mission"] .bar > i { box-shadow: 0 0 10px #5dffb3; }
+
+/* ── dash: analytics navy, gradient figures ── */
+html[data-skin="dash"] {
+  --fg: #eef1ff; --muted: rgba(200, 210, 255, 0.58); --accent: #7c95ff;
+  --card: rgba(130, 150, 255, 0.07); --faint: rgba(130, 150, 255, 0.17); --radius: 10px;
+  --good: #2ed3b7; --bad: #ff6b8b;
+}
+html[data-skin="dash"] .label { letter-spacing: 0.1em; color: rgba(200, 210, 255, 0.6); }
+html[data-skin="dash"] .big:not(.good):not(.bad):not(.accent) {
+  background: linear-gradient(180deg, #ffffff 30%, #a9b8ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+html[data-skin="dash"] button.primary,
+html[data-skin="dash"] button.primary:hover { background: linear-gradient(135deg, #6c8cff, #b07cff); border-color: transparent; color: #fff; box-shadow: 0 6px 18px -8px #6c8cff; }
+html[data-skin="dash"] .bar > i { background: linear-gradient(90deg, #6c8cff, #b07cff); }
+
+/* ── library: serif, gilt, ledger lines ── */
+html[data-skin="library"] {
+  --sans: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --mono: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --fg: #f1e6cc; --muted: rgba(241, 230, 204, 0.56); --accent: #e3c98a;
+  --card: rgba(227, 201, 138, 0.06); --faint: rgba(227, 201, 138, 0.24); --radius: 3px;
+  --good: #a8d5a2; --bad: #e58f7a;
+}
+html[data-skin="library"] .label { text-transform: none; font-variant: small-caps; letter-spacing: 0.1em; font-size: 13px; font-weight: 500; color: #e3c98a; }
+html[data-skin="library"] .big { font-weight: 500; letter-spacing: 0; font-variant-numeric: lining-nums tabular-nums; }
+html[data-skin="library"] .mono { font-variant-numeric: lining-nums tabular-nums; }
+html[data-skin="library"] :is(input, select) { background: transparent; border: 0; border-bottom: 1px solid rgba(227, 201, 138, 0.4); border-radius: 0; font-style: italic; }
+html[data-skin="library"] :is(input, select):focus { box-shadow: none; border-bottom-color: #e3c98a; }
+html[data-skin="library"] textarea { background: rgba(0, 0, 0, 0.18); font-size: 14px; line-height: 1.6; }
+html[data-skin="library"] button { font-variant: small-caps; letter-spacing: 0.06em; font-weight: 500; font-size: 13px; }
+html[data-skin="library"] button.primary { background: #d4af5f; border-color: #d4af5f; color: #1c140d; box-shadow: none; }
+html[data-skin="library"] button.primary:hover { background: #e3c98a; }
+
+/* ── planner: soft periwinkle, pill controls ── */
+html[data-skin="planner"] {
+  --fg: #f2f4fa; --muted: rgba(220, 226, 240, 0.58); --accent: #7d97ff;
+  --card: rgba(255, 255, 255, 0.06); --faint: rgba(255, 255, 255, 0.12); --radius: 10px;
+}
+html[data-skin="planner"] button { border-radius: 99px; }
+html[data-skin="planner"] button.primary,
+html[data-skin="planner"] button.primary:hover { background: #6c8cff; border-color: #6c8cff; color: #fff; box-shadow: 0 6px 16px -8px #6c8cff; }
+
+/* ── notebook (light): ink, handwriting, ruled lines, a highlighter ── */
+html[data-skin="notebook"] {
+  --hand: "Marker Felt", "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
+  --fg: #1f2a44; --muted: rgba(31, 42, 68, 0.55); --accent: #2b4a8b;
+  --card: rgba(43, 74, 139, 0.05); --faint: rgba(43, 74, 139, 0.2); --radius: 4px;
+}
+html[data-skin="notebook"] .label { font-family: var(--hand); text-transform: none; letter-spacing: 0; font-size: 15px; font-weight: 400; color: #2b4a8b; }
+html[data-skin="notebook"] .big { font-family: var(--hand); font-weight: 400; letter-spacing: 0; color: #1f2a44; }
+html[data-skin="notebook"] button {
+  font-family: var(--hand); font-weight: 400; font-size: 14px;
+  background: transparent; border: 1.5px solid #2b4a8b; color: #2b4a8b;
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+}
+html[data-skin="notebook"] button:hover { background: rgba(43, 74, 139, 0.08); }
+html[data-skin="notebook"] button.ghost { border-color: transparent; }
+html[data-skin="notebook"] button.primary,
+html[data-skin="notebook"] button.primary:hover { background: #2b4a8b; color: #fffefa; border-color: #2b4a8b; box-shadow: none; }
+html[data-skin="notebook"] :is(input, select) { background: transparent; border: 0; border-bottom: 1.5px dashed rgba(43, 74, 139, 0.45); border-radius: 0; }
+html[data-skin="notebook"] :is(input, select):focus { box-shadow: none; border-bottom-style: solid; }
+html[data-skin="notebook"] textarea {
+  background: repeating-linear-gradient(transparent 0 23px, rgba(43, 74, 139, 0.16) 23px 24px);
+  border: 0; border-radius: 0; line-height: 24px; padding-top: 0;
+  font-family: var(--hand); font-size: 15px;
+}
+html[data-skin="notebook"] textarea:focus { box-shadow: none; }
+html[data-skin="notebook"] .bar { background: rgba(43, 74, 139, 0.1); }
+html[data-skin="notebook"] .bar > i { background: #ffcf4d; }
+
+/* ── terminal: black + amber, everything monospace and square ── */
+html[data-skin="terminal"] {
+  --sans: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  --fg: #ffd59a; --muted: rgba(255, 159, 28, 0.62); --accent: #ff9f1c;
+  --card: rgba(255, 159, 28, 0.05); --faint: rgba(255, 159, 28, 0.26); --radius: 0;
+  --good: #19e68c; --bad: #ff4d4d;
+}
+html[data-skin="terminal"] .label { color: #ff9f1c; letter-spacing: 0.08em; }
+html[data-skin="terminal"] .big { font-weight: 600; letter-spacing: -0.02em; color: #ffe3b8; }
+html[data-skin="terminal"] button { text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.08em; background: #140d02; border-color: rgba(255, 159, 28, 0.4); color: #ff9f1c; }
+html[data-skin="terminal"] button:hover { background: #2a1a04; }
+html[data-skin="terminal"] button.primary,
+html[data-skin="terminal"] button.primary:hover { background: #ff9f1c; border-color: #ff9f1c; color: #000; font-weight: 800; box-shadow: none; }
+html[data-skin="terminal"] :is(input, select, textarea) { background: #000; caret-color: #ff9f1c; }
+
+/* ── paper (light): serif reading, typewriter writing, a red pen ── */
+html[data-skin="paper"] {
+  --sans: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --type: "American Typewriter", "Courier Prime", "Courier New", monospace;
+  --mono: var(--type);
+  --fg: #2d2820; --muted: rgba(45, 40, 32, 0.55); --accent: #b3261e;
+  --card: rgba(45, 40, 32, 0.04); --faint: rgba(45, 40, 32, 0.16); --radius: 2px;
+}
+html[data-skin="paper"] .label { text-transform: none; font-style: italic; letter-spacing: 0; font-size: 13px; font-weight: 400; }
+html[data-skin="paper"] .big { font-weight: 400; letter-spacing: -0.01em; }
+html[data-skin="paper"] button { font-family: var(--type); font-weight: 400; text-transform: uppercase; letter-spacing: 0.1em; font-size: 10.5px; }
+html[data-skin="paper"] button.primary,
+html[data-skin="paper"] button.primary:hover { background: #2d2820; border-color: #2d2820; color: #fbf8f1; box-shadow: none; }
+html[data-skin="paper"] :is(input, select) { font-family: var(--type); background: transparent; border: 0; border-bottom: 1px solid rgba(45, 40, 32, 0.3); border-radius: 0; }
+html[data-skin="paper"] :is(input, select):focus { box-shadow: none; border-bottom-color: #b3261e; }
+html[data-skin="paper"] textarea { font-family: var(--type); font-size: 14px; line-height: 1.75; background: transparent; border: 0; padding: 4px 2px; }
+html[data-skin="paper"] textarea:focus { box-shadow: none; }
+
+/* ── canvas: a design tool's panels — compact, blue selection ── */
+html[data-skin="canvas"] {
+  --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --fg: #e6e6e6; --muted: rgba(255, 255, 255, 0.5); --accent: #0d99ff;
+  --card: #383838; --faint: #444; --radius: 5px;
+}
+html[data-skin="canvas"] .label { text-transform: none; letter-spacing: 0; font-weight: 600; font-size: 11px; color: #fff; }
+html[data-skin="canvas"] :is(input, select, textarea) { background: #383838; border-color: transparent; font-size: 12px; }
+html[data-skin="canvas"] :is(input, select, textarea):hover { border-color: #4d4d4d; }
+html[data-skin="canvas"] :is(input, select, textarea):focus { border-color: #0d99ff; box-shadow: none; }
+html[data-skin="canvas"] button { border-color: transparent; font-weight: 500; font-size: 11px; }
+html[data-skin="canvas"] button.primary,
+html[data-skin="canvas"] button.primary:hover { background: #0d99ff; border-color: #0d99ff; color: #fff; box-shadow: none; }
+
+/* ── dawn: warm, soft, glowing ── */
+html[data-skin="dawn"] {
+  --fg: #fff5ee; --muted: rgba(255, 236, 225, 0.68); --accent: #ffb38a;
+  --card: rgba(255, 255, 255, 0.1); --faint: rgba(255, 228, 212, 0.26); --radius: 14px;
+}
+html[data-skin="dawn"] .label { color: rgba(255, 228, 210, 0.8); letter-spacing: 0.12em; }
+html[data-skin="dawn"] .big { text-shadow: 0 2px 20px rgba(255, 170, 120, 0.45); }
+html[data-skin="dawn"] button { border-radius: 99px; }
+html[data-skin="dawn"] button.primary,
+html[data-skin="dawn"] button.primary:hover { background: linear-gradient(135deg, #ffd29a, #ff8fa3); border-color: transparent; color: #3a1530; box-shadow: 0 6px 18px -8px #ff8fa3; }
+html[data-skin="dawn"] .bar > i { background: linear-gradient(90deg, #ffd29a, #ff8fa3); }
+
+/* ── dusk: violet night, an ember glow ── */
+html[data-skin="dusk"] {
+  --fg: #efe8ff; --muted: rgba(220, 210, 255, 0.6); --accent: #b49bff;
+  --card: rgba(180, 160, 255, 0.08); --faint: rgba(180, 160, 255, 0.2); --radius: 12px;
+}
+html[data-skin="dusk"] .label { color: rgba(205, 190, 255, 0.72); letter-spacing: 0.12em; }
+html[data-skin="dusk"] .big { text-shadow: 0 0 26px rgba(155, 123, 255, 0.5); }
+html[data-skin="dusk"] button.primary,
+html[data-skin="dusk"] button.primary:hover { background: linear-gradient(135deg, #ff8a5c, #9b7bff); border-color: transparent; color: #fff; box-shadow: 0 6px 18px -8px #9b7bff; }
+html[data-skin="dusk"] .bar > i { background: linear-gradient(90deg, #ffb35c, #ff6a88, #9b7bff); }

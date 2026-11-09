@@ -11,7 +11,7 @@
 
 export const WIDGET_STORE_ORIGIN = 'https://cool-desk.com';
 export const WIDGET_STORE_URL = `${WIDGET_STORE_ORIGIN}/widgets`;
-const WIDGET_VERSION = '11';
+const WIDGET_VERSION = '12';
 
 export const WIDGET_CATEGORIES = ['CoolDesk', 'Time & Focus', 'Productivity', 'Data & Life', 'Dev Tools'];
 
@@ -96,13 +96,16 @@ function widgetBase() {
 // `fit`: { w, h } designed size — the widget scales its content to fill the
 // frame (glanceable widgets in Custom-layout cards; see base.css data-fit).
 // `center`: center the widget's content (start pages; base.css data-center).
-export function widgetEmbedUrl(id, theme, tint, { clear = false, fit = null, center = false } = {}) {
+// `skin`: the Workflow board skin it sits on (boardSkins.js) — base.css
+// restyles the widget's tokens to match (data-skin there too).
+export function widgetEmbedUrl(id, theme, tint, { clear = false, fit = null, center = false, skin = null } = {}) {
     const t = typeof tint === 'string' ? tint.replace(/^#/, '') : '';
     const tintParam = /^(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(t) ? `&tint=${t}` : '';
     const embedParam = clear ? '&embed=host' : '';
     const fitParam = fit ? `&fitw=${Math.round(fit.w)}&fith=${Math.round(fit.h)}` : '';
     const centerParam = center ? '&center=1' : '';
-    const query = `?theme=${theme === 'light' ? 'light' : 'dark'}${tintParam}${embedParam}${fitParam}${centerParam}&v=${WIDGET_VERSION}`;
+    const skinParam = typeof skin === 'string' && /^[a-z]+$/.test(skin) ? `&skin=${skin}` : '';
+    const query = `?theme=${theme === 'light' ? 'light' : 'dark'}${tintParam}${embedParam}${fitParam}${centerParam}${skinParam}&v=${WIDGET_VERSION}`;
     return new URL(`${id}.html${query}`, widgetBase()).href;
 }
 

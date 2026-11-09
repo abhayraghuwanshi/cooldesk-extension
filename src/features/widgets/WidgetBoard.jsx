@@ -885,7 +885,8 @@ const WidgetBoard = memo(function WidgetBoard({ storageArea, compact = false, de
 // `theme`: force 'light' / 'dark' regardless of the app theme (a start page
 // with its own surface — e.g. a cream "newspaper" — needs dark text). A forced
 // theme always draws clear (no widget card), so the host surface shows.
-const WidgetEmbed = memo(function WidgetEmbed({ widgetId, center = false, theme: forcedTheme = null }) {
+// `skin`: a Workflow board skin name; the widget restyles itself to match.
+const WidgetEmbed = memo(function WidgetEmbed({ widgetId, center = false, theme: forcedTheme = null, skin = null }) {
     const appTheme = useWidgetTheme();
     const theme = forcedTheme || appTheme;
     const widget = useMemo(
@@ -905,6 +906,7 @@ const WidgetEmbed = memo(function WidgetEmbed({ widgetId, center = false, theme:
                 // leaving a wide margin.
                 fit: widget.fit ? { w: widget.fitW || 240, h: widget.h } : null,
                 center,
+                skin,
             })}
             title={widget.name}
             onLoad={bridgeOnLoad}

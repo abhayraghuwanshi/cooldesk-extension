@@ -50,6 +50,9 @@ export const DEFAULT_VISIBLE = { widgets: true, summary: true, feed: true, favor
 // the board centers on the columns it uses. `center` vertically centers the
 // board (sparse vibes would otherwise hang from the top).
 const vibeCard = (id, widgetId, w, h, x, y) => ({ id, type: 'widget', widgetId, tab: null, w, h, x, y });
+// A page piece rather than a widget: searchbar / summary / favorites, or a
+// feed card pinned to one tab (local, tabs, search, suites, media).
+const pageCard = (id, type, tab, w, h, x, y) => ({ id, type, tab, w, h, x, y });
 
 export const OVERVIEW_VIBES = [
     {
@@ -176,6 +179,148 @@ export const OVERVIEW_VIBES = [
             { id: 'col-tabs', type: 'feed', tab: 'tabs', w: 4, h: 5, x: 0, y: 0 },
             { id: 'col-search', type: 'feed', tab: 'search', w: 2, h: 5, x: 4, y: 0 },
             { id: 'col-suites', type: 'feed', tab: 'suites', w: 2, h: 5, x: 6, y: 0 },
+        ],
+    },
+
+    // ── Workflows ── boards built around a job, not a mood: what a person in
+    // that role actually keeps open (dev servers next to tabs, the activity
+    // summary next to tab pulse, time zones next to a timer). Card boards, so
+    // each one is a starting point the user can rearrange; 8 columns max.
+    // No ⚡ powered widgets (session, workspaces, tab-stats): the extension
+    // doesn't answer their bridge calls, so they'd only show demo data.
+    // `skin` dresses the board as the place that job happens (an IDE, a
+    // trading terminal, a notebook…) — see boardSkins.jsx.
+    {
+        key: 'work-localdev', group: 'work', skin: 'ide', label: 'Local Dev', hint: 'Dev servers, open tabs, snippets and a scratchpad', center: true,
+        cards: [
+            pageCard('d-search', 'searchbar', null, 6, 1, 0, 0),
+            vibeCard('d-snippets', 'snippets', 2, 2, 6, 0),
+            pageCard('d-local', 'feed', 'local', 3, 4, 0, 1),
+            pageCard('d-tabs', 'feed', 'tabs', 3, 4, 3, 1),
+            vibeCard('d-notes', 'notes', 2, 3, 6, 2),
+        ],
+    },
+    {
+        key: 'work-debug', group: 'work', skin: 'devtools', label: 'Debugging', hint: 'Servers, JSON, regex, a timer and notes for chasing a bug', center: true,
+        cards: [
+            pageCard('g-local', 'feed', 'local', 2, 3, 0, 0),
+            vibeCard('g-json', 'json', 3, 3, 2, 0),
+            vibeCard('g-regex', 'regex', 3, 3, 5, 0),
+            vibeCard('g-notes', 'notes', 4, 2, 0, 3),
+            vibeCard('g-timer', 'timer', 2, 2, 4, 3),
+            vibeCard('g-password', 'password', 2, 2, 6, 3),
+        ],
+    },
+    {
+        key: 'work-oncall', group: 'work', skin: 'mission', label: 'On-call', hint: 'Mission control: servers, time zones, a timer, a runbook', center: true,
+        cards: [
+            vibeCard('o-world', 'world-clock', 2, 2, 0, 0),
+            pageCard('o-local', 'feed', 'local', 4, 4, 2, 0),
+            vibeCard('o-timer', 'timer', 2, 2, 6, 0),
+            vibeCard('o-runbook', 'todo', 2, 3, 0, 2),
+            vibeCard('o-notes', 'notes', 2, 3, 6, 2),
+            pageCard('o-search', 'searchbar', null, 4, 1, 2, 4),
+        ],
+    },
+    {
+        key: 'work-analytics', group: 'work', skin: 'dash', label: 'Analytics', hint: 'Your browsing in numbers: activity, progress, habits, streaks', center: true,
+        cards: [
+            pageCard('a-summary', 'summary', null, 4, 4, 0, 0),
+            vibeCard('a-habits', 'habits', 2, 2, 4, 0),
+            vibeCard('a-year', 'year-progress', 2, 1, 6, 0),
+            vibeCard('a-today', 'today', 2, 2, 6, 1),
+            vibeCard('a-dots', 'year-dots', 2, 2, 4, 2),
+            vibeCard('a-streak', 'streak', 2, 2, 6, 3),
+            pageCard('a-search', 'feed', 'search', 4, 2, 0, 4),
+            vibeCard('a-converter', 'converter', 2, 2, 4, 4),
+        ],
+    },
+    {
+        key: 'work-research', group: 'work', skin: 'library', label: 'Research', hint: 'Search engines, open tabs and notes side by side', center: true,
+        cards: [
+            pageCard('r-searchbar', 'searchbar', null, 8, 1, 0, 0),
+            pageCard('r-search', 'feed', 'search', 2, 4, 0, 1),
+            pageCard('r-tabs', 'feed', 'tabs', 3, 4, 2, 1),
+            vibeCard('r-question', 'focus', 3, 1, 5, 1),
+            vibeCard('r-notes', 'notes', 3, 3, 5, 2),
+        ],
+    },
+    {
+        key: 'work-manager', group: 'work', skin: 'planner', label: 'Manager', hint: 'Calendar, time zones, priorities and your work suites', center: true,
+        cards: [
+            vibeCard('m-calendar', 'calendar', 2, 3, 0, 0),
+            vibeCard('m-focus', 'focus', 4, 1, 2, 0),
+            pageCard('m-suites', 'feed', 'suites', 2, 5, 6, 0),
+            vibeCard('m-world', 'world-clock', 2, 2, 2, 1),
+            vibeCard('m-todo', 'todo', 2, 4, 4, 1),
+            vibeCard('m-countdown', 'countdown', 2, 1, 0, 3),
+            vibeCard('m-notes', 'notes', 2, 2, 2, 3),
+        ],
+    },
+    {
+        key: 'work-student', group: 'work', skin: 'notebook', label: 'Student', hint: 'Pomodoro, exam countdown, calendar, habits and tasks', center: true,
+        cards: [
+            vibeCard('s-pomodoro', 'pomodoro', 2, 3, 0, 0),
+            vibeCard('s-countdown', 'countdown', 4, 1, 2, 0),
+            vibeCard('s-calendar', 'calendar', 2, 3, 6, 0),
+            vibeCard('s-todo', 'todo', 2, 2, 2, 1),
+            vibeCard('s-habits', 'habits', 2, 2, 4, 1),
+            vibeCard('s-notes', 'notes', 4, 2, 0, 3),
+            vibeCard('s-dots', 'year-dots', 2, 2, 4, 3),
+            vibeCard('s-quotes', 'quotes', 2, 2, 6, 3),
+        ],
+    },
+    {
+        key: 'work-markets', group: 'work', skin: 'terminal', label: 'Markets', hint: 'Crypto, currencies, market hours across the world', center: true,
+        cards: [
+            vibeCard('k-world', 'world-clock', 4, 2, 0, 0),
+            vibeCard('k-crypto', 'crypto', 2, 3, 4, 0),
+            vibeCard('k-currency', 'currency', 2, 3, 6, 0),
+            vibeCard('k-countdown', 'countdown', 2, 1, 0, 2),
+            vibeCard('k-calendar', 'calendar', 2, 3, 2, 2),
+            vibeCard('k-notes', 'notes', 2, 2, 0, 3),
+            pageCard('k-search', 'feed', 'search', 4, 2, 4, 3),
+        ],
+    },
+    {
+        key: 'work-writer', group: 'work', skin: 'paper', label: 'Writer', hint: 'One focus, a big scratchpad, a timer and typing sprints', center: true,
+        cards: [
+            vibeCard('w-focus', 'focus', 6, 1, 0, 0),
+            vibeCard('w-notes', 'notes', 4, 4, 0, 1),
+            vibeCard('w-pomodoro', 'pomodoro', 2, 2, 4, 1),
+            vibeCard('w-wpm', 'wpm', 2, 2, 4, 3),
+            vibeCard('w-quotes', 'quotes', 6, 1, 0, 5),
+        ],
+    },
+    {
+        key: 'work-designer', group: 'work', skin: 'canvas', label: 'Designer', hint: 'Palettes, media, references and a tie-breaker', center: true,
+        cards: [
+            vibeCard('x-palette', 'palette', 4, 2, 0, 0),
+            pageCard('x-media', 'feed', 'media', 4, 4, 4, 0),
+            vibeCard('x-notes', 'notes', 2, 2, 0, 2),
+            vibeCard('x-picker', 'picker', 2, 2, 2, 2),
+            pageCard('x-favorites', 'favorites', null, 8, 1, 0, 4),
+        ],
+    },
+    {
+        key: 'work-resume', group: 'work', skin: 'dawn', label: 'Resume', hint: 'Pick up where you left off: favorites, open tabs, dev servers', center: true,
+        cards: [
+            pageCard('u-favorites', 'favorites', null, 6, 2, 0, 0),
+            vibeCard('u-today', 'today', 2, 2, 6, 0),
+            pageCard('u-tabs', 'feed', 'tabs', 4, 4, 0, 2),
+            vibeCard('u-todo', 'todo', 2, 4, 4, 2),
+            pageCard('u-local', 'feed', 'local', 2, 4, 6, 2),
+        ],
+    },
+    {
+        key: 'work-wrapup', group: 'work', skin: 'dusk', label: 'Wrap-up', hint: 'End of day: what you did, what\'s next, a streak to keep', center: true,
+        cards: [
+            pageCard('e-summary', 'summary', null, 4, 4, 0, 0),
+            vibeCard('e-streak', 'streak', 2, 2, 4, 0),
+            vibeCard('e-sun', 'sun', 2, 2, 6, 0),
+            vibeCard('e-todo', 'todo', 2, 3, 4, 2),
+            vibeCard('e-notes', 'notes', 2, 3, 6, 2),
+            vibeCard('e-quotes', 'quotes', 4, 1, 0, 4),
         ],
     },
 
