@@ -1,3 +1,4 @@
+  var T = cooldesk.t;
   var QUOTES = [
     ["Simplicity is the ultimate sophistication.", "Leonardo da Vinci"],
     ["The way to get started is to quit talking and begin doing.", "Walt Disney"],
@@ -14,7 +15,7 @@
   ];
   var i = new Date().getDate() % QUOTES.length; // stable quote-of-the-day, click to shuffle
   function render() {
-    document.getElementById("text").textContent = "“" + QUOTES[i][0] + "”";
+    document.getElementById("text").textContent = "“" + T(QUOTES[i][0]) + "”";
     document.getElementById("author").textContent = "— " + QUOTES[i][1];
   }
   document.getElementById("box").onclick = function () {

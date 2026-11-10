@@ -18,6 +18,7 @@ import {
   saveWorkspaceNote,
   saveWorkspaceTodo,
 } from '../../../db/index.js';
+import { isActiveSpace, onWsContentChanged } from '../../../shared/activeSpace';
 // Heavy: @tiptap/* (a dozen extensions). Only load when a note is actually opened.
 const TiptapEditor = lazy(() => import('./editor/TiptapEditor'));
 
@@ -98,10 +99,13 @@ function TodosSection({ workspaceId, sharedTodos }) {
   useEffect(() => {
     if (!workspaceId) return;
     let cancelled = false;
-    listWorkspaceTodos(workspaceId)
+    const load = () => listWorkspaceTodos(workspaceId)
       .then(data => { if (!cancelled) setTodos(data?.data || data || []); })
       .catch(() => {});
-    return () => { cancelled = true; };
+    load();
+    // Todos added elsewhere — the spotlight's /todo is its own window.
+    const off = onWsContentChanged(workspaceId, load);
+    return () => { cancelled = true; off(); };
   }, [workspaceId]);
 
   // Shared todos by project, so a linked group reads as one subsection per project.
@@ -326,9 +330,12 @@ function NotesSection({ workspaceId, workspaceName, sharedDocs, onOpenNote }) {
     // Notes added elsewhere (a page clip from Browse) show up here too.
     const onChanged = (e) => { if (e.detail?.workspaceId === workspaceId) load(); };
     window.addEventListener('cooldesk-notes-changed', onChanged);
+    // …and from the spotlight's /notes, which is its own window.
+    const off = onWsContentChanged(workspaceId, load);
     return () => {
       cancelled = true;
       window.removeEventListener('cooldesk-notes-changed', onChanged);
+      off();
     };
   }, [workspaceId]);
 
@@ -592,13 +599,17 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
   // (appType 'vscode' / 'cursor' / … when added as "open the folder in <editor>").
   // Both name a directory root that can hold a committed .cooldesk/, so both are
   // valid candidates — prefer a plain folder, then fall back to an editor folder.
+  // Active (the live items) isn't a saved workspace: its "apps" are whatever
+  // is running, not a project — no .cooldesk lookup, no accent to save.
+  const isActive = isActiveSpace(workspaceId);
   const folderPath = useMemo(() => {
+    if (isActive) return null;
     const apps = workspace?.apps || [];
     const plain = apps.find(a => a.appType?.toLowerCase() === 'folder' && a.path);
     if (plain) return plain.path;
     const editorFolder = apps.find(a => CUSTOM_EDITORS.includes(a.appType?.toLowerCase()) && a.path);
     return editorFolder?.path || null;
-  }, [workspace]);
+  }, [workspace, isActive]);
   const [cooldesk, setCooldesk] = useState(null);
 
   // Re-read when the plugin announces a write to this project's .cooldesk/.
@@ -637,10 +648,11 @@ export const WorkspaceContextPanel = memo(function WorkspaceContextPanel({ works
   // what you want: the note editor, inputs and other editable text (copy /
   // paste / spelling).
   const handleContextMenu = useCallback((e) => {
+    if (isActive) return; // nothing to save an accent on
     if (e.target.closest?.('input, textarea, [contenteditable="true"], .wcp-note-editor')) return;
     e.preventDefault();
     setColorMenu({ x: e.clientX, y: e.clientY });
-  }, []);
+  }, [isActive]);
 
   // Dismiss on any press outside the menu. Capture phase on mousedown: the
   // panel stops click propagation (onClick below), so a bubbling window

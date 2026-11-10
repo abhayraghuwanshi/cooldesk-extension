@@ -57,8 +57,21 @@ chrome.runtime.onInstalled.addListener(async ({ reason, previousVersion }) => {
   if (reopen) chrome.tabs.create({}).catch(() => {});
 });
 
-// A tab closing may have been the last CoolDesk page holding the update back.
-chrome.tabs.onRemoved.addListener(() => { applyIfIdle(); });
+// The last CoolDesk page can go away two ways: its tab closes, or — far more
+// often — the user types a URL into the CoolDesk new tab, which navigates it
+// away without any tab being removed. Watch both. Debounced and delayed a
+// beat, because getContexts() can still list a page for a moment after its
+// tab closed or navigated, and a too-early check would wait for the next 3h
+// alarm instead.
+let idleCheckTimer = null;
+function scheduleIdleCheck() {
+  clearTimeout(idleCheckTimer);
+  idleCheckTimer = setTimeout(() => { applyIfIdle(); }, 1500);
+}
+chrome.tabs.onRemoved.addListener(scheduleIdleCheck);
+chrome.tabs.onUpdated.addListener((_tabId, changeInfo) => {
+  if (changeInfo.url) scheduleIdleCheck();
+});
 
 chrome.alarms.get(CHECK_ALARM, (existing) => {
   if (!existing) chrome.alarms.create(CHECK_ALARM, { delayInMinutes: 1, periodInMinutes: 180 });

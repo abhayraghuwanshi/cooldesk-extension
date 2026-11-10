@@ -1,6 +1,7 @@
+  var T = cooldesk.t;
   var habits = cooldesk.store.get("habits", [
-    { name: "Deep work", days: {} },
-    { name: "Exercise", days: {} }
+    { name: T("Deep work"), days: {} },
+    { name: T("Exercise"), days: {} }
   ]);
   function save() { cooldesk.store.set("habits", habits); }
 
@@ -15,7 +16,7 @@
     week.push(d.toLocaleDateString("en-CA"));
   }
   var todayKey = today.toLocaleDateString("en-CA");
-  document.getElementById("days").textContent = "M T W T F S S";
+  document.getElementById("days").textContent = cooldesk.weekdays("narrow").join(" ");
 
   function render() {
     var box = document.getElementById("rows");

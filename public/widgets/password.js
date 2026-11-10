@@ -1,3 +1,4 @@
+  var T = cooldesk.t;
   // Generated locally with crypto.getRandomValues; nothing leaves the page.
   var LOWER = "abcdefghijkmnopqrstuvwxyz", UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
   var DIGITS = "23456789", SYMBOLS = "!@#$%^&*-_=+?";
@@ -17,8 +18,8 @@
   function copy() {
     navigator.clipboard.writeText(current).then(function () {
       var btn = document.getElementById("copy");
-      btn.textContent = "Copied ✓";
-      setTimeout(function () { btn.textContent = "Copy"; }, 1200);
+      btn.textContent = T("Copied ✓");
+      setTimeout(function () { btn.textContent = T("Copy"); }, 1200);
     });
   }
   document.getElementById("len").oninput = generate;

@@ -2960,3 +2960,604 @@ body.spotlight-window {
   font-size: 11.5px;
   color: #fbbf24;
 }
+
+/* ── Shell mode (/shell) ───────────────────────────────────────────────────
+   A real terminal under the input (ShellPanel). Fixed height: the terminal
+   fits itself to its box, and a box that grew with output would push the
+   spotlight off screen. `hidden` keeps it mounted — and running — outside
+   the mode. */
+.bp-root.spotlight-shell {
+  /* .bp-root (browse.css, loaded after this file) is a flex:1 / min-height:0
+     card for Browse. In the spotlight's column that collapsed the panel to
+     nothing, so pin a real height and drop the card look — here it's a
+     section of the spotlight, not a floating card. */
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  height: min(52vh, 420px);
+  min-height: 260px;
+  padding-top: 10px;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  animation: none;
+}
+
+.bp-root.spotlight-shell[hidden] {
+  display: none;
+}
+
+.spotlight-shell .term-body {
+  margin: 0 10px 6px;
+}
+
+.spotlight-shell-hint {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 14px 10px;
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.spotlight-shell-hint kbd {
+  display: inline-block;
+  min-width: 14px;
+  margin-right: 2px;
+  padding: 0 4px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  font: inherit;
+  text-align: center;
+}
+
+/* One tab per spotlight shell, plus "+" for a new one. Scrolls sideways
+   rather than wrapping, so the terminal below keeps its height. */
+.spotlight-shell-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.spotlight-shell-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.spotlight-shell-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  max-width: 200px;
+  height: 26px;
+  padding: 0 4px 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11.5px;
+  cursor: pointer;
+  outline: none;
+}
+
+.spotlight-shell-tab:hover,
+.spotlight-shell-tab:focus-visible {
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.spotlight-shell-tab.is-active {
+  border-color: rgba(129, 133, 255, 0.4);
+  background: rgba(129, 133, 255, 0.12);
+  color: #fff;
+}
+
+.spotlight-shell-tab-icon {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.spotlight-shell-tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+/* Green while the shell runs, grey once it has exited. */
+.spotlight-shell-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(148, 163, 184, 0.6);
+}
+
+.spotlight-shell-dot.is-running {
+  background: #4ade80;
+  box-shadow: 0 0 5px rgba(74, 222, 128, 0.7);
+}
+
+.spotlight-shell-tab-close,
+.spotlight-shell-new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font-size: 10px;
+  opacity: 0.55;
+  cursor: pointer;
+}
+
+.spotlight-shell-tab-close:hover,
+.spotlight-shell-new:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.spotlight-shell-new {
+  width: 26px;
+  height: 26px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+}
+
+/* Each shell's pane fills the space between the tabs and the hint; the
+   inactive ones stay mounted (still running), just not shown. */
+.spotlight-shell-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.spotlight-shell-pane[hidden] {
+  display: none;
+}
+
+/* Armed close (first click on a running shell's ×): click again to end it. */
+.spotlight-shell-tab-close.is-confirm,
+.context-shell .context-close.is-confirm {
+  width: auto;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: #ef4444;
+  color: #fff;
+  opacity: 1;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+/* /todo, /notes chip: the workspace name is a quiet native picker. */
+.spotlight-focus-badge .spotlight-focus-ws {
+  max-width: 150px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+}
+
+.spotlight-focus-badge .spotlight-focus-ws option {
+  background: rgb(22, 22, 26);
+  color: #e5e7eb;
+}
+
+/* ── /todo · /notes (TodoNotesPanel) ───────────────────────────────────────
+   Same frame as /shell: a strip (list switch + places) over the content. */
+.sp-tn {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  max-height: min(56vh, 460px);
+  min-height: 0;
+}
+
+.sp-tn-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 8px;
+  min-width: 0;
+}
+
+/* Todos | Notes — a two-way segmented switch. */
+.sp-tn-kind {
+  flex: 0 0 auto;
+  display: flex;
+  padding: 2px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sp-tn-kind-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sp-tn-kind-btn svg { font-size: 10.5px; }
+
+.sp-tn-kind-btn:hover { color: rgba(255, 255, 255, 0.85); }
+
+.sp-tn-kind-btn.is-on {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+/* Places: Active, then each workspace. Scrolls sideways, never wraps. */
+.sp-tn-places {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+}
+
+.sp-tn-places::-webkit-scrollbar { display: none; }
+
+.sp-tn-place {
+  flex: 0 0 auto;
+  max-width: 160px;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font: inherit;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sp-tn-place:hover {
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sp-tn-place.is-on {
+  border-color: rgba(129, 133, 255, 0.4);
+  background: rgba(129, 133, 255, 0.14);
+  color: #fff;
+}
+
+.sp-tn-empty {
+  padding: 26px 16px 30px;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.sp-tn-empty b {
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 600;
+}
+
+/* A row's delete ×, shown on hover / selection. */
+.sp-row-del {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 11px;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.sp-row-del:hover {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+}
+
+/* Todos — a checklist. */
+.sp-todos {
+  overflow-y: auto;
+  padding: 2px 8px 10px;
+  min-height: 0;
+}
+
+.sp-todo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 4px 6px 4px 8px;
+  border-radius: 8px;
+}
+
+.sp-todo.is-sel { background: rgba(255, 255, 255, 0.055); }
+
+.sp-todo:hover .sp-row-del,
+.sp-todo.is-sel .sp-row-del { opacity: 1; }
+
+.sp-todo-check {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  background: transparent;
+  color: #fff;
+  font-size: 9px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.sp-todo-check:hover { border-color: rgba(129, 133, 255, 0.9); }
+
+.sp-todo.is-done .sp-todo-check {
+  border-color: #8185ff;
+  background: #8185ff;
+}
+
+.sp-todo-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.9);
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+
+.sp-todo.is-done .sp-todo-text {
+  color: rgba(255, 255, 255, 0.38);
+  text-decoration: line-through;
+}
+
+.sp-todo-input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid rgba(129, 133, 255, 0.45);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+/* Notes — list | editor. */
+.sp-notes {
+  display: grid;
+  grid-template-columns: minmax(170px, 34%) 1fr;
+  height: min(46vh, 380px);
+  min-height: 220px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sp-notes-list {
+  overflow-y: auto;
+  padding: 6px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sp-note {
+  position: relative;
+  padding: 8px 28px 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.sp-note:hover { background: rgba(255, 255, 255, 0.04); }
+
+.sp-note.is-on { background: rgba(129, 133, 255, 0.14); }
+
+.sp-note .sp-row-del {
+  position: absolute;
+  top: 7px;
+  right: 4px;
+}
+
+.sp-note:hover .sp-row-del { opacity: 1; }
+
+.sp-note-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sp-note-meta {
+  display: flex;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.38);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sp-note-snippet {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sp-note-edit {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.sp-note-title-input {
+  flex: 0 0 auto;
+  padding: 12px 16px 4px;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  outline: none;
+}
+
+.sp-note-title-input::placeholder { color: rgba(255, 255, 255, 0.3); }
+
+.sp-note-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 4px 10px;
+  cursor: text;
+}
+
+/* ── /help (HelpPanel) ───────────────────────────────────────────────────── */
+.sp-help {
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+  padding: 6px 8px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sp-help-section {
+  padding: 8px 4px 4px;
+}
+
+.sp-help-title {
+  margin: 0 0 6px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.sp-help-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.sp-help-row.is-pickable { cursor: pointer; }
+
+.sp-help-row.is-pickable:hover { background: rgba(255, 255, 255, 0.05); }
+
+.sp-help-cmd {
+  flex: 0 0 128px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 11.5px;
+  color: #a5a8ff;
+}
+
+.sp-help-desc { color: rgba(255, 255, 255, 0.72); }
+
+.sp-help-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 8px 4px;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.sp-help-stat {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.sp-help-stat-label {
+  flex: 0 0 128px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.sp-help-shells {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+}
+
+.sp-help-shell {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: rgba(74, 222, 128, 0.1);
+  color: #86efac;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+}
+
+.sp-help-shell svg { font-size: 9px; }
+
+.sp-help-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #a5a8ff;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.sp-help-foot {
+  padding: 10px 12px 2px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.sp-help-foot code {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  color: rgba(255, 255, 255, 0.6);
+}

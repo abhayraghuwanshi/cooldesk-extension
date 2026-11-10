@@ -31,6 +31,7 @@ import ThemesTab from './parts/ThemesTab';
 import WorkspaceCleanupSettings from './parts/WorkspaceCleanupSettings';
 import { getLocale, useT } from '../../shared/i18n';
 import { LanguageSelect } from '../../shared/i18n/LanguageSelect';
+import { availableEngines, getEngineKey, getWebSuggestEnabled, setEngineKey, setWebSuggestEnabled } from '../../shared/searchEngines';
 
 export function SettingsModal({
   show,
@@ -95,6 +96,9 @@ export function SettingsModal({
 
   const [unsplashApiKey, setUnsplashApiKey] = useState('');
   const [autoGroupEnabled, setAutoGroupEnabled] = useState(false);
+  const [searchEngine, setSearchEngine] = useState(getEngineKey);
+  const [webSuggest, setWebSuggest] = useState(getWebSuggestEnabled);
+  const handleWebSuggestToggle = (on) => { setWebSuggest(on); setWebSuggestEnabled(on); };
 
   const isDesktopApp = isElectronApp();
 
@@ -775,6 +779,42 @@ export function SettingsModal({
                           color: '#e5e7eb', cursor: 'pointer', outline: 'none', maxWidth: 190,
                         }} />
                       }
+                      last
+                    />
+                  </Card>
+                </section>
+
+                {/* Web search — the engine Spotlight searches with and suggests
+                    from (shared/searchEngines.js), and an off switch for the
+                    suggestions, which send what you type to that engine. */}
+                <section>
+                  <SectionHeader title={t('st.webSearch')} />
+                  <Card>
+                    <SettingRow
+                      label={t('st.searchEngine')}
+                      hint={t('st.searchEngineHint')}
+                      right={
+                        <select
+                          value={searchEngine}
+                          aria-label={t('st.searchEngine')}
+                          onChange={e => { setSearchEngine(e.target.value); setEngineKey(e.target.value); }}
+                          style={{
+                            height: 30, padding: '0 8px', borderRadius: 6, fontSize: 12,
+                            border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)',
+                            color: '#e5e7eb', cursor: 'pointer', outline: 'none', maxWidth: 190,
+                          }}
+                        >
+                          {availableEngines().map(e => (
+                            <option key={e.key} value={e.key}>{e.key === 'default' ? t('st.searchEngineDefault') : e.label}</option>
+                          ))}
+                        </select>
+                      }
+                    />
+                    <SettingRow
+                      label={t('st.webSuggest')}
+                      hint={t('st.webSuggestHint')}
+                      right={<Toggle checked={webSuggest} onChange={handleWebSuggestToggle} accentColor="#22c55e" />}
+                      onClick={() => handleWebSuggestToggle(!webSuggest)}
                       last
                     />
                   </Card>

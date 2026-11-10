@@ -1,3 +1,4 @@
+  var T = cooldesk.t;
   // Runs entirely locally — nothing is uploaded anywhere.
   var input = document.getElementById("input"), output = document.getElementById("output");
   var status = document.getElementById("status");
@@ -5,7 +6,7 @@
     try {
       var parsed = JSON.parse(input.value);
       output.value = JSON.stringify(parsed, null, spacing);
-      status.textContent = "Valid ✓";
+      status.textContent = T("Valid ✓");
       status.style.color = "var(--good)";
     } catch (e) {
       output.value = "";
@@ -18,7 +19,7 @@
   document.getElementById("copy").onclick = function () {
     if (!output.value) return;
     navigator.clipboard.writeText(output.value).then(function () {
-      status.textContent = "Copied ✓";
+      status.textContent = T("Copied ✓");
       status.style.color = "var(--muted)";
     });
   };

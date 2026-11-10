@@ -1,3 +1,4 @@
+  var T = cooldesk.t;
   // Runs entirely locally.
   function esc(s) {
     return s.replace(/[&<>]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]; });
@@ -14,7 +15,7 @@
       re = new RegExp(pat, flags.indexOf("g") === -1 ? flags + "g" : flags);
     } catch (e) {
       out.textContent = String(e.message);
-      count.textContent = "invalid";
+      count.textContent = T("invalid");
       return;
     }
     var html = "", last = 0, m, n = 0;
@@ -27,7 +28,7 @@
     }
     html += esc(src.slice(last));
     out.innerHTML = html;
-    count.textContent = n + (n === 1 ? " match" : " matches");
+    count.textContent = n === 1 ? T("1 match") : T("{n} matches", { n: n });
   }
   document.getElementById("pattern").oninput = run;
   document.getElementById("flags").oninput = run;

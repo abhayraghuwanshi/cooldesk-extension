@@ -1,3 +1,4 @@
+  var T = cooldesk.t;
   function tick() {
     var now = new Date();
     var y = now.getFullYear();
@@ -8,9 +9,9 @@
     document.getElementById("pct").textContent = pct.toFixed(1) + "%";
     document.getElementById("year").textContent = String(y);
     document.getElementById("fill").style.width = pct + "%";
-    document.getElementById("left").textContent = daysLeft + " days left";
+    document.getElementById("left").textContent = T("{n} days left", { n: daysLeft });
     document.getElementById("month").textContent =
-      now.toLocaleDateString("en-US", { month: "short" }) + " " + Math.round((now - mStart) / (mEnd - mStart) * 100) + "%";
+      now.toLocaleDateString(cooldesk.locale, { month: "short" }) + " " + Math.round((now - mStart) / (mEnd - mStart) * 100) + "%";
   }
   tick();
   setInterval(tick, 60000);

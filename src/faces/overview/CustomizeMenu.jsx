@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FEED_TABS, OVERVIEW_PARTS, isBoardLayout, isStageLayout } from './overviewLayouts';
+import { FEED_TABS, OVERVIEW_PARTS, getVibe, isBoardLayout, isStageLayout } from './overviewLayouts';
+import { LOOKS } from './boardSkins';
+import { setLook, supportsLook, useLookChoice } from './looks';
 import { LayoutBrowser, LayoutPreview } from './LayoutPicker';
-import { layoutOption } from './layoutOptions';
+import { ALL_OPTIONS, groupOf, layoutOption } from './layoutOptions';
 import { useQuickSettings } from './useQuickSettings';
 import { FEATURED_WALLPAPERS, moreWallpapers } from '../../shared/data/wallpapers';
 import { THEME_PRESETS, applyTheme, currentTheme } from '../../shared/data/themePresets';
@@ -9,6 +11,7 @@ import { fontFamilies, fontSizes, getCurrentFontFamily, setAndSaveFontFamily } f
 import ExportData from '../../shared/components/ExportData';
 import { useT } from '../../shared/i18n';
 import { LanguageSelect } from '../../shared/i18n/LanguageSelect';
+import { getWebSuggestEnabled, setWebSuggestEnabled } from '../../shared/searchEngines';
 
 // Everything about the new tab, in one panel behind the bottom-right
 // Customize button — three tabs, no other windows:
@@ -65,9 +68,89 @@ const wheelSideways = (e) => {
     if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) e.currentTarget.scrollLeft += e.deltaY;
 };
 
+// Look strip: the same layout in another material (looks.js). First tile is
+// the layout's own look ("Original" on a Workflow board, else "Plain"), then
+// every look. "Surprise me" rolls a layout and a look together.
+const LOOKABLE = ALL_OPTIONS.filter(o => supportsLook(o.key));
+
+function LookTile({ look, on, onPick }) {
+    return (
+        <button
+            type="button"
+            role="radio"
+            aria-checked={on}
+            className={`cz-look ${on ? 'on' : ''}`}
+            onClick={onPick}
+            title={look.label}
+        >
+            <b
+                className="cz-look-swatch"
+                style={{ background: look.bg, color: look.ink, fontFamily: look.font, boxShadow: look.edge ? `inset 0 -5px 0 ${look.edge}` : undefined }}
+                aria-hidden="true"
+            >
+                Aa
+            </b>
+            <small className="cz-look-name">{look.label}</small>
+        </button>
+    );
+}
+
+function LookStrip({ layout, onLayoutChange, onSurprise }) {
+    const t = useT();
+    const choice = useLookChoice(layout);
+    const stripRef = useRef(null);
+    // Keep the chosen tile in view (a surprise can land past the edge).
+    useEffect(() => {
+        const strip = stripRef.current;
+        const on = strip?.querySelector('.cz-look.on');
+        if (!strip || !on) return;
+        const left = on.offsetLeft - strip.offsetLeft;
+        if (left < strip.scrollLeft || left + on.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+            strip.scrollTo({ left: left - strip.clientWidth / 2 + on.offsetWidth / 2, behavior: 'smooth' });
+        }
+    }, [layout, choice]);
+    const own = getVibe(layout)?.skin;
+    const ownLook = own && LOOKS.find(l => l.key === own);
+    const surprise = () => {
+        const pool = LOOKABLE.filter(o => o.key !== layout);
+        const next = pool[Math.floor(Math.random() * pool.length)];
+        if (!next) return;
+        setLook(next.key, LOOKS[Math.floor(Math.random() * LOOKS.length)].key);
+        onLayoutChange(next.key);
+        onSurprise?.();
+    };
+    const firsts = ownLook
+        ? [{ key: 'auto', label: t('cz.lookOriginal'), bg: ownLook.bg, ink: ownLook.ink, font: ownLook.font, edge: ownLook.edge },
+            { key: 'none', label: t('cz.lookPlain'), bg: 'linear-gradient(135deg, #3a3f4b, #16181d)', ink: '#fff', font: 'system-ui, sans-serif' }]
+        : [{ key: 'auto', label: t('cz.lookPlain'), bg: 'linear-gradient(135deg, #3a3f4b, #16181d)', ink: '#fff', font: 'system-ui, sans-serif' }];
+    // With no look of its own, 'none' and 'auto' are the same thing.
+    const current = !ownLook && choice === 'none' ? 'auto' : choice;
+    return (
+        <div className="cz-looks-wrap">
+            <div className="cz-looks-head">
+                <div className="cz-heading">{t('cz.look')}</div>
+                <small className="cz-looks-count">{t('cz.lookCount', { n: LOOKABLE.length * (LOOKS.length + 1) })}</small>
+                <button type="button" className="cz-link cz-surprise" onClick={surprise}>✦ {t('cz.surprise')}</button>
+            </div>
+            {supportsLook(layout) ? (
+                <div className="cz-looks" ref={stripRef} role="radiogroup" aria-label={t('cz.look')} onWheel={wheelSideways}>
+                    {firsts.map(l => <LookTile key={l.key} look={l} on={current === l.key} onPick={() => setLook(layout, l.key)} />)}
+                    {LOOKS.map(l => <LookTile key={l.key} look={l} on={current === l.key} onPick={() => setLook(layout, l.key)} />)}
+                </div>
+            ) : (
+                <div className="cz-looks-off">{t('cz.lookOff')}</div>
+            )}
+        </div>
+    );
+}
+
 function LayoutTab({ layout, onLayoutChange, visible, onVisibleChange, onCustomizeCards, closePanel }) {
     const t = useT();
     const current = layoutOption(layout);
+    // Bumped by "Surprise me": remounts the browser so it opens on the new
+    // layout's group instead of staying on the old one (keyed on the group
+    // too — the layout itself lands a moment later, in a transition).
+    const [rolls, setRolls] = useState(0);
     const isBoard = isBoardLayout(layout);
     const isColumns = !isBoard && !isStageLayout(layout);
     const hiddenTabs = visible.hiddenFeedTabs || [];
@@ -80,11 +163,12 @@ function LayoutTab({ layout, onLayoutChange, visible, onVisibleChange, onCustomi
 
     return (
         <>
-            <LayoutBrowser layout={layout} onChange={onLayoutChange} visible={visible} />
+            <LayoutBrowser key={rolls ? `${rolls}:${groupOf(layout)}` : 0} layout={layout} onChange={onLayoutChange} visible={visible} />
             <div className="cz-current">
                 <span className="cz-current-name">{current.label}</span>
                 <span className="cz-current-hint">{current.hint}</span>
             </div>
+            <LookStrip layout={layout} onLayoutChange={onLayoutChange} onSurprise={() => setRolls(r => r + 1)} />
             {isBoard && onCustomizeCards && (
                 <button type="button" className="cz-btn cz-wide" onClick={() => { closePanel(); onCustomizeCards(); }}>
                     {t('cz.customizeCards')}
@@ -272,6 +356,7 @@ function LookTab({ wallpaper, onWallpaperChange, fontSize, onFontSizeChange }) {
 function SettingsTab({ onStartTour, closePanel }) {
     const t = useT();
     const s = useQuickSettings();
+    const [webSuggest, setWebSuggest] = useState(getWebSuggestEnabled);
     const syncHint = !s.hostSync
         ? t('cz.off')
         : s.hostAvailable === null ? t('cz.checking')
@@ -280,6 +365,9 @@ function SettingsTab({ onStartTour, closePanel }) {
         <>
             <Row title={t('cz.language')} hint={t('cz.languageHint')}>
                 <LanguageSelect className="cz-select cz-lang" />
+            </Row>
+            <Row title={t('cz.webSuggest')} hint={t('cz.webSuggestHint')}>
+                <Switch checked={webSuggest} onChange={v => { setWebSuggest(v); setWebSuggestEnabled(v); }} label={t('cz.webSuggest')} />
             </Row>
             <Row title={t('cz.autoGroup')} hint={t('cz.autoGroupHint')}>
                 <Switch checked={s.autoGroup} onChange={s.setAutoGroup} label={t('cz.autoGroup')} />

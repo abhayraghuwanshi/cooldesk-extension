@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { notifyWsContentChanged } from '../../shared/activeSpace';
 
 // Same plain-text ↔ rich-text bridge WorkspaceContextPanel.jsx uses, so a note
 // created here reads correctly when later opened in its Tiptap editor there,
@@ -14,6 +15,21 @@ const stripHtml = (html) =>
         .trim();
 const wrapPlain = (text) => `<p>${(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p>`;
 
+// Records in the shape WorkspaceContextPanel.jsx reads/writes.
+const makeTodo = (workspaceId, text) => ({
+    id: `todo_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    workspaceId, text, done: false, createdAt: Date.now(), updatedAt: Date.now(),
+});
+const makeNote = (workspaceId, text) => ({
+    id: `wsnote_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    workspaceId,
+    title: text.slice(0, 40),
+    text: wrapPlain(text),
+    type: 'richtext',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+});
+
 /**
  * Typing an existing workspace's own name directly as a command (e.g.
  * "/cool-verse") opens it here. One input does everything: search text
@@ -28,6 +44,10 @@ const wrapPlain = (text) => `<p>${(text || '').replace(/&/g, '&amp;').replace(/<
  * Every mutation goes through `applyActions`/`workspaceActions.js` — the same
  * validated whitelist /agent's own proposals use — rather than a second
  * hand-rolled save path.
+ *
+ * `/todo` and `/notes` typed on their own reuse this mode with a `focus`
+ * ('todo' | 'notes'): the active workspace's todos or notes only, and plain
+ * text + Enter adds one (no prefix, no search-to-attach). See enter().
  */
 export function useEditWorkspaceMode({ showFeedback, setCommandMode, setQuery, setWorkspaces, onExit }) {
     const [workspaceId, setWorkspaceId] = useState(null);
@@ -41,11 +61,24 @@ export function useEditWorkspaceMode({ showFeedback, setCommandMode, setQuery, s
     const [activeNoteId, setActiveNoteId] = useState(null);
     // A todo whose text is being edited inline (its row swaps to an input).
     const [editingTodoId, setEditingTodoId] = useState(null);
+    // 'todo' | 'notes' for the standalone /todo and /notes views, else null.
+    const [focus, setFocus] = useState(null);
 
-    const enter = useCallback(async (ws) => {
+    /**
+     * @param opts.focus 'todo' | 'notes' — only that list (see above).
+     * @param opts.add   text to add to that list straight away ("/todo buy
+     *                   milk") — done here, with `ws.id`, because addTodo /
+     *                   addNote read workspaceId from state, not set yet.
+     */
+    const enter = useCallback(async (ws, opts = {}) => {
         setCommandMode('edit-workspace');
+        setFocus(opts.focus || null);
         setWorkspaceId(ws.id);
         setWorkspace(ws); // shown immediately; replaced below once the fresh copy lands
+        // Not the previous workspace's lists while this one's load (the
+        // /todo · /notes chip switches workspace in place).
+        setNotes([]);
+        setTodos([]);
         setActiveNoteId(null);
         setEditingTodoId(null);
         setQuery('');
@@ -59,8 +92,22 @@ export function useEditWorkspaceMode({ showFeedback, setCommandMode, setQuery, s
             const list = wsRes?.success ? wsRes.data : (Array.isArray(wsRes) ? wsRes : []);
             const fresh = list.find(w => w.id === ws.id);
             if (fresh) setWorkspace(fresh); // the cached row passed in may be stale
-            setNotes(n?.data || n || []);
-            setTodos(t?.data || t || []);
+            let noteList = n?.data || n || [];
+            let todoList = t?.data || t || [];
+            const add = (opts.add || '').trim();
+            if (add && opts.focus === 'todo') {
+                const { saveWorkspaceTodo } = await import('../../db/index.js');
+                const todo = makeTodo(ws.id, add);
+                todoList = [...todoList, todo];
+                saveWorkspaceTodo(todo).then(() => notifyWsContentChanged(todo.workspaceId)).catch(() => { });
+            } else if (add && opts.focus === 'notes') {
+                const { saveWorkspaceNote } = await import('../../db/index.js');
+                const note = makeNote(ws.id, add);
+                noteList = [note, ...noteList];
+                saveWorkspaceNote(note).then(() => notifyWsContentChanged(note.workspaceId)).catch(() => { });
+            }
+            setNotes(noteList);
+            setTodos(todoList);
         } catch (e) {
             console.warn('[Spotlight] edit-workspace: failed to load notes/todos', e);
         }
@@ -69,6 +116,7 @@ export function useEditWorkspaceMode({ showFeedback, setCommandMode, setQuery, s
     const exit = useCallback(() => {
         setCommandMode(null);
         setQuery('');
+        setFocus(null);
         setWorkspaceId(null);
         setWorkspace(null);
         setNotes([]);
@@ -149,12 +197,9 @@ export function useEditWorkspaceMode({ showFeedback, setCommandMode, setQuery, s
         const trimmed = (text || '').trim();
         if (!trimmed || !workspaceId) return;
         const { saveWorkspaceTodo } = await import('../../db/index.js');
-        const todo = {
-            id: `todo_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-            workspaceId, text: trimmed, done: false, createdAt: Date.now(), updatedAt: Date.now(),
-        };
+        const todo = makeTodo(workspaceId, trimmed);
         setTodos(prev => [...prev, todo]);
-        saveWorkspaceTodo(todo).catch(() => { });
+        saveWorkspaceTodo(todo).then(() => notifyWsContentChanged(todo.workspaceId)).catch(() => { });
     }, [workspaceId]);
 
     const toggleTodo = useCallback(async (id) => {
@@ -162,7 +207,7 @@ export function useEditWorkspaceMode({ showFeedback, setCommandMode, setQuery, s
         setTodos(prev => {
             const next = prev.map(t => (t.id === id ? { ...t, done: !t.done, updatedAt: Date.now() } : t));
             const updated = next.find(t => t.id === id);
-            if (updated) saveWorkspaceTodo(updated).catch(() => { });
+            if (updated) saveWorkspaceTodo(updated).then(() => notifyWsContentChanged(updated.workspaceId)).catch(() => { });
             return next;
         });
     }, []);
@@ -170,8 +215,8 @@ export function useEditWorkspaceMode({ showFeedback, setCommandMode, setQuery, s
     const removeTodo = useCallback(async (id) => {
         const { deleteWorkspaceTodo } = await import('../../db/index.js');
         setTodos(prev => prev.filter(t => t.id !== id));
-        deleteWorkspaceTodo(id).catch(() => { });
-    }, []);
+        deleteWorkspaceTodo(id).then(() => notifyWsContentChanged(workspaceId)).catch(() => { });
+    }, [workspaceId]);
 
     // ── Notes — plain text in this compact panel; stored as the same
     // richtext-shaped record WorkspaceContextPanel.jsx reads/writes, so
@@ -180,25 +225,18 @@ export function useEditWorkspaceMode({ showFeedback, setCommandMode, setQuery, s
         const trimmed = (text || '').trim();
         if (!trimmed || !workspaceId) return;
         const { saveWorkspaceNote } = await import('../../db/index.js');
-        const note = {
-            id: `wsnote_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-            workspaceId,
-            title: trimmed.slice(0, 40),
-            text: wrapPlain(trimmed),
-            type: 'richtext',
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-        };
+        const note = makeNote(workspaceId, trimmed);
         setNotes(prev => [note, ...prev]);
-        saveWorkspaceNote(note).catch(() => { });
+        saveWorkspaceNote(note).then(() => notifyWsContentChanged(note.workspaceId)).catch(() => { });
+        return note.id;
     }, [workspaceId]);
 
     const removeNote = useCallback(async (id) => {
         const { deleteNote } = await import('../../db/index.js');
         setNotes(prev => prev.filter(n => n.id !== id));
         if (activeNoteId === id) setActiveNoteId(null);
-        deleteNote(id).catch(() => { });
-    }, [activeNoteId]);
+        deleteNote(id).then(() => notifyWsContentChanged(workspaceId)).catch(() => { });
+    }, [activeNoteId, workspaceId]);
 
     /** Tiptap's onChange — HTML, debounced 150ms on its own side already. */
     const updateNoteContent = useCallback(async (id, html) => {
@@ -207,7 +245,7 @@ export function useEditWorkspaceMode({ showFeedback, setCommandMode, setQuery, s
             const note = prev.find(n => n.id === id);
             if (!note) return prev;
             const updated = { ...note, text: html, updatedAt: Date.now() };
-            saveWorkspaceNote(updated).catch(() => { });
+            saveWorkspaceNote(updated).then(() => notifyWsContentChanged(updated.workspaceId)).catch(() => { });
             return prev.map(n => (n.id === id ? updated : n));
         });
     }, []);
@@ -218,7 +256,7 @@ export function useEditWorkspaceMode({ showFeedback, setCommandMode, setQuery, s
             const note = prev.find(n => n.id === id);
             if (!note) return prev;
             const updated = { ...note, title, updatedAt: Date.now() };
-            saveWorkspaceNote(updated).catch(() => { });
+            saveWorkspaceNote(updated).then(() => notifyWsContentChanged(updated.workspaceId)).catch(() => { });
             return prev.map(n => (n.id === id ? updated : n));
         });
     }, []);
@@ -234,13 +272,13 @@ export function useEditWorkspaceMode({ showFeedback, setCommandMode, setQuery, s
         setTodos(prev => {
             const next = prev.map(t => (t.id === id ? { ...t, text: trimmed, updatedAt: Date.now() } : t));
             const updated = next.find(t => t.id === id);
-            if (updated) saveWorkspaceTodo(updated).catch(() => { });
+            if (updated) saveWorkspaceTodo(updated).then(() => notifyWsContentChanged(updated.workspaceId)).catch(() => { });
             return next;
         });
     }, []);
 
     return {
-        workspaceId, workspace, notes, todos, renaming,
+        workspaceId, workspace, notes, todos, renaming, focus,
         activeNoteId, openNote, closeNote, updateNoteContent, updateNoteTitle,
         editingTodoId, startEditTodo, cancelEditTodo, updateTodoText,
         enter, exit, addItem, removeUrl, removeApp, rename,

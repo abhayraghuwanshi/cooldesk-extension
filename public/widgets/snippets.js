@@ -1,13 +1,14 @@
+  var T = cooldesk.t;
   var snippets = cooldesk.store.get("snippets", [
-    { name: "Email", text: "you@example.com" },
-    { name: "Meet link", text: "https://meet.google.com/your-room" },
-    { name: "Shrug", text: "¯\\_(ツ)_/¯" }
+    { name: T("Email"), text: "you@example.com" },
+    { name: T("Meet link"), text: "https://meet.google.com/your-room" },
+    { name: T("Shrug"), text: "¯\\_(ツ)_/¯" }
   ]);
   function save() { cooldesk.store.set("snippets", snippets); }
   function flash(msg) {
     var s = document.getElementById("status");
     s.textContent = msg;
-    setTimeout(function () { s.textContent = "Snippets — click to copy"; }, 1300);
+    setTimeout(function () { s.textContent = T("Snippets — click to copy"); }, 1300);
   }
   function render() {
     var box = document.getElementById("rows");
@@ -28,7 +29,7 @@
       del.onclick = function (e) { e.stopPropagation(); snippets.splice(i, 1); save(); render(); };
       el.append(name, preview, del);
       el.onclick = function () {
-        navigator.clipboard.writeText(sn.text).then(function () { flash("Copied “" + sn.name + "” ✓"); });
+        navigator.clipboard.writeText(sn.text).then(function () { flash(T("Copied “{name}” ✓", { name: sn.name })); });
       };
       box.appendChild(el);
     });

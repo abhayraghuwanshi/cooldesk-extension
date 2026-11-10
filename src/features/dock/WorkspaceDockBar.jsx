@@ -86,6 +86,19 @@ const placeLabel = (app) => {
   return { name, parent };
 };
 
+// Hover label for a filesystem path: the full path never fits the 150px chip,
+// so keep the end (the part that names the thing): "/Users/me/a/b/c" →
+// "…/b/c". Home becomes "~". Anything that isn't a path passes through.
+const shortPath = (label) => {
+  const s = String(label || '');
+  if (!/^(~|\/|[A-Za-z]:[\\/])/.test(s)) return s;
+  const home = s.replace(/^\/(Users|home)\/[^\\/]+/, '~').replace(/^[A-Za-z]:[\\/]Users[\\/][^\\/]+/i, '~');
+  const sep = home.includes('\\') && !home.includes('/') ? '\\' : '/';
+  const parts = home.split(/[\\/]/).filter(Boolean);
+  if (home.length <= 36 || parts.length <= 2) return home;
+  return `…${sep}${parts.slice(-2).join(sep)}`;
+};
+
 /**
  * What the bar shows for a workspace: its own links/apps, then its project's
  * committed .cooldesk items (same resolution as the workspace cards — see
@@ -379,9 +392,10 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
   // would be clipped at the window edge — and the native `title` tooltip only
   // shows after the OS hover delay. Instead the workspace chip shows the
   // hovered item's name, instantly, inside the bar.
-  const [hoverLabel, setHoverLabel] = useState(null);
+  const [hoverLabel, setHoverLabelRaw] = useState(null);
+  const setHoverLabel = useCallback((l) => setHoverLabelRaw(l ? shortPath(l) : l), []);
 
-  const handleDockMouseLeave = useCallback(() => setHoverLabel(null), []);
+  const handleDockMouseLeave = useCallback(() => setHoverLabelRaw(null), []);
 
   // The launcher row scrolls sideways when it outgrows the screen, but a
   // mouse wheel / vertical two-finger swipe only produces deltaY, and the
@@ -722,7 +736,9 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
             title={workspaces.length > 1 ? t('db.switchWorkspace') : workspace?.name || 'CoolDesk'}
             aria-expanded={picking}
           >
-            {picking ? t('db.pick') : hoverLabel || (isActiveMode ? t('db.active') : workspace?.name || 'CoolDesk')}
+            <span className="dockbar-ws-name-text">
+              {picking ? t('db.pick') : hoverLabel || (isActiveMode ? t('db.active') : workspace?.name || 'CoolDesk')}
+            </span>
           </button>
         </div>
 

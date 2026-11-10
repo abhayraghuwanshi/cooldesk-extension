@@ -1,3 +1,4 @@
+  var T = cooldesk.t;
   // Computed locally from the synodic month — no network needed.
   var SYNODIC = 29.53058867;
   var KNOWN_NEW_MOON = Date.UTC(2000, 0, 6, 18, 14); // reference new moon
@@ -12,8 +13,8 @@
   var toFull = frac < 0.5 ? (0.5 - frac) * SYNODIC : (1.5 - frac) * SYNODIC;
 
   document.getElementById("icon").textContent = PHASES[idx][0];
-  document.getElementById("name").textContent = PHASES[idx][1];
-  document.getElementById("lit").textContent = illumination + "% illuminated";
+  document.getElementById("name").textContent = T(PHASES[idx][1]);
+  document.getElementById("lit").textContent = T("{n}% illuminated", { n: illumination });
   var days = Math.round(toFull);
   document.getElementById("tofull").textContent =
-    days < 1 || days >= 29 ? "Full moon tonight" : days + (days === 1 ? " day" : " days") + " to full moon";
+    days < 1 || days >= 29 ? T("Full moon tonight") : days === 1 ? T("1 day to full moon") : T("{n} days to full moon", { n: days });

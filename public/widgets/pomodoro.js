@@ -1,3 +1,4 @@
+  var T = cooldesk.t;
   var FOCUS = parseInt(cooldesk.get("focus", "25"), 10) * 60;
   var BREAK = parseInt(cooldesk.get("break", "5"), 10) * 60;
   var isFocus = true, left = FOCUS, running = false, session = 1, timer = null;
@@ -5,10 +6,10 @@
   function fmt(s) { return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); }
   function render() {
     document.getElementById("time").textContent = fmt(left);
-    document.getElementById("phase").textContent = isFocus ? "Focus" : "Break";
-    document.getElementById("count").textContent = "Session " + session;
+    document.getElementById("phase").textContent = isFocus ? T("Focus") : T("Break");
+    document.getElementById("count").textContent = T("Session {n}", { n: session });
     document.getElementById("fill").style.width = (left / (isFocus ? FOCUS : BREAK) * 100) + "%";
-    document.getElementById("toggle").textContent = running ? "Pause" : "Start";
+    document.getElementById("toggle").textContent = running ? T("Pause") : T("Start");
     document.title = fmt(left) + (isFocus ? " Focus" : " Break");
   }
   function switchPhase() {

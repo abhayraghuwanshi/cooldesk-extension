@@ -1,3 +1,4 @@
+  var T = cooldesk.t;
   var goal = parseInt(cooldesk.get("goal", "8"), 10);
   var todayKey = new Date().toLocaleDateString("en-CA");
   var state = cooldesk.store.get("water", {});
@@ -13,7 +14,7 @@
       box.appendChild(g);
     }
     document.getElementById("count").textContent = state.n + " / " + goal +
-      (state.n >= goal ? " · Done 💧" : "");
+      (state.n >= goal ? " · " + T("Done") + " 💧" : "");
   }
   document.getElementById("add").onclick = function () { state.n++; save(); render(); };
   document.getElementById("minus").onclick = function () { if (state.n > 0) state.n--; save(); render(); };

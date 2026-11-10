@@ -1,3 +1,4 @@
+  var T = cooldesk.t;
   // Rates: Frankfurter (ECB data, no key) — api.frankfurter.dev/v1; the old
   // api.frankfurter.app host only redirects there now. Last good rates cached for offline.
   var CURRENCIES = ["USD", "EUR", "GBP", "INR", "JPY", "AUD", "CAD", "CNY", "CHF", "SGD"];
@@ -13,7 +14,7 @@
   function compute() {
     var amount = parseFloat(document.getElementById("amount").value) || 0;
     document.getElementById("result").textContent =
-      rate === null ? "—" : (amount * rate).toLocaleString("en-US", { maximumFractionDigits: 2 });
+      rate === null ? "—" : (amount * rate).toLocaleString(cooldesk.locale, { maximumFractionDigits: 2 });
   }
   function load() {
     if (from.value === to.value) { rate = 1; compute(); document.getElementById("status").textContent = ""; return; }
@@ -28,7 +29,7 @@
       })
       .catch(function () {
         rate = cooldesk.store.get(key, null);
-        document.getElementById("status").textContent = rate ? "Offline — cached rate" : "Offline";
+        document.getElementById("status").textContent = rate ? T("Offline — cached rate") : T("Offline");
         compute();
       });
   }

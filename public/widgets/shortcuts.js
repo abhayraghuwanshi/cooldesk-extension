@@ -1,3 +1,4 @@
+  var T = cooldesk.t;
   var SHORTCUTS = [
     [["Alt", "K"], "Open CoolDesk Spotlight — search tabs, apps, notes and files from anywhere", "CoolDesk"],
     [["Ctrl", "Shift", "T"], "Reopen the tab you just closed (works repeatedly)", "Browser"],
@@ -27,8 +28,8 @@
       kbd.textContent = k;
       keys.appendChild(kbd);
     });
-    document.getElementById("what").textContent = s[1];
-    document.getElementById("app").textContent = s[2];
+    document.getElementById("what").textContent = T(s[1]);
+    document.getElementById("app").textContent = T(s[2]);
   }
   document.getElementById("next").onclick = function () { i++; render(); };
   render();

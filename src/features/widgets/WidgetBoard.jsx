@@ -19,6 +19,7 @@ import {
 } from '../../data/customWidgets';
 import { attachWidgetHostBridge } from '../../services/widgetHostBridge';
 import { accentTextVars } from '../../utils/readableColor.js';
+import { useLanguage } from '../../shared/i18n';
 import './WidgetBoard.css';
 
 // Every widget iframe gets the host bridge on load: widget data mirrors into
@@ -168,6 +169,7 @@ function useWidgetTheme() {
 }
 
 const WidgetTile = memo(function WidgetTile({ tile, widget, theme, dragging, onResize, onRemove, onRecolor, onDragStart, onDragEnter, onDragEnd }) {
+    useLanguage(); // widget URLs carry ?lang= — re-render on a language switch
     const [menu, setMenu] = useState(null);
 
     // Dismiss on outside click. The menu is portaled out of the tile, so its
@@ -396,6 +398,7 @@ function CustomWidgetForm({ onCreate }) {
 const NEW_CUSTOM = '::new-custom';
 
 function WidgetPicker({ board, theme, customs, onAdd, onRemove, onClose, onCreateCustom, onDeleteCustom, onRenameCustom }) {
+    useLanguage();
     const [category, setCategory] = useState('All');
     const [query, setQuery] = useState('');
     const [selectedId, setSelectedId] = useState(WIDGET_CATALOG[0].id);
@@ -885,7 +888,9 @@ const WidgetBoard = memo(function WidgetBoard({ storageArea, compact = false, de
 // `theme`: force 'light' / 'dark' regardless of the app theme (a start page
 // with its own surface — e.g. a cream "newspaper" — needs dark text). A forced
 // theme always draws clear (no widget card), so the host surface shows.
-const WidgetEmbed = memo(function WidgetEmbed({ widgetId, center = false, theme: forcedTheme = null }) {
+// `skin`: a Workflow board skin name; the widget restyles itself to match.
+const WidgetEmbed = memo(function WidgetEmbed({ widgetId, center = false, theme: forcedTheme = null, skin = null }) {
+    useLanguage();
     const appTheme = useWidgetTheme();
     const theme = forcedTheme || appTheme;
     const widget = useMemo(
@@ -905,6 +910,7 @@ const WidgetEmbed = memo(function WidgetEmbed({ widgetId, center = false, theme:
                 // leaving a wide margin.
                 fit: widget.fit ? { w: widget.fitW || 240, h: widget.h } : null,
                 center,
+                skin,
             })}
             title={widget.name}
             onLoad={bridgeOnLoad}

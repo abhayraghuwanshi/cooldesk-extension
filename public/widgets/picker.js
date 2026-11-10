@@ -1,3 +1,4 @@
+  var T = cooldesk.t;
   var result = document.getElementById("result");
   function reveal(final, pool) {
     result.className = "big";
@@ -12,11 +13,11 @@
     e.preventDefault();
     var opts = document.getElementById("options").value.split(",")
       .map(function (s) { return s.trim(); }).filter(Boolean);
-    if (opts.length < 2) { result.className = "hint"; result.textContent = "Give me at least two options, comma-separated"; return; }
+    if (opts.length < 2) { result.className = "hint"; result.textContent = T("Give me at least two options, comma-separated"); return; }
     reveal(opts[Math.floor(Math.random() * opts.length)], opts);
   };
   document.getElementById("coin").onclick = function () {
-    reveal(Math.random() < 0.5 ? "Heads" : "Tails", ["Heads", "Tails"]);
+    reveal(Math.random() < 0.5 ? T("Heads") : T("Tails"), [T("Heads"), T("Tails")]);
   };
   document.getElementById("dice").onclick = function () {
     var faces = ["1", "2", "3", "4", "5", "6"];

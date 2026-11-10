@@ -3,6 +3,10 @@ import { useEffect, useRef, useState } from 'react';
 import { quickSearch } from '../../../services/searchService';
 import { getFaviconUrl } from '../../../utils/helpers.js';
 import { useT } from '../../../shared/i18n';
+import {
+    availableEngines, engineFor, fetchWebSuggestions as fetchEngineSuggestions, getEngineKey,
+    getWebSuggestEnabled, hasChromeSearch, searchUrl, setEngineKey as saveEngineKey,
+} from '../../../shared/searchEngines';
 
 // The Search vibe's centerpiece (also addable as a "Search bar" card): one big
 // pill, engine chips under it, and an omnibox-style suggestion panel while
@@ -14,35 +18,14 @@ import { useT } from '../../../shared/i18n';
 //   1. exactly what was typed — "Search … for x" / "Go to x". It's selected by
 //      default, so a plain Enter never opens a fuzzy match nobody picked.
 //   2. web query suggestions from the chosen engine's suggest endpoint
-//      (Google for Default/YouTube/GitHub — those have no public one).
+//      (shared/searchEngines.js), unless turned off in Customize → Settings.
 //   3. open tabs, bookmarks, history, saved workspace links — the spotlight's
 //      own index (searchService.quickSearch). An open tab switches to it.
-const ENGINES = [
-    { key: 'default', label: 'Default', suggest: 'google' },
-    { key: 'google', label: 'Google', url: 'https://www.google.com/search?q=', suggest: 'google' },
-    { key: 'ddg', label: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=', suggest: 'ddg' },
-    { key: 'bing', label: 'Bing', url: 'https://www.bing.com/search?q=', suggest: 'bing' },
-    { key: 'youtube', label: 'YouTube', url: 'https://www.youtube.com/results?search_query=', suggest: 'youtube' },
-    { key: 'github', label: 'GitHub', url: 'https://github.com/search?q=', suggest: 'google' },
-];
-const ENGINE_KEY = 'cooldesk-search-engine';
-
-// Each returns OpenSearch-style JSON: [query, [suggestion, …], …]. Their
-// hosts are in the manifest's connect-src.
-const SUGGEST_URL = {
-    google: (q) => `https://suggestqueries.google.com/complete/search?client=chrome&ie=utf-8&oe=utf-8&q=${encodeURIComponent(q)}`,
-    youtube: (q) => `https://suggestqueries.google.com/complete/search?client=chrome&ie=utf-8&oe=utf-8&ds=yt&q=${encodeURIComponent(q)}`,
-    ddg: (q) => `https://duckduckgo.com/ac/?type=list&q=${encodeURIComponent(q)}`,
-    bing: (q) => `https://api.bing.com/osjson.aspx?query=${encodeURIComponent(q)}`,
-};
-
 const MAX_WEB = 5;
 const MAX_LOCAL = 5;
 const DEBOUNCE_MS = 110;
 const LOCAL_TYPES = new Set(['tab', 'bookmark', 'history', 'workspace-url']);
 const LOCAL_LABEL = { tab: 'Switch to tab', bookmark: 'Bookmark', history: 'History', 'workspace-url': 'Saved link' };
-
-const hasChromeSearch = () => typeof chrome !== 'undefined' && !!chrome.search?.query;
 
 // "example.com", "localhost:3000", "https://…" → go there instead of searching.
 function asUrl(q) {
@@ -57,19 +40,9 @@ const hostOf = (url) => {
     try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
 };
 
-async function fetchWebSuggestions(engine, q, signal) {
-    const make = SUGGEST_URL[engine.suggest];
-    if (!make) return [];
-    try {
-        const res = await fetch(make(q), { signal, credentials: 'omit' });
-        if (!res.ok) return [];
-        const data = await res.json();
-        const list = Array.isArray(data?.[1]) ? data[1] : [];
-        return list.filter(s => typeof s === 'string' && s.toLowerCase() !== q.toLowerCase()).slice(0, MAX_WEB);
-    } catch {
-        return [];
-    }
-}
+const fetchWebSuggestions = (engine, q, signal) => (
+    getWebSuggestEnabled() ? fetchEngineSuggestions(engine.key, q, { signal, max: MAX_WEB }) : Promise.resolve([])
+);
 
 async function fetchLocal(q) {
     try {
@@ -101,19 +74,9 @@ async function switchToTab(tabId, url) {
     }
 }
 
-function engineFor(key) {
-    return ENGINES.find(e => e.key === key) || ENGINES[1];
-}
-
 export function SearchHero() {
     const t = useT();
-    const [engineKey, setEngineKey] = useState(() => {
-        try {
-            const v = localStorage.getItem(ENGINE_KEY);
-            if (ENGINES.some(e => e.key === v) && (v !== 'default' || hasChromeSearch())) return v;
-        } catch { /* storage unavailable */ }
-        return hasChromeSearch() ? 'default' : 'google';
-    });
+    const [engineKey, setEngineKey] = useState(getEngineKey);
     const [q, setQ] = useState('');
     const [open, setOpen] = useState(false);
     const [web, setWeb] = useState([]);
@@ -123,7 +86,7 @@ export function SearchHero() {
     const panelRef = useRef(null);
 
     const engine = engineFor(engineKey);
-    const engines = ENGINES.filter(e => e.key !== 'default' || hasChromeSearch());
+    const engines = availableEngines();
     const term = q.trim();
 
     useEffect(() => { inputRef.current?.focus(); }, []);
@@ -197,7 +160,7 @@ export function SearchHero() {
             chrome.search.query({ text, disposition: newTab ? 'NEW_TAB' : 'CURRENT_TAB' });
             return;
         }
-        go(`${engine.url || ENGINES[1].url}${encodeURIComponent(text)}`, newTab);
+        go(searchUrl(engine.key, text), newTab);
     };
 
     const activate = (item, newTab = false) => {
@@ -233,7 +196,7 @@ export function SearchHero() {
 
     const pickEngine = (key) => {
         setEngineKey(key);
-        try { localStorage.setItem(ENGINE_KEY, key); } catch { /* won't persist */ }
+        saveEngineKey(key);
         inputRef.current?.focus();
     };
 
