@@ -404,3 +404,107 @@ html[data-skin="dusk"] .big { text-shadow: 0 0 26px rgba(155, 123, 255, 0.5); }
 html[data-skin="dusk"] button.primary,
 html[data-skin="dusk"] button.primary:hover { background: linear-gradient(135deg, #ff8a5c, #9b7bff); border-color: transparent; color: #fff; box-shadow: 0 6px 18px -8px #9b7bff; }
 html[data-skin="dusk"] .bar > i { background: linear-gradient(90deg, #ffb35c, #ff6a88, #9b7bff); }
+
+/* ── Looks (any layout; src/faces/overview/looks.js) ── */
+
+/* mono: Helvetica, white on black, hairlines, no corners */
+html[data-skin="mono"] {
+  --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --fg: #fff; --muted: rgba(255, 255, 255, 0.5); --accent: #fff;
+  --card: transparent; --faint: rgba(255, 255, 255, 0.2); --radius: 0;
+}
+html[data-skin="mono"] .label { letter-spacing: 0.22em; font-size: 9.5px; font-weight: 500; }
+html[data-skin="mono"] .big { font-weight: 500; letter-spacing: -0.06em; }
+html[data-skin="mono"] :is(input, select) { background: transparent; border: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.3); }
+html[data-skin="mono"] :is(input, select):focus { box-shadow: none; border-bottom-color: #fff; }
+html[data-skin="mono"] button { font-weight: 500; }
+html[data-skin="mono"] button.primary,
+html[data-skin="mono"] button.primary:hover { background: #fff; border-color: #fff; color: #000; box-shadow: none; }
+
+/* noir: serif, grey ink, one red */
+html[data-skin="noir"] {
+  --fg: #f2f2f2; --muted: rgba(242, 242, 242, 0.5); --accent: #e63946;
+  --card: rgba(255, 255, 255, 0.04); --faint: rgba(255, 255, 255, 0.12); --radius: 2px;
+  --good: #e8e8e8; --bad: #e63946;
+}
+html[data-skin="noir"] .big { font-family: "Iowan Old Style", Palatino, Georgia, serif; font-weight: 400; letter-spacing: -0.02em; }
+html[data-skin="noir"] .label { letter-spacing: 0.18em; }
+html[data-skin="noir"] button.primary,
+html[data-skin="noir"] button.primary:hover { background: #e63946; border-color: #e63946; color: #fff; box-shadow: none; }
+
+/* sakura (light): blush, rose ink, soft pills */
+html[data-skin="sakura"] {
+  --fg: #5a2a3a; --muted: rgba(90, 42, 58, 0.58); --accent: #e0577f;
+  --card: rgba(224, 87, 127, 0.07); --faint: rgba(224, 87, 127, 0.2); --radius: 14px;
+}
+html[data-skin="sakura"] .big { font-family: "Iowan Old Style", Palatino, Georgia, serif; font-weight: 400; font-style: italic; letter-spacing: -0.01em; }
+html[data-skin="sakura"] .label { color: #c2416b; }
+html[data-skin="sakura"] button { border-radius: 99px; }
+html[data-skin="sakura"] button.primary,
+html[data-skin="sakura"] button.primary:hover { background: #e0577f; border-color: #e0577f; color: #fff; box-shadow: 0 6px 16px -8px #e0577f; }
+html[data-skin="sakura"] .bar > i { background: linear-gradient(90deg, #ffa3c0, #e0577f); }
+
+/* ocean: aqua on deep blue, thin big numerals */
+html[data-skin="ocean"] {
+  --fg: #e6fffb; --muted: rgba(170, 240, 232, 0.62); --accent: #3fe0d0;
+  --card: rgba(95, 240, 224, 0.07); --faint: rgba(95, 240, 224, 0.2); --radius: 12px;
+}
+html[data-skin="ocean"] .big { font-weight: 200; letter-spacing: -0.03em; text-shadow: 0 0 24px rgba(63, 224, 208, 0.45); }
+html[data-skin="ocean"] .label { color: rgba(95, 240, 224, 0.75); }
+html[data-skin="ocean"] button.primary,
+html[data-skin="ocean"] button.primary:hover { background: linear-gradient(135deg, #3fe0d0, #2a8cff); border-color: transparent; color: #02141c; box-shadow: none; }
+html[data-skin="ocean"] .bar > i { background: linear-gradient(90deg, #2a8cff, #3fe0d0); }
+
+/* forest: serif, cream on moss, lime accent */
+html[data-skin="forest"] {
+  --sans: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --fg: #eef3dc; --muted: rgba(217, 232, 168, 0.6); --accent: #c8e07a;
+  --card: rgba(217, 232, 168, 0.06); --faint: rgba(217, 232, 168, 0.18); --radius: 10px;
+}
+html[data-skin="forest"] .label { text-transform: none; font-style: italic; letter-spacing: 0; font-size: 13px; font-weight: 400; color: #c8e07a; }
+html[data-skin="forest"] .big { font-weight: 400; font-variant-numeric: lining-nums tabular-nums; }
+html[data-skin="forest"] button.primary,
+html[data-skin="forest"] button.primary:hover { background: #c8e07a; border-color: #c8e07a; color: #172512; box-shadow: none; }
+
+/* vapor: chrome-pink-cyan, italic heavy numerals with a double shadow */
+html[data-skin="vapor"] {
+  --fg: #fff; --muted: #5ef2ff; --accent: #ff4fa3;
+  --card: rgba(94, 242, 255, 0.07); --faint: rgba(94, 242, 255, 0.35); --radius: 4px;
+}
+html[data-skin="vapor"] .big { font-style: italic; font-weight: 800; text-shadow: 3px 3px 0 #ff4fa3, -2px -2px 0 #5ef2ff; }
+html[data-skin="vapor"] .label { font-style: italic; letter-spacing: 0.12em; }
+html[data-skin="vapor"] button { font-style: italic; text-transform: uppercase; letter-spacing: 0.08em; font-size: 10.5px; }
+html[data-skin="vapor"] button.primary,
+html[data-skin="vapor"] button.primary:hover { background: linear-gradient(135deg, #ff4fa3, #8a4dff); border-color: #5ef2ff; color: #fff; box-shadow: 3px 3px 0 #5ef2ff; }
+html[data-skin="vapor"] .bar > i { background: linear-gradient(90deg, #5ef2ff, #ff4fa3); }
+
+/* brutal (light): black ink, hard borders, yellow */
+html[data-skin="brutal"] {
+  --sans: "Helvetica Neue", Arial, sans-serif;
+  --fg: #000; --muted: #444; --accent: #000;
+  --card: #fff; --faint: #000; --radius: 0;
+}
+html[data-skin="brutal"] .big { font-family: "Arial Black", Arial, sans-serif; font-weight: 900; letter-spacing: -0.05em; }
+html[data-skin="brutal"] .label { color: #000; font-weight: 800; }
+html[data-skin="brutal"] :is(button, input, select, textarea) { border-width: 2px; border-color: #000; }
+html[data-skin="brutal"] button { box-shadow: 3px 3px 0 #000; font-weight: 800; text-transform: uppercase; font-size: 11px; }
+html[data-skin="brutal"] button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #000; }
+html[data-skin="brutal"] button.ghost { box-shadow: none; border-color: transparent; }
+html[data-skin="brutal"] button.primary,
+html[data-skin="brutal"] button.primary:hover { background: #ffe600; border-color: #000; color: #000; box-shadow: 3px 3px 0 #000; }
+html[data-skin="brutal"] :is(input, select, textarea):focus { box-shadow: 3px 3px 0 #000; }
+html[data-skin="brutal"] .bar { background: #fff; border: 2px solid #000; height: 10px; border-radius: 0; }
+html[data-skin="brutal"] .bar > i { background: #000; border-radius: 0; }
+html[data-skin="brutal"] input[type="checkbox"] { accent-color: #000; }
+
+/* clay (light): warm, soft, pressed-in fields, orange */
+html[data-skin="clay"] {
+  --fg: #4a3f35; --muted: rgba(74, 63, 53, 0.58); --accent: #e07a4f;
+  --card: #efe7dc; --faint: rgba(74, 63, 53, 0.12); --radius: 14px;
+}
+html[data-skin="clay"] .big { color: #e07a4f; }
+html[data-skin="clay"] :is(input, select, textarea) { border-color: transparent; box-shadow: inset 3px 3px 7px #d6cbbd, inset -3px -3px 7px #fffaf2; }
+html[data-skin="clay"] button { border-color: transparent; border-radius: 99px; box-shadow: 3px 3px 7px #d6cbbd, -3px -3px 7px #fffaf2; }
+html[data-skin="clay"] button.ghost { box-shadow: none; }
+html[data-skin="clay"] button.primary,
+html[data-skin="clay"] button.primary:hover { background: #e07a4f; color: #fff; box-shadow: 4px 4px 10px #d6cbbd, -4px -4px 10px #fffaf2; }

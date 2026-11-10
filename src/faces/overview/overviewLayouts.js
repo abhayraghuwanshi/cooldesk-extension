@@ -348,7 +348,7 @@ export const OVERVIEW_VIBES = [
         },
     },
     {
-        key: 'fun-terminal', group: 'fun', label: 'Terminal', hint: 'Green-screen hacker mode',
+        key: 'fun-terminal', group: 'fun', ownLook: true, label: 'Terminal', hint: 'Green-screen hacker mode',
         preview: [[4, 4, 14, 2], [4, 8, 20, 6], [4, 16, 26, 2], [4, 19, 12, 1], [4, 21, 12, 1], [4, 23, 12, 1]],
         stage: {
             align: 'top',
@@ -367,7 +367,7 @@ export const OVERVIEW_VIBES = [
         },
     },
     {
-        key: 'fun-paper', group: 'fun', label: 'Newspaper', hint: 'The morning edition: headline, quote, weather',
+        key: 'fun-paper', group: 'fun', ownLook: true, label: 'Newspaper', hint: 'The morning edition: headline, quote, weather',
         preview: [[6, 2, 28, 24], [9, 4, 22, 3], [9, 9, 22, 1], [9, 12, 13, 11], [24, 12, 7, 5], [24, 18, 7, 5]],
         stage: {
             align: 'top',
@@ -398,7 +398,7 @@ export const OVERVIEW_VIBES = [
         },
     },
     {
-        key: 'fun-scrapbook', group: 'fun', label: 'Scrapbook', hint: 'Widgets taped to a corkboard, a little crooked',
+        key: 'fun-scrapbook', group: 'fun', ownLook: true, label: 'Scrapbook', hint: 'Widgets taped to a corkboard, a little crooked',
         preview: [[4, 4, 10, 9], [16, 3, 9, 10], [27, 5, 9, 8], [6, 15, 11, 9], [20, 15, 12, 9]],
         stage: {
             center: [{
@@ -414,7 +414,7 @@ export const OVERVIEW_VIBES = [
         },
     },
     {
-        key: 'fun-night', group: 'fun', label: 'Night', hint: 'A starry sky, the moon and the clock',
+        key: 'fun-night', group: 'fun', ownLook: true, label: 'Night', hint: 'A starry sky, the moon and the clock',
         preview: [[15, 4, 10, 8], [10, 14, 20, 6], [14, 22, 12, 3]],
         stage: {
             center: [

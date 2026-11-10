@@ -11,6 +11,7 @@ import { accentTextVars } from '../../utils/readableColor.js';
 import { ColumnColorChip } from './ColumnColorChip.jsx';
 import { DEFAULT_COLORLESS_OPACITY, colorlessStyle } from './columnColor.js';
 import { getSkin, skinLabel } from './boardSkins.js';
+import { useLook } from './looks.js';
 import { CARD_MAX, CARD_TYPES, cardLabel, firstFreeCell, getVibe, makeCard, resolveLayout, useOverviewCards, widgetRows } from './overviewLayouts';
 
 // Custom layout: the page as a free grid of cards (macOS-desktop-widget
@@ -200,9 +201,11 @@ function cardColorStyle(card, wall) {
 const CardBoard = memo(function CardBoard({ board = 'custom', editing = false, onDone, wall = null }) {
     const [cards, setCards, resetCards] = useOverviewCards(board);
     const vibe = getVibe(board);
-    // Workflow boards wear a skin (boardSkins.jsx): backdrop, card labels and
-    // a header/footer frame whose height comes out of the cells' budget.
-    const skin = getSkin(vibe?.skin);
+    // The board's look (looks.js — a Workflow board's own skin, or one the
+    // user picked): backdrop, card labels and a header/footer frame whose
+    // height comes out of the cells' budget.
+    const skinName = useLook(board);
+    const skin = getSkin(skinName);
     const chrome = skin?.chrome || 0;
     const [{ cell, cols }, setGrid] = useState(() => gridFor(window.innerWidth * 0.9, window.innerHeight - 110 - chrome));
     // Rows the stored board spans — what the cell size must fit vertically.
@@ -341,9 +344,10 @@ const CardBoard = memo(function CardBoard({ board = 'custom', editing = false, o
             ref={boardRef}
             className={`ocb ${editing ? 'is-editing' : ''} ${vibe?.center ? 'is-centered' : ''}`}
             data-vibe={vibe ? vibe.key.replace(/^(vibe|start|fun)-/, '') : undefined}
-            data-skin={skin ? vibe.skin : undefined}
+            data-skin={skin ? skinName : undefined}
+            data-light={skin?.theme === 'light' ? '' : undefined}
         >
-            {skin && <div className={`ocb-skin-bg skin-${vibe.skin}`} aria-hidden="true"><i /></div>}
+            {skin && <div className={`ocb-skin-bg skin-${skinName}`} aria-hidden="true"><i /></div>}
             <div className={skin ? 'ocb-skin-frame' : 'ocb-frame-none'}>
             {skin?.header && <skin.header />}
             <div ref={gridRef} className="ocb-grid" style={{ '--ocb-cols': shownCols, '--ocb-cell': `${cell}px`, '--ocb-gap': `${GAP}px` }}>
@@ -375,7 +379,7 @@ const CardBoard = memo(function CardBoard({ board = 'custom', editing = false, o
                             </div>
                         )}
                         <div className="ocb-card-body">
-                            <CardContent card={card} pinnedTabs={pinnedTabs} centerGlance={!!vibe} theme={skin?.theme || null} skin={skin ? vibe.skin : null} />
+                            <CardContent card={card} pinnedTabs={pinnedTabs} centerGlance={!!vibe} theme={skin?.theme || null} skin={skin ? skinName : null} />
                         </div>
                         {!editing && kindOf(card) !== 'searchbar' && (
                             <ColumnColorChip

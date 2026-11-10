@@ -251,3 +251,44 @@ export function DuskHeader() {
     );
 }
 
+
+// ── Looks (any layout can wear these; see looks.js) ──
+
+export function MonoHeader() {
+    const now = useNow(60_000);
+    return (
+        <div className="skin-bar skin-mono-head">
+            <b>{now.toLocaleDateString(getLocale(), { weekday: 'long' })}</b>
+            <span className="skin-spacer" />
+            <span>{pad(now.getDate())}.{pad(now.getMonth() + 1)}.{now.getFullYear()}</span>
+            <span>W{pad(isoWeek(now))}</span>
+            <span>{hm(now)}</span>
+        </div>
+    );
+}
+
+export function BrutalHeader() {
+    const now = useNow(30_000);
+    const day = now.toLocaleDateString(getLocale(), { weekday: 'long' }).toUpperCase();
+    const row = (
+        <span className="skin-brutal-run">
+            TODAY IS {day} ★ {hm(now)} ★ WEEK {isoWeek(now)} ★ DAY {dayOfYear(now)} OF {daysInYear(now)} ★&nbsp;
+        </span>
+    );
+    return (
+        <div className="skin-bar skin-brutal-head" aria-label={`${day} ${hm(now)}`}>
+            <div className="skin-brutal-track">{row}{row}{row}{row}</div>
+        </div>
+    );
+}
+
+export function VaporHeader() {
+    const now = useNow(1000);
+    return (
+        <div className="skin-bar skin-vapor-head">
+            <span className="skin-vapor-title">{'ｗｅｌｃｏｍｅ\u3000ｂａｃｋ'}</span>
+            <span className="skin-spacer" />
+            <span className="skin-vapor-time">{hms(now)}</span>
+        </div>
+    );
+}

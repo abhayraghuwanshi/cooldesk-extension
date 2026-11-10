@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef } from 'react';
+import { createContext, memo, useContext, useEffect, useRef } from 'react';
 import { ActivityFeed } from './parts/ActivityFeed';
 import { SearchHero } from './parts/SearchHero';
 import { ActivityOverview } from '../../features/activity/ActivityOverview';
@@ -6,6 +6,12 @@ import { WidgetEmbed } from '../../features/widgets/WidgetBoard';
 import { AnalogClock, BinaryClock, CodeRain, FlipClock, ProgressBars, SkyArc, SkyBackground, WordClock } from './stagePieces';
 import { useNow } from './useNow';
 import { getLocale, t, useT } from '../../shared/i18n';
+import { getSkin } from './boardSkins';
+import { useLook } from './looks';
+
+// The stage's look (looks.js), for the widget pieces: they restyle their
+// insides to match (?skin=) and go light on light looks.
+const LookCtx = createContext(null);
 
 // "Start pages" and the just-for-fun layouts: classic and not-so-classic
 // new-tab arrangements built only from pieces the page already has. Unlike the
@@ -152,6 +158,18 @@ function DockShortcuts({ p }) {
     );
 }
 
+function LookWidget({ p }) {
+    const look = useContext(LookCtx);
+    return (
+        <WidgetEmbed
+            widgetId={p.id}
+            center={p.align !== 'left'}
+            theme={p.theme || look?.theme || null}
+            skin={look?.name || null}
+        />
+    );
+}
+
 const sizeStyle = (p) => ({
     ...(p.w ? { width: '100%', maxWidth: p.w } : {}),
     ...(p.h ? { height: p.h } : {}),
@@ -164,7 +182,7 @@ function Piece({ p }) {
             // the wallpaper. Centered unless it sits in a left-aligned spot.
             return (
                 <div className={`ostage-piece ostage-widget ${p.glass ? 'ostage-glass' : ''} ${p.className || ''}`} style={sizeStyle(p)}>
-                    <WidgetEmbed widgetId={p.id} center={p.align !== 'left'} theme={p.theme || null} />
+                    <LookWidget p={p} />
                 </div>
             );
         case 'time':
@@ -244,6 +262,9 @@ const Region = ({ name, pieces }) => (pieces?.length ? (
 
 const StageBoard = memo(function StageBoard({ vibe }) {
     const { stage } = vibe;
+    const lookName = useLook(vibe.key);
+    const skin = getSkin(lookName);
+    const look = skin ? { name: lookName, theme: skin.theme || null } : null;
     const main = (
         <>
             {(stage.topLeft || stage.topRight) && (
@@ -263,11 +284,15 @@ const StageBoard = memo(function StageBoard({ vibe }) {
         </>
     );
     return (
+        <LookCtx.Provider value={look}>
         <div
             className={`ostage ostage-align-${stage.align || 'center'} ${stage.left ? 'has-rail' : ''}`}
             data-stage={vibe.key.replace(/^(start|vibe|fun|design)-/, '')}
+            data-skin={look ? look.name : undefined}
+            data-light={look?.theme === 'light' ? '' : undefined}
         >
-            {stage.bg === 'sky' ? <SkyBackground />
+            {look ? <div className={`ostage-bg ocb-skin-bg skin-${look.name}`} aria-hidden="true"><i /></div>
+                : stage.bg === 'sky' ? <SkyBackground />
                 : stage.bg === 'coderain' ? <CodeRain />
                     : stage.bg ? <div className={`ostage-bg bg-${stage.bg}`} aria-hidden="true"><i className="bg-layer" /></div> : null}
             {stage.left ? (
@@ -277,6 +302,7 @@ const StageBoard = memo(function StageBoard({ vibe }) {
                 </>
             ) : main}
         </div>
+        </LookCtx.Provider>
     );
 });
 
