@@ -1,3 +1,4 @@
+  var T = cooldesk.t;
   // The year as a GitHub-style dot grid — a quiet memento mori for your projects.
   var now = new Date();
   var year = now.getFullYear();
@@ -16,5 +17,5 @@
     el.className = "d" + (d < today ? " past" : d === today ? " today" : "");
     box.appendChild(el);
   }
-  document.getElementById("title").textContent = year + " in dots";
-  document.getElementById("count").textContent = "day " + (today + 1) + " / " + days;
+  document.getElementById("title").textContent = T("{year} in dots", { year: year });
+  document.getElementById("count").textContent = T("day {n} / {total}", { n: today + 1, total: days });

@@ -1,3 +1,4 @@
+  var T = cooldesk.t;
   function hslToHex(h, s, l) {
     s /= 100; l /= 100;
     var f = function (n) {
@@ -23,9 +24,9 @@
       el.innerHTML = "<span>" + hex + "</span>";
       el.onclick = function () {
         navigator.clipboard.writeText(hex).then(function () {
-          document.getElementById("status").textContent = "Copied " + hex;
+          document.getElementById("status").textContent = T("Copied {hex}", { hex: hex });
           setTimeout(function () {
-            document.getElementById("status").textContent = "Palette · click to copy";
+            document.getElementById("status").textContent = T("Palette · click to copy");
           }, 1400);
         });
       };

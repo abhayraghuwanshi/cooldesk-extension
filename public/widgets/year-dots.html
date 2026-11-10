@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Year in Dots — CoolDesk Widget</title>
-<link rel="stylesheet" href="base.css?v=11">
+<link rel="stylesheet" href="base.css?v=12">
 <style>
   /* 53 week-columns must fit any card width: columns share the width
      (minmax(0, 1fr)) instead of each insisting on a minimum, which overflowed. */
@@ -13,7 +13,7 @@
   .d.past { background: color-mix(in srgb, var(--accent) 62%, transparent); }
   .d.today { background: var(--fg); box-shadow: 0 0 6px var(--fg); }
 </style>
-<script src="cooldesk.js?v=8"></script>
+<script src="cooldesk.js?v=9"></script>
 <link rel="icon" href="/favicon.ico"></head>
 <body>
 <main class="widget">
@@ -23,6 +23,7 @@
   </div>
   <div class="dots" id="dots"></div>
 </main>
+<script src="i18n.js?v=3"></script>
 <script src="year-dots.js?v=5"></script>
 </body>
 </html>

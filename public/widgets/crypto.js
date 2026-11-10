@@ -1,3 +1,4 @@
+  var T = cooldesk.t;
   // Prices: CoinGecko public API, no key. ?coins=bitcoin,ethereum,solana (CoinGecko ids)
   var ids = cooldesk.get("coins", "bitcoin,ethereum,solana").split(",");
   var SYMBOLS = { bitcoin: "BTC", ethereum: "ETH", solana: "SOL", dogecoin: "DOGE", cardano: "ADA", ripple: "XRP" };
@@ -16,7 +17,7 @@
     ids.forEach(function (id, i) {
       var coin = d[id];
       if (!coin) return;
-      priceEls[i].textContent = "$" + coin.usd.toLocaleString("en-US", { maximumFractionDigits: coin.usd < 10 ? 4 : 0 });
+      priceEls[i].textContent = "$" + coin.usd.toLocaleString(cooldesk.locale, { maximumFractionDigits: coin.usd < 10 ? 4 : 0 });
       var chg = coin.usd_24h_change;
       chgEls[i].textContent = (chg >= 0 ? "+" : "") + chg.toFixed(1) + "%";
       chgEls[i].className = "mono " + (chg >= 0 ? "good" : "bad");
@@ -38,7 +39,7 @@
         cooldesk.store.set(cacheKey, { data: d, at: Date.now() });
       })
       .catch(function () {
-        if (!last) document.getElementById("status").textContent = "Offline";
+        if (!last) document.getElementById("status").textContent = T("Offline");
       });
   }
   load();

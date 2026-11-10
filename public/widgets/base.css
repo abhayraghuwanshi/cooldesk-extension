@@ -508,3 +508,7 @@ html[data-skin="clay"] button { border-color: transparent; border-radius: 99px; 
 html[data-skin="clay"] button.ghost { box-shadow: none; }
 html[data-skin="clay"] button.primary,
 html[data-skin="clay"] button.primary:hover { background: #e07a4f; color: #fff; box-shadow: 4px 4px 10px #d6cbbd, -4px -4px 10px #fffaf2; }
+
+/* Translated labels run longer (i18n.js): a button in a row gives way with
+   an ellipsis instead of pushing its neighbours out of the card. */
+.row > button { min-width: 0; overflow: hidden; text-overflow: ellipsis; }

@@ -1,5 +1,6 @@
+  var T = cooldesk.t;
   // ?to=YYYY-MM-DD (or full ISO) & label=Event name. Defaults to next New Year.
-  var label = cooldesk.get("label", "New Year");
+  var label = cooldesk.get("label", T("New Year"));
   var to = cooldesk.get("to", (new Date().getFullYear() + 1) + "-01-01");
   var target = new Date(to.length === 10 ? to + "T00:00:00" : to);
   document.getElementById("title").textContent = label;
@@ -9,7 +10,7 @@
     var el = document.createElement("div");
     el.className = "stack center";
     el.style.gap = "4px";
-    el.innerHTML = '<span class="big mono" style="font-size:34px" data-v>0</span><span class="label">' + u + "</span>";
+    el.innerHTML = '<span class="big mono" style="font-size:34px" data-v>0</span><span class="label">' + T(u) + "</span>";
     units.appendChild(el);
   });
   var vals = document.querySelectorAll("[data-v]");
@@ -17,7 +18,7 @@
   function tick() {
     var ms = target - Date.now();
     if (ms <= 0) {
-      document.getElementById("title").textContent = label + " — it's here 🎉";
+      document.getElementById("title").textContent = T("{label} — it's here 🎉", { label: label });
       ms = 0;
     }
     var s = Math.floor(ms / 1000);

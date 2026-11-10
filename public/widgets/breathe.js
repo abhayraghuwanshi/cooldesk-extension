@@ -1,5 +1,6 @@
+  var T = cooldesk.t;
   // Box breathing: inhale 4s, hold 4s, exhale 4s, hold 4s.
-  var PHASES = [["Breathe in", true], ["Hold", true], ["Breathe out", false], ["Hold", false]];
+  var PHASES = [[T("Breathe in"), true], [T("Hold"), true], [T("Breathe out"), false], [T("Hold"), false]];
   var running = false, step = 0, timer = null;
   var orb = document.getElementById("orb"), phase = document.getElementById("phase");
   function advance() {
@@ -10,11 +11,11 @@
   }
   document.getElementById("toggle").onclick = function () {
     running = !running;
-    this.textContent = running ? "Stop" : "Start";
+    this.textContent = running ? T("Stop") : T("Start");
     if (running) { step = 0; advance(); timer = setInterval(advance, 4000); }
     else {
       clearInterval(timer);
       orb.className = "orb";
-      phase.textContent = "Box breathing · 4-4-4-4";
+      phase.textContent = T("Box breathing · 4-4-4-4");
     }
   };

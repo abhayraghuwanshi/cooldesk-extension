@@ -1,3 +1,4 @@
+import { getLanguage } from '../shared/i18n';
 /**
  * Catalog of the widgets hosted in the CoolDesk widget store
  * (cool-desk.com/widgets). Mirrors the store's curated list; each widget is a
@@ -11,7 +12,7 @@
 
 export const WIDGET_STORE_ORIGIN = 'https://cool-desk.com';
 export const WIDGET_STORE_URL = `${WIDGET_STORE_ORIGIN}/widgets`;
-const WIDGET_VERSION = '13';
+const WIDGET_VERSION = '14';
 
 export const WIDGET_CATEGORIES = ['CoolDesk', 'Time & Focus', 'Productivity', 'Data & Life', 'Dev Tools'];
 
@@ -105,7 +106,10 @@ export function widgetEmbedUrl(id, theme, tint, { clear = false, fit = null, cen
     const fitParam = fit ? `&fitw=${Math.round(fit.w)}&fith=${Math.round(fit.h)}` : '';
     const centerParam = center ? '&center=1' : '';
     const skinParam = typeof skin === 'string' && /^[a-z]+$/.test(skin) ? `&skin=${skin}` : '';
-    const query = `?theme=${theme === 'light' ? 'light' : 'dark'}${tintParam}${embedParam}${fitParam}${centerParam}${skinParam}&v=${WIDGET_VERSION}`;
+    // The app's UI language — widgets translate themselves (public/widgets/i18n.js).
+    const lang = getLanguage();
+    const langParam = lang && lang !== 'en' ? `&lang=${lang}` : '';
+    const query = `?theme=${theme === 'light' ? 'light' : 'dark'}${tintParam}${embedParam}${fitParam}${centerParam}${skinParam}${langParam}&v=${WIDGET_VERSION}`;
     return new URL(`${id}.html${query}`, widgetBase()).href;
 }
 

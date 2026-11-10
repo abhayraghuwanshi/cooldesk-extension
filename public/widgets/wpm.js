@@ -1,3 +1,4 @@
+  var T = cooldesk.t;
   var SENTENCES = [
     "The quick brown fox jumps over the lazy dog while the launcher restores every tab.",
     "Ship small improvements every day and the compound interest takes care of the rest.",
@@ -11,7 +12,7 @@
     target = SENTENCES[Math.floor(Math.random() * SENTENCES.length)];
     document.getElementById("target").textContent = target;
     document.getElementById("clock").textContent = "15.0";
-    document.getElementById("result").textContent = best ? "Best: " + best + " wpm" : "";
+    document.getElementById("result").textContent = best ? T("Best: {n} wpm", { n: best }) : "";
     input.value = "";
     input.disabled = false;
     started = null;
@@ -26,7 +27,7 @@
     var wpm = Math.round((correct / 5) / (15 / 60));
     var acc = typed.length ? Math.round(correct / typed.length * 100) : 0;
     if (wpm > best) { best = wpm; cooldesk.store.set("wpm-best", best); }
-    document.getElementById("result").textContent = wpm + " wpm · " + acc + "% · best " + best;
+    document.getElementById("result").textContent = T("{wpm} wpm · {acc}% · best {best}", { wpm: wpm, acc: acc, best: best });
   }
   input.oninput = function () {
     if (!started) {

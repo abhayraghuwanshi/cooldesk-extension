@@ -1,16 +1,17 @@
+  var T = cooldesk.t;
   var view = new Date();
   view.setDate(1);
   function render() {
     var cal = document.getElementById("cal");
     cal.innerHTML = "";
-    ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].forEach(function (d) {
+    cooldesk.weekdays("short").forEach(function (d) {
       var el = document.createElement("div");
       el.className = "h";
       el.textContent = d;
       cal.appendChild(el);
     });
     document.getElementById("title").textContent =
-      view.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+      view.toLocaleDateString(cooldesk.locale, { month: "long", year: "numeric" });
     var firstDow = (view.getDay() + 6) % 7; // Monday-start
     var daysInMonth = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
     var daysInPrev = new Date(view.getFullYear(), view.getMonth(), 0).getDate();

@@ -1,3 +1,4 @@
+  var T = cooldesk.t;
   // Factors are "units per base unit"; temperature handled specially.
   var UNITS = {
     Length: { m: 1, km: 0.001, cm: 100, mi: 0.000621371, ft: 3.28084, in: 39.3701 },
@@ -7,7 +8,7 @@
     Temperature: { "°C": null, "°F": null, "K": null }
   };
   var cat = document.getElementById("cat"), from = document.getElementById("from"), to = document.getElementById("to");
-  Object.keys(UNITS).forEach(function (c) { cat.add(new Option(c, c)); });
+  Object.keys(UNITS).forEach(function (c) { cat.add(new Option(T(c), c)); });
 
   function fillUnits() {
     from.innerHTML = ""; to.innerHTML = "";
@@ -25,7 +26,7 @@
     if (cat.value === "Temperature") result = fromC(toC(v, from.value), to.value);
     else result = v / UNITS[cat.value][from.value] * UNITS[cat.value][to.value];
     document.getElementById("output").textContent =
-      result.toLocaleString("en-US", { maximumFractionDigits: 4 });
+      result.toLocaleString(cooldesk.locale, { maximumFractionDigits: 4 });
   }
   cat.onchange = fillUnits;
   from.onchange = compute;

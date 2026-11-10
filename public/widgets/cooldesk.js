@@ -25,6 +25,13 @@
   var skin = params.get("skin") || "";
   if (/^[a-z]+$/.test(skin)) document.documentElement.dataset.skin = skin;
 
+  // `?lang=xx` — the host's UI language (src/shared/i18n). Widget text is
+  // translated by i18n.js (built-in markup, once at load) and cooldesk.t()
+  // (text a widget builds in code); dates use `cooldesk.locale`.
+  var lang = (params.get("lang") || "en").toLowerCase();
+  if (!/^[a-z]{2}$/.test(lang)) lang = "en";
+  document.documentElement.lang = lang;
+
   // `?tint=RRGGBB` — the embedding board's per-widget accent. The card tints
   // itself rather than the host tinting it from outside, because the host can't
   // paint through an opaque iframe canvas. Also drives --accent so the widget's
@@ -77,6 +84,23 @@
   window.cooldesk = {
     version: 2,
     params: params,
+    lang: lang,
+    // BCP-47 for toLocale*String: the widget follows the app's language,
+    // not the browser's.
+    locale: lang === "zh" ? "zh-CN" : lang,
+    // t("Session {n}", { n: 2 }) — keyed by the English text; falls back to
+    // it when a language has no entry (window.CDI18N, from i18n.js).
+    t: function (text, vars) {
+      var row = window.CDI18N && window.CDI18N[text];
+      var s = (lang !== "en" && row && row[lang]) || text;
+      return vars ? s.replace(/\{(\w+)\}/g, function (m, k) { return k in vars ? String(vars[k]) : m; }) : s;
+    },
+    // Monday-first weekday names in the widget's language ("short" | "narrow").
+    weekdays: function (style) {
+      var out = [];
+      for (var i = 0; i < 7; i++) out.push(new Date(2024, 0, 1 + i).toLocaleDateString(window.cooldesk.locale, { weekday: style || "short" }));
+      return out;
+    },
     get: function (key, fallback) {
       var v = params.get(key);
       return v === null || v === "" ? fallback : v;

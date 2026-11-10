@@ -1,6 +1,7 @@
+  var T = cooldesk.t;
   var tasks = cooldesk.store.get("todo", [
-    { text: "Try CoolDesk widgets", done: false },
-    { text: "Plan the week", done: false }
+    { text: T("Try CoolDesk widgets"), done: false },
+    { text: T("Plan the week"), done: false }
   ]);
   function save() { cooldesk.store.set("todo", tasks); }
   function render() {

@@ -1,3 +1,4 @@
+  var T = cooldesk.t;
   var mode = "timer", running = false, timer = null;
   var timerLeft = 300, timerTotal = 300, watchMs = 0, lastTick = 0;
 
@@ -9,7 +10,7 @@
   }
   function render() {
     document.getElementById("display").textContent = mode === "timer" ? fmtT(timerLeft) : fmtW(watchMs);
-    document.getElementById("toggle").textContent = running ? "Pause" : "Start";
+    document.getElementById("toggle").textContent = running ? T("Pause") : T("Start");
     document.getElementById("presets").style.visibility = mode === "timer" ? "visible" : "hidden";
     document.getElementById("tabTimer").className = mode === "timer" ? "" : "ghost";
     document.getElementById("tabWatch").className = mode === "watch" ? "" : "ghost";

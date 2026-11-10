@@ -1,3 +1,4 @@
+  var T = cooldesk.t;
   // Config: ?lat=&lon=&city= (defaults: Mumbai). Data: open-meteo.com, no API key.
   var lat = cooldesk.get("lat", "19.076");
   var lon = cooldesk.get("lon", "72.877");
@@ -15,8 +16,8 @@
     var info = CODES[c.weather_code] || ["·", "—"];
     document.getElementById("temp").textContent = Math.round(c.temperature_2m) + "°";
     document.getElementById("icon").textContent = info[0];
-    document.getElementById("desc").textContent = info[1];
-    document.getElementById("wind").textContent = "wind " + Math.round(c.wind_speed_10m) + " km/h";
+    document.getElementById("desc").textContent = T(info[1]);
+    document.getElementById("wind").textContent = T("wind {n} km/h", { n: Math.round(c.wind_speed_10m) });
   }
 
   // Paint the last reading instantly (stale-while-revalidate), then refresh.
@@ -33,7 +34,7 @@
         cooldesk.store.set(cacheKey, { current: d.current, at: Date.now() });
       })
       .catch(function () {
-        if (!last) document.getElementById("desc").textContent = "Offline";
+        if (!last) document.getElementById("desc").textContent = T("Offline");
       });
   }
   load();

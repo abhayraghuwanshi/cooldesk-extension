@@ -1,3 +1,4 @@
+  var T = cooldesk.t;
   function isoWeek(d) {
     var date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
     var dayNum = date.getUTCDay() || 7;
@@ -7,9 +8,9 @@
   }
   function tick() {
     var now = new Date();
-    document.getElementById("day").textContent = now.toLocaleDateString("en-US", { weekday: "long" });
-    document.getElementById("date").textContent = now.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-    document.getElementById("week").textContent = "Week " + isoWeek(now);
+    document.getElementById("day").textContent = now.toLocaleDateString(cooldesk.locale, { weekday: "long" });
+    document.getElementById("date").textContent = now.toLocaleDateString(cooldesk.locale, { month: "long", day: "numeric", year: "numeric" });
+    document.getElementById("week").textContent = T("Week {n}", { n: isoWeek(now) });
     var pct = (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) / 864;
     document.getElementById("fill").style.width = pct + "%";
     document.getElementById("pct").textContent = pct.toFixed(1) + "%";
