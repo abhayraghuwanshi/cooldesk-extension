@@ -2,12 +2,6 @@
 
 All notable changes to CoolDesk (desktop app + Chrome extension) are documented here.
 
-## [2.0.22] — 2026-11-11
-
-### Fixed
-- **A folder tile went blank in multi view** when you clicked another tile, like a shell next to it. Folder tiles now stay on screen; only the tile you're in takes the keyboard.
-- **The sidebar's folder browser was squeezed to a few rows** by an empty preview pane under the list. It's a full-height list again, and the preview pane no longer depends on Spotlight's styles being loaded.
-
 ## [2.0.21] — 2026-11-11
 
 Includes everything from 2.0.20, which was out for a few hours and never reached winget.
@@ -21,6 +15,8 @@ Includes everything from 2.0.20, which was out for a few hours and never reached
 - **Claude Code and other full-screen programs drew garbled in terminal tabs** — lines at the wrong width, overwriting each other. The shell now always gets the terminal's real size once it starts, and symbols and emoji are measured with Unicode 11 widths.
 - **The sidebar's shell said "Couldn't start a shell".** Since the sidebar became its own window in 2.0.19, the terminal only accepted the main window and Spotlight. Shells now start in the sidebar and bar windows too.
 - **The file manager stays usable in narrow multi view tiles** — its sidebar becomes a drawer and the preview keeps its room.
+- **A folder tile went blank in multi view** when you clicked another tile, like a shell next to it. Folder tiles now stay on screen; only the tile you're in takes the keyboard.
+- **The sidebar's folder browser was squeezed to a few rows** by an empty preview pane under the list. It's a full-height list again.
 
 ## [2.0.19] — 2026-11-11
 
