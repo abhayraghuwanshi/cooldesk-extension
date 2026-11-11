@@ -1,4 +1,4 @@
-import { faCompass, faDiagramProject, faFolder, faFolderOpen, faGear, faGlobe, faHouse, faNoteSticky, faThumbtack, faPlus, faTerminal, faExpand, faSearch, faServer, faTableCellsLarge, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faCompass, faDiagramProject, faFolder, faFolderOpen, faGear, faGlobe, faHouse, faNoteSticky, faThumbtack, faPlus, faTerminal, faExpand, faCompress, faSearch, faServer, faTableCellsLarge, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserPane } from '../../features/browser/BrowserPane';
@@ -383,11 +383,6 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   goHomeRef.current = goHome;
   const homeShown = filesShown && filesTab === 'tabs';
 
-  // A new (blank) tab brings Home up beside its start screen.
-  const blankActive = isBlank(activeTab);
-  useEffect(() => {
-    if (blankActive && isActive) goHomeRef.current();
-  }, [browseTabs.activeId, blankActive, isActive]);
 
   const [filesWidth, setFilesWidth] = useState(() => {
     const w = Number(localStorage.getItem(FILES_WIDTH_KEY));
@@ -796,18 +791,38 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   );
   const toolbarEnd = (
     <>
-    {/* One layout button: single view, multi view (tabs side by side) or
-        focus mode (the page alone). Shows the current layout. */}
-    <ToolbarMenu
-      icon={focusOn ? faExpand : canvasMode ? faTableCellsLarge : faWindowMaximize}
-      title="Layout"
-      items={[
-        { key: 'single', icon: faWindowMaximize, label: 'Single view', checked: !canvasMode && !focusOn, onSelect: () => { setFocusMode(false); setMode('browse'); } },
-        { key: 'multi', icon: faTableCellsLarge, label: 'Multi view — tabs side by side', checked: canvasMode && !focusOn, onSelect: () => { setFocusMode(false); setMode('canvas'); } },
-        null,
-        { key: 'focus', icon: faExpand, label: focusOn ? 'Exit focus mode' : 'Focus mode', checked: focusOn, hint: IS_MAC_UI ? '⌘⇧F' : 'Ctrl+Shift+F', onSelect: () => setFocusMode(v => !v) },
-      ]}
-    />
+    {/* Layout: Single | Multi as a labelled switch, and focus mode as its
+        own button (the page alone, Esc to leave). */}
+    <div className="bp-capsule bp-modes bp-layout" role="tablist" aria-label="Layout">
+      <button
+        className={`bp-btn bp-layout-btn ${!canvasMode ? 'on' : ''}`}
+        role="tab"
+        aria-selected={!canvasMode}
+        onClick={() => { setFocusMode(false); setMode('browse'); }}
+        title="Single view — one tab at a time"
+      >
+        <FontAwesomeIcon icon={faWindowMaximize} />
+        <span>Single</span>
+      </button>
+      <button
+        className={`bp-btn bp-layout-btn ${canvasMode ? 'on' : ''}`}
+        role="tab"
+        aria-selected={canvasMode}
+        onClick={() => { setFocusMode(false); setMode('canvas'); }}
+        title="Multi view — your open tabs side by side"
+      >
+        <FontAwesomeIcon icon={faTableCellsLarge} />
+        <span>Multi</span>
+      </button>
+    </div>
+    <button
+      className={`bp-btn ${focusOn ? 'on' : ''}`}
+      onClick={() => setFocusMode(v => !v)}
+      title={focusOn ? `Exit focus mode (Esc)` : `Focus mode — just the page, full screen (${IS_MAC_UI ? '⌘⇧F' : 'Ctrl+Shift+F'})`}
+      aria-pressed={focusOn}
+    >
+      <FontAwesomeIcon icon={focusOn ? faCompress : faExpand} />
+    </button>
     <button
       className={`bp-btn ${filesShown ? 'on' : ''} ${downloading || shelf.unseen ? 'files-badge' : ''} ${downloading ? 'downloading' : ''}`}
       data-count={shelf.unseen || ''}
@@ -1095,6 +1110,9 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                 <button className="bp-btn browse-tabs-new" onClick={() => openTerminal()} title="New shell tab">
                   <FontAwesomeIcon icon={faTerminal} />
                 </button>
+                <button className="bp-btn browse-tabs-new" onClick={browseTabs.openScratchNote} title="New note (a scratch notepad — save it to a workspace when you want to keep it)">
+                  <FontAwesomeIcon icon={faNoteSticky} />
+                </button>
               </div>
               {capped('tabs', openTabs, renderTabRow)}
             </section>
@@ -1195,6 +1213,9 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
               <button className="bp-btn" onClick={() => openTerminal()} title="New terminal tile">
                 <FontAwesomeIcon icon={faTerminal} />
               </button>
+              <button className="bp-btn" onClick={browseTabs.openScratchNote} title="New note tile">
+                <FontAwesomeIcon icon={faNoteSticky} />
+              </button>
               <button className="bp-btn" onClick={() => browseTabs.openInNew(null)} title="New tab tile (⌘T)">
                 <FontAwesomeIcon icon={faPlus} />
               </button>
@@ -1261,6 +1282,9 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                   <div key={tab.id} {...paneProps(tab, isCurrent)}>
                     <NoteTab
                       note={tab.note}
+                      workspaces={savedWorkspaces}
+                      activeWorkspaceId={activeWorkspaceId}
+                      onSaveToWorkspace={(ws) => browseTabs.noteToWorkspace(tab.id, ws)}
                       onTitle={(title) => browseTabs.noteTitle(tab.id, title)}
                       onClose={() => browseTabs.close(tab.id)}
                       onOpenUrl={(url) => browseTabs.openInNew(url, { position: 'after' })}
@@ -1333,6 +1357,22 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                         <div className="browse-hero-orb"><FontAwesomeIcon icon={faCompass} /></div>
                         <h2>Browse without leaving CoolDesk</h2>
                         <p>Pick a link, or type a URL or search above. ⌘T opens a new tab.</p>
+                        {/* Or make this tab a shell, a note or the file
+                            manager instead of a page. */}
+                        <div className="browse-hero-actions">
+                          <button className="browse-chip browse-hero-action" onClick={() => openTerminal()} title="A shell in this tab">
+                            <span className="browse-tile term-tile"><FontAwesomeIcon icon={faTerminal} /></span>
+                            <span>Shell</span>
+                          </button>
+                          <button className="browse-chip browse-hero-action" onClick={browseTabs.openScratchNote} title="A scratch note in this tab — save it to a workspace when you want to keep it">
+                            <span className="browse-tile note-tile"><FontAwesomeIcon icon={faNoteSticky} /></span>
+                            <span>Note</span>
+                          </button>
+                          <button className="browse-chip browse-hero-action" onClick={() => showFolder(filesPath, true)} disabled={!filesPath} title="The file manager in this tab">
+                            <span className="browse-tile"><FontAwesomeIcon icon={faFolderOpen} /></span>
+                            <span>Files</span>
+                          </button>
+                        </div>
                         {quickPicks.length > 0 && (
                           <div className="browse-hero-picks">
                             {quickPicks.map(item => (

@@ -814,7 +814,7 @@ dependencies = [
 
 [[package]]
 name = "cooldesk"
-version = "2.0.19"
+version = "2.0.20"
 dependencies = [
  "arboard",
  "argon2",
