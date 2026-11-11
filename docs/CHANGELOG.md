@@ -2,6 +2,12 @@
 
 All notable changes to CoolDesk (desktop app + Chrome extension) are documented here.
 
+## [2.0.22] — 2026-11-11
+
+### Fixed
+- **A folder tile went blank in multi view** when you clicked another tile, like a shell next to it. Folder tiles now stay on screen; only the tile you're in takes the keyboard.
+- **The sidebar's folder browser was squeezed to a few rows** by an empty preview pane under the list. It's a full-height list again, and the preview pane no longer depends on Spotlight's styles being loaded.
+
 ## [2.0.21] — 2026-11-11
 
 Includes everything from 2.0.20, which was out for a few hours and never reached winget.

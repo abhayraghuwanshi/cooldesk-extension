@@ -1321,6 +1321,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                     <FileTab
                       file={tab.file}
                       active={isActive && isCurrent && onScreen(tab)}
+                      visible={isActive && onScreen(tab)}
                       onOpenFile={(path) => browseTabs.openFileTab(path, false, true)}
                       onOpenUrl={(url) => browseTabs.openInNew(url, { position: 'after' })}
                       onShowFolder={(dir) => showFolder(dir, true)}

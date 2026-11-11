@@ -1146,9 +1146,12 @@ export function TabManagement({ onOpenFolder, panel = false, hideOpen = false } 
                     full-screen modal covered the whole narrow strip. */}
                 {isSidebarWidth && browsingFolder && (
                   <div style={{ marginTop: 10 }}>
+                    {/* No Quick Look pane: in a strip this narrow it went
+                        under the list and squeezed it to a few rows. */}
                     <FileManager
                       inline
                       isOpen
+                      quickLook={false}
                       initialPath={browsingFolder}
                       places={frequentFolders}
                       onClose={() => setBrowsingFolder(null)}
