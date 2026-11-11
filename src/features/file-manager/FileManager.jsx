@@ -1756,9 +1756,9 @@ ${c.path}`}
             )}
           </div>
 
-          {/* Quick Look-style preview, wide widths only (see fileManager.css
-              — there's no room for a third column once the sidebar has
-              already been dropped for space). */}
+          {/* Quick Look-style preview: a column beside the list, capped at
+              half the manager's width when it's narrow, and under the list
+              when it's narrower still (container queries, fileManager.css). */}
           {quickLook && previewItem && (
             <>
               <div className="fm-preview-resize" onPointerDown={startPreviewResize} title="Drag to resize" />

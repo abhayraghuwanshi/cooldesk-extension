@@ -546,6 +546,9 @@ html.browse-focus .browse-drawer {
   align-items: center;
   gap: 8px;
   padding: 9px 10px;
+  /* Sized by its pane, so controls can drop their labels when it's narrow. */
+  container-type: inline-size;
+  container-name: bp-toolbar;
 }
 
 .bp-capsule {
@@ -814,6 +817,19 @@ html.browse-focus .browse-drawer {
   color: var(--bv-dim);
 }
 
+.browse-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.browse-hero-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .browse-hero-picks {
   display: flex;
   flex-wrap: wrap;
@@ -918,6 +934,23 @@ html.browse-focus .browse-drawer {
 /* Hidden, not unmounted: its slot measures 0×0, so its pages hide but live on. */
 .browse-mode.is-hidden {
   display: none;
+}
+
+/* Single | Multi in the toolbar: icon + word, so the switch says what it does. */
+.bp-layout-btn {
+  width: auto;
+  height: 26px;
+  gap: 6px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Tight toolbars (narrow window, or a multi-view tile): icons only. */
+@container bp-toolbar (max-width: 560px) {
+  .bp-layout-btn span { display: none; }
+  .bp-layout-btn { padding: 0 7px; }
 }
 
 .bp-modes .bp-btn.on {

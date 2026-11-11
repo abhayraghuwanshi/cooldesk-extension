@@ -33,6 +33,12 @@
   font-family: var(--font-family-base, inherit);
   color: var(--text, #e5e7eb);
   animation: fm-rise 0.16s cubic-bezier(0.4, 0, 0.2, 1);
+  /* The layout breakpoints below measure the manager itself, not the
+     screen: in Browse's multi view a tile is narrow while the window is
+     wide, and viewport @media never fired — the sidebar and preview kept
+     their widths and squeezed the file list to nothing. */
+  container-type: inline-size;
+  container-name: fm-window;
 }
 
 @keyframes fm-rise {
@@ -1202,13 +1208,13 @@
 
 @media (max-width: 720px) {
   .fm-backdrop { padding: 12px; }
+}
+
+@container fm-window (max-width: 720px) {
   .fm-sidebar { display: none; }
-  /* Same reasoning: a 320px preview column has nowhere left to go once
-     `.fm-main` alone is already this tight. Places gets a toggle-drawer
-     back (`.fm-places-toggle`, below); preview doesn't — a cramped preview
-     isn't worth much, so it just steps aside for the file list here. */
-  .fm-preview,
-  .fm-preview-resize { display: none; }
+  /* The preview (eye button) stays, but never takes more than half, so the
+     file list keeps room. */
+  .fm-preview { max-width: 50%; }
   .fm-search { width: 120px; }
   .fm-status-hint { display: none; }
 
@@ -1256,7 +1262,9 @@
     border-left: 1px solid var(--border-primary, rgba(255, 255, 255, 0.1));
     border-right: 1px solid var(--border-primary, rgba(255, 255, 255, 0.1));
   }
+}
 
+@container fm-window (max-width: 500px) {
   /* The toolbar is a nowrap flex row; let it wrap rather than overflow. Nav
      (back/forward/up) + the breadcrumb land on row 1 — the breadcrumb has its
      own min-width: 0 and overflow-x: auto, so it always fits by shrinking,
@@ -1283,6 +1291,21 @@
   .fm-setup-text { white-space: normal; flex: 1 1 100%; }
   .fm-project-bar { scrollbar-width: thin; }
   .fm-project-bar::-webkit-scrollbar { display: block; height: 4px; }
+}
+
+/* Narrower still: the preview goes under the list instead of beside it. */
+@container fm-window (max-width: 480px) {
+  .fm-body { flex-direction: column; }
+  .fm-main { flex: 1 1 55%; min-height: 0; }
+  .fm-main .fm-list { min-height: 0; }
+  .fm-preview-resize { display: none; }
+  .fm-preview {
+    width: auto !important; /* beats the inline drag width */
+    max-width: none;
+    flex: 1 1 45%;
+    min-height: 0;
+    border-top: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.06));
+  }
 }
 
 /* Name/date/size column widths and the grid-view tile count, keyed off

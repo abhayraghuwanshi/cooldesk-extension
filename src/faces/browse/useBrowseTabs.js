@@ -5,7 +5,9 @@ import { recordRecentFile, recordRecentShell } from '../../features/browser/rece
 // with paneId `bt-<id>`), a file / folder from disk (`file: { path, isDir }`,
 // previewed in the main area), a terminal (`term: { cwd }`, a shell that
 // runs as long as the tab is open — never put to sleep) or a workspace note
-// (`note: { id, workspaceId, workspaceName }`, its TipTap editor — NoteTab)
+// (`note: { id, workspaceId, workspaceName }`, its TipTap editor — NoteTab;
+// `workspaceId: null` is a scratch note, kept with the tab until it's saved
+// to a workspace — SCRATCH_KEY)
 // or one of CoolDesk's own pages (`special: 'activity' | 'settings'` — Cool
 // Activity or Settings, at most one tab each; SPECIAL_TITLES). Web tabs stay loaded while you switch away —
 // up to MAX_LIVE of them; older ones "sleep" (their page is closed) and
@@ -17,6 +19,8 @@ import { recordRecentFile, recordRecentShell } from '../../features/browser/rece
 const TABS_KEY = 'cooldesk.browse.tabs';
 const MAX_LIVE = 6;
 const MAX_TABS = 40;
+// A scratch note's title + text, per note id, while it belongs to no workspace.
+export const SCRATCH_KEY = (id) => `cooldesk.scratch.${id}`;
 
 // CoolDesk's own pages that open as tabs (`special`).
 export const SPECIAL_TITLES = { activity: 'Cool Activity', settings: 'Settings' };
@@ -84,8 +88,8 @@ function load(fallbackUrl) {
           req: { url: isWebUrl(t.url) ? t.url : null, key: 0 },
           file: t.file && typeof t.file.path === 'string' ? { path: t.file.path, isDir: !!t.file.isDir } : null,
           term: t.term ? { cwd: typeof t.term.cwd === 'string' ? t.term.cwd : null } : null,
-          note: t.note && typeof t.note.id === 'string' && t.note.workspaceId
-            ? { id: t.note.id, workspaceId: t.note.workspaceId, workspaceName: t.note.workspaceName || '' }
+          note: t.note && typeof t.note.id === 'string'
+            ? { id: t.note.id, workspaceId: t.note.workspaceId || null, workspaceName: t.note.workspaceId ? (t.note.workspaceName || '') : '' }
             : null,
           special: specialOf(t),
           back: cleanEntries(t.back),
@@ -179,6 +183,11 @@ export function useBrowseTabs(initialUrl) {
       const i = s.tabs.findIndex(t => t.id === id);
       if (i === -1) return s;
       const rest = s.tabs.filter(t => t.id !== id);
+      // Closing a scratch note discards it (Save to workspace keeps it).
+      const gone = s.tabs[i].note;
+      if (gone && !gone.workspaceId) {
+        try { localStorage.removeItem(SCRATCH_KEY(gone.id)); } catch { /* ignore */ }
+      }
       if (!rest.length) {
         const fresh = { id: newId(), url: null, title: '', req: { url: null, key: 0 } };
         mru.current = [fresh.id];
@@ -353,6 +362,36 @@ export function useBrowseTabs(initialUrl) {
     }));
   }, [tabs, activeId]);
 
+  /** A new scratch note — a notepad that belongs to no workspace yet. Takes
+   *  the blank tab you're on, else opens a new one. */
+  const openScratchNote = useCallback(() => {
+    const meta = { id: `wsnote_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, workspaceId: null, workspaceName: '' };
+    const title = 'Scratch note';
+    const here = tabs.find(t => t.id === activeId);
+    if (here && !here.url && !here.file && !here.term && !here.note && !here.special) {
+      touch(here.id);
+      setState(s => ({ ...s, tabs: s.tabs.map(t => (t.id === here.id ? { ...t, title, note: meta } : t)) }));
+      return;
+    }
+    const id = newId();
+    touch(id);
+    setState(s => (s.tabs.length >= MAX_TABS ? s : {
+      tabs: [...s.tabs, { id, url: null, title, req: { url: null, key: 0 }, note: meta }],
+      activeId: id,
+    }));
+  }, [tabs, activeId]);
+
+  /** A scratch note was saved to workspace `ws`: the tab now holds that
+   *  workspace note. */
+  const noteToWorkspace = useCallback((tabId, ws) => {
+    setState(s => ({
+      ...s,
+      tabs: s.tabs.map(t => (t.id === tabId && t.note
+        ? { ...t, note: { ...t.note, workspaceId: ws.id, workspaceName: ws.name || '' } }
+        : t)),
+    }));
+  }, []);
+
   /** One of CoolDesk's own pages (`kind`: 'activity' | 'settings') in the
    *  main view: switches to its tab if it's open, else takes the blank tab
    *  you're on or a new one. */
@@ -403,5 +442,5 @@ export function useBrowseTabs(initialUrl) {
   }, [tabs, activeId]);
 
   const active = tabs.find(t => t.id === activeId) || tabs[0];
-  return { tabs, active, activeId: active.id, live, sleep, idleFor, activate, openInActive, openInNew, openFileTab, openTerminalTab, openNoteTab, openSpecialTab, step, close, cycle, noteUrl, noteTitle, move, findByUrl };
+  return { tabs, active, activeId: active.id, live, sleep, idleFor, activate, openInActive, openInNew, openFileTab, openTerminalTab, openNoteTab, openScratchNote, noteToWorkspace, openSpecialTab, step, close, cycle, noteUrl, noteTitle, move, findByUrl };
 }
