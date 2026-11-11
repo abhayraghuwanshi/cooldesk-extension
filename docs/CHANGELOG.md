@@ -2,6 +2,12 @@
 
 All notable changes to CoolDesk (desktop app + Chrome extension) are documented here.
 
+## [2.0.20] — 2026-11-11
+
+### Fixed
+- **Full-screen programs in terminal tabs drew garbled** — Claude Code and similar tools could draw lines at the wrong width and overwrite each other. The shell now always gets the terminal's real size once it starts, and symbols and emoji are measured with Unicode 11 widths.
+- **Single | Multi view switch** and the rest of the latest Browse changes (scratch notes, shell/note/files on the new-tab screen, file manager in narrow tiles) are now in the release.
+
 ## [2.0.19] — 2026-11-11
 
 ### Added

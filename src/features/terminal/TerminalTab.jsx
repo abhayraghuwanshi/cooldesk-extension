@@ -95,8 +95,8 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
     let disposed = false;
     let cleanup = () => { };
     (async () => {
-      const [{ Terminal }, { FitAddon }, { WebLinksAddon }] = await Promise.all([
-        import('@xterm/xterm'), import('@xterm/addon-fit'), import('@xterm/addon-web-links'),
+      const [{ Terminal }, { FitAddon }, { WebLinksAddon }, { Unicode11Addon }] = await Promise.all([
+        import('@xterm/xterm'), import('@xterm/addon-fit'), import('@xterm/addon-web-links'), import('@xterm/addon-unicode11'),
       ]);
       if (disposed) return;
       const term = new Terminal({
@@ -108,7 +108,12 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
         macOptionIsMeta: true,
         macOptionClickForcesSelection: true,
         theme: themeFor(host),
+        allowProposedApi: true, // unicode11 sets term.unicode.activeVersion
       });
+      // Modern TUIs (Claude Code, etc.) assume Unicode 11 widths for ❯ ⏵ and
+      // emoji; xterm's default v6 table miscounts them and the cursor drifts.
+      term.loadAddon(new Unicode11Addon());
+      term.unicode.activeVersion = '11';
       const fit = new FitAddon();
       term.loadAddon(fit);
       term.loadAddon(new WebLinksAddon((e, url) => {
@@ -208,6 +213,12 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
       if (queued) invoke('terminal_write', { id, data: `${queued}\r` }).catch(() => { });
       subs.push(term.onData(data => invoke('terminal_write', { id, data }).catch(() => { })));
       subs.push(term.onResize(({ cols, rows }) => invoke('terminal_resize', { id, cols, rows }).catch(() => { })));
+      // xterm may have been re-fit while terminal_open was in flight (the
+      // first layout, a hidden tile shown): that resize had no listener yet,
+      // so the pty would keep its startup size and full-screen programs
+      // would draw for the wrong width. Sync it now.
+      try { fitRef.current?.fit(); } catch { /* ignore */ }
+      invoke('terminal_resize', { id, cols: term.cols, rows: term.rows }).catch(() => { });
     })();
     return () => {
       alive = false;
