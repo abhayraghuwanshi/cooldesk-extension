@@ -228,11 +228,7 @@ function FolderRow({ folder, reindexing, onReindex, onRemove, onSetOptions }) {
                         <select
                             value={folder.auto_reindex_minutes || 0}
                             onChange={(e) => onSetOptions({ auto_reindex_minutes: Number(e.target.value) })}
-                            style={{
-                                padding: '6px 8px', borderRadius: 8,
-                                background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
-                                color: '#fff', fontSize: 12, outline: 'none', cursor: 'pointer',
-                            }}
+                            className="mac-select"
                         >
                             {AUTO_REINDEX_OPTIONS.map((o) => (
                                 <option key={o.value} value={o.value}>{o.label}</option>

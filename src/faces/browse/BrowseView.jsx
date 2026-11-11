@@ -1,7 +1,9 @@
-import { faCompass, faDiagramProject, faFolder, faFolderOpen, faGear, faHouse, faNoteSticky, faThumbtack, faPlus, faTerminal, faExpand, faSearch, faServer, faTableCellsLarge, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faCompass, faDiagramProject, faFolder, faFolderOpen, faGear, faGlobe, faHouse, faNoteSticky, faThumbtack, faPlus, faTerminal, faExpand, faSearch, faServer, faTableCellsLarge, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserPane } from '../../features/browser/BrowserPane';
+import { normalizeAddress } from '../../features/browser/useNativePane';
+import { engineFor, fetchWebSuggestions, getEngineKey, getWebSuggestEnabled, searchUrl } from '../../shared/searchEngines';
 import { usePaneGuard } from '../../features/browser/usePaneGuard';
 import { FilesView } from './FilesView';
 import { FileIcon, FileTab } from './FileTab';
@@ -146,6 +148,24 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   const [focusAddress, setFocusAddress] = useState(0);
   const [findKey, setFindKey] = useState(0);
   const [filter, setFilter] = useState('');
+  // Home's search, like the address bar: search suggestions from the engine
+  // picked in Settings (only while Settings → Search suggestions is on), for
+  // text that reads as a search rather than an address.
+  const [webSuggest, setWebSuggest] = useState({ term: '', list: [] });
+  useEffect(() => {
+    const term = filter.trim();
+    const isSearch = term.length >= 2 && normalizeAddress(term) === searchUrl(getEngineKey(), term);
+    if (!isSearch || !getWebSuggestEnabled()) {
+      setWebSuggest({ term: '', list: [] });
+      return undefined;
+    }
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => {
+      fetchWebSuggestions(getEngineKey(), term, { signal: ctrl.signal, max: 4 })
+        .then(list => { if (!ctrl.signal.aborted) setWebSuggest({ term, list }); });
+    }, 150);
+    return () => { clearTimeout(timer); ctrl.abort(); };
+  }, [filter]);
   const [ports, setPorts] = useState([]);
 
   // Focus mode: the pane takes the whole window — header, link list, face
@@ -686,10 +706,12 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
     .map(ws => ({
       ws,
       count: (ws.urls || []).filter(u => isWebUrl(u?.url)).length + (ws.apps || []).filter(isFileItem).length,
-    }))
-    .filter(x => x.count > 0), [savedWorkspaces]);
+    })), [savedWorkspaces]);
   // One workspace at a time (the rest stay out of the way, one pick away).
-  const shownWs = wsWithLinks.find(x => x.ws.id === listWs) || wsWithLinks[0] || null;
+  // Every workspace is listed — the current one shows even before it has
+  // links (with a hint), rather than Home silently falling back to another.
+  const shownWs = wsWithLinks.find(x => x.ws.id === listWs)
+    || wsWithLinks.find(x => x.count > 0) || wsWithLinks[0] || null;
 
   // Clips from a page (Page → Clip): saved as a note in the workspace shown
   // here, with a toast that leads to it.
@@ -970,10 +992,40 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   const searchBody = () => {
     const tabs = browseTabs.tabs.filter(t => !isBlank(t) && tabText(t).includes(q));
     const folders = frequentFolders.filter(f => `${f.name || ''} ${f.path}`.toLowerCase().includes(q));
-    const nothing = !tabs.length && !folders.length && !groups.length;
+    // The web: the search (or address) itself, then the engine's suggestions.
+    const term = filter.trim();
+    const engineKey = getEngineKey();
+    const typedUrl = normalizeAddress(term);
+    const typedIsSearch = typedUrl === searchUrl(engineKey, term);
+    const engineName = engineFor(engineKey).label === 'Default' ? 'the web' : engineFor(engineKey).label;
+    const suggestions = webSuggest.term === term ? webSuggest.list : [];
+    const openWeb = (url) => { setFilter(''); pickLink(url); };
+    const webRow = (key, url, label, typed = false) => (
+      <div
+        key={key}
+        role="button"
+        tabIndex={0}
+        className={`browse-tab-row nav-web-row ${typed ? 'is-typed' : ''}`}
+        onClick={() => openWeb(url)}
+        onKeyDown={(e) => { if (e.key === 'Enter') openWeb(url); }}
+        title={url}
+      >
+        <span className="browse-tile nav-web-icon"><FontAwesomeIcon icon={typed && !typedIsSearch ? faGlobe : faSearch} /></span>
+        <span className="browse-tab-title">{label}</span>
+      </div>
+    );
     return (
       <>
-        {nothing && <div className="browse-hint">Nothing matches “{filter.trim()}”.</div>}
+        {typedUrl && (
+          <section className="browse-group nav-web">
+            {webRow('typed', typedUrl, typedIsSearch ? `Search ${engineName} for “${term}”` : `Go to ${term}`, true)}
+            {suggestions.map(text => webRow(`s:${text}`, searchUrl(engineKey, text), (
+              text.toLowerCase().startsWith(term.toLowerCase())
+                ? <><span className="as-typed">{text.slice(0, term.length)}</span><b>{text.slice(term.length)}</b></>
+                : text
+            )))}
+          </section>
+        )}
         {tabs.length > 0 && (
           <section className="browse-group">
             <div className="nav-section-head"><span>Open tabs</span><span className="browse-count">{tabs.length}</span></div>
@@ -1061,8 +1113,8 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                       className="nav-ws-menu"
                       items={wsWithLinks.map(({ ws, count }) => ({
                         key: ws.id,
-                        icon: faFolder,
-                        label: `${ws.name} · ${count}`,
+                        label: ws.name,
+                        hint: count ? String(count) : null,
                         checked: shownWs.ws.id === ws.id,
                         onSelect: () => setListWs(ws.id),
                       }))}

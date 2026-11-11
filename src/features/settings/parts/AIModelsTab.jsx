@@ -659,11 +659,7 @@ function CloudAISection({ sidecarAvailable }) {
                                     const defaults = { openai: 'gpt-4o-mini', anthropic: 'claude-haiku-4-5-20251001', gemini: 'gemini-2.5-flash' };
                                     setModel(defaults[e.target.value] || 'gpt-4o-mini');
                                 }}
-                                style={{
-                                    width: '100%', padding: '8px 10px', borderRadius: 8,
-                                    background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
-                                    color: '#fff', fontSize: 13, outline: 'none', cursor: 'pointer',
-                                }}
+                                className="mac-select mac-select--block"
                             >
                                 <option value="openai">OpenAI</option>
                                 <option value="anthropic">Anthropic</option>
@@ -677,11 +673,7 @@ function CloudAISection({ sidecarAvailable }) {
                             <select
                                 value={model}
                                 onChange={e => setModel(e.target.value)}
-                                style={{
-                                    width: '100%', padding: '8px 10px', borderRadius: 8,
-                                    background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
-                                    color: '#fff', fontSize: 13, outline: 'none', cursor: 'pointer',
-                                }}
+                                className="mac-select mac-select--block"
                             >
                                 {(PROVIDER_MODELS[provider] || PROVIDER_MODELS.openai).map(m => (
                                     <option key={m.value} value={m.value}>{m.label}</option>

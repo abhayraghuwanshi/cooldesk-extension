@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from 'react';
  *
  * @param icon / title   the button
  * @param dot            show a small badge dot on the button (e.g. update)
- * @param items          [{ key, icon, label, hint?, checked?, accent?, onSelect }]
+ * @param items          [{ key, icon?, label, hint?, checked?, accent?, onSelect }]
  *                       — `null` entries draw a divider
  * @param align          'right' (default) or 'left' edge of the button
  */
@@ -19,6 +19,7 @@ export function ToolbarMenu({ icon, title, dot = false, items, align = 'right', 
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState(null); // key of an item that just ran (✓ flash)
   const rootRef = useRef(null);
+  const shown = items.filter(i => i !== false && i !== undefined);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -60,22 +61,27 @@ export function ToolbarMenu({ icon, title, dot = false, items, align = 'right', 
         {label && <span className="tbm-label">{label}</span>}
       </button>
       {open && (
-        <div className={`tbm-menu tbm-menu--${align}`} role="menu">
-          {items.filter(i => i !== false && i !== undefined).map((item, i) => (item === null ? (
+        // macOS-style menu: a ✓ gutter on the left when any item can be
+        // checked, blue highlight under the pointer.
+        <div className={`tbm-menu tbm-menu--${align} ${shown.some(i => i && i.checked !== undefined) ? 'has-checks' : ''}`} role="menu">
+          {shown.map((item, i) => (item === null ? (
             <div key={`sep-${i}`} className="tbm-sep" role="separator" />
           ) : (
             <button
               key={item.key}
               type="button"
-              role="menuitem"
               className={`tbm-item ${item.accent ? 'is-accent' : ''} ${item.checked ? 'is-checked' : ''}`}
+              role={item.checked !== undefined ? 'menuitemcheckbox' : 'menuitem'}
+              aria-checked={item.checked !== undefined ? !!item.checked : undefined}
               onClick={() => run(item)}
             >
-              <span className="tbm-icon">
-                <FontAwesomeIcon icon={done === item.key ? faCheck : item.icon} />
-              </span>
+              <span className="tbm-gutter">{item.checked && <FontAwesomeIcon icon={faCheck} />}</span>
+              {(item.icon || done === item.key) && (
+                <span className="tbm-icon">
+                  <FontAwesomeIcon icon={done === item.key ? faCheck : item.icon} />
+                </span>
+              )}
               <span className="tbm-text">{done === item.key ? (item.doneLabel || 'Done') : item.label}</span>
-              {item.checked && <FontAwesomeIcon icon={faCheck} className="tbm-check" />}
               {item.hint && <kbd className="tbm-hint">{item.hint}</kbd>}
             </button>
           )))}

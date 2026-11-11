@@ -3362,13 +3362,20 @@ body.bg-white-cred .js-null { color: #8250df; }
   position: absolute;
   top: calc(100% + 6px);
   z-index: 40;
-  min-width: 220px;
+  min-width: 210px;
+  /* Long lists (the workspace picker) scroll instead of running off screen. */
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  scrollbar-width: thin;
   padding: 5px;
-  border-radius: 12px;
-  background: var(--bv-popover);
-  border: 1px solid var(--bv-line);
-  box-shadow: 0 18px 48px -12px rgba(0, 0, 0, 0.6);
-  animation: bv-fade 120ms var(--bv-ease) both;
+  border-radius: 10px;
+  /* macOS menu: frosted, hairline edge, soft deep shadow. */
+  background: color-mix(in srgb, var(--bv-popover) 82%, transparent);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: blur(28px) saturate(170%);
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.5), 0 14px 40px -8px rgba(0, 0, 0, 0.55);
+  animation: bv-fade 110ms var(--bv-ease) both;
 }
 
 .tbm-menu--right { right: 0; }
@@ -3377,27 +3384,53 @@ body.bg-white-cred .js-null { color: #8250df; }
 .tbm-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  padding: 7px 9px;
+  height: 26px;
+  padding: 0 10px 0 6px;
   border: none;
-  border-radius: 8px;
+  border-radius: 5px;
   background: none;
   color: var(--bv-text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
   white-space: nowrap;
 }
 
-.tbm-item:hover {
-  background: var(--bv-hover);
+/* The highlight: system blue, white text and icons. */
+.tbm-item:hover,
+.tbm-item:focus-visible {
+  outline: none;
+  background: #0a84ff;
+  color: #fff;
+}
+
+.tbm-item:hover .tbm-icon,
+.tbm-item:hover .tbm-hint,
+.tbm-item:hover .tbm-gutter,
+.tbm-item:focus-visible .tbm-icon,
+.tbm-item:focus-visible .tbm-hint {
+  color: #fff;
 }
 
 .tbm-item.is-accent {
   color: var(--bv-good);
   font-weight: 600;
+}
+
+/* ✓ gutter on the left, only in menus that have checkable items. */
+.tbm-gutter {
+  display: none;
+  flex: 0 0 12px;
+  font-size: 10.5px;
+  color: var(--bv-text);
+}
+
+.tbm-menu.has-checks .tbm-gutter {
+  display: grid;
+  place-items: center;
 }
 
 .tbm-icon {
@@ -3408,8 +3441,7 @@ body.bg-white-cred .js-null { color: #8250df; }
   color: var(--bv-dim);
 }
 
-.tbm-item.is-accent .tbm-icon,
-.tbm-item.is-checked .tbm-icon {
+.tbm-item.is-accent .tbm-icon {
   color: inherit;
 }
 
@@ -3417,26 +3449,22 @@ body.bg-white-cred .js-null { color: #8250df; }
   flex: 1;
 }
 
-.tbm-check {
-  font-size: 11px;
-  color: var(--bv-accent);
-}
-
+/* Shortcut, right-aligned and quiet, like a menu's key equivalent. */
 .tbm-hint {
-  padding: 0 5px;
-  border-radius: 4px;
-  border: 1px solid var(--bv-line);
-  background: var(--bv-hover);
+  margin-left: 18px;
   font: inherit;
-  font-size: 10px;
-  line-height: 16px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
   color: var(--bv-dim);
+  background: none;
+  border: none;
+  padding: 0;
 }
 
 .tbm-sep {
   height: 1px;
-  margin: 4px 6px;
-  background: var(--bv-line);
+  margin: 5px 10px;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* ── Home and the side panel's rows ─────────────────────────────────
@@ -3549,4 +3577,35 @@ html.multi-resizing-y * { cursor: row-resize !important; user-select: none !impo
 
 .as-title b {
   font-weight: 700;
+}
+
+/* A toolbar menu button with a text label (Home's workspace picker) sizes
+   to its label — the plain .bp-btn is a 30px square and cut it off. */
+.tbm-btn:has(.tbm-label) {
+  width: auto;
+  padding: 0 10px;
+}
+
+/* Home search: the web rows on top (search / go to, then suggestions). */
+.nav-web-icon {
+  color: var(--bv-accent);
+}
+
+.nav-web-row .browse-tab-title b {
+  font-weight: 700;
+}
+
+.nav-web-row .as-typed {
+  font-weight: 400;
+  color: var(--bv-dim);
+}
+
+.nav-web-row.is-typed .browse-tab-title {
+  font-weight: 600;
+}
+
+.nav-web {
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--bv-line);
 }

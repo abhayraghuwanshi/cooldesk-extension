@@ -798,11 +798,7 @@ export function SettingsModal({
                       label={t('st.language')}
                       hint={t('st.languageHint')}
                       right={
-                        <LanguageSelect style={{
-                          height: 30, padding: '0 8px', borderRadius: 6, fontSize: 12,
-                          border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)',
-                          color: '#e5e7eb', cursor: 'pointer', outline: 'none', maxWidth: 190,
-                        }} />
+                        <LanguageSelect className="mac-select" />
                       }
                       last
                     />
@@ -823,11 +819,7 @@ export function SettingsModal({
                           value={searchEngine}
                           aria-label={t('st.searchEngine')}
                           onChange={e => { setSearchEngine(e.target.value); setEngineKey(e.target.value); }}
-                          style={{
-                            height: 30, padding: '0 8px', borderRadius: 6, fontSize: 12,
-                            border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)',
-                            color: '#e5e7eb', cursor: 'pointer', outline: 'none', maxWidth: 190,
-                          }}
+                          className="mac-select"
                         >
                           {availableEngines().map(e => (
                             <option key={e.key} value={e.key}>{e.key === 'default' ? t('st.searchEngineDefault') : e.label}</option>
@@ -1224,11 +1216,7 @@ export function SettingsModal({
                                     value={st.side}
                                     aria-label={`${label} — ${t('st.position')}`}
                                     onChange={e => handleSurfaceSide(surface, e.target.value)}
-                                    style={{
-                                      height: 30, padding: '0 8px', borderRadius: 6, fontSize: 12,
-                                      border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)',
-                                      color: '#e5e7eb', cursor: 'pointer', outline: 'none',
-                                    }}
+                                    className="mac-select"
                                   >
                                     {sides.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
                                   </select>
@@ -1245,11 +1233,7 @@ export function SettingsModal({
                                     value={st.size}
                                     aria-label={`${label} — ${t('st.width')}`}
                                     onChange={e => handleSurfaceSize(surface, Number(e.target.value))}
-                                    style={{
-                                      height: 30, padding: '0 8px', borderRadius: 6, fontSize: 12,
-                                      border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)',
-                                      color: '#e5e7eb', cursor: 'pointer', outline: 'none',
-                                    }}
+                                    className="mac-select"
                                   >
                                     {[...new Set([...SIDEBAR_WIDTHS, st.size])].sort((a, b) => a - b).map(w => (
                                       <option key={w} value={w}>{w} px</option>
