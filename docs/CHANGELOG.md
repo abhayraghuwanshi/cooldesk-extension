@@ -2,6 +2,32 @@
 
 All notable changes to CoolDesk (desktop app + Chrome extension) are documented here.
 
+## [2.0.19] — 2026-11-11
+
+### Added
+- **CoolDesk speaks 14 languages** — English, Spanish, French, German, Italian, Portuguese, Russian, Turkish, Indonesian, Hindi, Arabic (right-to-left), Chinese, Japanese and Korean, across Settings, the sidebar, the dock and the widgets. Pick one in Settings → General, or let it follow your system.
+- **Sidebar and dock are separate windows.** The sidebar and the taskbar-style dock each get their own window and edge handle, and you turn them on independently in **Settings → Windows** or from the tray — one, both or neither, alongside the full app. Drag the sidebar's inner edge to resize it.
+- **Multi view shows your open tabs side by side** — pages, terminals, files and folders in a grid that fits the window, with dividers you can drag. A layout menu switches between single view, multi view and focus mode.
+- **Cool Activity and Settings open as tabs.**
+- **Search suggestions** from your chosen engine (Google, Bing, DuckDuckGo, Brave, Ecosia, YouTube) in Spotlight, the address bar and Home's search. Turn them off in Settings → General → Search suggestions.
+- **Spotlight commands** — `/shell` for real shells inside Spotlight (they keep running when it closes), `/todo` and `/notes` for to-dos and notes per workspace, and `/help`.
+- **Clipboard history in Browse's Home**, next to the Shelf — click a clip to copy it back.
+
+### Changed
+- **Browse is simpler.** No header bar: one ☰ menu holds the sidebar, dock, Cool Activity, Settings and updates. The side panel is just **Home** and **Page**, and Home is one page — search, tabs, the workspace's pinned links (pick the workspace right in its header), folders, notes on the page, clipboard and Shelf.
+- **Folders open as tabs** with the full file manager, instead of in the side panel.
+- **Browse shows only what opens inside it** — running apps and your other browsers' tabs stay in the sidebar, dock and Spotlight.
+- **The main window always stays the full app** and opens maximized; it no longer turns into the sidebar or the bar.
+- **The Shelf holds files only** — downloads and dropped files. Copied text and images live in clipboard history.
+- **macOS-style dropdowns and menus** in Settings and Browse; a cleaner, solid address-bar suggestion list with short paths.
+- **Terminal tabs** use a short prompt and show the folder you're in.
+- **Widgets follow the app language**, including dates and numbers.
+
+### Fixed
+- **Pages felt slower than in a browser** — they now appear as soon as they can draw, instead of after every image and ad has loaded.
+- **A page could stay stuck on screen** after closing its tab while it was still opening.
+- **A white block** could cover Settings, and a **terminal could start all white**.
+
 ## [2.0.18] — 2026-11-06
 
 ### Added
