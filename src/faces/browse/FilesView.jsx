@@ -4,11 +4,12 @@ import { useEffect, useRef } from 'react';
 import { ShelfView } from '../../features/shelf/ShelfView';
 import { NotesView } from '../../features/browser/NotesView';
 import { PageView } from '../../features/browser/PageView';
+import { ClipboardSection } from '../../features/clipboard/ClipboardSection';
 
 // Browse's side panel: two tabs.
 //   Home — one scroll: tabs, the workspace's links, folders (BrowseView's
-//          nav), then your notes on the current page and the Shelf
-//          (downloads, pasted clips, dropped files).
+//          nav), then your notes on the current page, clipboard history and
+//          the Shelf (downloads and dropped files).
 //   Page — the current page's controls and memory.
 // Files aren't here: a folder opens as a tab in the main view, with the full
 // file manager (FileTab). `tab` may still name a spot inside Home — 'notes'
@@ -79,7 +80,13 @@ export function FilesView({ onOpen, active, onClose, tab = 'tabs', onTab, shelf,
               <NotesView url={notesUrl} paneId={notesPaneId} shelf={shelf} />
             </section>
           )}
-          {/* Downloads, pasted clips and dropped files (kept 7 days). */}
+          {/* Clipboard history — click copies back, to paste into a page or
+              a terminal. The same section as the sidebar's; renders nothing
+              while history is off in Settings. */}
+          <div className="fp-home-clipboard">
+            <ClipboardSection />
+          </div>
+          {/* Downloads and dropped files (kept 7 days). */}
           {shelfCount > 0 && (
             <section className="nav-section fp-home-section" ref={shelfRef}>
               <div className="nav-section-head">

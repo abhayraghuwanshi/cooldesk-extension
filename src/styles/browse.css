@@ -3609,3 +3609,15 @@ html.multi-resizing-y * { cursor: row-resize !important; user-select: none !impo
   margin-bottom: 4px;
   border-bottom: 1px solid var(--bv-line);
 }
+
+/* Home: clipboard history (the sidebar's ClipboardSection) between the
+   page notes and the Shelf. */
+.fp-home-clipboard {
+  margin-top: 14px;
+  padding-top: 6px;
+  border-top: 1px solid var(--bv-line);
+}
+
+.fp-home-clipboard:empty {
+  display: none;
+}

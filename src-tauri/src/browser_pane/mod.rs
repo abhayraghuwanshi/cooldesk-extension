@@ -115,6 +115,9 @@ pub async fn browser_pane_open(
 /// first position, owned by nothing — a "ghost" page over the app.
 static EARLY_CLOSE: std::sync::Mutex<Option<std::collections::HashSet<String>>> = std::sync::Mutex::new(None);
 
+/// Release builds: each pane's last logged state (see browser_pane_set_bounds).
+static LAST_STATE: std::sync::Mutex<Option<std::collections::HashMap<String, String>>> = std::sync::Mutex::new(None);
+
 fn take_early_close(label: &str) -> bool {
     EARLY_CLOSE.lock().unwrap().as_mut().is_some_and(|set| set.remove(label))
 }
@@ -165,6 +168,9 @@ async fn open_pane(
         .on_page_load(move |wv, payload| {
             if payload.url().scheme() == "about" {
                 return;
+            }
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                log::info!("[BrowserPane] {} loaded {}", load_id, payload.url().host_str().unwrap_or(""));
             }
             // Mute follows the site, so set it for each page this pane loads.
             #[cfg(target_os = "macos")]
@@ -462,12 +468,23 @@ pub fn browser_pane_set_bounds(
     visible: bool,
     reason: Option<String>,
 ) -> Result<(), String> {
-    let Some(wv) = app.get_webview(&label_for(&id)) else { return Ok(()) };
+    let Some(wv) = app.get_webview(&label_for(&id)) else {
+        log::warn!("[BrowserPane] bounds {id}: no such pane (not created yet, or closed)");
+        return Ok(());
+    };
+    let state = reason.as_deref().map_or("shown".to_string(), |r| format!("hidden: {r}"));
     if cfg!(debug_assertions) {
-        log::info!(
-            "[BrowserPane] bounds {id}: {} ({x:.0},{y:.0}) {width:.0}x{height:.0}",
-            reason.as_deref().map_or("shown".to_string(), |r| format!("hidden: {r}"))
-        );
+        log::info!("[BrowserPane] bounds {id}: {state} ({x:.0},{y:.0}) {width:.0}x{height:.0}");
+    } else {
+        // Release builds: only when a pane's state changes (shown ↔ hidden,
+        // or why it's hidden), so a page that never appears can be traced
+        // from the log without logging every move.
+        let mut last = LAST_STATE.lock().unwrap();
+        let map = last.get_or_insert_with(Default::default);
+        if map.get(&id) != Some(&state) {
+            log::info!("[BrowserPane] {id}: {state} ({x:.0},{y:.0}) {width:.0}x{height:.0}");
+            map.insert(id.clone(), state);
+        }
     }
     let visible = visible && width >= 1.0 && height >= 1.0;
     #[cfg(target_os = "macos")]
