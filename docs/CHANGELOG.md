@@ -2,6 +2,11 @@
 
 All notable changes to CoolDesk (desktop app + Chrome extension) are documented here.
 
+## [2.0.21] — 2026-11-11
+
+### Fixed
+- **The sidebar's shell said "Couldn't start a shell".** Since the sidebar became its own window in 2.0.19, the terminal only accepted the main window and Spotlight. Shells now start in the sidebar and bar windows too.
+
 ## [2.0.20] — 2026-11-11
 
 ### Fixed
