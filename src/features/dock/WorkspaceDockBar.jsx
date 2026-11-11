@@ -1,4 +1,4 @@
-import { faCode, faDesktop, faFileLines, faFolderOpen, faPen, faTableColumns, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faCode, faDesktop, faFileLines, faFolderOpen, faPen, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import logo from '../../../logo-2.png';
@@ -7,10 +7,9 @@ import { isEditorApp, workspaceActivityService } from '../../services/workspaceA
 import { openSpotlightEdit } from '../../services/spotlightEdit';
 import { useCooldeskItems } from '../../shared/hooks/useCooldeskItems.js';
 import { fileStack, stackLogo, useFolderIdentity } from '../../shared/hooks/useFolderIdentity.js';
-import { LayoutSwitchButton } from './LayoutSwitchButton';
+import { OpenFullAppButton } from './LayoutSwitchButton';
 import { closeLiveItem, useLiveItems } from './useLiveItems';
 import '../../styles/dockbar.css';
-import { recordFeature } from '../../services/analytics';
 import { useT } from '../../shared/i18n';
 
 // Favicon resolution as an ordered fallback chain rather than a single source:
@@ -486,22 +485,6 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
   }, []);
   useEffect(() => () => { if (bounceTimerRef.current) clearTimeout(bounceTimerRef.current); }, []);
 
-  // Bar mode has no way back to a vertical layout except backing out to full
-  // window first — this jumps straight from bottom/top bar to a side dock.
-  // The bar doesn't track which vertical edge was last used (dock state's
-  // `side` field is overwritten by "top"/"bottom" while docked as a bar), so
-  // this defaults to the right edge, same as the header's layout cycle does
-  // in the same situation.
-  const dockToSide = useCallback(async () => {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('dock_enable', { mode: 'drawer', side: 'right' });
-      recordFeature('dock_enabled');
-      await invoke('dock_expand');
-    } catch (e) {
-      console.error('[DockBar] dock_enable/dock_expand failed:', e);
-    }
-  }, []);
 
   // Item renderers. The row is one list ordered by activity
   // (itemRankingService), not grouped by type, so each kind renders through
@@ -809,18 +792,9 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
               <FontAwesomeIcon icon={faPen} />
             </button>
           )}
-          <button
-            className="dockbar-ctrl"
-            onClick={dockToSide}
-            title={t('db.dockSide')}
-          >
-            <FontAwesomeIcon icon={faTableColumns} />
-          </button>
-          {/* From the bar, the layout cycle's next step is the full window —
-              this is the "back to full app" control. No manual hide button:
-              the bar already auto-collapses to its edge handle when the
-              cursor leaves it. */}
-          <LayoutSwitchButton className="dockbar-ctrl" />
+          {/* Back to the full app. No manual hide button: the bar already
+              auto-collapses to its edge handle when the cursor leaves it. */}
+          <OpenFullAppButton className="dockbar-ctrl" from="bar" />
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
-import { faArrowLeft, faArrowRight, faArrowUpRightFromSquare, faCheck, faCopy, faFolder, faFolderOpen, faLink, faTerminal } from '@fortawesome/free-solid-svg-icons';
+import { faArrowLeft, faArrowRight, faArrowUpRightFromSquare, faCopy, faEllipsis, faFolder, faFolderOpen, faLink, faTerminal } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { ToolbarMenu } from './ToolbarMenu';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { RenderedPreview } from './RenderedPreview';
 import { ARCHIVE_RE, AUDIO_RE, ArchiveView, AudioView, CsvView, JsonView } from './FileViewers';
@@ -41,27 +42,6 @@ function storedView(kind) {
 async function invoke(cmd, args) {
   const { invoke } = await import('@tauri-apps/api/core');
   return invoke(cmd, args);
-}
-
-function CopyButton({ icon, label, run }) {
-  const [done, setDone] = useState(false);
-  return (
-    <button
-      className={`bp-btn ${done ? 'on' : ''}`}
-      title={label}
-      onClick={async () => {
-        try {
-          await run();
-          setDone(true);
-          setTimeout(() => setDone(false), 1200);
-        } catch (err) {
-          console.warn(`[FileTab] ${label} failed:`, err);
-        }
-      }}
-    >
-      <FontAwesomeIcon icon={done ? faCheck : icon} />
-    </button>
-  );
 }
 
 export function FileIcon({ path, isDir, className = '' }) {
@@ -117,31 +97,31 @@ export function FileTab({ file, active, onOpenFile, onOpenUrl, onShowFolder, onB
           onOpenPath={(path, isDir) => (isDir ? onShowFolder?.(path) : onOpenFile?.(path))}
           onOpenShell={onOpenTerminal}
         />
+        {/* The one action used all the time stays a button; the rest are
+            under "⋯" so the toolbar stays short. */}
         <div className="bp-capsule">
-          {isText && (
-            <CopyButton
-              icon={faCopy}
-              label="Copy contents"
-              run={async () => {
-                const { content } = await invoke('preview_text_file', { path: file.path });
-                await navigator.clipboard.writeText(content);
-              }}
-            />
-          )}
-          <CopyButton icon={faLink} label="Copy path" run={() => navigator.clipboard.writeText(file.path)} />
           {onOpenTerminal && (
             <button className="bp-btn" onClick={() => onOpenTerminal(file.isDir ? file.path : parentDir(file.path))} title="Open a shell here">
               <FontAwesomeIcon icon={faTerminal} />
             </button>
           )}
-          {onShowInFiles && (
-            <button className="bp-btn" onClick={() => onShowInFiles(file.path)} title="Show in the Files panel">
-              <FontAwesomeIcon icon={faFolderOpen} />
-            </button>
-          )}
-          <button className="bp-btn" onClick={() => invoke('open_folder', { path: file.path }).catch(() => { })} title="Open with default app">
-            <FontAwesomeIcon icon={faArrowUpRightFromSquare} />
-          </button>
+          <ToolbarMenu
+            icon={faEllipsis}
+            title="More"
+            items={[
+              isText && {
+                key: 'copy-contents', icon: faCopy, label: 'Copy contents', doneLabel: 'Copied', keepOpen: true,
+                onSelect: async () => {
+                  const { content } = await invoke('preview_text_file', { path: file.path });
+                  await navigator.clipboard.writeText(content);
+                },
+              },
+              { key: 'copy-path', icon: faLink, label: 'Copy path', doneLabel: 'Copied', keepOpen: true, onSelect: () => navigator.clipboard.writeText(file.path) },
+              null,
+              onShowInFiles && { key: 'files', icon: faFolderOpen, label: 'Show in the Files panel', onSelect: () => onShowInFiles(file.path) },
+              { key: 'open', icon: faArrowUpRightFromSquare, label: 'Open with default app', onSelect: () => invoke('open_folder', { path: file.path }).catch(() => { }) },
+            ]}
+          />
         </div>
         {toolbarEnd}
       </div>

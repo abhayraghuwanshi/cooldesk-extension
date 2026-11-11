@@ -112,10 +112,10 @@ pub fn set_window_frame(
 /// itself non-opaque so only the page's own cards paint and the desktop /
 /// app behind shows through the gaps — no panel container. The clear window
 /// + webview background colors are set alongside this via
-/// `set_main_background` in `expand_drawer`.
+/// `set_page_background` in `surfaces::expand`.
 ///
-/// Scoped to the sidebar and switched back off in `disable_dock`: the main
-/// window is deliberately opaque otherwise (see `ensure_main_window`) because
+/// Only ever applied to the sidebar / dock-bar windows: the main window is
+/// deliberately opaque (see `ensure_main_window`) because
 /// `backdrop-filter` renders unreliably in a transparent WKWebView — the
 /// frontend's `dock-see-through` CSS drops every backdrop-filter while this
 /// is on for the same reason.
@@ -269,6 +269,7 @@ pub fn window_frame(window: &tauri::Window) -> Option<(f64, f64, f64, f64)> {
 /// the full app fullscreen again. This used to drop the window to
 /// `NSFloatingWindowLevel`, and AppKit won't make a floating window
 /// fullscreen — after any trip through the dock, fullscreen was gone.
+#[allow(dead_code)] // undoes allow_over_fullscreen_spaces; no caller since the main window stopped docking
 pub fn restrict_to_current_space(window: &tauri::Window) {
     let Ok(ptr) = window.ns_window() else { return };
     let ns_window: &NSWindow = unsafe { &*(ptr as *mut NSWindow) };

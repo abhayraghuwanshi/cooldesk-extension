@@ -231,3 +231,47 @@ html.dock-see-through .dockbar-ws-chip:hover {
 html.dock-see-through .dockbar-ws-chip:focus-visible {
   filter: brightness(1.15);
 }
+
+/* Sidebar window: drag grip on the inner edge (SidebarResizeHandle). A
+   near-invisible fill, not transparent: macOS passes clicks on fully
+   transparent pixels of a see-through window through to the app behind. */
+.sidebar-resize-handle {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  z-index: 10000;
+  cursor: ew-resize;
+  background: rgba(0, 0, 0, 0.01);
+  touch-action: none;
+}
+
+.sidebar-resize-handle--left-edge { left: 0; }
+.sidebar-resize-handle--right-edge { right: 0; }
+
+.sidebar-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 44px;
+  margin-top: -22px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.28);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.sidebar-resize-handle--left-edge::after { left: 2px; }
+.sidebar-resize-handle--right-edge::after { right: 2px; }
+
+.sidebar-resize-handle:hover::after,
+html.sidebar-resizing .sidebar-resize-handle::after {
+  opacity: 1;
+}
+
+html.sidebar-resizing,
+html.sidebar-resizing * {
+  cursor: ew-resize !important;
+  user-select: none !important;
+}

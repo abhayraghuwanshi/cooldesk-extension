@@ -25,10 +25,24 @@
         "url": "pages/spotlight.html"
       },
       {
-        "label": "handle",
-        "title": "CoolDesk Handle",
+        "label": "sidebar-handle",
+        "title": "CoolDesk Sidebar Handle",
         "width": 22,
         "height": 132,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "resizable": false,
+        "shadow": false,
+        "url": "pages/handle.html"
+      },
+      {
+        "label": "bar-handle",
+        "title": "CoolDesk Dock Handle",
+        "width": 132,
+        "height": 22,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,

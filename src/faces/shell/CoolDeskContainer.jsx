@@ -20,8 +20,11 @@ import { itemRankingService } from '../../services/itemRankingService.js';
 import { WorkspaceDockBar } from '../../features/dock/WorkspaceDockBar';
 import { WorkspaceFileDrop } from '../../features/workspace-drop/WorkspaceFileDrop.jsx';
 import { useDockState } from '../../features/dock/useDockState';
-import { useLayoutSwitch } from '../../features/dock/useLayoutSwitch';
-import { LayoutSwitchButton } from '../../features/dock/LayoutSwitchButton';
+import { OpenFullAppButton, SidebarToggleButton } from '../../features/dock/LayoutSwitchButton';
+import { getWindowSurface } from '../../features/dock/surface';
+import { SidebarResizeHandle } from '../../features/dock/SidebarResizeHandle';
+import { AppMenu } from '../../features/dock/AppMenu';
+import { enableSurface, openFullApp, toggleSurface } from '../../features/dock/surfaceControls';
 import { ClipboardSection } from '../../features/clipboard/ClipboardSection';
 import { VaultSection } from '../../features/vault/VaultSection';
 import { ShellSection } from '../../features/terminal/ShellSection';
@@ -52,6 +55,7 @@ export function CoolDeskContainer({
   onAddNote,
   onSearch,
   onOpenSettings,
+  renderSettings,
   themeClass = 'crimson-fire', // Default theme
   wallpaperEnabled = false,
   wallpaperUrl = '',
@@ -74,8 +78,8 @@ export function CoolDeskContainer({
     return unsubscribe;
   }, []);
 
-  // The docked drawer's webview is hidden rather than unmounted between
-  // opens (see dock_expand/expand_drawer in lib.rs), so every face's scroll
+  // A sidebar/dock window's webview is hidden rather than unmounted between
+  // opens (see `expand` in src-tauri/src/surfaces.rs), so every face's scroll
   // position otherwise survives untouched from whenever it was last closed —
   // scroll down once, close the drawer, and it reopens still scrolled to the
   // bottom every time after. `dock-expanded` fires on every drawer open
@@ -190,40 +194,66 @@ export function CoolDeskContainer({
   // reports the mode closed (Esc, its chip's ×, or picking another workspace),
   // so the next right-click "Edit" — even on the same workspace — re-triggers.
   const [editTarget, setEditTarget] = useState(null);
-  // Backend dock state — drives the sidebar / horizontal-bar render modes below.
+  // Which window this page is: the full app ('main'), the sidebar window or
+  // the dock bar window — they're separate windows loading the same page
+  // (src-tauri/src/surfaces.rs). Fixed for the page's lifetime.
+  const surface = isDesktopApp ? getWindowSurface() : 'main';
+  // Backend dock state (both surfaces' on/off, side, mode).
   const dockState = useDockState();
-  // Docked left/right always gets the sidebar layout, whatever width the page
-  // reports: if the page view ever lags the window (it did — see
+  // The sidebar window always gets the sidebar layout, whatever width the
+  // page reports: if the page view ever lags the window (it did — see
   // `autoresize_main_page` in src-tauri/src/lib.rs), Browse stayed mounted and its
   // native page showed over the 360pt panel.
-  const isVerticalDock = isDesktopApp && !!dockState?.enabled
-    && (dockState.side === 'left' || dockState.side === 'right');
+  const isVerticalDock = surface === 'sidebar';
   const isSidebarWidth = useIsSidebarWidth() || isVerticalDock;
-  // Spotlight's "> cmd": Browse takes it when it's up; docked, the sidebar's
-  // ShellSection does (it registers first — a child's effects run first).
-  useSpotlightRuns(isDesktopApp && isSidebarWidth);
+  // Spotlight's "> cmd": Browse takes it when it's up; in a narrowed main
+  // window the ShellSection does (it registers first — a child's effects run
+  // first). Never the sidebar window: `spotlight_run_in_terminal` brings up
+  // the main window, and two windows racing for the same command would run
+  // it wherever happened to ask first.
+  useSpotlightRuns(isDesktopApp && isSidebarWidth && surface === 'main');
 
-  // At sidebar widths the header (and its embedded spotlight) isn't mounted,
-  // so hand the edit to the standalone spotlight window instead.
+  // The desktop app has no header search (Browse's own address bar and the
+  // Alt+K spotlight window cover it), so the edit goes to the standalone
+  // spotlight window. The extension edits in its embedded header search.
   const handleOpenEditModal = useCallback((workspace = null) => {
     if (!workspace) return;
-    if (isDesktopApp && isSidebarWidth) {
+    if (isDesktopApp) {
       openSpotlightEdit(workspace);
       return;
     }
     setEditTarget({ id: workspace.id, name: workspace.name });
-  }, [isDesktopApp, isSidebarWidth]);
+  }, [isDesktopApp]);
 
   const handleExitEditMode = useCallback(() => setEditTarget(null), []);
 
+  // Cool Activity: a modal in the extension (and a main window too narrow
+  // for Browse); in the desktop app it opens as a tab in Browse instead.
   const [graphOpen, setGraphOpen] = useState(false);
+  // Settings likewise: a Browse tab in the desktop app, else the modal.
+  const openSettings = useCallback(() => {
+    if (isDesktopApp && !isSidebarWidth) {
+      window.dispatchEvent(new CustomEvent('cooldesk-browse', { detail: { to: 'settings' } }));
+    } else {
+      onOpenSettings?.();
+    }
+  }, [isDesktopApp, isSidebarWidth, onOpenSettings]);
+  const openActivity = useCallback(() => {
+    if (isDesktopApp && !isSidebarWidth) {
+      window.dispatchEvent(new CustomEvent('cooldesk-browse', { detail: { to: 'activity' } }));
+    } else {
+      setGraphOpen(true);
+    }
+  }, [isDesktopApp, isSidebarWidth]);
 
   // SettingsModal is a fixed two-column dialog that doesn't adapt to sidebar
   // widths (same reasoning that already keeps it out of `sidebar-control-bar`
   // below) — gate WorkspaceShell's own settings nav dot on the same check so
   // it isn't reachable from a width where it can't actually open correctly.
 
-  const isDockedDrawer = isDesktopApp && !!dockState?.enabled && dockState.mode === 'drawer';
+  // A sidebar/dock window in drawer mode (the default until state loads).
+  // Reserve mode (a Windows AppBar strip) stays opaque.
+  const isDockedDrawer = surface !== 'main' && dockState?.[surface]?.mode !== 'reserve';
 
   // See-through on every platform now. How the window gets there differs —
   // macOS flips `setOpaque(false)` on the live window (`dock::set_see_through`),
@@ -238,8 +268,7 @@ export function CoolDeskContainer({
   // Vertical sides additionally get the floating-tile treatment — card
   // border/radius/shadow, hidden scrollbars, lifted text (`dock-sidebar` in
   // dock-see-through.css). The bar has its own pill styling instead.
-  const isSidebarDock = isDockedDrawer
-    && (dockState.side === 'left' || dockState.side === 'right');
+  const isSidebarDock = isDockedDrawer && surface === 'sidebar';
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle('dock-see-through', !!isSeeThroughDock);
@@ -247,28 +276,48 @@ export function CoolDeskContainer({
     return () => root.classList.remove('dock-see-through', 'dock-sidebar');
   }, [isSeeThroughDock, isSidebarDock]);
 
-  // Activate a workspace as a taskbar-style bottom bar: make it current, then
-  // dock the main window to the bottom edge and slide it in.
+  // Activate a workspace in the dock window: make it current (persisted, so
+  // a dock window that's only now being created opens on it), turn the dock
+  // on, and tell an already-open dock window to switch to it.
   const handleDockWorkspace = useCallback(async (workspace) => {
-    if (workspace) setCurrentWorkspace(workspace);
+    if (workspace) {
+      setCurrentWorkspace(workspace);
+      try { localStorage.setItem(CURRENT_WS_KEY, workspace.id); } catch { /* the event still carries it */ }
+    }
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('dock_enable', { mode: 'drawer', side: 'bottom' });
-      recordFeature('dock_enabled');
-      await invoke('dock_expand');
+      await enableSurface('bar');
+      if (workspace?.id) {
+        const { emitTo } = await import('@tauri-apps/api/event');
+        await emitTo('bar', 'dock-bar-select-workspace', { id: workspace.id });
+      }
     } catch (e) {
-      console.error('[CoolDesk] Failed to dock workspace as bar:', e);
+      console.error('[CoolDesk] Failed to open workspace in the dock:', e);
     }
   }, []);
 
-  /* ── Layout cycle ────────────────────────────────────────────────────────
-     One button walks the window through three layouts:
-       full → side (drawer on the saved vertical edge) → bar (bottom strip) → full
-     Shared with the Tab Management toolbar and the workspace dock bar via
-     `useLayoutSwitch` — see `src/features/dock/useLayoutSwitch.js`. */
-  const { currentLayoutInfo, nextLayout, cycleLayout } = useLayoutSwitch(dockState);
+  // Dock window: follow "Activate as dock" from the main window.
+  useEffect(() => {
+    if (surface !== 'bar') return undefined;
+    let unlisten = null;
+    let cancelled = false;
+    import('@tauri-apps/api/event')
+      .then(({ listen }) => listen('dock-bar-select-workspace', (e) => {
+        const ws = savedWorkspaces.find((w) => w.id === e.payload?.id);
+        if (ws) setCurrentWorkspace(ws);
+      }))
+      .then((fn) => { if (cancelled) fn(); else unlisten = fn; })
+      .catch(() => { });
+    return () => { cancelled = true; unlisten?.(); };
+  }, [surface, savedWorkspaces]);
 
-  // Keyboard shortcuts: Graph (Ctrl+Shift+G), sidebar dock toggle (Ctrl+Shift+D).
+  // Ctrl+Shift+D: in the full app, turn the sidebar window on/off; in the
+  // sidebar or dock window, jump to the full app.
+  const handleSurfaceShortcut = useCallback(() => {
+    const p = surface === 'main' ? toggleSurface('sidebar', dockState) : openFullApp(surface);
+    p.catch((e) => console.error('[CoolDesk] Ctrl+Shift+D failed:', e));
+  }, [surface, dockState]);
+
+  // Keyboard shortcuts: Graph (Ctrl+Shift+G), sidebar toggle (Ctrl+Shift+D).
   // `e.key` is the *shifted* character, so compare case-insensitively.
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -276,15 +325,16 @@ export function CoolDeskContainer({
       const key = e.key.toLowerCase();
       if (key === 'g') {
         e.preventDefault();
-        setGraphOpen(prev => !prev);
+        if (graphOpen) setGraphOpen(false);
+        else openActivity();
       } else if (key === 'd' && isDesktopApp) {
         e.preventDefault();
-        cycleLayout();
+        handleSurfaceShortcut();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDesktopApp, cycleLayout]);
+  }, [isDesktopApp, handleSurfaceShortcut, graphOpen, openActivity]);
 
   // Onboarding navigation via custom event (face names: workspace, tabs, team, overview)
   useEffect(() => {
@@ -579,16 +629,16 @@ export function CoolDeskContainer({
   };
 
 
-  // Horizontal dock mode: while docked to the top/bottom edge, the main window
-  // is a ~96px-tall strip — render only the taskbar-style workspace bar.
-  if (isDesktopApp && dockState?.enabled && (dockState.side === 'top' || dockState.side === 'bottom')) {
+  // The dock window is a ~72px-tall strip — render only the taskbar-style
+  // workspace bar.
+  if (surface === 'bar') {
     return (
       <>
         <WorkspaceDockBar
           workspaces={savedWorkspaces}
           activeWorkspace={currentWorkspace}
           onSelectWorkspace={setCurrentWorkspace}
-          side={dockState.side}
+          side={dockState?.bar?.side === 'top' ? 'top' : 'bottom'}
         />
         <WorkspaceFileDrop />
       </>
@@ -643,6 +693,10 @@ export function CoolDeskContainer({
 
   return (
     <div className={`cooldesk-container ${themeClass}`}>
+      {/* Sidebar window: drag its inner edge to resize. */}
+      {surface === 'sidebar' && (
+        <SidebarResizeHandle side={dockState?.sidebar?.side} width={dockState?.sidebar?.size || 320} />
+      )}
       {/* Finder/Explorer → workspace card drops (desktop app only). */}
       <WorkspaceFileDrop />
       {/* Wallpaper Background Overlay (Blur) handled by React, Image handled by Body CSS */}
@@ -660,7 +714,10 @@ export function CoolDeskContainer({
         }} />
       )} */}
 
-      {/* Header with Logo and Settings - Unified Top Bar */}
+      {/* Header with Logo and Settings - Unified Top Bar. Extension only: the
+          desktop app has no header — its controls sit at the end of Browse's
+          tab toolbar (`appControls` below). */}
+      {!isDesktopApp && (
       <div className="cooldesk-header">
         <div className="header-left">
           <div className="cooldesk-logo">
@@ -681,13 +738,14 @@ export function CoolDeskContainer({
         </div>
 
         <div className="header-center">
-          {/* Same spotlight as Alt+K, embedded as the header search; voice and
-              slash commands are activated for this surface via props.
+          {/* Extension only: the same spotlight as Alt+K, embedded as the
+              header search. The desktop app has none — Browse's address bar
+              and the Alt+K spotlight window do that job.
               CSS drops the whole header at sidebar widths, but a display:none
               parent doesn't stop this component's effects (data fetching,
               polling, event subscriptions) from running — so gate the mount
               itself instead of relying on the header being hidden. */}
-          {!isSidebarWidth && (
+          {!isSidebarWidth && !isDesktopApp && (
             <GlobalSpotlight
               variant="embedded"
               onWorkspaceNavigate={handleWorkspaceNavigate}
@@ -705,15 +763,7 @@ export function CoolDeskContainer({
           {/* Renders only when an update is actually pending — the update must
               be reachable without opening Settings. */}
           <UpdateButton />
-          {isDesktopApp && (
-            <LayoutSwitchButton
-              className="cooldesk-settings-btn"
-              data-onboarding="dock-btn"
-              dockState={dockState}
-              title={`${currentLayoutInfo.label} → ${nextLayout.label} (Ctrl+Shift+D)`}
-            />
-          )}
-          <button className="cooldesk-settings-btn" onClick={() => setGraphOpen(true)} title="Cool Activity (Ctrl+Shift+G)">
+          <button className="cooldesk-settings-btn" onClick={openActivity} title="Cool Activity (Ctrl+Shift+G)">
             <FontAwesomeIcon icon={faDiagramProject} />
           </button>
           <button className="cooldesk-settings-btn" onClick={onOpenSettings} title="Settings">
@@ -721,20 +771,20 @@ export function CoolDeskContainer({
           </button>
         </div>
       </div>
+      )}
 
       {/* Corner control bar — only visible at sidebar widths (CSS), where the
-          top header above is hidden: the update badge and the layout switch. */}
+          top header above is hidden: the update badge and a window control. */}
       <div className="sidebar-control-bar">
         {/* Outside the collapse: a pending update shouldn't hide behind the
             dots button, and it disappears again once installed. */}
         <UpdateButton compact />
-        {/* The one layout switch at sidebar widths (was a row in each page —
-            WorkspaceList and TabManagement). With the header hidden this is
-            the only on-screen way out of the sidebar, so it lives here where
-            every page shows it. */}
-        {isDesktopApp && (
-          <LayoutSwitchButton className="sidebar-control-btn" dockState={dockState} />
-        )}
+        {/* The sidebar window's way to the full app (the header is hidden
+            here). A main window that's merely narrow gets the sidebar toggle
+            the header would have shown. */}
+        {isDesktopApp && (surface === 'sidebar'
+          ? <OpenFullAppButton className="sidebar-control-btn" from="sidebar" />
+          : <SidebarToggleButton className="sidebar-control-btn" dockState={dockState} />)}
         {/* No Settings or Cool Activity here. Both are full desktop surfaces —
             SettingsModal is a fixed two-column dialog and the activity graph
             wants real canvas area — and neither adapts to sidebar widths, so
@@ -747,7 +797,8 @@ export function CoolDeskContainer({
           the side panel for everything else. The old faces (Collections,
           Tabs, Browse) and their sliding shell are gone. */}
       {isDesktopApp && isSidebarWidth ? (
-        // Docked sidebar: too narrow for a browser, so just the Home page.
+        // Sidebar window (or a narrow main window): too narrow for a browser,
+        // so just the Home page.
         <div className="cooldesk-sidebar-page">{homePage}</div>
       ) : isDesktopApp ? (
         <div className="cooldesk-one-screen">
@@ -760,6 +811,10 @@ export function CoolDeskContainer({
                 if (ws) setCurrentWorkspace(ws);
               }}
               isActive
+              appControls={(
+                <AppMenu dockState={dockState} onOpenActivity={openActivity} onOpenSettings={openSettings} />
+              )}
+              renderSettings={renderSettings}
               homeExtras={(
                 <Suspense fallback={null}>
                   <TabManagement panel onOpenFolder={openFolderInBrowse} />

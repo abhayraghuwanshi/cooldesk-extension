@@ -1,9 +1,11 @@
-import { faCog, faDatabase, faFolderOpen, faPalette, faRocket, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faCog, faDatabase, faFolderOpen, faPalette, faRocket, faUsers, faWindowRestore } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import logo from '../../../logo-2.png';
 import { useClipboardStatus } from '../clipboard/useClipboardHistory';
 import { useVaultStatus } from '../vault/useVault';
+import { useDockState } from '../dock/useDockState';
+import { disableSurface, enableSurface, setSurfaceSize } from '../dock/surfaceControls';
 
 const isTauri = typeof window !== 'undefined' && !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
 async function tauriInvoke(cmd, args) {
@@ -36,6 +38,9 @@ import { availableEngines, getEngineKey, getWebSuggestEnabled, setEngineKey, set
 export function SettingsModal({
   show,
   onClose,
+  // Desktop app: rendered as a Browse tab (SpecialTab) instead of a modal —
+  // no overlay, fills the tab; Close closes the tab.
+  embedded = false,
   settings,
   onSave,
   fontSize,
@@ -104,12 +109,15 @@ export function SettingsModal({
 
   const TABS = [
     { id: 'general',    label: t('st.tab.general'),    icon: faCog     },
+    ...(isTauri ? [{ id: 'windows', label: t('st.windows'), icon: faWindowRestore }] : []),
     { id: 'appearance', label: t('st.tab.appearance'), icon: faPalette },
     // Local AI configures the desktop app's sidecar (models, cloud keys); in
     // the browser extension there's nothing behind it, so desktop only.
     ...(isDesktopApp ? [{ id: 'local-ai', label: t('st.tab.localAi'), icon: faRocket }] : []),
     ...(isTauri ? [{ id: 'folders', label: t('st.tab.folders'), icon: faFolderOpen }] : []),
     ...(isDesktopApp && TEAM_FEATURE_ENABLED ? [{ id: 'team', label: t('st.tab.team'), icon: faUsers }] : []),
+    // Sync, backups and updates — split out of General to keep it short.
+    { id: 'data', label: t('st.data'), icon: faDatabase },
   ];
 
   const themes = [
@@ -448,6 +456,21 @@ export function SettingsModal({
     setVaultEnabled(enabled).catch(err => console.warn('[Settings] vault toggle failed:', err));
   };
 
+  // Sidebar / dock windows (src-tauri/src/surfaces.rs). Each is its own
+  // window, turned on and placed independently of the other.
+  const dockState = useDockState();
+  const isWindowsOS = typeof navigator !== 'undefined' && /Win/.test(navigator.platform);
+  const surfaceAction = (p) => p.catch(e => setError(String(e?.message || e)));
+  const handleSurfaceToggle = (surface, on) =>
+    surfaceAction(on ? enableSurface(surface) : disableSurface(surface));
+  const handleSurfaceSide = (surface, side) => surfaceAction(enableSurface(surface, { side }));
+  const handleSurfaceSize = (surface, size) => surfaceAction(setSurfaceSize(surface, size));
+  // Sidebar widths offered (CSS px); the stored one is kept in the list even
+  // if it isn't one of these (an older default, a hand-edited file).
+  const SIDEBAR_WIDTHS = [280, 320, 360, 420];
+  const handleSurfaceReserve = (surface, on) =>
+    surfaceAction(enableSurface(surface, { mode: on ? 'reserve' : 'drawer' }));
+
   const handleAutostartToggle = async (enabled) => {
     try {
       await tauriInvoke('set_launch_at_login', { enabled });
@@ -567,7 +590,7 @@ export function SettingsModal({
 
   const SectionHeader = ({ title, description }) => (
     <div style={{ marginBottom: 16 }}>
-      <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 4px 0', color: '#fff', textTransform: 'uppercase', letterSpacing: '0.06em', opacity: 0.5 }}>{title}</h3>
+      {title && <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 4px 0', color: '#fff', textTransform: 'uppercase', letterSpacing: '0.06em', opacity: 0.5 }}>{title}</h3>}
       {description && <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', margin: 0 }}>{description}</p>}
     </div>
   );
@@ -629,18 +652,15 @@ export function SettingsModal({
 
   if (!show) return null;
 
+  // In a tab the overlay is dropped and the panel fills the tab's sheet.
+  const Overlay = embedded ? EmbeddedFrame : ModalOverlay;
   return (
-    <div
-      className="modal-overlay"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 20000,
-        background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: '20px', animation: 'fadeIn 0.2s ease'
-      }}
-    >
-      <div className="modal-content" style={{
+    <Overlay onClose={onClose}>
+      <div className="modal-content" style={embedded ? {
+        width: '100%', height: '100%',
+        display: 'flex', overflow: 'hidden',
+        color: '#fff', fontFamily: 'inherit'
+      } : {
         width: '100%', maxWidth: '960px', height: '82vh',
         background: 'rgba(20, 20, 30, 0.92)',
         backdropFilter: 'blur(24px)',
@@ -659,7 +679,8 @@ export function SettingsModal({
           display: 'flex', flexDirection: 'column',
           padding: '20px 12px'
         }}>
-          {/* Logo */}
+          {/* Logo — not in a tab, whose own title already says Settings */}
+          {!embedded && (
           <div style={{ padding: '0 8px 20px 8px', display: 'flex', alignItems: 'center', gap: 10 }}>
             <img
               src={logo}
@@ -671,6 +692,7 @@ export function SettingsModal({
               <div style={{ fontSize: 10, opacity: 0.4, color: '#fff' }}>{t('st.title')}</div>
             </div>
           </div>
+          )}
 
           {/* Nav */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
@@ -718,6 +740,8 @@ export function SettingsModal({
                 {t('st.gettingStarted')}
               </button>
             )}
+            {/* A tab closes like any tab — no Close button there. */}
+            {!embedded && (
             <button
               onClick={onClose}
               style={{
@@ -731,6 +755,7 @@ export function SettingsModal({
             >
               {t('st.close')}
             </button>
+            )}
           </div>
         </div>
 
@@ -773,11 +798,7 @@ export function SettingsModal({
                       label={t('st.language')}
                       hint={t('st.languageHint')}
                       right={
-                        <LanguageSelect style={{
-                          height: 30, padding: '0 8px', borderRadius: 6, fontSize: 12,
-                          border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)',
-                          color: '#e5e7eb', cursor: 'pointer', outline: 'none', maxWidth: 190,
-                        }} />
+                        <LanguageSelect className="mac-select" />
                       }
                       last
                     />
@@ -798,11 +819,7 @@ export function SettingsModal({
                           value={searchEngine}
                           aria-label={t('st.searchEngine')}
                           onChange={e => { setSearchEngine(e.target.value); setEngineKey(e.target.value); }}
-                          style={{
-                            height: 30, padding: '0 8px', borderRadius: 6, fontSize: 12,
-                            border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)',
-                            color: '#e5e7eb', cursor: 'pointer', outline: 'none', maxWidth: 190,
-                          }}
+                          className="mac-select"
                         >
                           {availableEngines().map(e => (
                             <option key={e.key} value={e.key}>{e.key === 'default' ? t('st.searchEngineDefault') : e.label}</option>
@@ -933,6 +950,13 @@ export function SettingsModal({
                     )}
                   </Card>
                 </section>
+
+              </div>
+            )}
+
+            {/* ── DATA — sync, backups, updates ───────────────────────────────── */}
+            {activeTabId === 'data' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
                 {/* Sync */}
                 <section>
@@ -1157,6 +1181,87 @@ export function SettingsModal({
               </div>
             )}
 
+            {/* ── WINDOWS ─────────────────────────────────────────────────────── */}
+            {activeTabId === 'windows' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                {/* Windows — the sidebar and the dock are separate windows,
+                    each switched on here (or from the tray) on its own. */}
+                {isTauri && (
+                  <section>
+                    <SectionHeader title={null} description={t('st.windowsHint')} />
+                    <Card>
+                      {[
+                        ['sidebar', t('st.sidebarWindow'), t('st.sidebarWindowHint'), [['left', t('st.sideLeft')], ['right', t('st.sideRight')]]],
+                        ['bar', t('st.dockWindow'), t('st.dockWindowHint'), [['bottom', t('st.sideBottom')], ['top', t('st.sideTop')]]],
+                      ].map(([surface, label, hint, sides], i, arr) => {
+                        const st = dockState?.[surface];
+                        const on = !!st?.enabled;
+                        const isLast = i === arr.length - 1;
+                        return (
+                          <div key={surface}>
+                            <SettingRow
+                              label={label}
+                              hint={hint}
+                              right={<Toggle checked={on} onChange={v => handleSurfaceToggle(surface, v)} accentColor="#22c55e" />}
+                              onClick={() => handleSurfaceToggle(surface, !on)}
+                              last={isLast && !on}
+                            />
+                            {on && (
+                              <SettingRow
+                                label={t('st.position')}
+                                style={{ paddingLeft: 28 }}
+                                last={isLast && !isWindowsOS}
+                                right={
+                                  <select
+                                    value={st.side}
+                                    aria-label={`${label} — ${t('st.position')}`}
+                                    onChange={e => handleSurfaceSide(surface, e.target.value)}
+                                    className="mac-select"
+                                  >
+                                    {sides.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
+                                  </select>
+                                }
+                              />
+                            )}
+                            {on && surface === 'sidebar' && (
+                              <SettingRow
+                                label={t('st.width')}
+                                style={{ paddingLeft: 28 }}
+                                last={isLast && !isWindowsOS}
+                                right={
+                                  <select
+                                    value={st.size}
+                                    aria-label={`${label} — ${t('st.width')}`}
+                                    onChange={e => handleSurfaceSize(surface, Number(e.target.value))}
+                                    className="mac-select"
+                                  >
+                                    {[...new Set([...SIDEBAR_WIDTHS, st.size])].sort((a, b) => a - b).map(w => (
+                                      <option key={w} value={w}>{w} px</option>
+                                    ))}
+                                  </select>
+                                }
+                              />
+                            )}
+                            {on && isWindowsOS && (
+                              <SettingRow
+                                label={t('st.reserveSpace')}
+                                hint={t('st.reserveSpaceHint')}
+                                style={{ paddingLeft: 28 }}
+                                last={isLast}
+                                right={<Toggle checked={st.mode === 'reserve'} onChange={v => handleSurfaceReserve(surface, v)} accentColor="#22c55e" />}
+                                onClick={() => handleSurfaceReserve(surface, st.mode !== 'reserve')}
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </Card>
+                  </section>
+                )}
+
+              </div>
+            )}
+
             {/* ── APPEARANCE ──────────────────────────────────────────────────── */}
             {activeTabId === 'appearance' && (
               <ThemesTab
@@ -1213,6 +1318,30 @@ export function SettingsModal({
           </div>
         </div>
       </div>
+    </Overlay>
+  );
+}
+
+// The modal's backdrop: click outside the panel to close.
+function ModalOverlay({ onClose, children }) {
+  return (
+    <div
+      className="modal-overlay"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 20000,
+        background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '20px', animation: 'fadeIn 0.2s ease'
+      }}
+    >
+      {children}
     </div>
   );
 }
+
+// In a Browse tab: just fill it.
+function EmbeddedFrame({ children }) {
+  return <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>{children}</div>;
+}
+

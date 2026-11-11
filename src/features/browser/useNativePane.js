@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { getEngineKey, searchUrl } from '../../shared/searchEngines';
 
 // Binds one native child webview (src-tauri/src/browser_pane) to a DOM slot.
 //
@@ -16,9 +17,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 const SYNC_MS = 120;
 // A requested page (sidebar click, typed address) stays hidden behind the
-// loading screen until it finishes loading — or this long at most, so a slow
-// site's stray ad request can't keep it covered.
-const REVEAL_MAX_MS = 6000;
+// loading screen until it has content — its document parsed (the page-tools
+// script reports "ready" at DOMContentLoaded), like a browser starts drawing
+// — or it finishes loading, or this long at most.
+const REVEAL_MAX_MS = 3000;
 const PROBES = [0.08, 0.5, 0.92];
 // A page whose process dies (stats.rs reports it) reloads by itself once it's
 // on screen — unless it already did that this recently, then it waits for
@@ -59,14 +61,15 @@ export async function invoke(cmd, args) {
   return invoke(cmd, args);
 }
 
-/** Typed address → URL: keeps http(s), assumes https for bare hosts, else searches. */
+/** Typed address → URL: keeps http(s), assumes https for bare hosts, else
+ *  searches with the engine picked in Settings. */
 export function normalizeAddress(input) {
   const text = input.trim();
   if (!text) return null;
   if (/^https?:\/\//i.test(text)) return text;
   if (/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(text)) return `http://${text}`;
   if (/^[^\s]+\.[a-z]{2,}(:\d+)?(\/\S*)?$/i.test(text)) return `https://${text}`;
-  return `https://www.google.com/search?q=${encodeURIComponent(text)}`;
+  return searchUrl(getEngineKey(), text);
 }
 
 function slotIsUnobstructed(slot, rect) {
@@ -167,7 +170,13 @@ export function useNativePane({ paneId, url, requestKey = 0, active, clipRef = n
       setZoom(nextZoom);
       invoke('browser_pane_set_zoom', { id: paneId, zoom: nextZoom }).catch(() => { });
     }
-    const key = b.visible ? `${Math.round(b.x)},${Math.round(b.y)},${Math.round(b.width)},${Math.round(b.height)}` : 'hidden';
+    // Hidden keys carry the reason, so a change of reason re-sends the hide.
+    // The native page can be shown behind our back (a re-open of a live pane
+    // shows it; a hide can lose a race with the view's creation), and with a
+    // bare 'hidden' key "hidden: loading" → "hidden: covered" (Settings
+    // opening over a loading tab) sent nothing, leaving the page drawn over
+    // the modal as a white block.
+    const key = b.visible ? `${Math.round(b.x)},${Math.round(b.y)},${Math.round(b.width)},${Math.round(b.height)}` : `hidden:${b.reason}`;
     if (key === lastBoundsRef.current) return;
     lastBoundsRef.current = key;
     setShown(b.visible);
@@ -286,6 +295,8 @@ export function useNativePane({ paneId, url, requestKey = 0, active, clipRef = n
         if (gate && payload.loading) gate.started = true;
         else if (gate?.started && !payload.loading) endGate();
       }
+      // …or, sooner, once its document is parsed and it can draw.
+      if (payload.ready && gateRef.current?.started) endGate();
     })).then(fn => { if (cancelled) fn(); else unlisten = fn; });
     return () => { cancelled = true; unlisten?.(); };
   }, [paneId, endGate]);

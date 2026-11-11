@@ -1,26 +1,38 @@
-// Collapsed edge-handle for the Workspace drawer. Hovering it (past a short
-// intent delay) or clicking it asks the backend to slide the panel in
-// (dock_expand); the backend hides this handle window. Collapsing back down
-// happens on the panel side, via its own blur handler (see `lib.rs`).
+// Collapsed edge-handle for one dock surface — the sidebar's
+// ("sidebar-handle") or the dock bar's ("bar-handle"); both windows load this
+// page. Hovering it (past a short intent delay) or clicking it asks the
+// backend to slide that surface's panel in (dock_expand); the backend hides
+// this handle window. Collapsing back down happens on the panel side (see
+// src-tauri/src/surfaces.rs).
 import { invoke } from '@tauri-apps/api/core';
 
 const el = document.getElementById('handle');
 
+const label = (() => {
+  try {
+    return window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label || '';
+  } catch {
+    return '';
+  }
+})();
+const surface = label.startsWith('bar') ? 'bar' : 'sidebar';
+
 // Reflect the docked side so the tab's rounded corner faces inward (and the
-// grip dots run horizontally for top/bottom docks). The backend stores side in
-// dock state; re-read whenever it changes so re-docking to another edge
-// restyles the handle without a reload.
+// grip dots run horizontally for top/bottom docks). Re-read whenever the
+// state changes so moving the surface to another edge restyles the handle
+// without a reload.
 const applySide = (side) => {
   el.classList.remove('left', 'top', 'bottom');
   if (side === 'left' || side === 'top' || side === 'bottom') el.classList.add(side);
 };
+const applyState = (st) => applySide(st?.[surface]?.side || (surface === 'bar' ? 'bottom' : 'right'));
 
 invoke('dock_get_state')
-  .then((st) => applySide(st?.side))
+  .then(applyState)
   .catch(() => {});
 
 import('@tauri-apps/api/event')
-  .then(({ listen }) => listen('dock-state-changed', (e) => applySide(e.payload?.side)))
+  .then(({ listen }) => listen('dock-state-changed', (e) => applyState(e.payload)))
   .catch(() => {});
 
 // Pending update: badge the grip so it's visible while the drawer is collapsed
@@ -43,7 +55,7 @@ import('@tauri-apps/api/event')
   .catch(() => {});
 
 const expand = () => {
-  invoke('dock_expand').catch((e) => console.error('[Handle] dock_expand failed:', e));
+  invoke('dock_expand', { surface }).catch((e) => console.error('[Handle] dock_expand failed:', e));
 };
 
 el.addEventListener('click', expand);

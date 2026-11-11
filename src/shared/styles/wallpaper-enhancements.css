@@ -459,11 +459,13 @@
    face link list and browser toolbar; cv-* canvas tiles; as-item address
    suggestions; ft-* file tabs; nt-* Notes cards) style their own glass and turned into a stack of boxed chips
    under it. cb-* / vt-* (side dock's clipboard and password cards) are
-   small icon buttons and chips on their own solid tile. */
+   small icon buttons and chips on their own solid tile. tbm-* (Browse's
+   toolbar menus) draw macOS-style menus — as glass every row became a
+   boxed button. */
 .wallpaper-enabled .cooldesk-settings-btn,
 .wallpaper-enabled .cooldesk-voice-btn,
 .wallpaper-enabled .workspace-add-url-btn,
-.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):not([class*="spotlight-"]):not([class*="ws-dropdown"]):not([class*="tree-chevron"]):not([class*="dockbar-"]):not([class*="card-swatch"]):not([class*="wcp-color-trigger"]):not([class*="ob-"]):not([class*="upd-"]):not([class*="fm-"]):not([class*="feed-tab"]):not([class*="feed-badge"]):not([class*="overview-"]):not([class*="ocb-"]):not([class*="search-hero"]):not([class*="lp-"]):not([class*="cz-"]):not([class*="lb-"]):not([class*="fav-tile"]):not([class*="browse-"]):not([class*="bp-"]):not([class*="cv-"]):not([class*="as-item"]):not([class*="ft-"]):not([class*="nt-"]):not([class*="pg-"]):not([class*="nav-"]):not([class*="cb-"]):not([class*="vt-"]) {
+.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):not([class*="spotlight-"]):not([class*="ws-dropdown"]):not([class*="tree-chevron"]):not([class*="dockbar-"]):not([class*="card-swatch"]):not([class*="wcp-color-trigger"]):not([class*="ob-"]):not([class*="upd-"]):not([class*="fm-"]):not([class*="feed-tab"]):not([class*="feed-badge"]):not([class*="overview-"]):not([class*="ocb-"]):not([class*="search-hero"]):not([class*="lp-"]):not([class*="cz-"]):not([class*="lb-"]):not([class*="fav-tile"]):not([class*="browse-"]):not([class*="bp-"]):not([class*="cv-"]):not([class*="as-item"]):not([class*="ft-"]):not([class*="nt-"]):not([class*="pg-"]):not([class*="nav-"]):not([class*="cb-"]):not([class*="vt-"]):not([class*="tbm-"]) {
     background: linear-gradient(135deg,
             rgba(25, 25, 30, 0.76) 0%,
             rgba(20, 20, 25, 0.7) 100%) !important;
@@ -484,7 +486,7 @@
 .wallpaper-enabled .cooldesk-settings-btn:hover,
 .wallpaper-enabled .cooldesk-voice-btn:hover,
 .wallpaper-enabled .workspace-add-url-btn:hover,
-.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):not([class*="spotlight-"]):not([class*="ws-dropdown"]):not([class*="tree-chevron"]):not([class*="dockbar-"]):not([class*="card-swatch"]):not([class*="wcp-color-trigger"]):not([class*="ob-"]):not([class*="upd-"]):not([class*="fm-"]):not([class*="feed-tab"]):not([class*="feed-badge"]):not([class*="overview-"]):not([class*="ocb-"]):not([class*="search-hero"]):not([class*="lp-"]):not([class*="cz-"]):not([class*="lb-"]):not([class*="fav-tile"]):not([class*="browse-"]):not([class*="bp-"]):not([class*="cv-"]):not([class*="as-item"]):not([class*="ft-"]):not([class*="nt-"]):not([class*="pg-"]):not([class*="nav-"]):not([class*="cb-"]):not([class*="vt-"]):hover {
+.wallpaper-enabled button:not([class*="awm-"]):not([class*="wgb-"]):not([class*="spotlight-"]):not([class*="ws-dropdown"]):not([class*="tree-chevron"]):not([class*="dockbar-"]):not([class*="card-swatch"]):not([class*="wcp-color-trigger"]):not([class*="ob-"]):not([class*="upd-"]):not([class*="fm-"]):not([class*="feed-tab"]):not([class*="feed-badge"]):not([class*="overview-"]):not([class*="ocb-"]):not([class*="search-hero"]):not([class*="lp-"]):not([class*="cz-"]):not([class*="lb-"]):not([class*="fav-tile"]):not([class*="browse-"]):not([class*="bp-"]):not([class*="cv-"]):not([class*="as-item"]):not([class*="ft-"]):not([class*="nt-"]):not([class*="pg-"]):not([class*="nav-"]):not([class*="cb-"]):not([class*="vt-"]):not([class*="tbm-"]):hover {
     background: linear-gradient(135deg,
             rgba(40, 40, 45, 0.84) 0%,
             rgba(30, 30, 35, 0.78) 100%) !important;

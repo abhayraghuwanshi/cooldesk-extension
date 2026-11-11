@@ -4,10 +4,12 @@ const isTauri = () =>
   typeof window !== 'undefined' && !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
 
 /**
- * Live view of the backend dock state ({enabled, mode, side, width, barHeight}).
+ * Live view of the backend dock state:
+ *   { sidebar: {enabled, mode, side, size}, bar: {enabled, mode, side, size} }
  * Reads it once on mount and stays in sync via the `dock-state-changed` event
- * the dock commands emit — so tray toggles and other windows are reflected too.
- * Returns null outside the desktop app (or before the first read resolves).
+ * the dock commands emit to every window — so tray toggles and changes made
+ * from another window are reflected too. Returns null outside the desktop app
+ * (or before the first read resolves).
  */
 export function useDockState() {
   const [dockState, setDockState] = useState(null);

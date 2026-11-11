@@ -5,7 +5,9 @@ import { recordRecentFile, recordRecentShell } from '../../features/browser/rece
 // with paneId `bt-<id>`), a file / folder from disk (`file: { path, isDir }`,
 // previewed in the main area), a terminal (`term: { cwd }`, a shell that
 // runs as long as the tab is open — never put to sleep) or a workspace note
-// (`note: { id, workspaceId, workspaceName }`, its TipTap editor — NoteTab). Web tabs stay loaded while you switch away —
+// (`note: { id, workspaceId, workspaceName }`, its TipTap editor — NoteTab)
+// or one of CoolDesk's own pages (`special: 'activity' | 'settings'` — Cool
+// Activity or Settings, at most one tab each; SPECIAL_TITLES). Web tabs stay loaded while you switch away —
 // up to MAX_LIVE of them; older ones "sleep" (their page is closed) and
 // reload when you come back, since every live page is a WebKit process of
 // 100–300 MB. The pane guard (usePaneGuard) also puts tabs to sleep early —
@@ -15,6 +17,10 @@ import { recordRecentFile, recordRecentShell } from '../../features/browser/rece
 const TABS_KEY = 'cooldesk.browse.tabs';
 const MAX_LIVE = 6;
 const MAX_TABS = 40;
+
+// CoolDesk's own pages that open as tabs (`special`).
+export const SPECIAL_TITLES = { activity: 'Cool Activity', settings: 'Settings' };
+const specialOf = (t) => (SPECIAL_TITLES[t.special] ? t.special : t.activity === true ? 'activity' : undefined);
 
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 const isWebUrl = (url) => typeof url === 'string' && /^https?:\/\//i.test(url);
@@ -81,6 +87,7 @@ function load(fallbackUrl) {
           note: t.note && typeof t.note.id === 'string' && t.note.workspaceId
             ? { id: t.note.id, workspaceId: t.note.workspaceId, workspaceName: t.note.workspaceName || '' }
             : null,
+          special: specialOf(t),
           back: cleanEntries(t.back),
           fwd: cleanEntries(t.fwd),
         }));
@@ -115,7 +122,7 @@ export function useBrowseTabs(initialUrl) {
           activeId,
           // A terminal's start command isn't saved: after a restart the tab
           // is a plain shell, so a dev server doesn't start on its own.
-          tabs: tabs.map(({ id, url, title, file, term, note, back, fwd }) => ({ id, url, title, file, term: term ? { cwd: term.cwd } : term, note, back, fwd })),
+          tabs: tabs.map(({ id, url, title, file, term, note, special, back, fwd }) => ({ id, url, title, file, term: term ? { cwd: term.cwd } : term, note, special, back, fwd })),
         }));
       } catch { /* keep in memory */ }
     }, 300);
@@ -141,7 +148,7 @@ export function useBrowseTabs(initialUrl) {
         if (t.id !== s.activeId) return t;
         // Leaving a file for a page: the file goes on Back (page-to-page
         // history is the page's own).
-        const next = { ...t, url, file: null, term: null, note: null, req: { url, key: t.req.key + 1 } };
+        const next = { ...t, url, file: null, term: null, note: null, special: undefined, req: { url, key: t.req.key + 1 } };
         return t.file ? { ...next, back: [...(t.back || []), entryOf(t)].slice(-HISTORY), fwd: [] } : next;
       }),
     }));
@@ -216,7 +223,7 @@ export function useBrowseTabs(initialUrl) {
   if (!mru.current.includes(activeId)) touch(activeId);
   // Only web tabs count toward MAX_LIVE (file tabs have no web process).
   const live = useMemo(
-    () => new Set([activeId, ...mru.current.filter(id => !asleep.current.has(id) && tabs.some(t => t.id === id && !t.file && !t.term && !t.note))].slice(0, MAX_LIVE)),
+    () => new Set([activeId, ...mru.current.filter(id => !asleep.current.has(id) && tabs.some(t => t.id === id && !t.file && !t.term && !t.note && !t.special))].slice(0, MAX_LIVE)),
     // mru / asleep are refs; recompute when the active tab, the tab set or
     // the sleepers change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -273,7 +280,7 @@ export function useBrowseTabs(initialUrl) {
     }
     const title = path.split(/[/\\]/).filter(Boolean).pop() || path;
     const here = tabs.find(t => t.id === activeId);
-    if (inPlace && here && !here.term && !here.note) {
+    if (inPlace && here && !here.term && !here.note && !here.special) {
       touch(here.id);
       setState(s => ({ ...s, tabs: s.tabs.map(t => (t.id === here.id ? goTo(t, { url: null, file: { path, isDir }, title }) : t)) }));
       return;
@@ -305,7 +312,7 @@ export function useBrowseTabs(initialUrl) {
     }
     const title = name || (cwd ? cwd.split(/[/\\]/).filter(Boolean).pop() || cwd : 'Shell');
     const here = tabs.find(t => t.id === activeId);
-    if (inPlace && here && !here.url && !here.file && !here.term && !here.note) {
+    if (inPlace && here && !here.url && !here.file && !here.term && !here.note && !here.special) {
       touch(here.id);
       setState(s => ({ ...s, tabs: s.tabs.map(t => (t.id === here.id ? { ...t, title, term: { cwd, run } } : t)) }));
       return;
@@ -333,7 +340,7 @@ export function useBrowseTabs(initialUrl) {
     const meta = { id: note.id, workspaceId: note.workspaceId, workspaceName: note.workspaceName || '' };
     const title = note.title || 'New note';
     const here = tabs.find(t => t.id === activeId);
-    if (here && !here.url && !here.file && !here.term && !here.note) {
+    if (here && !here.url && !here.file && !here.term && !here.note && !here.special) {
       touch(here.id);
       setState(s => ({ ...s, tabs: s.tabs.map(t => (t.id === here.id ? { ...t, title, note: meta } : t)) }));
       return;
@@ -342,6 +349,32 @@ export function useBrowseTabs(initialUrl) {
     touch(id);
     setState(s => (s.tabs.length >= MAX_TABS ? s : {
       tabs: [...s.tabs, { id, url: null, title, req: { url: null, key: 0 }, note: meta }],
+      activeId: id,
+    }));
+  }, [tabs, activeId]);
+
+  /** One of CoolDesk's own pages (`kind`: 'activity' | 'settings') in the
+   *  main view: switches to its tab if it's open, else takes the blank tab
+   *  you're on or a new one. */
+  const openSpecialTab = useCallback((kind) => {
+    const title = SPECIAL_TITLES[kind];
+    if (!title) return;
+    const existing = tabs.find(t => t.special === kind);
+    if (existing) {
+      touch(existing.id);
+      setState(s => ({ ...s, activeId: existing.id }));
+      return;
+    }
+    const here = tabs.find(t => t.id === activeId);
+    if (here && !here.url && !here.file && !here.term && !here.note && !here.special) {
+      touch(here.id);
+      setState(s => ({ ...s, tabs: s.tabs.map(t => (t.id === here.id ? { ...t, title, special: kind } : t)) }));
+      return;
+    }
+    const id = newId();
+    touch(id);
+    setState(s => (s.tabs.length >= MAX_TABS ? s : {
+      tabs: [...s.tabs, { id, url: null, title, req: { url: null, key: 0 }, special: kind }],
       activeId: id,
     }));
   }, [tabs, activeId]);
@@ -370,5 +403,5 @@ export function useBrowseTabs(initialUrl) {
   }, [tabs, activeId]);
 
   const active = tabs.find(t => t.id === activeId) || tabs[0];
-  return { tabs, active, activeId: active.id, live, sleep, idleFor, activate, openInActive, openInNew, openFileTab, openTerminalTab, openNoteTab, step, close, cycle, noteUrl, noteTitle, move, findByUrl };
+  return { tabs, active, activeId: active.id, live, sleep, idleFor, activate, openInActive, openInNew, openFileTab, openTerminalTab, openNoteTab, openSpecialTab, step, close, cycle, noteUrl, noteTitle, move, findByUrl };
 }

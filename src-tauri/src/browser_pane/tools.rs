@@ -175,6 +175,14 @@ fn on_message(label: &str, message: &WKScriptMessage) {
             if cfg!(debug_assertions) {
                 log::info!("[PageTools] {label} ready on {url}");
             }
+            // The document is parsed (this script runs at DOMContentLoaded):
+            // the page has something to show, so the frontend can lift its
+            // loading screen now instead of waiting for every image, font and
+            // ad to finish — which is what made pages feel slower than in a
+            // browser (useNativePane's reveal gate).
+            if let Some(id) = label.strip_prefix("browser-pane-") {
+                let _ = tauri::Emitter::emit(app, "browser-pane-state", serde_json::json!({ "id": id, "ready": true }));
+            }
             unsafe { apply(app, &view) };
             Ok(())
         }

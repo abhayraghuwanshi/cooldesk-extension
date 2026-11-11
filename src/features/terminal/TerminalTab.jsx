@@ -22,9 +22,21 @@ async function invoke(cmd, args) {
 
 // Colours follow Browse's light/dark tokens (read off the element, whose CSS
 // colour is --bv-text): a dark ink means the light theme.
+// Pure black is the browser's default text colour, i.e. Browse's styles
+// haven't applied yet (a terminal created in the same frame as its tab, a
+// hidden multi-view tile): that reads as "light theme" and painted a white
+// terminal for good — so treat it as unknown and stay dark until re-checked
+// (syncTheme, once laid out and each time the tab is shown).
+function syncTheme(term, el) {
+  if (!term || !el) return;
+  const next = themeFor(el);
+  if (term.options.theme?.background !== next.background) term.options.theme = next;
+}
+
 function themeFor(el) {
   const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(getComputedStyle(el).color);
-  const light = m ? (0.299 * m[1] + 0.587 * m[2] + 0.114 * m[3]) / 255 < 0.5 : false;
+  const unstyled = !m || (m[1] === '0' && m[2] === '0' && m[3] === '0');
+  const light = !unstyled && (0.299 * m[1] + 0.587 * m[2] + 0.114 * m[3]) / 255 < 0.5;
   const accent = getComputedStyle(el).getPropertyValue('--bv-accent').trim() || '#60a5fa';
   return light ? {
     background: '#fbfbfc', foreground: '#1f2328', cursor: accent, cursorAccent: '#fbfbfc',
@@ -128,10 +140,14 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
       termRef.current = term;
       fitRef.current = fit;
       try { fit.fit(); } catch { /* not laid out yet */ }
+      requestAnimationFrame(() => syncTheme(term, host));
 
       // Re-fit whenever the tab's box changes (window, side panel, focus mode).
+      // Laid out for the first time (a hidden tile shown) is also when its
+      // styles are surely in, so the colours are re-checked then too.
       const ro = new ResizeObserver(() => {
         if (host.offsetWidth > 0 && host.offsetHeight > 0) {
+          syncTheme(term, host);
           try { fit.fit(); } catch { /* ignore */ }
         }
       });
@@ -173,7 +189,12 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
         }
       };
       try {
-        await invoke('terminal_open', { id, cwd: cwd || null, cols: term.cols, rows: term.rows, compact, output });
+        // Short prompt everywhere but the drawer: the sidebar is narrow, and
+        // a Browse tab shows the shell's folder in its header instead (from
+        // the title the short prompt sets — terminal.rs ZSH_RC_TAIL), so a
+        // long path or themed prompt doesn't eat every line. Text size is
+        // `compact` alone.
+        await invoke('terminal_open', { id, cwd: cwd || null, cols: term.cols, rows: term.rows, compact: compact || variant === 'tab', output });
       } catch (err) {
         if (alive) setError(String(err));
         return;
@@ -194,7 +215,7 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
       subs.forEach(s => s.dispose());
       invoke('terminal_close', { id }).catch(() => { });
     };
-  }, [generation, tabId, cwd, run, compact]);
+  }, [generation, tabId, cwd, run, compact, variant]);
 
   // Commands handed in from outside (the docked sidebar's terminal host).
   useEffect(() => {
@@ -216,6 +237,7 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
   useEffect(() => {
     if (!active) return;
     const id = requestAnimationFrame(() => {
+      syncTheme(termRef.current, hostRef.current);
       try { fitRef.current?.fit(); } catch { /* ignore */ }
       termRef.current?.focus();
     });
@@ -236,6 +258,9 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
   }, []);
 
   const folder = cwd || '~';
+  // The shell's current folder, when its title is one (a short-prompt zsh
+  // sets it to `%~` before each prompt); other shells' titles are left out.
+  const liveDir = title && /^(~|\/|[A-Za-z]:[\\/])/.test(title) ? title : null;
   const clear = () => { termRef.current?.clear(); termRef.current?.focus(); };
 
   if (variant === 'panel') {
@@ -289,9 +314,9 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
         {toolbarStart}
         <TabAddressBar
           icon={<FontAwesomeIcon icon={faTerminal} className="ft-address-icon term-address-icon" />}
-          label={cwd ? baseName(cwd) : 'Shell'}
-          sub={run ? `$ ${run}` : folder}
-          title={folder}
+          label={liveDir ? baseName(liveDir) : (cwd ? baseName(cwd) : 'Shell')}
+          sub={run ? `$ ${run}` : (liveDir || folder)}
+          title={liveDir || folder}
           onOpenUrl={onOpenUrl}
           onOpenPath={onOpenPath}
           onOpenShell={onOpenShell}

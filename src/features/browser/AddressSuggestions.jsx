@@ -38,10 +38,6 @@ export function AddressSuggestions({ items, selected, onPick, onHover, scope }) 
 
   return (
     <div className="as-panel" ref={listRef} onMouseDown={e => e.preventDefault() /* keep focus in the bar */}>
-      <div className="as-hint">
-        {scope === 'u' ? 'Links only' : scope === 'f' ? 'Files only' : 'Links and files'}
-        <span>· type <kbd>/u</kbd> or <kbd>/f</kbd> to narrow · <kbd>↑</kbd><kbd>↓</kbd> to choose · <kbd>Esc</kbd> to close</span>
-      </div>
       {items.length === 0 && <div className="as-empty">No matches yet.</div>}
       {GROUPS.map(group => {
         const groupItems = items.filter(i => group.kinds.includes(i.kind));
@@ -57,20 +53,34 @@ export function AddressSuggestions({ items, selected, onPick, onHover, scope }) 
                   className={`as-item ${i === selected ? 'selected' : ''}`}
                   onMouseEnter={() => onHover(i)}
                   onClick={() => onPick(item)}
-                  title={item.url || item.path || item.sub}
+                  title={item.url || item.path || item.cwd || item.sub}
                 >
                   <span className="as-icon"><KindIcon item={item} /></span>
                   <span className="as-text">
-                    <span className="as-title">{item.title}</span>
-                    <span className="as-sub">{item.sub}</span>
+                    <span className="as-title">
+                      {/* A suggestion: what you typed, then the completion in bold — like a browser's bar. */}
+                      {item.suggestion && item.term && item.title.toLowerCase().startsWith(item.term.toLowerCase())
+                        ? <><span className="as-typed">{item.title.slice(0, item.term.length)}</span><b>{item.title.slice(item.term.length)}</b></>
+                        : item.title}
+                    </span>
+                    {item.sub && <span className="as-sub">{item.sub}</span>}
                   </span>
-                  {i === selected && <kbd className="as-enter">↵</kbd>}
+                  {item.badge && <span className="as-badge">{item.badge}</span>}
+                  <kbd className="as-enter" aria-hidden={i !== selected}>↵</kbd>
                 </button>
               );
             })}
           </section>
         );
       })}
+      {/* Keys, kept in view at the bottom while the list scrolls. */}
+      <div className="as-hint">
+        <span className="as-scope">{scope === 'u' ? 'Links only' : scope === 'f' ? 'Files only' : 'Links, files & shells'}</span>
+        <span><kbd>/u</kbd> <kbd>/f</kbd> narrow</span>
+        <span><kbd>↑</kbd><kbd>↓</kbd> choose</span>
+        <span><kbd>↵</kbd> open</span>
+        <span><kbd>esc</kbd> close</span>
+      </div>
     </div>
   );
 }

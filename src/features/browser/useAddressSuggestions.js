@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { browseUrls, quickSearch, refreshElectronCache } from '../../services/searchService';
 import { getFaviconUrl } from '../../utils/helpers.js';
 import { hostOf, invoke, normalizeAddress } from './useNativePane';
+import { engineFor, fetchWebSuggestions, getEngineKey, getWebSuggestEnabled, searchUrl } from '../../shared/searchEngines';
 import { recentFiles, recentShells } from './recentHistory';
 
 // Suggestions for the Browse address bar and the Canvas "add" bar — the same
@@ -24,6 +25,9 @@ const MAX_SHELLS = 3;
 
 const LINK_LABEL = { tab: 'Open tab', history: 'History', bookmark: 'Bookmark', 'workspace-url': 'Saved link' };
 
+// Search suggestions shown under the typed query.
+const MAX_SUGGESTIONS = 4;
+
 function parseScope(query) {
   const m = /^\/([uf])(?:\s+|$)(.*)$/i.exec(query);
   return m ? { scope: m[1].toLowerCase(), term: m[2].trim() } : { scope: null, term: query.trim() };
@@ -33,13 +37,30 @@ function baseName(p) {
   return p.split(/[\\/]/).filter(Boolean).pop() || p;
 }
 
+// A path as a second line: the home folder as ~, and long ones cut to the
+// first and last two folders (`~/…/pricing/new`) — the full path is the
+// row's tooltip.
+export function shortPath(p) {
+  if (!p) return '~';
+  const home = p.replace(/^(\/Users\/[^/]+|\/home\/[^/]+|[A-Za-z]:\\Users\\[^\\]+)(?=$|[\\/])/, '~');
+  const sep = home.includes('\\') && !home.includes('/') ? '\\' : '/';
+  const parts = home.split(/[\\/]/);
+  return parts.length > 5 ? [parts[0], '…', ...parts.slice(-2)].join(sep) : home;
+}
+
+function parentDir(p) {
+  const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+  return i > 0 ? p.slice(0, i) : p;
+}
+
 function toLink(r) {
   return {
     kind: 'link',
     id: `link:${r.url}`,
     url: r.url,
     title: r.title || hostOf(r.url),
-    sub: `${LINK_LABEL[r.type] || 'Link'} · ${hostOf(r.url)}`,
+    sub: hostOf(r.url),
+    badge: LINK_LABEL[r.type] || null,
     icon: getFaviconUrl(r.url, 32, r.favicon),
   };
 }
@@ -47,7 +68,7 @@ function toLink(r) {
 function toFile(f) {
   const path = f.path;
   const isDir = f.is_dir ?? f.isDir ?? false;
-  return { kind: isDir ? 'folder' : 'file', id: `file:${path}`, path, isDir, title: f.name || baseName(path), sub: path };
+  return { kind: isDir ? 'folder' : 'file', id: `file:${path}`, path, isDir, title: f.name || baseName(path), sub: shortPath(parentDir(path)) };
 }
 
 // Empty bar: recent tabs/history/bookmarks. The cache behind browseUrls is
@@ -98,7 +119,7 @@ function shellItems() {
     id: `shell:${s.cwd || '~'}`,
     cwd: s.cwd || null,
     title: s.cwd ? baseName(s.cwd) : 'Home',
-    sub: `Shell · ${s.cwd || '~'}`,
+    sub: shortPath(s.cwd),
   }));
 }
 
@@ -121,20 +142,32 @@ export function useAddressSuggestions(query, { enabled, withFiles = true, withSh
     const wantFiles = withFiles && scope !== 'u';
 
     const timer = setTimeout(async () => {
+      const engineKey = getEngineKey();
+      const engine = engineFor(engineKey);
       const typed = [];
+      let isSearch = false;
       if (term && scope !== 'f') {
         const url = normalizeAddress(term);
-        const isSearch = url && /google\.com\/search\?/.test(url) && !/^https?:\/\//i.test(term);
+        isSearch = url === searchUrl(engineKey, term);
         if (url) {
           typed.push({
             kind: isSearch ? 'search' : 'go',
             id: 'typed',
             url,
-            title: isSearch ? `Search Google for “${term}”` : `Go to ${term}`,
-            sub: isSearch ? 'google.com' : hostOf(url),
+            title: isSearch ? `Search ${engine.label === 'Default' ? 'the web' : engine.label} for “${term}”` : `Go to ${term}`,
+            sub: hostOf(url),
           });
         }
       }
+
+      // Search suggestions from the engine, like a browser's address bar —
+      // only for something that reads as a search, and only while turned on
+      // (Settings → General → Search suggestions: what you type goes to the
+      // engine). Fetched alongside the local lists and added when they land,
+      // so tabs, history and files never wait on the network.
+      const suggestP = isSearch && term.length >= 2 && getWebSuggestEnabled()
+        ? fetchWebSuggestions(engineKey, term, { max: MAX_SUGGESTIONS }).catch(() => [])
+        : null;
 
       const [links, files] = await Promise.all([
         !wantLinks ? [] : term
@@ -156,6 +189,20 @@ export function useAddressSuggestions(query, { enabled, withFiles = true, withSh
         if (linkItems.length >= MAX_LINKS) break;
       }
       setState({ items: [...typed, ...linkItems, ...files, ...shells], scope });
+
+      suggestP?.then(list => {
+        if (id !== seq.current || !list.length) return;
+        const suggestions = list.map(text => ({
+          kind: 'search',
+          id: `suggest:${text}`,
+          url: searchUrl(engineKey, text),
+          title: text,
+          sub: null,
+          suggestion: true,
+          term,
+        }));
+        setState(st => ({ ...st, items: [...typed, ...suggestions, ...st.items.slice(typed.length)] }));
+      });
     }, term ? DEBOUNCE_MS : 0);
 
     return () => clearTimeout(timer);

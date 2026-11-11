@@ -1,4 +1,4 @@
-import { faArrowDown, faCheck, faCopy, faDownload, faFile, faFileLines, faImage, faPaste, faSpinner, faThumbtack, faTrashCan, faTriangleExclamation } from '@fortawesome/free-solid-svg-icons';
+import { faArrowDown, faCheck, faCopy, faDownload, faFile, faFileLines, faImage, faSpinner, faThumbtack, faTrashCan, faTriangleExclamation } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useRef, useState } from 'react';
 import { getPreviewItem } from '../../utils/filePreviewKind.js';
@@ -81,7 +81,7 @@ function Action({ icon, label, onRun, danger = false, active = false }) {
 
 /**
  * @param shelf   from useShelf (owned by BrowseView, which also shows its badge)
- * @param active  the Shelf tab is on screen (drop target + paste)
+ * @param active  the Shelf is on screen (drop target)
  * @param onOpen  (path) → open an item as a main-view tab
  */
 export function ShelfView({ shelf, active, onOpen }) {
@@ -100,40 +100,6 @@ export function ShelfView({ shelf, active, onOpen }) {
   const flash = (text) => {
     setNote(text);
     setTimeout(() => setNote(n => (n === text ? null : n)), 2200);
-  };
-
-  // ⌘V while the shelf has focus.
-  const onPaste = async (e) => {
-    const files = [...(e.clipboardData?.files || [])];
-    const text = e.clipboardData?.getData('text/plain');
-    if (!files.length && !text) return;
-    e.preventDefault();
-    for (const f of files) await shelf.addFile(f);
-    if (!files.length && text) await shelf.addText(text);
-    flash(files.length ? t(files.length === 1 ? 'sh.addedItems1' : 'sh.addedItemsN', { n: files.length }) : t('sh.addedText'));
-  };
-
-  // Paste button: the async clipboard (WebKit shows its own "Paste" bubble).
-  const pasteFromClipboard = async () => {
-    try {
-      const entries = await navigator.clipboard.read();
-      let added = 0;
-      for (const entry of entries) {
-        const image = entry.types.find(t => t.startsWith('image/'));
-        if (image) {
-          const blob = await entry.getType(image);
-          await shelf.addFile(new File([blob], '', { type: image }));
-          added += 1;
-        } else if (entry.types.includes('text/plain')) {
-          const text = await (await entry.getType('text/plain')).text();
-          if (text.trim()) { await shelf.addText(text); added += 1; }
-        }
-      }
-      flash(added ? t('sh.addedFromClipboard') : t('sh.clipboardEmpty'));
-    } catch {
-      flash(t('sh.pressCmdV'));
-      rootRef.current?.focus();
-    }
   };
 
   // Files dropped from Finder or the file manager arrive as a Tauri
@@ -187,13 +153,11 @@ export function ShelfView({ shelf, active, onOpen }) {
       ref={rootRef}
       className={`sh-root ${dropHover ? 'drop-hover' : ''}`}
       tabIndex={-1}
-      onPaste={onPaste}
     >
       <div className="sh-bar">
-        <button className="browse-chip" onClick={pasteFromClipboard} title={t('sh.pasteTitle')}>
-          <FontAwesomeIcon icon={faPaste} /> {t('sh.paste')}
-        </button>
-        <span className="sh-hint">{note || t('sh.hint')}</span>
+        {/* Files only — downloads and drops. Copied text and images are the
+            Clipboard's (clipboard history), not the Shelf's. */}
+        <span className="sh-hint">{note || t('sh.hintFiles')}</span>
         {items.length > 0 && (
           <button className="bp-btn sh-act danger" onClick={() => shelf.clear(false)} title={t('sh.clearTitle')}>
             <FontAwesomeIcon icon={faTrashCan} />
