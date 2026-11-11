@@ -1,6 +1,6 @@
 cask "cooldesk" do
   version "2.0.21"
-  sha256 "a9b953327919afb36b7c71978c2db907b5dfe7e07b122b72082249bea8ee1fb1"
+  sha256 "dcb120ff729e8c448a6fd6ea1ac80f2a8ff4df48dab1be67e765a0e48962d09c"
 
   url "https://github.com/abhayraghuwanshi/cooldesk-extension/releases/download/v#{version}/CoolDesk_#{version}_aarch64.dmg",
       verified: "github.com/abhayraghuwanshi/cooldesk-extension/"
