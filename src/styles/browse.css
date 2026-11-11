@@ -68,6 +68,7 @@ html.browse-focus .bp-root {
   --bv-glow: transparent;
   --bv-tint: color-mix(in srgb, var(--bv-accent) 14%, transparent);
   --bv-panel: rgba(13, 15, 26, 0.66);
+  --bv-popover: #10121c;
   --bv-sheen: rgba(255, 255, 255, 0.045);
   --bv-line: rgba(255, 255, 255, 0.07);
   --bv-hover: rgba(255, 255, 255, 0.055);
@@ -83,6 +84,7 @@ body.bg-white-cred .browse-view,
 body.bg-white-cred .bp-root {
   --bv-tint: color-mix(in srgb, var(--bv-accent) 12%, transparent);
   --bv-panel: rgba(255, 255, 255, 0.72);
+  --bv-popover: #ffffff;
   --bv-sheen: rgba(255, 255, 255, 0.6);
   --bv-line: rgba(15, 23, 42, 0.08);
   --bv-hover: rgba(15, 23, 42, 0.05);
@@ -925,191 +927,66 @@ html.browse-focus .browse-drawer {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bv-accent) 35%, transparent);
 }
 
-/* ── Canvas ─────────────────────────────────────────────────────────── */
-.cv-count {
+/* ── Multi view ─────────────────────────────────────────────────────
+   The open tabs side by side (BrowseView `multiTabs`): the tabs' own panes
+   laid out in a grid that always fits the window — no scrolling, since a
+   native page can't be clipped by a scrolling box. Each tile is a framed
+   card; the current one (keyboard focus) glows in the accent. No transform
+   animations: a native page can't follow them and would jitter. */
+.multi-bar {
   flex: 0 0 auto;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--bv-dim);
-  padding: 4px 9px;
-  border-radius: 999px;
-  background: var(--bv-hover);
 }
 
-.cv-scroll {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  margin: 0 8px 8px;
-  padding: 4px;
-  scrollbar-width: thin;
-}
-
-.cv-grid {
-  position: relative;
-  min-height: 100%;
-}
-
-.cv-empty {
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  height: fit-content;
-}
-
-.cv-tile {
-  position: absolute;
-  top: 0;
-  left: 0;
-  display: flex;
-  flex-direction: column;
-  border-radius: 14px;
-  background: var(--bv-panel);
-  border: 1px solid var(--bv-line);
-  box-shadow: 0 16px 40px -24px rgba(0, 0, 0, 0.7);
-  overflow: hidden;
-  transition: transform 200ms var(--bv-ease), width 200ms var(--bv-ease), height 200ms var(--bv-ease), box-shadow 200ms ease;
-}
-
-.cv-tile:hover {
-  border-color: color-mix(in srgb, var(--bv-accent) 30%, transparent);
-}
-
-.cv-tile.is-dragging {
-  z-index: 5;
-  transition: none;
-  border-color: var(--bv-accent);
-  box-shadow: 0 0 0 3px var(--bv-tint), 0 30px 60px -20px var(--bv-glow);
-}
-
-.cv-tile-head {
-  position: relative;
-  flex: 0 0 auto;
-  display: flex;
+.multi-title {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 36px;
-  padding: 0 4px 0 8px;
-  cursor: grab;
-  user-select: none;
-  border-bottom: 1px solid var(--bv-line);
-}
-
-.cv-tile.is-dragging .cv-tile-head {
-  cursor: grabbing;
-}
-
-.cv-grip {
-  font-size: 10px;
-  color: var(--bv-dim);
-  opacity: 0.6;
-}
-
-.cv-favicon {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  flex: 0 0 auto;
-}
-
-.cv-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
+  padding: 0 6px;
+  font-size: 12.5px;
   font-weight: 600;
-}
-
-.cv-actions {
-  display: flex;
-  align-items: center;
-  opacity: 0.55;
-  transition: opacity 160ms ease;
-}
-
-.cv-tile:hover .cv-actions {
-  opacity: 1;
-}
-
-.cv-actions .bp-btn {
-  width: 26px;
-  height: 26px;
-  font-size: 11px;
-}
-
-.cv-close:hover:not(:disabled) {
-  color: #f87171;
-}
-
-.cv-slot {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  /* Bottom margin is the resize grip's strip: the native page covers
-     anything drawn inside the slot. */
-  margin: 6px 6px 14px;
-  border-radius: 10px;
-  background: var(--bv-field);
-  overflow: hidden;
-}
-
-/* The page's face while its live webview is hidden. */
-.cv-face {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 12px;
-  text-align: center;
-  background: radial-gradient(circle at 50% 35%, var(--bv-tint), transparent 70%);
-}
-
-.cv-face img {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  margin-bottom: 4px;
-  box-shadow: 0 8px 24px -8px var(--bv-glow);
-}
-
-.cv-face strong {
-  font-size: 13px;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--bv-dim);
   white-space: nowrap;
 }
 
-.cv-face span {
-  font-size: 11px;
-  color: var(--bv-dim);
+.multi-title svg {
+  color: var(--bv-accent);
 }
 
-/* Corner resize grip (two diagonal strokes). */
-.cv-resize {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 14px;
-  height: 14px;
-  cursor: nwse-resize;
-  z-index: 2;
-  background:
-    linear-gradient(135deg, transparent 50%, var(--bv-dim) 50%, var(--bv-dim) 58%, transparent 58%, transparent 70%, var(--bv-dim) 70%, var(--bv-dim) 78%, transparent 78%);
-  opacity: 0.5;
-  border-bottom-right-radius: 14px;
+.multi-grow {
+  flex: 1;
 }
 
-.cv-tile:hover .cv-resize,
-.cv-tile.is-dragging .cv-resize {
-  opacity: 1;
+.browse-mode.is-multi {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  padding: 2px 2px 4px;
+}
+
+.browse-tabpane.is-tile {
+  min-width: 0;
+  min-height: 0;
+  padding: 6px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, var(--bv-sheen, rgba(255, 255, 255, 0.03)), transparent 90px), var(--bv-panel, rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--bv-line);
+  transition: border-color 0.2s ease, box-shadow 0.25s ease;
+}
+
+.browse-tabpane.is-tile:hover {
+  border-color: color-mix(in srgb, var(--bv-accent) 30%, var(--bv-line));
+}
+
+.browse-tabpane.is-tile.is-current {
+  border-color: color-mix(in srgb, var(--bv-accent) 70%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--bv-accent) 35%, transparent),
+    0 18px 50px -18px color-mix(in srgb, var(--bv-accent) 55%, transparent);
+}
+
+/* Tiles are small: a tighter toolbar inside each. */
+.browse-tabpane.is-tile .bp-toolbar {
+  gap: 4px;
 }
 
 /* ── Memory meter + open pages ──────────────────────────────────────── */
@@ -1450,30 +1327,40 @@ html.browse-focus .browse-view.browse-peek .browse-list {
   position: absolute;
   inset: 0;
   z-index: 4;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
-  padding: 10px 12px 14px;
-  border-radius: 12px;
-  background: var(--bv-panel);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  padding: 6px 6px 0;
+  border-radius: 14px;
+  /* Solid, not glass: it opens over pages, code and terminals, and text
+     behind a translucent list made both unreadable. */
+  background: var(--bv-popover);
   border: 1px solid var(--bv-line);
-  animation: bv-fade 160ms var(--bv-ease) both;
+  animation: bv-fade 140ms var(--bv-ease) both;
   scrollbar-width: thin;
 }
 
+/* Key hints: a footer that stays in view while the list scrolls. */
 .as-hint {
+  position: sticky;
+  bottom: 0;
+  margin: auto -6px 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px 14px;
   align-items: center;
-  padding: 2px 6px 10px;
-  font-size: 11px;
-  font-weight: 600;
+  padding: 8px 14px;
+  border-top: 1px solid var(--bv-line);
+  background: var(--bv-popover);
+  font-size: 10.5px;
   color: var(--bv-dim);
 }
 
-.as-hint span {
-  font-weight: 400;
+.as-hint .as-scope {
+  margin-right: auto;
+  font-weight: 600;
+  color: var(--bv-text);
+  opacity: 0.8;
 }
 
 .as-panel kbd {
@@ -1485,38 +1372,43 @@ html.browse-focus .browse-view.browse-peek .browse-list {
   background: var(--bv-hover);
   font: inherit;
   font-size: 10px;
+  line-height: 15px;
   text-align: center;
   color: var(--bv-text);
 }
 
 .as-empty {
-  padding: 18px 8px;
+  padding: 18px 10px;
   font-size: 12px;
   color: var(--bv-dim);
 }
 
 .as-group + .as-group {
-  margin-top: 8px;
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--bv-line);
 }
 
 .as-group h4 {
   margin: 0;
-  padding: 6px 8px 4px;
-  font-size: 10.5px;
+  padding: 6px 10px 3px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--bv-dim);
+  opacity: 0.8;
 }
 
 .as-item {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 10px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 5px 8px;
   border: none;
-  border-radius: 11px;
+  border-radius: 9px;
   background: none;
   color: inherit;
   font: inherit;
@@ -1524,30 +1416,44 @@ html.browse-focus .browse-view.browse-peek .browse-list {
   cursor: pointer;
 }
 
+.as-item:hover {
+  background: var(--bv-hover);
+}
+
 .as-item.selected {
   background: var(--bv-tint);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bv-accent) 22%, transparent);
+}
+
+/* Accent marker on the keyboard choice. */
+.as-item.selected::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--bv-accent);
 }
 
 .as-icon {
-  flex: 0 0 30px;
-  width: 30px;
-  height: 30px;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
   display: grid;
   place-items: center;
-  border-radius: 9px;
+  border-radius: 7px;
   background: var(--bv-hover);
-  box-shadow: inset 0 0 0 1px var(--bv-line);
 }
 
 .as-favicon {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
 }
 
 .as-kind {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--bv-dim);
 }
 
@@ -1558,6 +1464,10 @@ html.browse-focus .browse-view.browse-peek .browse-list {
 
 .as-kind-folder {
   color: #fbbf24;
+}
+
+.as-kind-shell {
+  color: var(--bv-good);
 }
 
 .as-text {
@@ -1576,22 +1486,36 @@ html.browse-focus .browse-view.browse-peek .browse-list {
 }
 
 .as-title {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
+  line-height: 1.3;
 }
 
 .as-sub {
-  font-size: 11px;
+  font-size: 10.5px;
+  line-height: 1.3;
   color: var(--bv-dim);
+}
+
+/* "Open tab", "Bookmark"… — what kind of link, as a quiet tag. */
+.as-badge {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border-radius: 99px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--bv-dim);
+  background: var(--bv-hover);
+  white-space: nowrap;
 }
 
 .as-enter {
   flex: 0 0 auto;
+  visibility: hidden;
 }
 
-.bp-stage > .cv-scroll {
-  flex: 1;
-  margin: 0;
+.as-item.selected .as-enter {
+  visibility: visible;
 }
 
 
@@ -3366,3 +3290,263 @@ body.bg-white-cred .js-null { color: #8250df; }
 .sp-row .pg-label, .sp-row .pg-detail { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sp-row .sp-choice { flex: 1 0 100%; margin-left: 38px; max-width: calc(100% - 38px); }
 .sp-row .sp-choice button { flex: 1; }
+
+/* CoolDesk's own pages as tabs (SpecialTab.jsx): Cool Activity and
+   Settings, which used to be modals, framed like the note tab's sheet. Dark
+   like the modals were — the graph's colours are tuned for it. */
+.special-tab-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #020408;
+  border: 1px solid var(--bv-line);
+}
+
+.special-tab--settings .special-tab-body {
+  background: rgba(20, 20, 30, 0.92);
+}
+
+/* Divider between a tab's own controls and the app-wide ones (sidebar,
+   Cool Activity, Settings) at the end of the toolbar — see `appControls`
+   in BrowseView. */
+.bp-toolbar-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--bv-line, rgba(255, 255, 255, 0.12));
+  flex: none;
+}
+
+/* No header bar above Browse in the desktop app any more, so the toolbar
+   sits at the top of the window. */
+.cooldesk-one-screen {
+  margin-top: 0;
+}
+
+/* ── Toolbar menus (ToolbarMenu.jsx) ────────────────────────────────
+   The app menu, the layout menu and each tab's "⋯": occasional actions in
+   one button instead of a row of icons. Solid, like the address list. */
+.tbm {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+}
+
+.tbm-btn {
+  position: relative;
+  gap: 6px;
+}
+
+.tbm-label {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+/* Badge dot (a pending update). */
+.tbm-btn.tbm-dot::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--bv-good);
+  box-shadow: 0 0 0 2px var(--bv-popover);
+}
+
+.tbm-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  z-index: 40;
+  min-width: 220px;
+  padding: 5px;
+  border-radius: 12px;
+  background: var(--bv-popover);
+  border: 1px solid var(--bv-line);
+  box-shadow: 0 18px 48px -12px rgba(0, 0, 0, 0.6);
+  animation: bv-fade 120ms var(--bv-ease) both;
+}
+
+.tbm-menu--right { right: 0; }
+.tbm-menu--left { left: 0; }
+
+.tbm-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--bv-text);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tbm-item:hover {
+  background: var(--bv-hover);
+}
+
+.tbm-item.is-accent {
+  color: var(--bv-good);
+  font-weight: 600;
+}
+
+.tbm-icon {
+  flex: 0 0 16px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  color: var(--bv-dim);
+}
+
+.tbm-item.is-accent .tbm-icon,
+.tbm-item.is-checked .tbm-icon {
+  color: inherit;
+}
+
+.tbm-text {
+  flex: 1;
+}
+
+.tbm-check {
+  font-size: 11px;
+  color: var(--bv-accent);
+}
+
+.tbm-hint {
+  padding: 0 5px;
+  border-radius: 4px;
+  border: 1px solid var(--bv-line);
+  background: var(--bv-hover);
+  font: inherit;
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--bv-dim);
+}
+
+.tbm-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--bv-line);
+}
+
+/* ── Home and the side panel's rows ─────────────────────────────────
+   Home is one page (BrowseView navContent): search, then short sections —
+   Tabs, the workspace's Pinned (picked in its header), Folders & Apps,
+   browser tabs. No switches. */
+.nav-jump {
+  margin-top: 4px;
+}
+
+/* Pinned's header: the workspace name is the picker. */
+.nav-ws-head .nav-ws-menu .tbm-btn {
+  height: 24px;
+  padding: 0 8px;
+  margin-left: -8px;
+  border-radius: 7px;
+  color: var(--bv-text);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.nav-ws-head .nav-ws-menu .tbm-btn svg {
+  color: var(--bv-accent);
+  font-size: 11px;
+}
+
+.nav-ws-head .tbm-label {
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-ws-head .nav-ws-menu .tbm-btn::after {
+  content: '▾';
+  margin-left: 2px;
+  font-size: 10px;
+  color: var(--bv-dim);
+}
+
+/* Page tab: the page's controls. Home: notes and the Shelf at the end. */
+.fp-page {
+  overflow-y: auto;
+}
+
+/* Both at their natural height; the tab scrolls as one page. */
+.fp-page > * {
+  flex: none;
+}
+
+.fp-home-section {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--bv-line);
+}
+
+/* Multi view dividers (BrowseView startMultiResize): a 10px grab strip over
+   each gap between tiles, showing a thin accent line on hover / drag. */
+.browse-mode.is-multi {
+  position: relative;
+}
+
+.multi-divider {
+  position: absolute;
+  z-index: 5;
+  touch-action: none;
+}
+
+.multi-divider.is-col {
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: col-resize;
+}
+
+.multi-divider.is-row {
+  left: 0;
+  height: 10px;
+  cursor: row-resize;
+}
+
+.multi-divider::after {
+  content: '';
+  position: absolute;
+  border-radius: 2px;
+  background: var(--bv-accent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.multi-divider.is-col::after { top: 30%; bottom: 30%; left: 4px; width: 2px; }
+.multi-divider.is-row::after { left: 30%; right: 30%; top: 4px; height: 2px; }
+
+.multi-divider:hover::after,
+html.multi-resizing-x .multi-divider.is-col::after,
+html.multi-resizing-y .multi-divider.is-row::after {
+  opacity: 0.9;
+}
+
+html.multi-resizing-x,
+html.multi-resizing-x * { cursor: col-resize !important; user-select: none !important; }
+html.multi-resizing-y,
+html.multi-resizing-y * { cursor: row-resize !important; user-select: none !important; }
+
+/* Address bar search suggestions: typed part plain, completion bold. */
+.as-title .as-typed {
+  font-weight: 400;
+  color: var(--bv-dim);
+}
+
+.as-title b {
+  font-weight: 700;
+}

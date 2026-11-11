@@ -5,7 +5,10 @@
   "webviews": [
     "main",
     "spotlight",
-    "handle",
+    "sidebar",
+    "bar",
+    "sidebar-handle",
+    "bar-handle",
     "webapp-*"
   ],
   "permissions": [

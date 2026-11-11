@@ -20,10 +20,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SWP_SHOWWINDOW, WS_CAPTION,
 };
 
-// Holds the window handle (as isize) while an AppBar registration is live, so
-// a later remove/re-apply knows to tear down the previous one first. `None`
-// means no AppBar is currently registered.
-static REGISTERED: Mutex<Option<isize>> = Mutex::new(None);
+// Window handles (as isize) with a live AppBar registration — one per dock
+// surface (sidebar, dock bar), so a later remove/re-apply knows to tear down
+// that window's previous one first.
+static REGISTERED: Mutex<Vec<isize>> = Mutex::new(Vec::new());
 
 fn hwnd_from_isize(raw: isize) -> HWND {
     HWND(raw as *mut c_void)
@@ -151,22 +151,35 @@ pub fn foreground_is_fullscreen() -> bool {
     }
 }
 
-// Unregisters the current AppBar (if any) and releases its reserved work
-// area. Safe to call when nothing is registered.
+fn unregister(raw: isize) {
+    unsafe {
+        let mut abd = base_abd(hwnd_from_isize(raw));
+        SHAppBarMessage(ABM_REMOVE, &mut abd);
+    }
+}
+
+// Unregisters every AppBar we hold and releases their reserved work area.
+// Safe to call when nothing is registered.
 pub fn remove_dock() {
     let mut guard = REGISTERED.lock().unwrap();
-    if let Some(raw) = guard.take() {
-        unsafe {
-            let mut abd = base_abd(hwnd_from_isize(raw));
-            SHAppBarMessage(ABM_REMOVE, &mut abd);
-        }
+    for raw in guard.drain(..) {
+        unregister(raw);
+    }
+}
+
+// Unregisters one window's AppBar, if it has one.
+pub fn remove_dock_for(raw_hwnd: isize) {
+    let mut guard = REGISTERED.lock().unwrap();
+    if let Some(pos) = guard.iter().position(|&r| r == raw_hwnd) {
+        guard.remove(pos);
+        unregister(raw_hwnd);
     }
 }
 
 pub fn set_dock(raw_hwnd: isize, edge: &str, thickness: i32) -> Result<(i32, i32, i32, i32), String> {
-    // Clean re-apply: drop any prior registration first so we don't stack
-    // reserved strips (e.g. when only the thickness or edge changed).
-    remove_dock();
+    // Clean re-apply: drop this window's prior registration first so we don't
+    // stack reserved strips (e.g. when only the thickness or edge changed).
+    remove_dock_for(raw_hwnd);
 
     let thickness = thickness.max(1);
     unsafe {
@@ -217,7 +230,7 @@ pub fn set_dock(raw_hwnd: isize, edge: &str, thickness: i32) -> Result<(i32, i32
         )
         .map_err(|e| format!("SetWindowPos failed: {e}"))?;
 
-        *REGISTERED.lock().unwrap() = Some(raw_hwnd);
+        REGISTERED.lock().unwrap().push(raw_hwnd);
         Ok((x, y, cx, cy))
     }
 }

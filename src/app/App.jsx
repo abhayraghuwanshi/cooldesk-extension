@@ -20,6 +20,7 @@ config.autoAddCss = false; // Disable JS-based CSS injection — we import it ab
 import { faBroom, faClone, faGear, faGlobe, faHistory, faPlus, faRotateRight, faThumbtack, faTrash, faTriangleExclamation, faUndo } from '@fortawesome/free-solid-svg-icons';
 import { CoolDeskContainer } from '../faces/shell/CoolDeskContainer';
 import { useDockState } from '../features/dock/useDockState';
+import { getWindowSurface } from '../features/dock/surface';
 import { isElectronApp } from '../services/environmentDetector';
 import { UpdateBanner } from '../features/updates/UpdateBanner';
 import { FeedbackPrompt } from '../features/updates/FeedbackPrompt';
@@ -148,11 +149,13 @@ export default function App() {
   // Everywhere else the dock goes solid instead: dropping `wallpaper-enabled`
   // lets each theme's own `.bg-*` gradient reassert itself, so there is no
   // hardcoded colour here and light themes stay light.
+  // `surface`: which window this page is — the full app, or the separate
+  // sidebar / dock window (src/features/dock/surface.js).
+  const surface = isElectronApp() ? getWindowSurface() : 'main';
   const dockState = useDockState();
-  const wallpaperSuppressedByDock = isElectronApp()
+  const wallpaperSuppressedByDock = surface !== 'main'
     && !/Mac/.test(navigator.platform)
-    && !!dockState?.enabled
-    && dockState.mode === 'drawer';
+    && dockState?.[surface]?.mode !== 'reserve';
   const wallpaperActive = wallpaperEnabled && !wallpaperSuppressedByDock;
   const [wallpaperUrl, setWallpaperUrl] = useState(() => {
     try {
@@ -317,7 +320,9 @@ export default function App() {
 
   // Auto-backup scheduler. Lives here rather than in SettingsModal so it runs
   // whether or not Settings is open; no-ops outside the desktop app.
-  useEffect(() => startBackupScheduler(), []);
+  // Main window only: the sidebar / dock windows run this same App, and two
+  // schedulers would back up twice.
+  useEffect(() => (surface === 'main' ? startBackupScheduler() : undefined), [surface]);
 
   // Window resize handler for responsive behavior
   useEffect(() => {
@@ -646,6 +651,10 @@ export default function App() {
       }
     };
 
+    // Main window only: the sidebar / dock windows load the same data, and
+    // running this in each would race to create the same workspaces twice.
+    if (surface !== 'main') return undefined;
+
     // Run on mount and when data changes
     const defer = window.requestIdleCallback || ((cb) => setTimeout(cb, 5000));
     const handle = defer(() => {
@@ -656,7 +665,7 @@ export default function App() {
       if (window.cancelIdleCallback) window.cancelIdleCallback(handle);
       else clearTimeout(handle);
     };
-  }, [data]);
+  }, [data, surface]);
 
 
   // Side panel visibility control via runtime messages (default: open)
@@ -1415,14 +1424,45 @@ export default function App() {
   };
 
 
+  // Settings' props — shared by the modal (below) and the desktop app's
+  // Settings tab in Browse (`renderSettings`, through CoolDeskContainer).
+  const settingsProps = {
+    settings,
+    onSave: (newSettings) => {
+      setSettings(newSettings);
+      saveSettingsDB(newSettings);
+      sendMessage({ action: 'settingsUpdated', settings: newSettings });
+      if (window.electronAPI?.setSettings) {
+        window.electronAPI.setSettings(newSettings);
+      }
+    },
+    fontSize,
+    onFontSizeChange: handleFontSizeChange,
+    onStartOnboarding: startOnboarding,
+    wallpaperEnabled,
+    wallpaperUrl,
+    wallpaperOpacity,
+    wallpaperAutoRotate,
+    onWallpaperEnabledChange: setWallpaperEnabled,
+    onWallpaperUrlChange: setWallpaperUrl,
+    onWallpaperOpacityChange: setWallpaperOpacity,
+    onWallpaperAutoRotateChange: setWallpaperAutoRotate,
+  };
+  const renderSettings = (onClose) => (
+    <React.Suspense fallback={null}>
+      <SettingsModal show embedded onClose={onClose} {...settingsProps} />
+    </React.Suspense>
+  );
+
   return (
     <div className={`popup-wrap ${themeClass} ${wallpaperActive ? 'wallpaper-enabled' : ''}`} style={{
       '--section-spacing': '24px',
       '--card-spacing': '16px',
       position: 'relative'
     }}>
-      <UpdateBanner />
-      <FeedbackPrompt />
+      {/* Full-app chrome only — not in the narrow sidebar / dock windows. */}
+      {surface === 'main' && <UpdateBanner />}
+      {surface === 'main' && <FeedbackPrompt />}
       {/* Cooldesk UI */}
       <CoolDeskContainer
         savedWorkspaces={savedWorkspaces}
@@ -1508,6 +1548,7 @@ export default function App() {
         onOpenSettings={() => {
           setShowSettings(true);
         }}
+        renderSettings={renderSettings}
         themeClass={themeClass}
         wallpaperEnabled={wallpaperEnabled}
         wallpaperUrl={wallpaperUrl}
@@ -1554,38 +1595,21 @@ export default function App() {
         handleShareWorkspaceUrl={handleShareWorkspaceUrl}
       />
 
-      {/* Settings Modal */}
+      {/* Settings Modal (extension, and a main window too narrow for Browse;
+          the desktop app otherwise opens Settings as a Browse tab via
+          `renderSettings`) */}
       {showSettings && (
         <React.Suspense fallback={null}>
           <SettingsModal
             show={showSettings}
             onClose={() => setShowSettings(false)}
-            settings={settings}
-            onSave={(newSettings) => {
-              setSettings(newSettings);
-              saveSettingsDB(newSettings);
-              sendMessage({ action: 'settingsUpdated', settings: newSettings });
-              if (window.electronAPI?.setSettings) {
-                window.electronAPI.setSettings(newSettings);
-              }
-            }}
-            fontSize={fontSize}
-            onFontSizeChange={handleFontSizeChange}
-            onStartOnboarding={startOnboarding}
-            wallpaperEnabled={wallpaperEnabled}
-            wallpaperUrl={wallpaperUrl}
-            wallpaperOpacity={wallpaperOpacity}
-            wallpaperAutoRotate={wallpaperAutoRotate}
-            onWallpaperEnabledChange={setWallpaperEnabled}
-            onWallpaperUrlChange={setWallpaperUrl}
-            onWallpaperOpacityChange={setWallpaperOpacity}
-            onWallpaperAutoRotateChange={setWallpaperAutoRotate}
+            {...settingsProps}
           />
         </React.Suspense>
       )}
 
       {/* Onboarding Tour */}
-      {shouldShowOnboarding && (
+      {shouldShowOnboarding && surface === 'main' && (
         <React.Suspense fallback={null}>
           <OnboardingTour
             onComplete={completeOnboarding}

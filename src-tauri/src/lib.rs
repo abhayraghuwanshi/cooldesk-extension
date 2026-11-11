@@ -1,7 +1,6 @@
 use tauri::{Manager, Emitter};
 use tauri_plugin_autostart::ManagerExt;
 use std::sync::{Arc, RwLock};
-use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::tray::TrayIconBuilder;
 use tauri::menu::{Menu, MenuItem};
 
@@ -24,6 +23,7 @@ mod terminal;
 mod archive;
 mod annotations;
 mod dock;
+mod surfaces;
 mod folder_identity;
 mod ai_cli;
 mod folder_index;
@@ -445,14 +445,14 @@ fn main_window(app: &tauri::AppHandle) -> Option<tauri::Window> {
     app.get_window("main")
 }
 
-/// Background color of the main window *and* its page webview. A `Window`'s
-/// own `set_background_color` only reaches the NSWindow — the
-/// `WebviewWindow` version used to cover both — so on its own the WKWebView
-/// kept drawing its opaque background and the see-through dock painted as a
-/// solid black panel. Browser panes in the same window are left alone.
-fn set_main_background(window: &tauri::Window, color: Option<tauri::window::Color>) {
+/// Background color of a window *and* its own page webview (the webview
+/// labelled like the window). A `Window`'s own `set_background_color` only
+/// reaches the NSWindow, so on its own the WKWebView kept drawing its opaque
+/// background and a see-through panel painted as a solid black one. Browser
+/// panes in the same window are left alone.
+fn set_page_background(window: &tauri::Window, color: Option<tauri::window::Color>) {
     let _ = window.set_background_color(color);
-    if let Some(page) = window.get_webview("main") {
+    if let Some(page) = window.get_webview(window.label()) {
         let _ = page.set_background_color(color);
     }
 }
@@ -618,8 +618,7 @@ fn focus_left_the_app(app: &tauri::AppHandle) -> bool {
     }
 }
 
-/// Hide-on-close, and (in drawer mode) collapse to the handle when the panel
-/// loses focus — the "click away to hide" behavior.
+/// Hide-on-close: the main window lives in the tray, it doesn't quit the app.
 fn attach_main_window_events(window: &tauri::Window) {
     let win = window.clone();
     window.on_window_event(move |event| match event {
@@ -632,909 +631,27 @@ fn attach_main_window_events(window: &tauri::Window) {
             api.prevent_close();
             let _ = win.hide();
         }
-        tauri::WindowEvent::Focused(false) => {
-            let app = win.app_handle();
-            let st = load_dock_state(app);
-            if st.enabled && st.mode == "drawer" && win.is_visible().unwrap_or(false) {
-                // "Click away to hide" must only fire for a click *away*. During a
-                // layout switch focus bounces between our own windows (the panel is
-                // hidden, the handle is shown, the panel comes back), and the blur
-                // that produces is delivered asynchronously — often after the panel
-                // has already been re-shown, which then collapsed it right back out
-                // of view. Only collapse when something that isn't ours holds the
-                // foreground.
-                if focus_left_the_app(app) {
-                    log::info!("[Dock] Panel blurred → collapsing to handle");
-                    collapse_drawer(app, &st);
-                }
-            }
-        }
         _ => {}
     });
 }
 
-/// Create and show the main window (creating it first if needed).
+// Whether the main window has been shown yet this run — the first show opens
+// it maximized (filling the screen, not a separate fullscreen Space); after
+// that it keeps whatever size the user gave it.
+static MAIN_SHOWN_ONCE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Create and show the main window (creating it first if needed). The full
+/// app is always an ordinary window — the sidebar and dock are their own
+/// windows (surfaces.rs).
 fn show_main_window(app: &tauri::AppHandle) {
-    // In drawer mode the panel is not an ordinary window: it's a topmost strip
-    // pinned to a screen edge, and the handle must go away while it's up. Going
-    // through expand_drawer keeps every entry point (tray, relaunch, startup)
-    // consistent with the handle click. A plain show() here restored the panel
-    // without its topmost flag or dock geometry, so it came back underneath the
-    // other windows — and left the handle visible alongside it.
-    {
-        let st = load_dock_state(app);
-        if st.enabled && st.mode == "drawer" {
-            expand_drawer(app, &st);
-            return;
-        }
-    }
     if let Some(win) = ensure_main_window(app) {
+        let _ = win.unminimize();
         let _ = win.show();
+        if !MAIN_SHOWN_ONCE.swap(true, std::sync::atomic::Ordering::Relaxed) && !win.is_fullscreen().unwrap_or(false) {
+            let _ = win.maximize();
+        }
         let _ = win.set_focus();
     }
-}
-
-// ── Workspace dock ─────────────────────────────────────────────────────────
-// Workspace Layout. Two modes:
-//   • "drawer"  — a slim always-on-top handle sits at the screen edge; clicking
-//                 it slides the panel in as a topmost OVERLAY (nothing reflows).
-//                 Blur / click-away collapses back to the handle. This is the
-//                 default: low-friction, on-demand.
-//   • "reserve" — registers a native AppBar (see `dock.rs`) that reserves work
-//                 area so maximized apps fit beside the panel. Heavier: apps
-//                 reflow on every open/close.
-// State lives in its own small config file — same pattern as the autostart
-// intent flag — so it never races the sidecar's SyncData writes.
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-// `default` lets state files from older builds (which lacked `mode`) upgrade
-// gracefully — a missing field falls back to Default instead of failing the
-// whole parse and silently resetting the user's dock.
-#[serde(rename_all = "camelCase", default)]
-struct DockState {
-    /// Whether the dock (handle or reserved strip) is active at all.
-    enabled: bool,
-    /// "drawer" (overlay handle) or "reserve" (AppBar).
-    mode: String,
-    /// "left", "right", "top" or "bottom". Top/bottom render the horizontal
-    /// taskbar-style workspace bar instead of the sidebar panel.
-    side: String,
-    /// Panel width in logical (CSS) pixels (vertical docks) — converted to
-    /// physical pixels via the window's scale factor when applied, so the
-    /// panel is the same *visual* size on a 1x display and a 2x Retina one.
-    width: u32,
-    /// Bar thickness in logical (CSS) pixels (horizontal docks); see `width`.
-    bar_height: u32,
-}
-
-impl Default for DockState {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            mode: "drawer".to_string(),
-            side: "right".to_string(),
-            width: 360,
-            bar_height: 72,
-        }
-    }
-}
-
-// True while the drawer is collapsed to its edge handle (the handle window is
-// the visible dock surface). The fullscreen watcher thread only acts on the
-// handle in this state; when it's false the dock is off, in reserve mode, or the
-// panel is open, and there's nothing for the watcher to manage. Set here (not
-// read from disk) so the watcher's hot loop needs no file I/O.
-static DRAWER_COLLAPSED: AtomicBool = AtomicBool::new(false);
-
-// True while the drawer feature is enabled and showing (either surface) —
-// cross-platform, unlike `MAC_DOCK_ACTIVE` below. Gates the cross-platform
-// monitor re-anchor watcher in `setup()` so it doesn't read dock_state.json
-// off disk every tick while the dock is off.
-static DOCK_ACTIVE: AtomicBool = AtomicBool::new(false);
-
-// True while the drawer/handle should be actively rejoining the current macOS
-// Space (see the periodic watcher in `setup()`). Set alongside a real show in
-// `expand_drawer`/`collapse_drawer`, cleared in `disable_dock` — a CGS Space
-// join is a one-time snapshot (see `dock::join_fullscreen_space`'s doc
-// comment), so a window that's meant to stay visible across Space switches
-// needs this rejoined on a timer, not just once when it's (re)shown.
-#[cfg(target_os = "macos")]
-static MAC_DOCK_ACTIVE: AtomicBool = AtomicBool::new(false);
-
-// AppKit screen-coordinate frame (bottom-left origin) of the collapsed
-// handle, cached by `collapse_drawer` so the hover-intent watcher in
-// `setup()` can compare it against polled cursor positions without an
-// NSWindow touch (main-thread-only) on every poll tick. See
-// `dock::window_frame`'s doc comment.
-#[cfg(target_os = "macos")]
-static HANDLE_SCREEN_FRAME: std::sync::Mutex<Option<(f64, f64, f64, f64)>> = std::sync::Mutex::new(None);
-
-// Same idea as `HANDLE_SCREEN_FRAME`, cached by `expand_drawer` instead —
-// backs the mirror-image "collapse a beat after the cursor leaves the
-// expanded panel" watcher in `setup()`.
-#[cfg(target_os = "macos")]
-static MAIN_SCREEN_FRAME: std::sync::Mutex<Option<(f64, f64, f64, f64)>> = std::sync::Mutex::new(None);
-
-// Whether the panel cached in `MAIN_SCREEN_FRAME` is the horizontal bar
-// (`true`) or the floating vertical sidebar (`false`) — cached alongside it
-// by `expand_drawer` so the leave-intent watcher can pick the right margin
-// without calling `load_dock_state` (a disk read) on every 50ms poll tick.
-#[cfg(target_os = "macos")]
-static MAIN_PANEL_HORIZONTAL: AtomicBool = AtomicBool::new(false);
-
-// macOS: width (points) of the horizontal bar's visible pill, reported by the
-// frontend (`dock_set_bar_content_width`). The bar window is see-through, so
-// it's sized to hug the pill instead of spanning the screen — a transparent
-// full-width strip would still swallow clicks meant for apps behind it.
-// 0 = not reported yet → full screen width.
-static BAR_CONTENT_WIDTH: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-
-const DOCK_MIN_WIDTH: u32 = 220;
-const DOCK_MAX_WIDTH: u32 = 900;
-const BAR_MIN_HEIGHT: u32 = 40;
-const BAR_MAX_HEIGHT: u32 = 220;
-
-/// Gap (logical px) between the vertical sidebar panel and its left/right
-/// edges (inner edge and outer/docked edge alike) — a floating panel, not a
-/// flush-docked strip. Needs a non-opaque window plus the `sidebar-docked`
-/// body class (`CoolDeskContainer.jsx`) for the gap and rounded corners to
-/// reveal real desktop instead of window-colored margin — on Windows via
-/// `.transparent(true)` at creation (`ensure_main_window`), on macOS via
-/// `dock::set_see_through` flipping the live window while docked.
-const SIDEBAR_MARGIN: i32 = 16;
-
-/// Gap (logical px) between the vertical sidebar panel and the screen's
-/// top/bottom — kept larger than `SIDEBAR_MARGIN` since it reads as clearance
-/// below the menu bar, not just panel styling.
-const SIDEBAR_MARGIN_VERTICAL: i32 = 40;
-
-/// Converts a logical/CSS pixel size (what `DockState.width`/`bar_height` and
-/// the `HANDLE_W`/`HANDLE_H` constants represent) to the physical pixels the
-/// window-positioning APIs need. Every monitor geometry value we combine this
-/// with (`primary_geom`, `dock::work_area`, `dock::monitor_rect`) is already
-/// physical, so skipping this step made the dock panel render at half its
-/// intended width on any 2x display — which is every Mac and many Windows
-/// HiDPI laptops. At 1x scaling this is a no-op.
-fn logical_to_physical(logical_px: i32, scale_factor: f64) -> i32 {
-    (logical_px as f64 * scale_factor).round() as i32
-}
-
-// Logical-pixel size of the collapsed edge handle (a centered tab; the long
-// side runs along the docked edge, so it's rotated for top/bottom docks).
-const HANDLE_W: i32 = 22;
-const HANDLE_H: i32 = 132;
-
-fn dock_is_horizontal(side: &str) -> bool {
-    side == "top" || side == "bottom"
-}
-
-/// The edge-appropriate thickness for a dock state: panel width for vertical
-/// docks, bar height for horizontal ones.
-fn dock_thickness(st: &DockState) -> u32 {
-    if dock_is_horizontal(&st.side) { st.bar_height } else { st.width }
-}
-
-fn emit_dock_state(app: &tauri::AppHandle, state: &DockState) {
-    let _ = app.emit("dock-state-changed", state);
-}
-
-fn dock_state_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
-    app.path().app_config_dir().ok().map(|dir| dir.join("dock_state.json"))
-}
-
-fn load_dock_state(app: &tauri::AppHandle) -> DockState {
-    let Some(path) = dock_state_path(app) else { return DockState::default() };
-    std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|s| serde_json::from_str::<DockState>(&s).ok())
-        .unwrap_or_default()
-}
-
-fn save_dock_state(app: &tauri::AppHandle, state: &DockState) {
-    if let Some(path) = dock_state_path(app) {
-        if let Some(parent) = path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        if let Ok(json) = serde_json::to_string_pretty(state) {
-            let _ = std::fs::write(&path, json);
-        }
-    }
-}
-
-/// Primary monitor geometry in physical pixels: (x, y, width, height). Used
-/// only as `cursor_geom`'s last-resort fallback now (headless CI, an exotic
-/// display setup where the cursor position/monitor lookup fails) — see that
-/// function for the drawer's actual anchor.
-fn primary_geom(app: &tauri::AppHandle) -> Option<(i32, i32, i32, i32)> {
-    let m = app.primary_monitor().ok().flatten()?;
-    let p = m.position();
-    let s = m.size();
-    Some((p.x, p.y, s.width as i32, s.height as i32))
-}
-
-/// Geometry (physical pixels) of whichever monitor currently has the cursor,
-/// falling back to the primary monitor. Replaces the old permanently-primary
-/// anchor: the drawer/handle should follow the user across screens the same
-/// way the hover-to-open/close behavior follows them within one screen.
-/// `cursor_position`/`monitor_from_point` are on `AppHandle` too (tauri's
-/// `shared_app_impl!` macro), so this is callable from the background
-/// watcher threads in `setup()`, not just from a command on the main thread.
-///
-/// macOS: tao's `cursor_position()` scales the cursor's point location by the
-/// *primary* display's scale factor, but its `monitor_from_point` compares
-/// against `CGDisplayBounds` in *points* — so with a 2x Retina primary the
-/// lookup matched the wrong monitor (or none, falling back to primary) and
-/// the drawer never followed the cursor to a second screen. Feed it the raw
-/// point location from CGEvent instead (top-left origin, same space as
-/// `CGDisplayBounds`). Only the monitor's identity matters on macOS — the
-/// actual placement is done in points by `mac_drawer_frame`.
-fn cursor_geom(app: &tauri::AppHandle) -> Option<(i32, i32, i32, i32)> {
-    #[cfg(target_os = "macos")]
-    let cursor = {
-        use core_graphics::event::CGEvent;
-        use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
-        CGEventSource::new(CGEventSourceStateID::HIDSystemState)
-            .ok()
-            .and_then(|src| CGEvent::new(src).ok())
-            .map(|e| e.location())
-            .map(|loc| (loc.x, loc.y))
-    };
-    #[cfg(not(target_os = "macos"))]
-    let cursor = app.cursor_position().ok().map(|pos| (pos.x, pos.y));
-    let monitor = cursor.and_then(|(x, y)| app.monitor_from_point(x, y).ok().flatten());
-    match monitor {
-        Some(m) => {
-            let p = m.position();
-            let s = m.size();
-            Some((p.x, p.y, s.width as i32, s.height as i32))
-        }
-        None => primary_geom(app),
-    }
-}
-
-// ── Drawer mode ────────────────────────────────────────────────────────────
-
-/// macOS placement for the drawer panel (`handle == false`) or its collapsed
-/// tab (`handle == true`) on the screen under the cursor, as an AppKit frame
-/// (points, bottom-left origin) for `dock::set_window_frame`. Mirrors the
-/// physical-pixel math in `expand_drawer`/`collapse_drawer`, but against
-/// `NSScreen` rects — see `dock::cursor_screen_rects` for why Tauri's
-/// monitor/position APIs can't be used for this on a multi-monitor Mac.
-///
-/// Edges hug `visibleFrame` rather than the full frame so nothing lands
-/// under that display's menu bar or the real Dock; a horizontal panel still
-/// spans the full screen width (see the note in `expand_drawer`).
-#[cfg(target_os = "macos")]
-fn mac_drawer_frame(st: &DockState, handle: bool) -> Option<(f64, f64, f64, f64)> {
-    let ((fx, fy, fw, fh), visible) = dock::cursor_screen_rects()?;
-    // In a fullscreen app the macOS Dock and menu bar are hidden, so lay out
-    // against the whole screen: the bar sits right on the bottom edge,
-    // using the space the hidden Dock leaves free, instead of floating where
-    // `visibleFrame` still reserves room for it.
-    let fullscreen = dock::any_fullscreen_space();
-    let (vx, vy, vw, vh) = if fullscreen { (fx, fy, fw, fh) } else { visible };
-    let horizontal = dock_is_horizontal(&st.side);
-    let frame = match (handle, horizontal) {
-        (false, false) => {
-            // No horizontal window margin on macOS: the sidebar window is
-            // see-through (only its cards paint), so `SIDEBAR_MARGIN` — the
-            // gap that framed the old visible panel — would just add empty
-            // space between the cards and the screen edge on top of the
-            // page's own padding. Notification Center-style, the cards sit
-            // ~8px (that padding) from the edge.
-            let margin = 0.0;
-            let margin_v = SIDEBAR_MARGIN_VERTICAL as f64;
-            let w = (st.width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH) as f64 - margin * 2.0).max(1.0);
-            let x = if st.side == "left" { vx + margin } else { vx + vw - w - margin };
-            (x, vy + margin_v, w, (vh - margin_v * 2.0).max(1.0))
-        }
-        (false, true) => {
-            let h = st.bar_height.clamp(BAR_MIN_HEIGHT, BAR_MAX_HEIGHT) as f64;
-            let y = if st.side == "bottom" { vy } else { vy + vh - h };
-            // Hug the pill, centered like the macOS Dock (see `BAR_CONTENT_WIDTH`).
-            let content = BAR_CONTENT_WIDTH.load(Ordering::Relaxed) as f64;
-            let w = if content > 0.0 { content.min(fw) } else { fw };
-            (fx + (fw - w) / 2.0, y, w, h)
-        }
-        (true, false) => {
-            let (w, h) = (HANDLE_W as f64, HANDLE_H as f64);
-            let x = if st.side == "left" { vx } else { vx + vw - w };
-            (x, vy + (vh - h) / 2.0, w, h)
-        }
-        (true, true) => {
-            // Rotated tab: the long side runs along the edge.
-            let (w, h) = (HANDLE_H as f64, HANDLE_W as f64);
-            let y = if st.side == "bottom" { vy } else { vy + vh - h };
-            (fx + (fw - w) / 2.0, y, w, h)
-        }
-    };
-    Some(if fullscreen { frame } else { clear_of_mac_dock(st, frame) })
-}
-
-/// Gap (points) kept between the drawer and the space the macOS Dock pops up
-/// into, on top of the Dock's icon size (its padding is roughly this much).
-#[cfg(target_os = "macos")]
-const MAC_DOCK_CLEARANCE: f64 = 18.0;
-
-/// Adapts the drawer to the macOS Dock's own settings so the two docks don't
-/// fight over one edge.
-///
-/// When the macOS Dock is always shown, `visibleFrame` already excludes it,
-/// so the drawer sits beside it and nothing changes. When the Dock is on the
-/// drawer's edge with auto-hide on, the edge itself is the Dock's reveal
-/// zone: a handle flush against it gets covered when the Dock appears, and
-/// reaching for one opens the other. So the drawer moves in by the Dock's
-/// thickness (icon size + clearance): the very edge stays the macOS Dock's,
-/// and CoolDesk's handle/bar sits just past where it appears.
-///
-/// Not applied in a fullscreen app (see `mac_drawer_frame`): there the bar
-/// deliberately sits flush on the bottom edge, in the space the hidden Dock
-/// leaves free.
-#[cfg(target_os = "macos")]
-fn clear_of_mac_dock(st: &DockState, (x, y, w, h): (f64, f64, f64, f64)) -> (f64, f64, f64, f64) {
-    let dock = dock::mac_dock_prefs();
-    if dock.orientation != st.side || !dock.autohide {
-        return (x, y, w, h);
-    }
-    let inset = dock.tile_size + MAC_DOCK_CLEARANCE;
-    match st.side.as_str() {
-        "bottom" => (x, y + inset, w, h),
-        "left" => (x + inset, y, w, h),
-        "right" => (x - inset, y, w, h),
-        _ => (x, y, w, h),
-    }
-}
-
-/// Geometry the drawer lays out against. Horizontal (top/bottom) docks use the
-/// monitor *work area* so the bar sits above the Windows taskbar instead of
-/// covering it; vertical docks keep the historical full-monitor strip.
-fn drawer_geom(app: &tauri::AppHandle, win: &tauri::Window, horizontal: bool) -> Option<(i32, i32, i32, i32)> {
-    #[cfg(windows)]
-    if horizontal {
-        if let Ok(hwnd) = win.hwnd() {
-            if let Some(geom) = dock::work_area(hwnd.0 as isize) {
-                return Some(geom);
-            }
-        }
-    }
-    #[cfg(not(windows))]
-    let _ = (win, horizontal);
-    cursor_geom(app)
-}
-
-/// Slide the panel in: size the main window to a strip at the docked edge
-/// (full-height sidebar or full-width bar), make it a borderless topmost
-/// overlay, and hide the handle.
-fn expand_drawer(app: &tauri::AppHandle, st: &DockState) {
-    let horizontal = dock_is_horizontal(&st.side);
-    let Some(main) = ensure_main_window(app) else {
-        log::error!("[Dock] expand_drawer: no main window");
-        return;
-    };
-    // A natively fullscreen window ignores setFrame: docking the full app
-    // while it was fullscreen left a screen-sized, see-through window in its
-    // own fullscreen Space — black, with the "CoolDesk" title bar on hover.
-    // Leave fullscreen first, then dock once the exit animation is over.
-    #[cfg(target_os = "macos")]
-    if main.is_fullscreen().unwrap_or(false) {
-        log::info!("[Dock] main window is fullscreen — leaving fullscreen before docking");
-        let _ = main.set_fullscreen(false);
-        let (app, st) = (app.clone(), st.clone());
-        std::thread::spawn(move || {
-            for _ in 0..30 {
-                std::thread::sleep(std::time::Duration::from_millis(100));
-                if !main.is_fullscreen().unwrap_or(false) {
-                    break;
-                }
-            }
-            // is_fullscreen flips before AppKit finishes animating back.
-            std::thread::sleep(std::time::Duration::from_millis(400));
-            expand_drawer(&app, &st);
-        });
-        return;
-    }
-    let scale = main.scale_factor().unwrap_or(1.0);
-    match drawer_geom(app, &main, horizontal) {
-        None => log::error!("[Dock] expand_drawer: no monitor geometry"),
-        Some((mx, my, mw, mh)) => {
-            let (x, y, w, h) = if horizontal {
-                let h = logical_to_physical(st.bar_height.clamp(BAR_MIN_HEIGHT, BAR_MAX_HEIGHT) as i32, scale);
-                let y = if st.side == "top" { my } else { my + mh - h };
-                // Span the full monitor width (not the work-area width) so the bar
-                // reaches both screen edges even when a side taskbar/appbar insets
-                // the work area — that inset was leaving a gap + rounded corner on
-                // one side. Vertical placement still uses the work area (above), so
-                // a bottom taskbar is not covered.
-                #[cfg(windows)]
-                let (bx, bw) = main
-                    .hwnd()
-                    .ok()
-                    .and_then(|hwnd| dock::monitor_rect(hwnd.0 as isize))
-                    .map(|(rx, _, rw, _)| (rx, rw))
-                    .unwrap_or((mx, mw));
-                #[cfg(not(windows))]
-                let (bx, bw) = (mx, mw);
-                // Hug the pill instead of spanning the edge, same as macOS
-                // (see `BAR_CONTENT_WIDTH`). Needed as soon as the bar is
-                // see-through: a transparent full-width strip is invisible but
-                // still swallows clicks meant for windows behind it. 0 = the
-                // frontend has not reported a width yet -> span, as before.
-                let content = logical_to_physical(BAR_CONTENT_WIDTH.load(Ordering::Relaxed) as i32, scale);
-                let (bx, bw) = if content > 0 && content < bw {
-                    (bx + (bw - content) / 2, content)
-                } else {
-                    (bx, bw)
-                };
-                (bx, y, bw, h)
-            } else {
-                // Floating panel: gap on every edge, including the outer/docked
-                // one — flush against the physical screen edge looked cramped in
-                // practice (butts right up against neighboring windows). Top/bottom
-                // use a separate, larger margin — see `SIDEBAR_MARGIN_VERTICAL`.
-                // (Unused on macOS — see `mac_drawer_frame`.)
-                let margin = logical_to_physical(SIDEBAR_MARGIN, scale);
-                let margin_v = logical_to_physical(SIDEBAR_MARGIN_VERTICAL, scale);
-                let w = (logical_to_physical(st.width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH) as i32, scale) - margin * 2).max(1);
-                let x = if st.side == "left" { mx + margin } else { mx + mw - w - margin };
-                (x, my + margin_v, w, (mh - margin_v * 2).max(1))
-            };
-            let _ = main.set_decorations(false);
-            let _ = main.set_resizable(false);
-            let _ = main.set_always_on_top(true);
-            // A native rectangular drop shadow would poke past the rounded
-            // corners drawn by the `sidebar-docked` body CSS. On macOS the bar
-            // is see-through too (only its pill paints — see
-            // `dock::set_see_through`), so a window shadow there draws a
-            // second rounded outline around the whole window, framing the
-            // pill; its own CSS shadow is the only one it should have.
-            if !horizontal || cfg!(target_os = "macos") {
-                let _ = main.set_shadow(false);
-            }
-            // macOS positions the panel once, atomically, in AppKit points via
-            // `mac_drawer_frame` in the main-thread block below — Tauri's
-            // physical position/size APIs put it on the wrong screen (or
-            // half off one) on multi-monitor setups with mixed scale factors,
-            // and an approximate set here followed by a correction there
-            // would be two back-to-back resizes (see `dock::set_window_frame`).
-            if !cfg!(target_os = "macos") {
-                let _ = main.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w as u32, height: h as u32 }));
-                let _ = main.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
-            }
-            // Same reasoning as the handle: a dock/taskbar panel that vanishes
-            // when you switch Spaces (or when some other app goes fullscreen)
-            // isn't a dock. Undone in `disable_dock` once the window goes back
-            // to being a normal per-Space document window. Also clamps a
-            // horizontal bar back inside the visible frame so it doesn't end
-            // up rendered (and unclickable) underneath the real macOS Dock or
-            // menu bar — see `dock::cursor_screen_rects`'s doc comment.
-            //
-            // `expand_drawer` can run off the main thread (`dock_expand` is an
-            // async command, dispatched on a tokio worker), but this reaches
-            // into the raw NSWindow via objc2 — AppKit asserts/crashes
-            // (EXC_BREAKPOINT) if that happens off the main thread.
-            #[cfg(target_os = "macos")]
-            {
-                let main_for_appkit = main.clone();
-                let st_for_appkit = st.clone();
-                // `show()`/`set_focus()` are dispatched *inside* this same
-                // main-thread block, after positioning — not called
-                // separately below — so the window can't paint a frame at
-                // its previous (or default) position before this queued
-                // closure runs. `run_on_main_thread` just posts a block to
-                // the run loop; if `show()`/`set_focus()` reached the main
-                // thread through a different, unordered path, the window
-                // could flash at the wrong spot for a frame before snapping
-                // to the position set here.
-                let _ = app.run_on_main_thread(move || {
-                    dock::allow_over_fullscreen_spaces(&main_for_appkit);
-                    dock::join_fullscreen_space(&main_for_appkit);
-                    // Cards (sidebar) or the pill (bar) float over the desktop
-                    // with no panel behind them — see `dock::set_see_through`.
-                    dock::set_see_through(&main_for_appkit, true);
-                    set_main_background(&main_for_appkit, Some(tauri::window::Color(0, 0, 0, 0)));
-                    match mac_drawer_frame(&st_for_appkit, false) {
-                        Some(frame) => {
-                            dock::set_window_frame(&main_for_appkit, frame);
-                            log::info!("[Dock] Panel placed on cursor screen (points): {frame:?}");
-                        }
-                        None => log::error!("[Dock] expand_drawer: no NSScreen to place panel on"),
-                    }
-                    // Snapshot the final on-screen frame for the
-                    // leave-intent watcher to poll against.
-                    let frame = dock::window_frame(&main_for_appkit);
-                    log::info!("[Dock] Cached main panel frame for leave-intent watcher: {:?}", frame);
-                    *MAIN_SCREEN_FRAME.lock().unwrap() = frame;
-                    MAIN_PANEL_HORIZONTAL.store(horizontal, Ordering::Relaxed);
-                    let _ = main_for_appkit.show();
-                    let _ = main_for_appkit.set_focus();
-                    log_main_page_geometry(&main_for_appkit, "dock expanded");
-                });
-                MAC_DOCK_ACTIVE.store(true, Ordering::Relaxed);
-            }
-            #[cfg(not(target_os = "macos"))]
-            {
-                let _ = main.show();
-                let _ = main.set_focus();
-            }
-            // The drawer's webview is never recreated — hiding it just calls
-            // `.hide()`, so its DOM (and scroll positions) survive from the
-            // last time it was open. The frontend uses this to reset the tab
-            // list back to the top on every expand, the same way a re-opened
-            // Spotlight resets via `spotlight-shown`.
-            let _ = app.emit("dock-expanded", ());
-            log::info!("[Dock] Panel expanded on {}: x={x} y={y} w={w} h={h}", st.side);
-        }
-    }
-    if let Some(handle) = app.get_webview_window("handle") {
-        let _ = handle.hide();
-    }
-    // Panel is now the visible surface — the handle isn't, so the fullscreen
-    // watcher should stand down.
-    DRAWER_COLLAPSED.store(false, Ordering::Relaxed);
-    DOCK_ACTIVE.store(true, Ordering::Relaxed);
-}
-
-/// Collapse to the handle: hide the panel, show the slim edge tab (vertical tab
-/// on left/right, horizontal tab on top/bottom).
-fn collapse_drawer(app: &tauri::AppHandle, st: &DockState) {
-    if let Some(main) = main_window(&app) {
-        let _ = main.hide();
-    }
-    let horizontal = dock_is_horizontal(&st.side);
-    if let Some(handle) = app.get_webview_window("handle") {
-        let scale = handle.scale_factor().unwrap_or(1.0);
-        let (handle_w, handle_h) = (logical_to_physical(HANDLE_W, scale), logical_to_physical(HANDLE_H, scale));
-        if let Some((mx, my, mw, mh)) = drawer_geom(app, &handle.as_ref().window(), horizontal) {
-            let (x, y, w, h) = if horizontal {
-                // Rotated tab: the long side runs along the edge.
-                let (w, h) = (handle_h, handle_w);
-                let x = mx + (mw - w) / 2;
-                let y = if st.side == "top" { my } else { my + mh - h };
-                (x, y, w, h)
-            } else {
-                let x = if st.side == "left" { mx } else { mx + mw - handle_w };
-                let y = my + (mh - handle_h) / 2;
-                (x, y, handle_w, handle_h)
-            };
-            let _ = handle.set_always_on_top(true);
-            // Windows clamps every top-level window to a minimum tracking size
-            // (SM_CXMINTRACK ≈ 136px wide, SM_CYMINTRACK ≈ 39px tall, DPI-scaled)
-            // via WM_GETMINMAXINFO. A vertical handle asks for 22px wide, which
-            // gets silently forced up to ~136px — turning the slim tab into a fat
-            // near-square (and flipping the grip horizontal via handle.html's
-            // aspect-ratio safety net). Horizontal docks escape it because their
-            // 132px width already clears the floor. Pin the min size to our exact
-            // target first so the clamp can't override set_size below.
-            //
-            // macOS instead places the handle in AppKit points in the
-            // main-thread block below (see `mac_drawer_frame`); the min size
-            // is still pinned, in points, so a stale one can't override it.
-            #[cfg(not(target_os = "macos"))]
-            {
-                let target = tauri::Size::Physical(tauri::PhysicalSize { width: w as u32, height: h as u32 });
-                let _ = handle.set_min_size(Some(target.clone()));
-                let _ = handle.set_size(target);
-                let _ = handle.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
-            }
-            #[cfg(target_os = "macos")]
-            {
-                let _ = (x, y, w, h);
-                let (lw, lh) = if horizontal { (HANDLE_H, HANDLE_W) } else { (HANDLE_W, HANDLE_H) };
-                let _ = handle.set_min_size(Some(tauri::Size::Logical(tauri::LogicalSize {
-                    width: lw as f64,
-                    height: lh as f64,
-                })));
-            }
-            // Without this, the handle stays pinned to whichever Space/virtual
-            // desktop (including another app's fullscreen Space) it was last
-            // shown on — switch away and it (and the panel it opens) is simply
-            // gone until you switch back. Also clamps a horizontal tab back
-            // inside the visible frame so it doesn't render underneath the
-            // real macOS Dock or menu bar — unclickable, with no other way to
-            // re-expand the drawer. macOS-only.
-            //
-            // Dispatched via `run_on_main_thread`: this reaches into the raw
-            // NSWindow via objc2, which AppKit requires happen on the main
-            // thread — some callers (e.g. the fullscreen watcher) invoke
-            // `collapse_drawer` off it. `show()` goes inside the same block,
-            // after positioning, so the handle can't paint a frame at its
-            // previous screen first (same as `expand_drawer`).
-            #[cfg(target_os = "macos")]
-            {
-                let handle_for_appkit = handle.as_ref().window();
-                let st_for_appkit = st.clone();
-                let _ = app.run_on_main_thread(move || {
-                    dock::allow_over_fullscreen_spaces(&handle_for_appkit);
-                    dock::join_fullscreen_space(&handle_for_appkit);
-                    match mac_drawer_frame(&st_for_appkit, true) {
-                        Some(frame) => {
-                            dock::set_window_frame(&handle_for_appkit, frame);
-                        }
-                        None => log::error!("[Dock] collapse_drawer: no NSScreen to place handle on"),
-                    }
-                    // Snapshot the final on-screen frame for the
-                    // hover-intent watcher to poll against.
-                    *HANDLE_SCREEN_FRAME.lock().unwrap() = dock::window_frame(&handle_for_appkit);
-                    let _ = handle_for_appkit.show();
-                });
-                MAC_DOCK_ACTIVE.store(true, Ordering::Relaxed);
-            }
-            #[cfg(not(target_os = "macos"))]
-            let _ = handle.show();
-        }
-    }
-    // Handle is now the visible dock surface — let the watcher hide/show it as
-    // fullscreen apps come and go.
-    DRAWER_COLLAPSED.store(true, Ordering::Relaxed);
-    DOCK_ACTIVE.store(true, Ordering::Relaxed);
-}
-
-/// Turn on drawer mode: persist state and show the handle (collapsed).
-/// `thickness` is the panel width for vertical sides, the bar height for
-/// top/bottom; the other dimension's stored value is preserved.
-///
-/// `force_visible`: skip the visibility check below and always expand. Used
-/// by the tray's explicit per-layout recovery items — if the app is
-/// genuinely stuck (e.g. `main.is_visible()` wrongly reporting hidden), the
-/// point of those items is to guarantee the user actually sees the window,
-/// not to collapse it to a handle they may not be able to find either.
-fn enable_drawer(app: &tauri::AppHandle, side: String, thickness: u32, force_visible: bool) -> DockState {
-    let prev = load_dock_state(app);
-    let horizontal = dock_is_horizontal(&side);
-    let state = DockState {
-        enabled: true,
-        mode: "drawer".to_string(),
-        width: if horizontal { prev.width } else { thickness.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH) },
-        bar_height: if horizontal { thickness.clamp(BAR_MIN_HEIGHT, BAR_MAX_HEIGHT) } else { prev.bar_height },
-        side,
-    };
-    save_dock_state(app, &state);
-    // Turning the drawer *on* from a window the user is currently looking at is a
-    // layout switch, not a dismissal: slide straight into the new edge instead of
-    // hiding the panel down to the handle. Hiding it here also raced the blur
-    // handler, which is how "release to full window, then go back to the side
-    // dock" used to end up with no panel at all — just the edge tab.
-    let visible = force_visible
-        || app
-            .get_window("main")
-            .and_then(|w| w.is_visible().ok())
-            .unwrap_or(false);
-    if visible {
-        expand_drawer(app, &state);
-    } else {
-        collapse_drawer(app, &state);
-    }
-    state
-}
-
-// ── Reserve mode (AppBar) ──────────────────────────────────────────────────
-
-/// Register the AppBar and dock the main window into the reserved strip.
-/// `thickness` is the panel width for vertical sides, the bar height for
-/// top/bottom.
-fn apply_dock(app: &tauri::AppHandle, side: String, thickness: u32) -> Result<DockState, String> {
-    let horizontal = dock_is_horizontal(&side);
-    let thickness = if horizontal {
-        thickness.clamp(BAR_MIN_HEIGHT, BAR_MAX_HEIGHT)
-    } else {
-        thickness.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH)
-    };
-    let prev = load_dock_state(app);
-    let state = DockState {
-        enabled: true,
-        mode: "reserve".to_string(),
-        side: side.clone(),
-        width: if horizontal { prev.width } else { thickness },
-        bar_height: if horizontal { thickness } else { prev.bar_height },
-    };
-
-    #[cfg(windows)]
-    {
-        // The handle is a drawer concept — make sure it's hidden in reserve mode.
-        DRAWER_COLLAPSED.store(false, Ordering::Relaxed);
-        if let Some(handle) = app.get_webview_window("handle") {
-            let _ = handle.hide();
-        }
-        let window = ensure_main_window(app)
-            .ok_or_else(|| "main window not found".to_string())?;
-        let _ = window.set_decorations(false);
-        let _ = window.set_resizable(false);
-        let scale = window.scale_factor().unwrap_or(1.0);
-        let physical_thickness = logical_to_physical(thickness as i32, scale);
-        let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
-        let (x, y, cx, cy) = dock::set_dock(hwnd, &side, physical_thickness)?;
-        log::info!(
-            "[Dock] Reserved strip: x={x} y={y} w={cx} h={cy} (side={side}, thickness={thickness})"
-        );
-        let _ = window.show();
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = app;
-        return Err("Reserve mode is only supported on Windows".to_string());
-    }
-
-    save_dock_state(app, &state);
-    Ok(state)
-}
-
-/// Turn the dock off entirely: release any AppBar, hide the handle, and restore
-/// the main window to a normal decorated, centered window.
-fn disable_dock(app: &tauri::AppHandle) -> DockState {
-    #[cfg(windows)]
-    dock::remove_dock();
-
-    DRAWER_COLLAPSED.store(false, Ordering::Relaxed);
-    DOCK_ACTIVE.store(false, Ordering::Relaxed);
-    if let Some(handle) = app.get_webview_window("handle") {
-        let _ = handle.hide();
-    }
-    if let Some(window) = ensure_main_window(app) {
-        let _ = window.set_always_on_top(false);
-        // Raw NSWindow access via objc2 — must run on the main thread, see
-        // `expand_drawer`'s equivalent call for why.
-        #[cfg(target_os = "macos")]
-        {
-            MAC_DOCK_ACTIVE.store(false, Ordering::Relaxed);
-            let window_for_appkit = window.clone();
-            let _ = app.run_on_main_thread(move || {
-                dock::restrict_to_current_space(&window_for_appkit);
-                dock::set_see_through(&window_for_appkit, false);
-                set_main_background(&window_for_appkit, None);
-            });
-        }
-        // Resizable first: tao's set_decorations builds the new style mask
-        // from the *current* resizable flag and applies it a run-loop later,
-        // so the other order re-applied the dock's non-resizable mask after
-        // set_resizable(true) had already run. A non-resizable window can't
-        // grow, so fullscreen then sat at 1400x900 in a black Space.
-        let _ = window.set_resizable(true);
-        let _ = window.set_decorations(true);
-        let _ = window.set_shadow(true);
-        let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 1400.0, height: 900.0 }));
-        let _ = window.center();
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
-
-    let mut state = load_dock_state(app);
-    state.enabled = false;
-    save_dock_state(app, &state);
-    state
-}
-
-// ── Commands ───────────────────────────────────────────────────────────────
-
-#[tauri::command]
-fn dock_get_state(app: tauri::AppHandle) -> DockState {
-    load_dock_state(&app)
-}
-
-// Async for the same reason as `dock_expand`: reserve mode docks the main
-// window, which may still need building.
-#[tauri::command(rename_all = "snake_case")]
-async fn dock_enable(
-    app: tauri::AppHandle,
-    side: Option<String>,
-    width: Option<u32>,
-    mode: Option<String>,
-) -> Result<DockState, String> {
-    let prev = load_dock_state(&app);
-    let side = match side.as_deref() {
-        Some("left") => "left".to_string(),
-        Some("right") => "right".to_string(),
-        Some("top") => "top".to_string(),
-        Some("bottom") => "bottom".to_string(),
-        _ => prev.side.clone(),
-    };
-    // `width` is the thickness of the requested edge; default to the stored
-    // value for that orientation, not the other one's.
-    let thickness = width.unwrap_or(if dock_is_horizontal(&side) { prev.bar_height } else { prev.width });
-    let mode = mode.unwrap_or(prev.mode);
-    let state = if mode == "reserve" {
-        apply_dock(&app, side, thickness)?
-    } else {
-        enable_drawer(&app, side, thickness, false)
-    };
-    emit_dock_state(&app, &state);
-    Ok(state)
-}
-
-#[tauri::command]
-fn dock_disable(app: tauri::AppHandle) -> DockState {
-    let state = disable_dock(&app);
-    emit_dock_state(&app, &state);
-    state
-}
-
-/// Slide the drawer panel in (called by the handle window's click, the tray, or
-/// the frontend). No-op if the dock isn't in drawer mode.
-///
-/// `async` on purpose: a sync command runs on the main thread *inside* the event
-/// loop, and if the panel still has to be built (headless autostart, before the
-/// pre-warm lands) `WebviewWindowBuilder::build` blocks that loop waiting for
-/// WebView2 — a deadlock. Off the main thread the build is proxied instead, so
-/// the loop stays free to service it.
-#[tauri::command]
-async fn dock_expand(app: tauri::AppHandle) -> DockState {
-    let st = load_dock_state(&app);
-    if st.enabled && st.mode == "drawer" {
-        expand_drawer(&app, &st);
-    }
-    st
-}
-
-/// Collapse the drawer panel back to the handle.
-#[tauri::command]
-fn dock_collapse(app: tauri::AppHandle) -> DockState {
-    let st = load_dock_state(&app);
-    if st.enabled && st.mode == "drawer" {
-        collapse_drawer(&app, &st);
-    }
-    st
-}
-
-/// Resize the docked edge: sets the panel width for vertical docks, the bar
-/// height for horizontal ones.
-#[tauri::command(rename_all = "snake_case")]
-fn dock_set_width(app: tauri::AppHandle, width: u32) -> Result<DockState, String> {
-    let mut state = load_dock_state(&app);
-    if dock_is_horizontal(&state.side) {
-        state.bar_height = width.clamp(BAR_MIN_HEIGHT, BAR_MAX_HEIGHT);
-    } else {
-        state.width = width.clamp(DOCK_MIN_WIDTH, DOCK_MAX_WIDTH);
-    }
-    save_dock_state(&app, &state);
-
-    if state.enabled {
-        if state.mode == "reserve" {
-            let state = apply_dock(&app, state.side.clone(), dock_thickness(&state))?;
-            emit_dock_state(&app, &state);
-            return Ok(state);
-        }
-        // Drawer: if the panel is currently open, re-lay it out at the new size.
-        if let Some(main) = main_window(&app) {
-            if main.is_visible().unwrap_or(false) {
-                expand_drawer(&app, &state);
-            }
-        }
-    }
-    emit_dock_state(&app, &state);
-    Ok(state)
-}
-
-/// macOS: the frontend reports the horizontal bar pill's width (CSS px =
-/// points) whenever it changes, and the open bar is re-fit around it in place
-/// — see `BAR_CONTENT_WIDTH`. No-op elsewhere: other platforms keep an opaque
-/// full-width bar.
-#[tauri::command(rename_all = "snake_case")]
-fn dock_set_bar_content_width(app: tauri::AppHandle, width: u32) {
-    #[cfg(any(target_os = "macos", windows))]
-    {
-        if BAR_CONTENT_WIDTH.swap(width, Ordering::Relaxed) == width {
-            return;
-        }
-        let st = load_dock_state(&app);
-        if !(st.enabled && st.mode == "drawer" && dock_is_horizontal(&st.side))
-            || DRAWER_COLLAPSED.load(Ordering::Relaxed)
-        {
-            return;
-        }
-        #[cfg(target_os = "macos")]
-        {
-            let Some(main) = main_window(&app) else { return };
-            let _ = app.run_on_main_thread(move || {
-                if let Some(frame) = mac_drawer_frame(&st, false) {
-                    *MAIN_SCREEN_FRAME.lock().unwrap() = dock::set_window_frame(&main, frame);
-                }
-            });
-        }
-        #[cfg(windows)]
-        // Re-place the window at the new pill width. `expand_drawer` reads
-        // BAR_CONTENT_WIDTH itself, so this just re-runs the normal path.
-        expand_drawer(&app, &st);
-    }
-    #[cfg(not(any(target_os = "macos", windows)))]
-    let _ = (app, width);
 }
 
 #[derive(serde::Serialize)]
@@ -3743,13 +2860,15 @@ pub fn run() {
         kill_process_on_port,
         list_listening_ports,
         kill_process,
-        dock_enable,
-        dock_disable,
-        dock_expand,
-        dock_collapse,
-        dock_set_width,
-        dock_set_bar_content_width,
-        dock_get_state,
+        surfaces::dock_enable,
+        surfaces::dock_disable,
+        surfaces::dock_expand,
+        surfaces::dock_collapse,
+        surfaces::dock_set_size,
+        surfaces::dock_resize,
+        surfaces::dock_set_bar_content_width,
+        surfaces::dock_get_state,
+        surfaces::dock_open_main,
         ai_cli::ai_cli_run,
         ai_cli::ai_cli_cancel,
         ai_cli::ai_cli_detect,
@@ -3947,282 +3066,10 @@ pub fn run() {
           }
       });
 
-      // Re-apply the workspace dock if the user left it enabled. Windows are
-      // already created by the time setup runs.
-      //
-      // When it takes over, the dock owns the main window's visibility for the
-      // rest of startup — the plain show below must not fight it.
-      let dock_owns_window = {
-          let app_handle = app.handle();
-          let dock_state = load_dock_state(app_handle);
-          if dock_state.enabled {
-              if dock_state.mode == "reserve" {
-                  if let Err(e) = apply_dock(app_handle, dock_state.side.clone(), dock_thickness(&dock_state)) {
-                      log::warn!("[Dock] Failed to re-apply reserve dock on startup: {}", e);
-                  }
-              } else {
-                  // Drawer: start collapsed, showing only the handle.
-                  collapse_drawer(app_handle, &dock_state);
-                  log::info!("[Dock] Restored drawer handle on startup ({})", dock_state.side);
-              }
-              true
-          } else {
-              false
-          }
-      };
+      // Sidebar and dock windows: restore whichever the user left on, and start
+      // the watchers that keep them placed (see surfaces.rs).
+      surfaces::setup(app.handle());
 
-      // Fullscreen watcher: the drawer handle is a plain topmost window, so —
-      // unlike an AppBar — the shell never tells it to hide for a fullscreen app,
-      // leaving it floating over games/videos at the (now auto-hidden) taskbar
-      // row. Poll the foreground window and hide the handle while a fullscreen app
-      // holds it, restoring it afterwards. Gated on DRAWER_COLLAPSED so the loop
-      // does nothing (and touches no disk) unless the handle is actually showing.
-      // Linux: `dock::foreground_is_fullscreen` works over X11/EWMH only — under
-      // Wayland it always reports false, so the handle just never auto-hides
-      // there (same graceful-empty-result shape as the rest of the EWMH work).
-      #[cfg(any(windows, target_os = "linux"))]
-      {
-          let app_handle = app.handle().clone();
-          std::thread::spawn(move || {
-              let mut hidden_for_fullscreen = false;
-              loop {
-                  std::thread::sleep(std::time::Duration::from_millis(600));
-                  if !DRAWER_COLLAPSED.load(Ordering::Relaxed) {
-                      hidden_for_fullscreen = false;
-                      continue;
-                  }
-                  let Some(handle) = app_handle.get_webview_window("handle") else { continue };
-                  let fullscreen = dock::foreground_is_fullscreen();
-                  if fullscreen {
-                      if !hidden_for_fullscreen {
-                          let _ = handle.hide();
-                          hidden_for_fullscreen = true;
-                      }
-                      continue;
-                  }
-
-                  // Not fullscreen, and the drawer is collapsed — so the handle
-                  // is the dock's only surface and it must be on screen. Assert
-                  // that every tick rather than only undoing our own hide: an
-                  // app that goes topmost buries the tab in the topmost band,
-                  // and whatever hid it (a stale hide, a display change) would
-                  // otherwise leave the dock simply gone until the next tray
-                  // click. SetWindowPos here is SWP_NOACTIVATE, so re-asserting
-                  // steals no focus and doesn't flicker.
-                  let _ = handle.set_always_on_top(true);
-                  if !handle.is_visible().unwrap_or(true) {
-                      let _ = handle.show();
-                  }
-                  hidden_for_fullscreen = false;
-              }
-          });
-      }
-
-      // macOS: rejoin the current Space on a timer while the drawer/handle is
-      // meant to be visible. `dock::join_fullscreen_space` (see its doc
-      // comment) is a one-time snapshot of whatever Space is active right
-      // now — without re-calling it, the dock would only render on top of
-      // the Space that happened to be active the moment it was last
-      // expanded/collapsed, and go missing again the next time the user
-      // switches Spaces (including into another app's fullscreen Space).
-      // Gated on `MAC_DOCK_ACTIVE` so the loop does nothing while the dock
-      // feature is off. Same 600ms cadence as the Windows fullscreen watcher
-      // above — no evidence either way on the right interval yet, this just
-      // matches its established polling cost.
-      #[cfg(target_os = "macos")]
-      {
-          let app_handle = app.handle().clone();
-          std::thread::spawn(move || loop {
-              std::thread::sleep(std::time::Duration::from_millis(600));
-              if !MAC_DOCK_ACTIVE.load(Ordering::Relaxed) {
-                  continue;
-              }
-              let label = if DRAWER_COLLAPSED.load(Ordering::Relaxed) { "handle" } else { "main" };
-              // get_window, not get_webview_window: "main" stops being a webview
-              // window while a browser pane lives in it.
-              let Some(window) = app_handle.get_window(label) else { continue };
-              let _ = app_handle.run_on_main_thread(move || {
-                  dock::join_fullscreen_space(&window);
-              });
-          });
-      }
-
-      // macOS: hover-intent to expand the collapsed handle without a click.
-      // As explained in `dock::cursor_location`'s doc comment, the handle's
-      // own `:hover`/`mouseenter` JS listener (in `handle-main.js`) never
-      // fires here — its NSTrackingArea only reports hover while CoolDesk is
-      // the frontmost app, which it normally isn't while the handle sits at
-      // the screen edge over whatever app the user is using. This polls the
-      // real cursor position instead (unaffected by which app is active) and
-      // fires the same 200ms hover-intent debounce natively. Finer-grained
-      // than the Space-rejoin watcher above (50ms vs 600ms) since hover
-      // timing is directly user-perceptible.
-      #[cfg(target_os = "macos")]
-      {
-          let app_handle = app.handle().clone();
-          std::thread::spawn(move || {
-              const HOVER_INTENT: std::time::Duration = std::time::Duration::from_millis(200);
-              let mut hover_since: Option<std::time::Instant> = None;
-              loop {
-                  std::thread::sleep(std::time::Duration::from_millis(50));
-                  if !MAC_DOCK_ACTIVE.load(Ordering::Relaxed) || !DRAWER_COLLAPSED.load(Ordering::Relaxed) {
-                      hover_since = None;
-                      continue;
-                  }
-                  let Some((fx, fy, fw, fh)) = *HANDLE_SCREEN_FRAME.lock().unwrap() else {
-                      hover_since = None;
-                      continue;
-                  };
-                  let (cx, cy) = dock::cursor_location();
-                  let over = cx >= fx && cx <= fx + fw && cy >= fy && cy <= fy + fh;
-                  if !over {
-                      hover_since = None;
-                      continue;
-                  }
-                  let since = *hover_since.get_or_insert_with(std::time::Instant::now);
-                  if since.elapsed() < HOVER_INTENT {
-                      continue;
-                  }
-                  hover_since = None;
-                  let st = load_dock_state(&app_handle);
-                  if st.enabled && st.mode == "drawer" {
-                      expand_drawer(&app_handle, &st);
-                  }
-              }
-          });
-      }
-
-      // macOS: mirror image of the hover-intent watcher above — collapse the
-      // expanded panel a beat after the cursor leaves it, instead of only on
-      // the existing "click away to hide" blur handler
-      // (`attach_main_window_events`). That handler only fires when focus
-      // moves to *another app's* window, which needs a click — just moving
-      // the cursor off the panel without clicking anywhere doesn't change
-      // which app is frontmost on macOS, so before this the panel stayed
-      // open indefinitely once opened by hover. Same 350ms-ish debounce
-      // shape as the open side, just a little longer so ordinary in-panel
-      // mouse movement near an edge doesn't collapse it prematurely.
-      #[cfg(target_os = "macos")]
-      {
-          let app_handle = app.handle().clone();
-          std::thread::spawn(move || {
-              const LEAVE_INTENT: std::time::Duration = std::time::Duration::from_millis(350);
-              let mut away_since: Option<std::time::Instant> = None;
-              loop {
-                  std::thread::sleep(std::time::Duration::from_millis(50));
-                  if !MAC_DOCK_ACTIVE.load(Ordering::Relaxed) || DRAWER_COLLAPSED.load(Ordering::Relaxed) {
-                      away_since = None;
-                      continue;
-                  }
-                  let Some((fx, fy, fw, fh)) = *MAIN_SCREEN_FRAME.lock().unwrap() else {
-                      away_since = None;
-                      continue;
-                  };
-                  let (cx, cy) = dock::cursor_location();
-                  // Grown by the sidebar margins: the vertical panel now floats
-                  // with a real gap on every edge (see `expand_drawer`), so the
-                  // cursor passes through that gap — technically outside `frame`
-                  // — just moving to/from the panel. Without this buffer that
-                  // dead zone was read as "left the panel," flapping the
-                  // collapse timer. The horizontal bar has no such gap — it's
-                  // clamped flush against its screen edge (`mac_drawer_frame`)
-                  // — so applying this buffer to it would just let the cursor
-                  // sit further outside the bar than intended and still count
-                  // as "over" it. `MAIN_PANEL_HORIZONTAL` is cached by
-                  // `expand_drawer` alongside `MAIN_SCREEN_FRAME`, so this reads
-                  // an atomic instead of re-loading dock state from disk.
-                  let (buffer_x, buffer_y) = if MAIN_PANEL_HORIZONTAL.load(Ordering::Relaxed) {
-                      (0.0, 0.0)
-                  } else {
-                      (SIDEBAR_MARGIN as f64, SIDEBAR_MARGIN_VERTICAL as f64)
-                  };
-                  let over = cx >= fx - buffer_x && cx <= fx + fw + buffer_x && cy >= fy - buffer_y && cy <= fy + fh + buffer_y;
-                  if over {
-                      away_since = None;
-                      continue;
-                  }
-                  let is_new = away_since.is_none();
-                  let since = *away_since.get_or_insert_with(std::time::Instant::now);
-                  if is_new {
-                      log::info!(
-                          "[Dock] Cursor ({cx:.0},{cy:.0}) left panel frame ({fx:.0},{fy:.0},{fw:.0}x{fh:.0}) — leave-intent timer started"
-                      );
-                  }
-                  if since.elapsed() < LEAVE_INTENT {
-                      continue;
-                  }
-                  away_since = None;
-                  let st = load_dock_state(&app_handle);
-                  log::info!("[Dock] Leave-intent elapsed — collapsing panel (enabled={} mode={})", st.enabled, st.mode);
-                  if st.enabled && st.mode == "drawer" {
-                      collapse_drawer(&app_handle, &st);
-                  }
-              }
-          });
-      }
-
-      // Cross-platform: keep the drawer/handle anchored to whichever monitor
-      // currently has the cursor, instead of staying pinned to wherever it
-      // was last shown. `drawer_geom` (via `cursor_geom`) already re-targets
-      // the cursor's monitor every time `expand_drawer`/`collapse_drawer`
-      // run, so hovering/clicking/blurring already relocates things on their
-      // own — this only covers the *idle* case: the handle just sitting
-      // collapsed (or the panel sitting open) while the user walks over to a
-      // different monitor without touching it. Coarser interval than the
-      // hover-intent watchers above — a monitor switch is a much rarer, more
-      // deliberate action than sub-second cursor movement — and gated on
-      // `DOCK_ACTIVE` so it costs nothing while the dock feature is off.
-      {
-          let app_handle = app.handle().clone();
-          std::thread::spawn(move || {
-              let mut anchor: Option<(i32, i32)> = None;
-              // macOS: what `clear_of_mac_dock` depends on — the macOS Dock's
-              // side/auto-hide/icon size and whether an app is fullscreen. When
-              // any of it changes (the user edits Desktop & Dock settings, or
-              // enters/leaves a fullscreen app) the drawer is re-placed too, so
-              // the handle never sits where the macOS Dock now pops up.
-              #[cfg(target_os = "macos")]
-              let mut mac_dock_sig: Option<(String, bool, i64, bool)> = None;
-              loop {
-                  std::thread::sleep(std::time::Duration::from_millis(500));
-                  if !DOCK_ACTIVE.load(Ordering::Relaxed) {
-                      anchor = None;
-                      #[cfg(target_os = "macos")]
-                      {
-                          mac_dock_sig = None;
-                      }
-                      continue;
-                  }
-                  let Some((mx, my, _, _)) = cursor_geom(&app_handle) else { continue };
-                  let moved = anchor.is_some_and(|(ax, ay)| (ax, ay) != (mx, my));
-                  anchor = Some((mx, my));
-                  #[cfg(target_os = "macos")]
-                  let moved = {
-                      let prefs = dock::mac_dock_prefs();
-                      let sig = (prefs.orientation, prefs.autohide, prefs.tile_size.round() as i64, dock::any_fullscreen_space());
-                      let changed = mac_dock_sig.as_ref().is_some_and(|old| *old != sig);
-                      if changed {
-                          log::info!("[Dock] macOS Dock settings or fullscreen state changed ({sig:?}) — re-placing dock");
-                      }
-                      mac_dock_sig = Some(sig);
-                      moved || changed
-                  };
-                  if !moved {
-                      continue;
-                  }
-                  let st = load_dock_state(&app_handle);
-                  if !st.enabled || st.mode != "drawer" {
-                      continue;
-                  }
-                  log::info!("[Dock] Re-anchoring dock (monitor or macOS Dock change)");
-                  if DRAWER_COLLAPSED.load(Ordering::Relaxed) {
-                      collapse_drawer(&app_handle, &st);
-                  } else {
-                      expand_drawer(&app_handle, &st);
-                  }
-              }
-          });
-      }
 
       // Cross-platform: sweep linked folders (Settings → Folders & Index) for
       // ones due for auto-reindex. Checked every minute — reindexing itself is
@@ -4239,11 +3086,9 @@ pub fn run() {
 
       // Main window. Launched by hand (or by the installer's "run now"), the user
       // asked to see it — build and show it straight away. Launched at login, stay
-      // headless in the tray and pre-warm the webview once the login storm has
-      // settled, so the first tray click is still instant.
-      //
-      // The dock restore above may already have created it (reserve mode docks the
-      // main window); ensure_main_window is idempotent, so this is safe either way.
+      // headless in the tray (the sidebar/dock handles, if on, are already up) and
+      // pre-warm the webview once the login storm has settled, so the first tray
+      // click is still instant.
       if autostarted {
           let prewarm_handle = app.handle().clone();
           tauri::async_runtime::spawn(async move {
@@ -4255,37 +3100,22 @@ pub fn run() {
                   }
               });
           });
-      } else if dock_owns_window {
-          // The dock decides when the panel is *shown*, but it must still exist
-          // by the time the handle is clicked. Building it lazily from inside
-          // `dock_expand` deadlocks: sync commands run on the main thread, and
-          // `WebviewWindowBuilder::build` needs that event loop free to pump
-          // WebView2 creation messages. Create it hidden here, during setup,
-          // where the loop isn't blocked; expand_drawer then only shows it.
-          let _ = ensure_main_window(app.handle());
       } else {
           show_main_window(app.handle());
       }
 
-      // System tray icon — lets users show/hide the window and quit cleanly.
-      // The three "layout_*" items exist specifically as an always-reachable
-      // recovery path: if the window ends up stuck (wrong layout, off-screen,
-      // occluded — a docked panel/handle rendered behind the real macOS Dock
-      // was one real case of this), the in-app layout controls live inside
-      // that same possibly-unreachable window. The tray icon doesn't, so each
-      // layout gets its own explicit, unambiguous entry here rather than a
-      // single toggle whose effect depends on state the user may not be able
-      // to see.
+      // System tray icon — lets users show/hide the full app, toggle the
+      // sidebar and dock windows, and quit cleanly. The Sidebar / Dock check
+      // items double as the always-reachable recovery path for a panel that
+      // ends up stuck or off-screen (its own controls would be too).
       let show_item = MenuItem::with_id(app, "show", "Show CoolDesk", true, None::<&str>)?;
-      let full_item = MenuItem::with_id(app, "layout_full", "Full Window", true, None::<&str>)?;
-      let side_item = MenuItem::with_id(app, "layout_side", "Side Dock", true, None::<&str>)?;
-      let bar_item = MenuItem::with_id(app, "layout_bar", "Bottom Bar", true, None::<&str>)?;
+      let (sidebar_item, bar_item) = surfaces::tray_items(app)?;
       let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
       let sep1 = tauri::menu::PredefinedMenuItem::separator(app)?;
       let sep2 = tauri::menu::PredefinedMenuItem::separator(app)?;
       let tray_menu = Menu::with_items(
           app,
-          &[&show_item, &sep1, &full_item, &side_item, &bar_item, &sep2, &quit_item],
+          &[&show_item, &sep1, &sidebar_item, &bar_item, &sep2, &quit_item],
       )?;
 
       TrayIconBuilder::new()
@@ -4293,55 +3123,22 @@ pub fn run() {
           .menu(&tray_menu)
           .tooltip("CoolDesk")
           .on_menu_event(|app, event| match event.id.as_ref() {
-              "show" => {
-                  // In drawer mode, "show" means slide the panel in.
-                  let st = load_dock_state(app);
-                  if st.enabled && st.mode == "drawer" {
-                      expand_drawer(app, &st);
-                  } else {
-                      show_main_window(app);
-                  }
+              "show" => show_main_window(app),
+              "quit" => app.exit(0),
+              id => {
+                  surfaces::handle_tray_menu(app, id);
               }
-              "layout_full" => {
-                  let state = disable_dock(app);
-                  emit_dock_state(app, &state);
-              }
-              "layout_side" => {
-                  let prev = load_dock_state(app);
-                  // Preserve whichever vertical edge was last used; default to
-                  // right the same way the in-app layout cycle does.
-                  let side = if prev.side == "left" { "left" } else { "right" }.to_string();
-                  let state = enable_drawer(app, side, prev.width, true);
-                  emit_dock_state(app, &state);
-              }
-              "layout_bar" => {
-                  let prev = load_dock_state(app);
-                  let state = enable_drawer(app, "bottom".to_string(), prev.bar_height, true);
-                  emit_dock_state(app, &state);
-              }
-              "quit" => {
-                  app.exit(0);
-              }
-              _ => {}
           })
           .on_tray_icon_event(|tray: &tauri::tray::TrayIcon, event: tauri::tray::TrayIconEvent| {
               if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, button_state: tauri::tray::MouseButtonState::Up, .. } = event {
                   let app = tray.app_handle();
-                  let st = load_dock_state(app);
                   // `is_visible` on a not-yet-created window is treated as
                   // hidden, so a headless autostart falls through to "open it".
                   let visible = app
                       .get_window("main")
                       .and_then(|w| w.is_visible().ok())
                       .unwrap_or(false);
-                  if st.enabled && st.mode == "drawer" {
-                      // Drawer: toggle the panel open/closed.
-                      if visible {
-                          collapse_drawer(app, &st);
-                      } else {
-                          expand_drawer(app, &st);
-                      }
-                  } else if visible {
+                  if visible {
                       if let Some(window) = main_window(&app) {
                           let _ = window.hide();
                       }

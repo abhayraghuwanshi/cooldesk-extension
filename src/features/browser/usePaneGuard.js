@@ -50,11 +50,13 @@ export function pagesMemoryOf(panes) {
  * @param browseTabs   useBrowseTabs() (tabs, live, activeId, sleep, idleFor)
  * @param paneIdOf     tab id → pane id
  * @param shownPaneId  pane on screen right now (the active tab's), or null
+ * @param tiledTabIds  multi view: every tab on screen side by side (Set) —
+ *                     never put to sleep, and not "hidden" for the CPU check
  * @param enabled      false when no page is open (nothing to watch)
  * @param meterShown   the Page tab's meter is visible (poll faster)
  * @param onScreen     the Browse face is on screen
  */
-export function usePaneGuard({ browseTabs, paneIdOf, shownPaneId, enabled, meterShown, onScreen }) {
+export function usePaneGuard({ browseTabs, paneIdOf, shownPaneId, tiledTabIds = null, enabled, meterShown, onScreen }) {
   const [stats, setStats] = useState(null);
   const [heavyPaneId, setHeavyPaneId] = useState(null);
   const hotSince = useRef(new Map());   // paneId -> ms, hidden and over HOT_CPU
@@ -62,10 +64,11 @@ export function usePaneGuard({ browseTabs, paneIdOf, shownPaneId, enabled, meter
   const dismissed = useRef(new Set());  // heavy notices closed until it calms down
 
   const inputs = useRef(null);
-  inputs.current = { browseTabs, paneIdOf, shownPaneId };
+  inputs.current = { browseTabs, paneIdOf, shownPaneId, tiledTabIds };
 
   const decide = useCallback((next) => {
-    const { browseTabs: bt, paneIdOf: paneOf, shownPaneId: shown } = inputs.current;
+    const { browseTabs: bt, paneIdOf: paneOf, shownPaneId: shown, tiledTabIds: tiled } = inputs.current;
+    const tiledPanes = new Set([...(tiled || [])].map(paneOf));
     const now = Date.now();
     const byPane = new Map(next.panes.map(p => [p.id, p]));
 
@@ -74,7 +77,7 @@ export function usePaneGuard({ browseTabs, paneIdOf, shownPaneId, enabled, meter
     };
     for (const p of next.panes) {
       const cpu = p.cpu || 0;
-      track(hotSince.current, p.id, p.id !== shown && cpu >= HOT_CPU);
+      track(hotSince.current, p.id, p.id !== shown && !tiledPanes.has(p.id) && cpu >= HOT_CPU);
       track(heavySince.current, p.id, p.id === shown && cpu >= HEAVY_CPU);
       if (!heavySince.current.has(p.id)) dismissed.current.delete(p.id);
     }
@@ -88,7 +91,7 @@ export function usePaneGuard({ browseTabs, paneIdOf, shownPaneId, enabled, meter
 
     // Background tabs whose page is open and may be closed.
     const candidates = bt.tabs
-      .filter(t => t.id !== bt.activeId && bt.live.has(t.id) && !t.file && !t.term && !t.note)
+      .filter(t => t.id !== bt.activeId && !tiled?.has(t.id) && bt.live.has(t.id) && !t.file && !t.term && !t.note && !t.special)
       .map(t => ({ tab: t, pane: byPane.get(paneOf(t.id)) }))
       .filter(({ pane }) => !pane?.audible && !pane?.capturing);
 

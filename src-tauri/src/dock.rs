@@ -1,5 +1,8 @@
 // Workspace Layout — Phase 1: the AppBar dock.
 //
+// (The sidebar and dock-bar windows that use this live in `surfaces.rs`; this
+// module is the per-platform window plumbing underneath them.)
+//
 // Reserves a strip of the primary monitor's work area for CoolDesk via the
 // native Windows AppBar API (`SHAppBarMessage`) — the same mechanism the
 // taskbar uses. Once the strip is reserved, Windows itself shrinks the usable
@@ -24,7 +27,7 @@
 mod windows;
 #[cfg(windows)]
 pub use windows::{
-    foreground_hwnd, foreground_is_fullscreen, monitor_rect, remove_dock, set_dock, work_area,
+    foreground_hwnd, foreground_is_fullscreen, monitor_rect, remove_dock, remove_dock_for, set_dock, work_area,
 };
 
 // Reserve-mode stubs (true screen-edge reservation, the AppBar equivalent).
@@ -73,6 +76,6 @@ mod mac;
 #[cfg(target_os = "macos")]
 pub use mac::{
     allow_over_fullscreen_spaces, any_fullscreen_space, cursor_location, cursor_screen_rects, join_fullscreen_space, mac_dock_prefs,
-    promote_spotlight_over_fullscreen_spaces, restrict_to_current_space, set_see_through, set_window_frame,
+    promote_spotlight_over_fullscreen_spaces, set_see_through, set_window_frame,
     show_over_fullscreen_spaces, window_frame,
 };

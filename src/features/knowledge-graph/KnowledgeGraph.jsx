@@ -904,6 +904,23 @@ export function GraphCanvas() {
   );
 }
 
+// ── Page body ─────────────────────────────────────────────────────────────────
+
+/** One scrolling page: overview readout on top, graph stage below. Shared by
+ *  the modal (browser extension) and the desktop app's Activity tab in
+ *  Browse (faces/browse/ActivityTab.jsx). */
+export function ActivityContent() {
+  return (
+    <div className="kg-scroll">
+      <ActivityOverview />
+      <div className="kg-graph-heading">Knowledge graph</div>
+      <div className="kg-graph-section">
+        <GraphCanvas />
+      </div>
+    </div>
+  );
+}
+
 // ── Modal wrapper ─────────────────────────────────────────────────────────────
 
 export function KnowledgeGraph({ isOpen, onClose }) {
@@ -927,14 +944,7 @@ export function KnowledgeGraph({ isOpen, onClose }) {
             <FontAwesomeIcon icon={faTimes} />
           </button>
         </div>
-        {/* One scrolling page: overview readout on top, graph stage below */}
-        <div className="kg-scroll">
-          <ActivityOverview />
-          <div className="kg-graph-heading">Knowledge graph</div>
-          <div className="kg-graph-section">
-            <GraphCanvas />
-          </div>
-        </div>
+        <ActivityContent />
       </div>
     </div>
   );

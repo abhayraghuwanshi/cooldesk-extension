@@ -1,30 +1,46 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useLayoutSwitch } from './useLayoutSwitch';
+import { faTableColumns, faWindowMaximize } from '@fortawesome/free-solid-svg-icons';
+import { useT } from '../../shared/i18n';
+import { openFullApp, toggleSurface } from './surfaceControls';
 import { useDockState } from './useDockState';
 
 /**
- * Cycles the window through full window → side dock → bottom bar → full.
- * Reads live dock state itself via `useDockState()` unless a caller that
- * already has it (e.g. CoolDeskContainer, which needs it for other layout
- * decisions too) passes `dockState` explicitly to avoid a second listener.
+ * Main window: turns the separate sidebar window on (and slides it in) or
+ * off. Reads live dock state itself unless the caller passes `dockState`.
  */
-export function LayoutSwitchButton({ className, style, dockState: dockStateProp, title, ...rest }) {
+export function SidebarToggleButton({ className, style, dockState: dockStateProp, title, ...rest }) {
+  const t = useT();
   const ownDockState = useDockState();
   const dockState = dockStateProp !== undefined ? dockStateProp : ownDockState;
-  const { currentLayoutInfo, nextLayout, cycleLayout } = useLayoutSwitch(dockState);
-
+  const on = !!dockState?.sidebar?.enabled;
   return (
     <button
       type="button"
       className={className}
       style={style}
-      onClick={cycleLayout}
-      title={title ?? `${currentLayoutInfo.label} → ${nextLayout.label}`}
+      aria-pressed={on}
+      onClick={() => toggleSurface('sidebar', dockState).catch((e) => console.error('[Sidebar] toggle failed:', e))}
+      title={title ?? (on ? t('dk.sidebarOff') : t('dk.sidebarOn'))}
       {...rest}
     >
-      <FontAwesomeIcon icon={nextLayout.icon} />
+      <FontAwesomeIcon icon={faTableColumns} />
     </button>
   );
 }
 
-export default LayoutSwitchButton;
+/** Sidebar / dock windows: bring up the full app. */
+export function OpenFullAppButton({ className, style, from, title, ...rest }) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      className={className}
+      style={style}
+      onClick={() => openFullApp(from).catch((e) => console.error('[Dock] open full app failed:', e))}
+      title={title ?? t('dk.openFullApp')}
+      {...rest}
+    >
+      <FontAwesomeIcon icon={faWindowMaximize} />
+    </button>
+  );
+}

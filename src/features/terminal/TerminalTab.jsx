@@ -173,7 +173,12 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
         }
       };
       try {
-        await invoke('terminal_open', { id, cwd: cwd || null, cols: term.cols, rows: term.rows, compact, output });
+        // Short prompt everywhere but the drawer: the sidebar is narrow, and
+        // a Browse tab shows the shell's folder in its header instead (from
+        // the title the short prompt sets — terminal.rs ZSH_RC_TAIL), so a
+        // long path or themed prompt doesn't eat every line. Text size is
+        // `compact` alone.
+        await invoke('terminal_open', { id, cwd: cwd || null, cols: term.cols, rows: term.rows, compact: compact || variant === 'tab', output });
       } catch (err) {
         if (alive) setError(String(err));
         return;
@@ -194,7 +199,7 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
       subs.forEach(s => s.dispose());
       invoke('terminal_close', { id }).catch(() => { });
     };
-  }, [generation, tabId, cwd, run, compact]);
+  }, [generation, tabId, cwd, run, compact, variant]);
 
   // Commands handed in from outside (the docked sidebar's terminal host).
   useEffect(() => {
@@ -236,6 +241,9 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
   }, []);
 
   const folder = cwd || '~';
+  // The shell's current folder, when its title is one (a short-prompt zsh
+  // sets it to `%~` before each prompt); other shells' titles are left out.
+  const liveDir = title && /^(~|\/|[A-Za-z]:[\\/])/.test(title) ? title : null;
   const clear = () => { termRef.current?.clear(); termRef.current?.focus(); };
 
   if (variant === 'panel') {
@@ -289,9 +297,9 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
         {toolbarStart}
         <TabAddressBar
           icon={<FontAwesomeIcon icon={faTerminal} className="ft-address-icon term-address-icon" />}
-          label={cwd ? baseName(cwd) : 'Shell'}
-          sub={run ? `$ ${run}` : folder}
-          title={folder}
+          label={liveDir ? baseName(liveDir) : (cwd ? baseName(cwd) : 'Shell')}
+          sub={run ? `$ ${run}` : (liveDir || folder)}
+          title={liveDir || folder}
           onOpenUrl={onOpenUrl}
           onOpenPath={onOpenPath}
           onOpenShell={onOpenShell}

@@ -283,34 +283,34 @@ function StepDock({ isDesktop }) {
         </span>
       </div>
 
-      <p className="ob-lead">That one button cycles CoolDesk through three layouts. Keep clicking to come back around.</p>
+      <p className="ob-lead">CoolDesk comes in three separate windows. Use any of them on its own or together — switch the sidebar and the dock on in Settings → Windows.</p>
 
       <ul className="ob-list">
         <li>
           <FontAwesomeIcon icon={faWindowMaximize} className="ob-list-icon" />
           <div>
-            <strong>Full window</strong>
+            <strong>Full app</strong>
             <span>The normal app, the way you're seeing it now.</span>
           </div>
         </li>
         <li>
           <FontAwesomeIcon icon={faTableColumns} className="ob-list-icon" />
           <div>
-            <strong>Side dock</strong>
-            <span>Pins CoolDesk to the edge of your screen as a slim always-there panel. It reserves the space, so your other windows resize around it instead of covering it.</span>
+            <strong>Sidebar</strong>
+            <span>A slim panel of its own on the edge of your screen. Hover its handle to slide it in; it tucks away when you move off it. That button turns it on and off.</span>
           </div>
         </li>
         <li>
           <FontAwesomeIcon icon={faGripLines} className="ob-list-icon" />
           <div>
-            <strong>Bottom bar</strong>
-            <span>Same idea, but a thin strip along the bottom of the screen.</span>
+            <strong>Dock</strong>
+            <span>A taskbar-style bar for your workspace along the bottom of the screen, also its own window.</span>
           </div>
         </li>
       </ul>
 
       <div className="ob-shortcuts">
-        <div className="ob-shortcut"><Kbd>Ctrl</Kbd><Kbd>Shift</Kbd><Kbd>D</Kbd><span>Cycle layouts without reaching for the button</span></div>
+        <div className="ob-shortcut"><Kbd>Ctrl</Kbd><Kbd>Shift</Kbd><Kbd>D</Kbd><span>Turn the sidebar on or off without reaching for the button</span></div>
       </div>
 
       {!isDesktop && (

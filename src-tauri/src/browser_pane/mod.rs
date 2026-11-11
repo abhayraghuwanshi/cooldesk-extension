@@ -108,6 +108,17 @@ pub async fn browser_pane_open(
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Panes closed while still being created: `browser_pane_close` found no
+/// webview yet (add_child hadn't registered it), so the close is held here
+/// and `open_pane` destroys the pane as soon as it exists. Without this a tab
+/// closed (or a tile re-laid out) mid-open left its page on screen at its
+/// first position, owned by nothing — a "ghost" page over the app.
+static EARLY_CLOSE: std::sync::Mutex<Option<std::collections::HashSet<String>>> = std::sync::Mutex::new(None);
+
+fn take_early_close(label: &str) -> bool {
+    EARLY_CLOSE.lock().unwrap().as_mut().is_some_and(|set| set.remove(label))
+}
+
 async fn open_pane(
     app: tauri::AppHandle,
     id: String,
@@ -123,6 +134,8 @@ async fn open_pane(
     let adblock = adblock.unwrap_or(true);
     log::info!("[BrowserPane] open {label} → {parsed} at ({x:.0},{y:.0}) {width:.0}x{height:.0} adblock={adblock}");
 
+    // A fresh open supersedes any close that arrived before an earlier one.
+    take_early_close(&label);
     if let Some(wv) = app.get_webview(&label) {
         return retarget(&wv, parsed, x, y, width, height, adblock);
     }
@@ -221,6 +234,16 @@ async fn open_pane(
 
     match window.add_child(builder, LogicalPosition::new(x, y), LogicalSize::new(width, height)) {
         Ok(wv) => {
+            // Its tab went away while it was being created: don't leave it.
+            if take_early_close(&label) {
+                log::info!("[BrowserPane] {label} closed while opening — destroying it");
+                let _ = wv.close();
+                return Err("closed while opening".into());
+            }
+            // Start hidden: the page shows once the frontend has checked its
+            // slot is on screen and uncovered (browser_pane_set_bounds), never
+            // just because it was created.
+            let _ = wv.hide();
             #[cfg(target_os = "macos")]
             {
                 permissions::install(&wv);
@@ -422,8 +445,8 @@ fn retarget(
 ) -> Result<(), String> {
     adblock::set_enabled(wv, adblock);
     wv.navigate(url).map_err(|e| e.to_string())?;
-    place(wv, x, y, width, height)?;
-    wv.show().map_err(|e| e.to_string())
+    // Visibility is the frontend's call (browser_pane_set_bounds follows).
+    place(wv, x, y, width, height)
 }
 
 /// Re-pin the pane over its slot, or hide it while the slot is off-screen /
@@ -577,7 +600,11 @@ pub fn browser_pane_close(app: tauri::AppHandle, id: String) -> Result<(), Strin
     adblock::forget(&label_for(&id));
     match app.get_webview(&label_for(&id)) {
         Some(wv) => wv.close().map_err(|e| e.to_string()),
-        None => Ok(()),
+        // Possibly still being created: close it once it exists (`EARLY_CLOSE`).
+        None => {
+            EARLY_CLOSE.lock().unwrap().get_or_insert_with(Default::default).insert(label_for(&id));
+            Ok(())
+        }
     }
 }
 
