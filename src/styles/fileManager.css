@@ -825,6 +825,17 @@
   background: var(--surface-2, #1a1a24);
 }
 
+/* The pane's own box rule lives in GlobalSpotlight.css, which a window
+   without Spotlight (the docked sidebar) never loads — without it the
+   pane didn't fill this column. */
+.fm-preview > .preview-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
 /* Drag handle for `.fm-preview`'s width — a thin strip just left of it, not
    a visible border, so it doesn't read as a second divider alongside
    `.fm-preview`'s own left edge. */

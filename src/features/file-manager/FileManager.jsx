@@ -264,7 +264,7 @@ function loadJSON(key, fallback) {
  * @param {boolean} [quickLook] the hover-preview column beside the list (off
  *   where the host shows opened files itself).
  */
-export function FileManager({ isOpen, initialPath, places = [], onClose, inline: inlineProp = false, embedded = false, compact = false, onOpenFile, projectBar = true, placesRow = false, quickLook = true }) {
+export function FileManager({ isOpen, keyboard = true, initialPath, places = [], onClose, inline: inlineProp = false, embedded = false, compact = false, onOpenFile, projectBar = true, placesRow = false, quickLook = true }) {
   const inline = inlineProp || embedded;
   const windowRef = useRef(null);
   const [path, setPath] = useState(initialPath || '');
@@ -879,8 +879,10 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline:
   // Grid view wraps, so ←/→ move by one and ↑/↓ by a full row.
   const gridCols = 5;
 
+  // `keyboard`: false for a manager that's drawn but isn't the current tab
+  // (a Browse multi view tile) — it stays on screen, the keys go elsewhere.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !keyboard) return;
     const onKey = (e) => {
       // Inline: only while focus is inside the browser — otherwise arrows,
       // Backspace and typing belong to the rest of the page around it.
@@ -952,7 +954,7 @@ export function FileManager({ isOpen, initialPath, places = [], onClose, inline:
     // were registered earlier on window.
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [isOpen, filter, visible, cursor, view, editingPath, crumbMenu, showRecent, showLinkMenu,
+  }, [isOpen, keyboard, filter, visible, cursor, view, editingPath, crumbMenu, showRecent, showLinkMenu,
       path, onClose, goBack, goForward, goUp, openEntry, inline, compactMenu, entryMenu]);
 
   // Inline has no backdrop, and its menus are portaled outside the window —

@@ -54,7 +54,9 @@ export function FileIcon({ path, isDir, className = '' }) {
 
 /**
  * @param file        { path, isDir }
- * @param active      this tab is on screen
+ * @param active      this tab is the current one: it takes the keyboard
+ * @param visible     drawn on screen — the current tab, or any tile in multi
+ *                    view (defaults to `active`)
  * @param onOpenFile  (path) → open a file from the folder view as a tab
  * @param onShowInFiles(path) → reveal in the side panel's Files tab
  * @param onOpenTerminal(dir) → a terminal tab in this folder (or the file's)
@@ -62,7 +64,7 @@ export function FileIcon({ path, isDir, className = '' }) {
  * @param onOpenUrl   (url) → a web link clicked in a Markdown / HTML preview
  * @param onShowFolder (dir) → a folder in the Files panel (after Extract)
  */
-export function FileTab({ file, active, onOpenFile, onOpenUrl, onShowFolder, onBack, onForward, onShowInFiles, onOpenTerminal, toolbarStart = null, toolbarEnd = null }) {
+export function FileTab({ file, active, visible = active, onOpenFile, onOpenUrl, onShowFolder, onBack, onForward, onShowInFiles, onOpenTerminal, toolbarStart = null, toolbarEnd = null }) {
   const preview = file.isDir ? null : getPreviewItem(file.path);
   const isText = preview?.previewKind === 'code';
   const renderKind = file.isDir ? null : RENDERABLE[(file.path.split('.').pop() || '').toLowerCase()] || null;
@@ -151,7 +153,7 @@ export function FileTab({ file, active, onOpenFile, onOpenUrl, onShowFolder, onB
         ) : !file.isDir && AUDIO_RE.test(file.path) ? (
           <AudioView key={file.path} path={file.path} />
         ) : file.isDir ? (
-          <FileManager embedded isOpen={active} initialPath={file.path} onOpenFile={onOpenFile} />
+          <FileManager embedded isOpen={visible} keyboard={active} initialPath={file.path} onOpenFile={onOpenFile} />
         ) : preview ? (
           <Suspense fallback={<div className="bp-empty">Opening…</div>}>
             <PreviewPane key={file.path} item={preview} markdownSource />
