@@ -4,14 +4,17 @@ All notable changes to CoolDesk (desktop app + Chrome extension) are documented 
 
 ## [2.0.21] — 2026-11-11
 
+Includes everything from 2.0.20, which was out for a few hours and never reached winget.
+
+### Added
+- **Single | Multi switch** in Browse's toolbar, with its own focus-mode button.
+- **Scratch notes.** A New note button (the Tabs header, the multi view bar and the new-tab screen) opens a note that stays with its tab until you save it to a workspace.
+- **A blank tab offers a shell, a note or your files**, right on the new-tab screen. It no longer opens Home in the side panel.
+
 ### Fixed
+- **Claude Code and other full-screen programs drew garbled in terminal tabs** — lines at the wrong width, overwriting each other. The shell now always gets the terminal's real size once it starts, and symbols and emoji are measured with Unicode 11 widths.
 - **The sidebar's shell said "Couldn't start a shell".** Since the sidebar became its own window in 2.0.19, the terminal only accepted the main window and Spotlight. Shells now start in the sidebar and bar windows too.
-
-## [2.0.20] — 2026-11-11
-
-### Fixed
-- **Full-screen programs in terminal tabs drew garbled** — Claude Code and similar tools could draw lines at the wrong width and overwrite each other. The shell now always gets the terminal's real size once it starts, and symbols and emoji are measured with Unicode 11 widths.
-- **Single | Multi view switch** and the rest of the latest Browse changes (scratch notes, shell/note/files on the new-tab screen, file manager in narrow tiles) are now in the release.
+- **The file manager stays usable in narrow multi view tiles** — its sidebar becomes a drawer and the preview keeps its room.
 
 ## [2.0.19] — 2026-11-11
 
