@@ -150,15 +150,33 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
       // Re-fit whenever the tab's box changes (window, side panel, focus mode).
       // Laid out for the first time (a hidden tile shown) is also when its
       // styles are surely in, so the colours are re-checked then too.
+      //
+      // Debounced: focus mode, window full screen and the side panel animate
+      // the box (CSS width transitions), firing this every frame. Each fit is
+      // a SIGWINCH, and a TUI like Claude Code redraws for every one while
+      // xterm reflows underneath it — the redraws land at stale widths and
+      // leave stacked prompt fragments. Fit once the box has settled. A box
+      // coming out of hiding (zero size before) fits at once, so it never
+      // shows at the wrong size.
+      let fitTimer = 0;
+      let wasHidden = host.offsetWidth === 0 || host.offsetHeight === 0;
+      const refit = () => {
+        fitTimer = 0;
+        if (host.offsetWidth === 0 || host.offsetHeight === 0) return;
+        syncTheme(term, host);
+        try { fit.fit(); } catch { /* ignore */ }
+      };
       const ro = new ResizeObserver(() => {
-        if (host.offsetWidth > 0 && host.offsetHeight > 0) {
-          syncTheme(term, host);
-          try { fit.fit(); } catch { /* ignore */ }
-        }
+        const hidden = host.offsetWidth === 0 || host.offsetHeight === 0;
+        if (hidden) { wasHidden = true; return; }
+        clearTimeout(fitTimer);
+        if (wasHidden) { wasHidden = false; refit(); return; }
+        fitTimer = setTimeout(refit, 150);
       });
       ro.observe(host);
       setGeneration(g => g + 1);
       cleanup = () => {
+        clearTimeout(fitTimer);
         ro.disconnect();
         offTitle.dispose();
         term.dispose();
