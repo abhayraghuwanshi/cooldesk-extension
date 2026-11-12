@@ -54,12 +54,34 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:4545 ws://127.0.0.1:4545 http://localhost:4545 ws://localhost:4545 https://github.com https://api.github.com https: asset: http://asset.localhost https://asset.localhost; script-src 'self' 'unsafe-inline'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' data: https://fonts.googleapis.com; img-src 'self' data: blob: https: asset: http://asset.localhost https://asset.localhost; font-src 'self' data: https://fonts.gstatic.com; media-src 'self' asset: http://asset.localhost https://asset.localhost; frame-src 'self' https:",
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:4545 ws://127.0.0.1:4545 http://localhost:4545 ws://localhost:4545 https://github.com https://api.github.com https: asset: http://asset.localhost https://asset.localhost; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' data: https://fonts.googleapis.com; img-src 'self' data: blob: https: asset: http://asset.localhost https://asset.localhost; font-src 'self' data: https://fonts.gstatic.com; media-src 'self' asset: http://asset.localhost https://asset.localhost; frame-src 'self' https:",
       "freezePrototype": false,
       "dangerousDisableAssetCspModification": false,
       "assetProtocol": {
         "enable": true,
-        "scope": ["$HOME/**"]
+        "scope": {
+          "allow": ["$HOME/**"],
+          "deny": [
+            "$HOME/.ssh/**",
+            "$HOME/.gnupg/**",
+            "$HOME/.aws/**",
+            "$HOME/.azure/**",
+            "$HOME/.kube/**",
+            "$HOME/.docker/config.json",
+            "$HOME/.config/gcloud/**",
+            "$HOME/.config/gh/**",
+            "$HOME/.netrc",
+            "$HOME/.npmrc",
+            "$HOME/.git-credentials",
+            "$HOME/Library/Keychains/**",
+            "$HOME/Library/Cookies/**",
+            "$HOME/Library/Application Support/Google/Chrome/**",
+            "$HOME/Library/Application Support/BraveSoftware/**",
+            "$HOME/Library/Application Support/Firefox/**",
+            "$HOME/Library/Application Support/Microsoft Edge/**",
+            "$HOME/Library/Application Support/Arc/**"
+          ]
+        }
       }
     }
   },

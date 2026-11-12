@@ -28,7 +28,7 @@ log = "0.4"
 # `devtools` is deliberately on for release builds as well: without it the
 # packaged app has no console, so console-only failures (CSP violations in
 # particular) are invisible in exactly the build where they occur.
-tauri = { version = "2.10.0", features = ["protocol-asset", "macos-private-api", "tray-icon", "devtools", "unstable"] }
+tauri = { version = "2.10.0", features = ["protocol-asset", "macos-private-api", "tray-icon", "unstable"] }
 tauri-plugin-log = "2"
 
 sysinfo = "0.30"

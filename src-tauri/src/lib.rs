@@ -1628,6 +1628,15 @@ async fn launch_app(path: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn open_url(url: String) -> Result<(), String> {
+    // Hands the string to the OS (`open` / ShellExecute), which will launch
+    // anything it names: a file path, an .app, any custom URL scheme. Links
+    // reach here from places we don't control (agent markdown, saved links,
+    // history), so only web links, mail and Windows Settings pages pass.
+    let scheme = url.split_once(':').map(|(s, _)| s.to_ascii_lowercase()).unwrap_or_default();
+    if !matches!(scheme.as_str(), "http" | "https" | "mailto" | "ms-settings") {
+        log::warn!("[open_url] refused non-web link (scheme '{scheme}')");
+        return Err("Only web links can be opened".into());
+    }
     #[cfg(target_os = "windows")]
     {
         use windows::Win32::UI::Shell::ShellExecuteW;
