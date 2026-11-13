@@ -1,4 +1,4 @@
-import { faCompass, faDiagramProject, faFolder, faFolderOpen, faGear, faGlobe, faHouse, faNoteSticky, faThumbtack, faPlus, faTerminal, faExpand, faCompress, faSearch, faServer, faTableCellsLarge, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faCompass, faDiagramProject, faFolder, faFolderOpen, faGear, faGripVertical, faGlobe, faHouse, faNoteSticky, faThumbtack, faPlus, faTerminal, faExpand, faCompress, faSearch, faServer, faTableCellsLarge, faTableColumns, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserPane } from '../../features/browser/BrowserPane';
@@ -17,6 +17,7 @@ import { WorkspaceContextPanel } from '../workspace/WorkspaceList';
 import { clipSummary, saveClipToWorkspace } from '../../features/browser/clipToNote';
 import { useShelf } from '../../features/shelf/useShelf';
 import { SPECIAL_TITLES, tabPaneId, useBrowseTabs } from './useBrowseTabs';
+import { defaultLayout, dockTile, evenSplit, hitDock, layoutRects, reconcile, setSplitSizes, splitSizes } from './multiLayout';
 import { getFaviconUrl } from '../../utils/helpers.js';
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
 import '../../styles/browse.css';
@@ -47,7 +48,7 @@ function parentDir(p) {
   return i > 0 ? p.slice(0, i) : p;
 }
 const LIST_WS_KEY = 'cooldesk.browse.workspace';
-const MULTI_SIZES_KEY = 'cooldesk.browse.multiSizes';
+const MULTI_LAYOUT_KEY = 'cooldesk.browse.multiLayout';
 const WS_CONTEXT_KEY = 'cooldesk.browse.workspaceContext';
 // Home: how many rows a section shows before "+N more".
 const HOME_CAP = { tabs: 8, pinned: 6, folders: 8 };
@@ -121,6 +122,14 @@ const MULTI_MAX = 6;
 const isWebUrl = (url) => typeof url === 'string' && /^https?:\/\//i.test(url);
 // A blank tab: a new tab's start screen (not a page, file or terminal).
 const isBlank = (t) => !t.url && !t.file && !t.term && !t.note && !t.special;
+// A tile's name while it's being moved.
+const tileLabel = (t) => t.title
+  || (t.special && SPECIAL_TITLES[t.special])
+  || (t.file && t.file.path.split(/[/\\]/).filter(Boolean).pop())
+  || (t.term && 'Shell')
+  || (t.note && 'Note')
+  || (t.url && hostOf(t.url))
+  || 'New tab';
 
 /**
  * Left: only what you're looking at (a page, file, folder or terminal).
@@ -553,80 +562,150 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
     return list;
   }, [canvasMode, browseTabs.tabs, browseTabs.live, browseTabs.activeId]);
   const tiledIds = useMemo(() => new Set((multiTabs || []).map(t => t.id)), [multiTabs]);
-  // Grid for n tiles: 1 → full, 2 → side by side, 3–4 → 2×2, 5–6 → 3×2.
-  const multiCols = !multiTabs ? 1 : multiTabs.length <= 1 ? 1 : multiTabs.length <= 4 ? 2 : 3;
-  const multiRows = !multiTabs ? 1 : Math.max(1, Math.ceil(multiTabs.length / multiCols));
-  // Tiles fill column by column; when they don't fill the grid, the last one
-  // stretches down its column (3 tabs: two stacked left, one tall right).
-  const lastTiledId = canvasMode ? [...browseTabs.tabs].reverse().find(t => tiledIds.has(t.id))?.id : null;
-  const lastSpan = multiTabs && multiRows > 1 ? multiRows - ((multiTabs.length - 1) % multiRows) : 1;
-  // Column / row sizes (fr), dragged by the dividers between tiles and
-  // remembered per layout ("2x2", "3x2"…).
-  const multiKey = `${multiCols}x${multiRows}`;
-  const [multiSizes, setMultiSizes] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(MULTI_SIZES_KEY) || '{}') || {}; } catch { return {}; }
+  const tiledKey = (multiTabs || []).map(t => t.id).join(',');
+
+  // Where the tiles go: a split tree (multiLayout.js). Until you rearrange
+  // anything it's the automatic grid; once you drag a tile or a divider it
+  // is your layout, kept as is (new tabs split the biggest tile) until
+  // "Auto-arrange".
+  const [savedLayout, setSavedLayout] = useState(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem(MULTI_LAYOUT_KEY) || 'null');
+      return s && typeof s === 'object' ? s : { custom: false, root: null };
+    } catch { return { custom: false, root: null }; }
   });
-  const sizesFor = (kind, n) => {
-    const saved = multiSizes[multiKey]?.[kind];
-    return Array.isArray(saved) && saved.length === n ? saved : Array(n).fill(1);
-  };
-  const colFr = sizesFor('cols', multiCols);
-  const rowFr = sizesFor('rows', multiRows);
+  const multiLayout = useMemo(() => {
+    const ids = tiledKey ? tiledKey.split(',') : [];
+    if (!savedLayout.custom) return defaultLayout(ids);
+    return reconcile(savedLayout.root, ids, window.innerWidth / Math.max(1, window.innerHeight));
+  }, [savedLayout, tiledKey]);
+  const multiRects = useMemo(() => layoutRects(multiLayout), [multiLayout]);
+  const multiLayoutRef = useRef(multiLayout);
+  multiLayoutRef.current = multiLayout;
   const multiGridRef = useRef(null);
-  const saveMultiSizes = (next) => {
-    setMultiSizes(next);
-    persist(MULTI_SIZES_KEY, JSON.stringify(next));
+  // The pages are native layers: nudge them to their new spots right away
+  // rather than at their usual poll.
+  const nudgePanes = () => requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  const commitLayout = useCallback((root, { save = true } = {}) => {
+    const next = { custom: true, root };
+    setSavedLayout(next);
+    if (save) persist(MULTI_LAYOUT_KEY, JSON.stringify(next));
+  }, []);
+  const autoArrange = () => {
+    const next = { custom: false, root: null };
+    setSavedLayout(next);
+    persist(MULTI_LAYOUT_KEY, JSON.stringify(next));
+    nudgePanes();
   };
-  // Drag the divider after column/row `index`: the two tracks either side of
-  // it trade size; the rest stay put. Double-click evens them all out.
-  const startMultiResize = (kind, index) => (e) => {
+
+  // Drag a divider: the two tiles either side of it trade size; the rest
+  // stay put. Double-click evens that split out.
+  const startMultiResize = (div) => (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
     const grid = multiGridRef.current;
     if (!grid) return;
-    const horizontal = kind === 'cols';
-    const total = horizontal ? grid.clientWidth : grid.clientHeight;
+    const horizontal = div.dir === 'row';
+    const total = (horizontal ? grid.clientWidth : grid.clientHeight) * div.extent;
     const start = horizontal ? e.clientX : e.clientY;
-    const fr = [...(horizontal ? colFr : rowFr)];
+    const base = multiLayoutRef.current;
+    const fr = [...splitSizes(base, div.path)];
     const sum = fr.reduce((a, b) => a + b, 0);
     const min = (sum / fr.length) * 0.25;
-    let latest = fr;
+    const i = div.index;
+    let latest = base;
     let frame = 0;
     document.documentElement.classList.add(horizontal ? 'multi-resizing-x' : 'multi-resizing-y');
     const onMove = (ev) => {
       const d = (((horizontal ? ev.clientX : ev.clientY) - start) / Math.max(1, total)) * sum;
-      const pair = fr[index] + fr[index + 1];
-      const a = Math.min(pair - min, Math.max(min, fr[index] + d));
-      latest = fr.map((v, i) => (i === index ? a : i === index + 1 ? pair - a : v));
-      setMultiSizes(m => ({ ...m, [multiKey]: { ...m[multiKey], [kind]: latest } }));
-      // The pages are native layers: nudge them to follow every frame
-      // rather than at their usual poll.
+      const pair = fr[i] + fr[i + 1];
+      const a = Math.min(pair - min, Math.max(min, fr[i] + d));
+      latest = setSplitSizes(base, div.path, fr.map((v, j) => (j === i ? a : j === i + 1 ? pair - a : v)));
+      commitLayout(latest, { save: false });
       if (!frame) frame = requestAnimationFrame(() => { frame = 0; window.dispatchEvent(new Event('resize')); });
     };
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       document.documentElement.classList.remove('multi-resizing-x', 'multi-resizing-y');
-      setMultiSizes(m => {
-        const next = { ...m, [multiKey]: { ...m[multiKey], [kind]: latest } };
-        persist(MULTI_SIZES_KEY, JSON.stringify(next));
-        return next;
-      });
-      window.dispatchEvent(new Event('resize'));
+      commitLayout(latest);
+      nudgePanes();
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   };
-  const resetMultiSizes = (kind) => () => {
-    saveMultiSizes({ ...multiSizes, [multiKey]: { ...multiSizes[multiKey], [kind]: null } });
-    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  const evenMultiSplit = (div) => () => {
+    commitLayout(evenSplit(multiLayoutRef.current, div.path));
+    nudgePanes();
   };
-  // Where the dividers sit (% of the grid), between consecutive tracks.
-  const dividerAt = (fr) => {
-    const sum = fr.reduce((a, b) => a + b, 0);
-    let acc = 0;
-    return fr.slice(0, -1).map(f => { acc += f; return (acc / sum) * 100; });
+
+  // Drag a tile by its grip: drop it on another tile's edge to put it on
+  // that side, on its middle to swap the two, or along the edge of the whole
+  // view to give it a full-height column / full-width row. Esc cancels.
+  // While dragging, a layer covers the tiles (so the native pages step aside
+  // and the drag isn't swallowed by them) and shows where it will land.
+  const [tileDrag, setTileDrag] = useState(null); // { id, x, y, drop }
+  const startTileDrag = (id) => (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const sx = e.clientX;
+    const sy = e.clientY;
+    let started = false;
+    let drop = null;
+    const hit = (cx, cy) => {
+      const grid = multiGridRef.current;
+      if (!grid) return null;
+      const r = grid.getBoundingClientRect();
+      const px = cx - r.left;
+      const py = cy - r.top;
+      if (px < 0 || py < 0 || px > r.width || py > r.height) return null;
+      const EDGE = 22;
+      const edges = { left: px, right: r.width - px, top: py, bottom: r.height - py };
+      const near = Object.keys(edges).reduce((a, b) => (edges[b] < edges[a] ? b : a));
+      return hitDock(multiLayoutRef.current, id, px / r.width, py / r.height, edges[near] < EDGE ? near : null);
+    };
+    const onMove = (ev) => {
+      if (!started) {
+        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return;
+        started = true;
+        document.documentElement.classList.add('multi-dragging');
+      }
+      drop = hit(ev.clientX, ev.clientY);
+      setTileDrag({ id, x: ev.clientX, y: ev.clientY, drop });
+    };
+    const end = (apply) => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('keydown', onKey, true);
+      document.documentElement.classList.remove('multi-dragging');
+      setTileDrag(null);
+      if (apply && started && drop) {
+        commitLayout(dockTile(multiLayoutRef.current, id, drop.target, drop.side));
+      }
+      nudgePanes();
+    };
+    const onUp = () => end(true);
+    const onKey = (ev) => { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); end(false); } };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('keydown', onKey, true);
   };
+  // Where the dragged tile would land, as a rect of the container.
+  const dropPreview = useMemo(() => {
+    if (!tileDrag?.drop) return null;
+    const { target, side } = tileDrag.drop;
+    if (side === 'center') return multiRects.tiles.get(target) || null;
+    return layoutRects(dockTile(multiLayout, tileDrag.id, target, side)).tiles.get(tileDrag.id) || null;
+  }, [tileDrag, multiLayout, multiRects]);
+  // A rect as absolute position, inset by half the gap between tiles.
+  const rectStyle = (r) => ({
+    position: 'absolute',
+    left: `calc(${r.x * 100}% + 5px)`,
+    top: `calc(${r.y * 100}% + 5px)`,
+    width: `calc(${r.w * 100}% - 10px)`,
+    height: `calc(${r.h * 100}% - 10px)`,
+  });
 
   // Live memory/CPU of every in-app page (browser_pane/stats.rs), shown in
   // the side panel's Page tab; the same poll lets the pane guard put
@@ -883,13 +962,22 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   const onScreen = (tab) => (canvasMode ? tiledIds.has(tab.id) : tab.id === browseTabs.activeId);
   const paneProps = (tab, isCurrent) => ({
     className: `browse-tabpane ${onScreen(tab) ? '' : 'is-hidden'}${canvasMode ? ' is-tile' : ''}${canvasMode && isCurrent ? ' is-current' : ''}`,
-    style: canvasMode && tab.id === lastTiledId && lastSpan > 1 ? { gridRow: `span ${lastSpan}` } : undefined,
+    style: canvasMode && multiRects.tiles.has(tab.id) ? rectStyle(multiRects.tiles.get(tab.id)) : undefined,
     // A click anywhere in a tile makes it the current tab (the keyboard
     // goes there). A web page itself is a native layer and doesn't report
     // clicks to us — its address bar does.
     onMouseDownCapture: canvasMode && !isCurrent ? () => browseTabs.activate(tab.id) : undefined,
   });
-  const paneStart = canvasMode ? null : toolbarStart;
+  // Multi view: a grip at the start of each tile's bar to drag it around.
+  const paneStart = (tab) => (canvasMode ? (multiTabs.length > 1 ? (
+    <button
+      className="bp-btn multi-grip"
+      onPointerDown={startTileDrag(tab.id)}
+      title="Drag to move — onto a tile's edge to put it beside it, its middle to swap, the view's edge for a full column or row"
+    >
+      <FontAwesomeIcon icon={faGripVertical} />
+    </button>
+  ) : null) : toolbarStart);
   const paneEnd = (tab) => (canvasMode ? (
     <>
       <button className="bp-btn" onClick={() => { browseTabs.activate(tab.id); setMode('browse'); }} title="Just this tab (single view)">
@@ -1234,6 +1322,11 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                 {multiTabs.length === 1 ? '1 tab' : `${multiTabs.length} tabs side by side`}
               </span>
               <span className="multi-grow" />
+              {savedLayout.custom && multiTabs.length > 1 && (
+                <button className="bp-btn" onClick={autoArrange} title="Auto-arrange — back to the automatic grid">
+                  <FontAwesomeIcon icon={faTableColumns} />
+                </button>
+              )}
               <button className="bp-btn" onClick={() => openTerminal()} title="New terminal tile">
                 <FontAwesomeIcon icon={faTerminal} />
               </button>
@@ -1249,38 +1342,46 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
           <div
             ref={multiGridRef}
             className={`browse-mode ${canvasMode ? 'is-multi' : ''}`}
-            style={canvasMode ? {
-              gridTemplateColumns: colFr.map(f => `minmax(0, ${f}fr)`).join(' '),
-              gridTemplateRows: rowFr.map(f => `minmax(0, ${f}fr)`).join(' '),
-              gridAutoFlow: 'column',
-            } : undefined}
           >
             {/* Dividers between tiles: drag to resize, double-click to even
-                out. A row divider stops short of a last column whose tile
-                spans every row. */}
-            {canvasMode && dividerAt(colFr).map((pct, i) => (
+                out that split. */}
+            {canvasMode && multiRects.dividers.map(div => (
               <div
-                key={`c${i}`}
-                className="multi-divider is-col"
-                style={{ left: `calc(${pct}% - 5px)` }}
-                onPointerDown={startMultiResize('cols', i)}
-                onDoubleClick={resetMultiSizes('cols')}
+                key={`${div.path.join('.')}:${div.index}`}
+                className={`multi-divider ${div.dir === 'row' ? 'is-col' : 'is-row'}`}
+                style={div.dir === 'row'
+                  ? { left: `calc(${div.x * 100}% - 5px)`, top: `${div.y * 100}%`, height: `${div.len * 100}%` }
+                  : { top: `calc(${div.y * 100}% - 5px)`, left: `${div.x * 100}%`, width: `${div.len * 100}%` }}
+                onPointerDown={startMultiResize(div)}
+                onDoubleClick={evenMultiSplit(div)}
                 title="Drag to resize · double-click to even out"
               />
             ))}
-            {canvasMode && dividerAt(rowFr).map((pct, i) => (
-              <div
-                key={`r${i}`}
-                className="multi-divider is-row"
-                style={{
-                  top: `calc(${pct}% - 5px)`,
-                  right: lastSpan > 1 ? `${100 - dividerAt(colFr).slice(-1)[0]}%` : 0,
-                }}
-                onPointerDown={startMultiResize('rows', i)}
-                onDoubleClick={resetMultiSizes('rows')}
-                title="Drag to resize · double-click to even out"
-              />
-            ))}
+            {/* Moving a tile: a stand-in card per tile (the pages hide while
+                this covers them) and where the dragged one would land. */}
+            {canvasMode && tileDrag && (
+              <div className="multi-dock-layer">
+                {multiTabs.map(t => {
+                  const r = multiRects.tiles.get(t.id);
+                  if (!r) return null;
+                  return (
+                    <div key={t.id} className={`multi-dock-ghost ${t.id === tileDrag.id ? 'is-source' : ''}`} style={rectStyle(r)}>
+                      <span>{tileLabel(t)}</span>
+                    </div>
+                  );
+                })}
+                {dropPreview && (
+                  <div className={`multi-dock-preview ${tileDrag.drop.side === 'center' ? 'is-swap' : ''}`} style={rectStyle(dropPreview)}>
+                    <span>{tileDrag.drop.side === 'center' ? 'Swap' : tileDrag.drop.target ? `Put ${tileDrag.drop.side}` : `Full ${tileDrag.drop.side === 'left' || tileDrag.drop.side === 'right' ? 'column' : 'row'}`}</span>
+                  </div>
+                )}
+              </div>
+            )}
+            {canvasMode && tileDrag && (
+              <div className="multi-dock-chip" style={{ left: tileDrag.x + 14, top: tileDrag.y + 14 }}>
+                {tileLabel(multiTabs.find(t => t.id === tileDrag.id) || {})}
+              </div>
+            )}
             {/* One live page per awake tab; inactive ones stay loaded but
                 hidden. Multi view un-hides the tiled ones in the grid. */}
             {browseTabs.tabs.filter(tab => tab.file || tab.term || tab.note || tab.special || browseTabs.live.has(tab.id)).map(tab => {
@@ -1295,7 +1396,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                       onOpenUrl={(url) => browseTabs.openInNew(url, { position: 'after' })}
                       onOpenPath={openPath}
                       onOpenShell={openTerminal}
-                      toolbarStart={paneStart}
+                      toolbarStart={paneStart(tab)}
                       toolbarEnd={paneEnd(tab)}
                     />
                   </div>
@@ -1314,7 +1415,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                       onOpenUrl={(url) => browseTabs.openInNew(url, { position: 'after' })}
                       onOpenPath={openPath}
                       onOpenShell={openTerminal}
-                      toolbarStart={paneStart}
+                      toolbarStart={paneStart(tab)}
                       toolbarEnd={paneEnd(tab)}
                     />
                   </div>
@@ -1334,7 +1435,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                       onOpenShell={openTerminal}
                       onShowInFiles={(dir) => showFolder(dir)}
                       onAttention={(on) => noteAttention(tab.id, on)}
-                      toolbarStart={paneStart}
+                      toolbarStart={paneStart(tab)}
                       toolbarEnd={paneEnd(tab)}
                     />
                   </div>
@@ -1354,7 +1455,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                       onForward={tab.fwd?.length ? () => browseTabs.step(1) : null}
                       onShowInFiles={showInFiles}
                       onOpenTerminal={openTerminal}
-                      toolbarStart={paneStart}
+                      toolbarStart={paneStart(tab)}
                       toolbarEnd={paneEnd(tab)}
                     />
                   </div>
@@ -1376,7 +1477,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                     onOpenShell={openTerminal}
                     focusAddressKey={isCurrent ? focusAddress : 0}
                     findKey={isCurrent ? findKey : 0}
-                    toolbarStart={paneStart}
+                    toolbarStart={paneStart(tab)}
                     toolbarEnd={paneEnd(tab)}
                     emptyState={(
                       <div className="browse-hero">
