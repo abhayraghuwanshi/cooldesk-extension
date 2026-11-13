@@ -21,15 +21,18 @@ jobs:
     outputs:
       release_id: ${{ steps.create.outputs.id }}
     steps:
+      - uses: actions/checkout@v4
+      # Release body = this version's section of docs/CHANGELOG.md + install table.
+      # Fails the release if the changelog has no section for the tag.
+      - name: Release notes from CHANGELOG
+        run: bash scripts/release-notes.sh "${{ github.ref_name }}" > release-notes.md
       - name: Create draft release
         id: create
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: 'CoolDesk ${{ github.ref_name }}'
-          body: |
-            ## What's new
-            See the full changelog for details.
+          body_path: release-notes.md
           draft: true
           prerelease: false
 

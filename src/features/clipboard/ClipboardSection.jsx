@@ -1,6 +1,7 @@
-import { faCheck, faCode, faChevronDown, faChevronRight, faClipboard, faEye, faEyeSlash, faFile, faFileLines, faImage, faLink, faPalette, faPause, faPlay, faThumbtack, faTrashCan, faBoxArchive } from '@fortawesome/free-solid-svg-icons';
+import { faCheck, faChevronLeft, faCopy, faXmark, faCode, faChevronDown, faChevronRight, faClipboard, faEye, faEyeSlash, faFile, faFileLines, faImage, faLink, faPalette, faPause, faPlay, faThumbtack, faTrashCan, faBoxArchive } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { workspaceActivityService } from '../../services/workspaceActivityService';
 import { IS_TAURI, startNativeDrag } from '../../utils/nativeDrag.js';
 import { clipFileUrl, fullClipText, useClipboardHistory, useClipboardStatus } from './useClipboardHistory';
@@ -16,6 +17,7 @@ import { t, useT } from '../../shared/i18n';
 
 const COLLAPSED_KEY = 'cooldesk.clipboard.collapsed';
 const PEEK = 3;
+const GRID_PEEK = 6;
 const CLIP_TYPE = 'application/x-cooldesk-clip';
 const LINK_TYPE = 'application/x-cooldesk-link';
 const IS_WINDOWS = typeof navigator !== 'undefined' && /Windows/i.test(navigator.userAgent);
@@ -52,20 +54,33 @@ function linkParts(url) {
   } catch { return { host: url, rest: '' }; }
 }
 
-/** One-line label for a row. */
-function titleOf(clip) {
+/** One-line label for a row, shaped per kind so a mixed list scans by type:
+ *  the clip's own content first, never a generic "Image 604×338". */
+function RowTitle({ clip }) {
   switch (clip.kind) {
-    case 'image': return t('cb.image', { w: clip.width, h: clip.height });
+    case 'image': return clip.source || t('cb.cat.image');
     case 'files': {
       const files = clip.files || [];
-      return files.length > 1 ? `${baseName(files[0])} +${files.length - 1}` : baseName(files[0]);
+      return files.length > 1
+        ? <>{baseName(files[0])} <span className="cb-title-dim">+{files.length - 1}</span></>
+        : baseName(files[0]);
     }
     case 'link': {
-      const { host, rest } = linkParts(clip.text);
-      return `${host}${rest}`;
+      const { host, rest } = linkParts(clip.text.trim());
+      return <>{host}{rest && <span className="cb-title-dim">{rest}</span>}</>;
     }
+    case 'color': return (clip.text || '').trim().toUpperCase();
     default:
       return (clip.text || '').trim().split('\n').find(l => l.trim()) || '';
+  }
+}
+
+/** Second line: what the title doesn't already say. */
+function rowMeta(clip) {
+  switch (clip.kind) {
+    case 'image': return [`${clip.width} × ${clip.height}`, clip.size ? formatSize(clip.size) : null];
+    case 'files': return [clip.files?.[0] ? baseName(String(clip.files[0]).replace(/[\\/]+[^\\/]*[\\/]*$/, '')) : null, clip.source];
+    default: return [clip.source];
   }
 }
 
@@ -84,7 +99,8 @@ const KIND_ICON = { text: faFileLines, code: faCode, link: faLink, color: faPale
 /** Category chips, in display order. */
 const CATEGORIES = ['text', 'code', 'link', 'image', 'files', 'color'].map(kind => ({ kind }));
 
-function Thumb({ clip }) {
+/** Display URL for an image clip's stored file (null until resolved). */
+function useClipImage(clip) {
   const [src, setSrc] = useState(null);
   useEffect(() => {
     if (clip.kind !== 'image' || !clip.path) return undefined;
@@ -92,6 +108,11 @@ function Thumb({ clip }) {
     clipFileUrl(clip.path).then(u => live && setSrc(u)).catch(() => { });
     return () => { live = false; };
   }, [clip.kind, clip.path]);
+  return src;
+}
+
+function Thumb({ clip }) {
+  const src = useClipImage(clip);
   if (clip.kind === 'color') return <span className="cb-thumb cb-swatch" style={{ background: clip.text.trim() }} />;
   if (src) return <img className="cb-thumb cb-thumb-img" src={src} alt="" draggable={false} />;
   return <span className={`cb-thumb cb-thumb-${clip.kind}`}><FontAwesomeIcon icon={KIND_ICON[clip.kind] || faFileLines} /></span>;
@@ -166,8 +187,9 @@ function IconBtn({ icon, label, onClick, active = false, danger = false }) {
   );
 }
 
-function ClipRow({ clip, history, previewing, onTogglePreview }) {
-  useT();
+/** Copy-on-click (with a brief "copied" state) and drag-out, shared by list
+ *  rows and image tiles. */
+function useClipActions(clip, history) {
   const [copied, setCopied] = useState(false);
   const fullText = useRef(null);
   const timer = useRef(null);
@@ -201,11 +223,123 @@ function ClipRow({ clip, history, previewing, onTogglePreview }) {
     }
   };
 
-  const meta = [clip.source, ago(clip.added)].filter(Boolean).join(' · ');
+  return { copied, copy, prefetch, onDragStart };
+}
+
+/** One image in the Images grid: the picture is the whole tile. */
+function ImageTile({ clip, history, previewing, onTogglePreview }) {
+  useT();
+  const src = useClipImage(clip);
+  const { copied, copy, onDragStart } = useClipActions(clip, history);
+  return (
+    <li
+      className={`cb-tile${previewing ? ' is-previewing' : ''}${copied ? ' is-copied' : ''}`}
+      role="button"
+      tabIndex={0}
+      draggable={IS_TAURI}
+      onDragStart={onDragStart}
+      onClick={copy}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return; // keys on the action buttons are theirs
+        if (e.key === 'Enter') { e.preventDefault(); copy(); }
+        if (e.key === ' ') { e.preventDefault(); onTogglePreview(); }
+      }}
+      title={[clip.source, `${clip.width} × ${clip.height}`, ago(clip.added)].filter(Boolean).join(' · ')}
+    >
+      {src
+        ? <img className="cb-tile-img" src={src} alt="" draggable={false} />
+        : <span className="cb-tile-img cb-tile-placeholder"><FontAwesomeIcon icon={faImage} /></span>}
+      <span className="cb-tile-dims">{clip.width}×{clip.height}</span>
+      {clip.pinned && <FontAwesomeIcon icon={faThumbtack} className="cb-tile-pin" />}
+      <div className="cb-tile-actions">
+        <IconBtn icon={previewing ? faEyeSlash : faEye} label={previewing ? t('cb.hidePreview') : t('cb.preview')} onClick={onTogglePreview} active={previewing} />
+        <IconBtn icon={faThumbtack} label={clip.pinned ? t('cb.unpin') : t('cb.pin')} active={clip.pinned} onClick={() => history.pin(clip.id, !clip.pinned).catch(() => { })} />
+        <IconBtn icon={faBoxArchive} label={t('cb.saveShelf')} onClick={() => history.saveToShelf(clip.id).catch(() => { })} />
+        <IconBtn icon={faTrashCan} label={t('cb.delete')} danger onClick={() => history.remove(clip.id).catch(() => { })} />
+      </div>
+      {copied && (
+        <span className="cb-tile-copied"><FontAwesomeIcon icon={faCheck} /> {t('cb.copied')}</span>
+      )}
+    </li>
+  );
+}
+
+/** Full-window viewer for the Images grid, so the preview can't end up
+ *  scrolled out of sight under a long grid. Esc / backdrop closes, ← → steps. */
+function ImageLightbox({ clip, clips, history, onNavigate, onClose }) {
+  useT();
+  const src = useClipImage(clip);
+  const { copied, copy } = useClipActions(clip, history);
+  const index = clips.findIndex(c => c.id === clip.id);
+  const prev = index > 0 ? clips[index - 1] : null;
+  const next = index >= 0 && index < clips.length - 1 ? clips[index + 1] : null;
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowLeft' && prev) onNavigate(prev.id);
+      else if (e.key === 'ArrowRight' && next) onNavigate(next.id);
+      else return;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [prev, next, onNavigate, onClose]);
+
+  const remove = () => {
+    // Step to a neighbour first so the viewer stays open on the next image.
+    const after = next || prev;
+    history.remove(clip.id).catch(() => { });
+    if (after) onNavigate(after.id); else onClose();
+  };
+
+  return createPortal(
+    <div className="cb-lightbox" role="dialog" aria-modal="true" aria-label={t('cb.preview')} onClick={onClose}>
+      <div className="cb-lightbox-panel" onClick={e => e.stopPropagation()}>
+        <div className="cb-lightbox-bar">
+          <span className="cb-lightbox-meta">
+            {[clip.source, `${clip.width} × ${clip.height}`, formatSize(clip.size), ago(clip.added)].filter(Boolean).join(' · ')}
+          </span>
+          <span className="cb-lightbox-count">{index + 1} / {clips.length}</span>
+          <IconBtn icon={faXmark} label={t('cb.close')} onClick={onClose} />
+        </div>
+        <div className="cb-lightbox-stage">
+          {src && <img className="cb-lightbox-img" src={src} alt="" draggable={false} />}
+          {prev && (
+            <button type="button" className="cb-lightbox-nav is-prev" aria-label={t('cb.prevImage')} onClick={() => onNavigate(prev.id)}>
+              <FontAwesomeIcon icon={faChevronLeft} />
+            </button>
+          )}
+          {next && (
+            <button type="button" className="cb-lightbox-nav is-next" aria-label={t('cb.nextImage')} onClick={() => onNavigate(next.id)}>
+              <FontAwesomeIcon icon={faChevronRight} />
+            </button>
+          )}
+        </div>
+        <div className="cb-lightbox-actions">
+          <button type="button" className={`cb-lightbox-copy${copied ? ' is-copied' : ''}`} onClick={copy}>
+            <FontAwesomeIcon icon={copied ? faCheck : faCopy} /> {copied ? t('cb.copied') : t('cb.copy')}
+          </button>
+          <IconBtn icon={faThumbtack} label={clip.pinned ? t('cb.unpin') : t('cb.pin')} active={clip.pinned} onClick={() => history.pin(clip.id, !clip.pinned).catch(() => { })} />
+          <IconBtn icon={faBoxArchive} label={t('cb.saveShelf')} onClick={() => history.saveToShelf(clip.id).catch(() => { })} />
+          <IconBtn icon={faTrashCan} label={t('cb.delete')} danger onClick={remove} />
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function ClipRow({ clip, history, previewing, onTogglePreview }) {
+  useT();
+  const { copied, copy, prefetch, onDragStart } = useClipActions(clip, history);
+
+  const meta = rowMeta(clip).filter(Boolean).join(' · ');
   return (
     <li className={`cb-row${previewing ? ' is-previewing' : ''}`}>
       <div
-        className="cb-row-main"
+        className={`cb-row-main cb-kind-${clip.kind}`}
         role="button"
         tabIndex={0}
         draggable={IS_TAURI}
@@ -220,9 +354,10 @@ function ClipRow({ clip, history, previewing, onTogglePreview }) {
       >
         <Thumb clip={clip} />
         <div className="cb-row-text">
-          <div className={`cb-row-title${copied ? ' is-copied' : ''}`}>{copied ? t('cb.copied') : titleOf(clip)}</div>
-          <div className="cb-row-meta">{meta}</div>
+          <div className={`cb-row-title${copied ? ' is-copied' : ''}`}>{copied ? t('cb.copied') : <RowTitle clip={clip} />}</div>
+          {meta && <div className="cb-row-meta">{meta}</div>}
         </div>
+        {!copied && !clip.pinned && <span className="cb-row-time">{ago(clip.added)}</span>}
         {copied
           ? <FontAwesomeIcon icon={faCheck} className="cb-copied" />
           : (
@@ -363,16 +498,30 @@ export function ClipboardSection() {
     return n;
   }, [ordered]);
   const chips = CATEGORIES.filter(c => counts[c.kind]);
+
+  // Chips sit on one scrollable line: map a plain vertical mouse wheel to a
+  // horizontal scroll while the strip overflows (trackpads already scroll it).
+  const chipsRef = useCallback(el => {
+    if (!el) return;
+    el.addEventListener('wheel', e => {
+      if (el.scrollWidth <= el.clientWidth || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    }, { passive: false });
+  }, []);
   // A category that's emptied out (last clip deleted) falls back to All.
   const activeCategory = category && counts[category] ? category : null;
+  // Images get a grid of thumbnails instead of rows; two rows of it in the peek.
+  const grid = activeCategory === 'image';
+  const peek = grid ? GRID_PEEK : PEEK;
 
   const visible = useMemo(() => {
     const inCategory = activeCategory ? ordered.filter(c => c.kind === activeCategory) : ordered;
-    if (!showAll) return inCategory.slice(0, PEEK);
+    if (!showAll) return inCategory.slice(0, peek);
     const q = filter.trim().toLowerCase();
     if (!q) return inCategory;
     return inCategory.filter(c => [c.text, c.source, ...(c.files || [])].some(v => v && v.toLowerCase().includes(q)));
-  }, [ordered, activeCategory, showAll, filter]);
+  }, [ordered, activeCategory, showAll, filter, peek]);
   const shownTotal = activeCategory ? counts[activeCategory] : ordered.length;
 
   if (!IS_TAURI || !enabled) return null;
@@ -418,7 +567,7 @@ export function ClipboardSection() {
             />
           )}
           {chips.length > 1 && (
-            <div className="cb-chips" role="tablist" aria-label={t('cb.categories')}>
+            <div ref={chipsRef} className="cb-chips" role="tablist" aria-label={t('cb.categories')}>
               <button
                 type="button"
                 role="tab"
@@ -435,7 +584,10 @@ export function ClipboardSection() {
                   role="tab"
                   aria-selected={activeCategory === c.kind}
                   className={`cb-chip${activeCategory === c.kind ? ' is-active' : ''}`}
-                  onClick={() => setCategory(k => (k === c.kind ? null : c.kind))}
+                  onClick={e => {
+                    e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+                    setCategory(k => (k === c.kind ? null : c.kind));
+                  }}
                 >
                   <FontAwesomeIcon icon={KIND_ICON[c.kind]} />
                   {t(`cb.cat.${c.kind}`)}
@@ -444,7 +596,30 @@ export function ClipboardSection() {
               ))}
             </div>
           )}
-          {visible.length ? (
+          {visible.length && grid ? (
+            <>
+              <ul className={`cb-grid${showAll ? ' is-all' : ''}`}>
+                {visible.map(clip => (
+                  <ImageTile
+                    key={clip.id}
+                    clip={clip}
+                    history={history}
+                    previewing={previewId === clip.id}
+                    onTogglePreview={() => setPreviewId(id => (id === clip.id ? null : clip.id))}
+                  />
+                ))}
+              </ul>
+              {visible.some(c => c.id === previewId) && (
+                <ImageLightbox
+                  clip={visible.find(c => c.id === previewId)}
+                  clips={visible}
+                  history={history}
+                  onNavigate={setPreviewId}
+                  onClose={() => setPreviewId(null)}
+                />
+              )}
+            </>
+          ) : visible.length ? (
             <ul className={`cb-list${showAll ? ' is-all' : ''}`}>
               {visible.map(clip => (
                 <ClipRow
@@ -462,7 +637,7 @@ export function ClipboardSection() {
               {filter ? t('cb.noMatch') : t('cb.empty')}
             </div>
           )}
-          {shownTotal > PEEK && (
+          {shownTotal > peek && (
             <div className="cb-footer">
               <button type="button" className="cb-link-btn" onClick={() => { setShowAll(s => !s); setFilter(''); }}>
                 {showAll ? t('cb.showLess') : t('cb.showAll', { n: shownTotal })}

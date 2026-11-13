@@ -68,11 +68,15 @@ function themeFor(el) {
  * @param input       { text, n }: typed into the running shell (followed by
  *                    Enter) each time n changes; held until the shell starts
  * @param compact     a very narrow terminal (the docked sidebar): smaller
- *                    text and a short `folder %` prompt (terminal.rs)
+ *                    text and a bare `>` prompt (terminal.rs)
  * @param onExit      (code | null) → the shell ended with `code`; null when a
  *                    (new) shell starts — lets a host show running vs exited
+ * @param onAttention (bool) → true when something in this terminal asks for
+ *                    you while the tab is off screen (a bell, or a desktop-
+ *                    notification escape: Claude Code, Codex… waiting for
+ *                    input); false once the tab is shown again
  */
-export function TerminalTab({ tabId, cwd, run = null, input = null, compact = false, active, onTitle, onOpenUrl, onOpenPath, onOpenShell, onShowInFiles, variant = 'tab', filesPath = null, onPopOut, onHide, onExit, toolbarStart = null, toolbarEnd = null }) {
+export function TerminalTab({ tabId, cwd, run = null, input = null, compact = false, active, onTitle, onOpenUrl, onOpenPath, onOpenShell, onShowInFiles, variant = 'tab', filesPath = null, onPopOut, onHide, onExit, onAttention, toolbarStart = null, toolbarEnd = null }) {
   const hostRef = useRef(null);
   const termRef = useRef(null);
   const fitRef = useRef(null);
@@ -88,6 +92,11 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
   onOpenUrlRef.current = onOpenUrl;
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
+  const onAttentionRef = useRef(onAttention);
+  onAttentionRef.current = onAttention;
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const flaggedRef = useRef(false);
 
   // xterm itself: once per tab.
   useEffect(() => {
@@ -142,6 +151,23 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
         setTitle(t);
         onTitleRef.current?.(t);
       });
+      // "Needs you": an agent waiting on a prompt rings the bell or sends a
+      // desktop-notification escape (OSC 9 iTerm2, OSC 777 urxvt/Ghostty,
+      // OSC 99 kitty). Only a tab you can't see is flagged; a bell while
+      // you're typing (tab completion) is just a bell. Nothing is answered
+      // for you — the flag only points at the tab.
+      const flag = () => {
+        if (activeRef.current || flaggedRef.current) return;
+        flaggedRef.current = true;
+        onAttentionRef.current?.(true);
+      };
+      const offBell = term.onBell(flag);
+      const oscs = [
+        // OSC 9;4;… is a progress bar (ConEmu / Windows Terminal), not a notification.
+        term.parser.registerOscHandler(9, (data) => { if (!data.startsWith('4;')) flag(); return true; }),
+        term.parser.registerOscHandler(777, (data) => { if (data.startsWith('notify')) flag(); return true; }),
+        term.parser.registerOscHandler(99, () => { flag(); return true; }),
+      ];
       termRef.current = term;
       fitRef.current = fit;
       try { fit.fit(); } catch { /* not laid out yet */ }
@@ -150,17 +176,37 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
       // Re-fit whenever the tab's box changes (window, side panel, focus mode).
       // Laid out for the first time (a hidden tile shown) is also when its
       // styles are surely in, so the colours are re-checked then too.
+      //
+      // Debounced: focus mode, window full screen and the side panel animate
+      // the box (CSS width transitions), firing this every frame. Each fit is
+      // a SIGWINCH, and a TUI like Claude Code redraws for every one while
+      // xterm reflows underneath it — the redraws land at stale widths and
+      // leave stacked prompt fragments. Fit once the box has settled. A box
+      // coming out of hiding (zero size before) fits at once, so it never
+      // shows at the wrong size.
+      let fitTimer = 0;
+      let wasHidden = host.offsetWidth === 0 || host.offsetHeight === 0;
+      const refit = () => {
+        fitTimer = 0;
+        if (host.offsetWidth === 0 || host.offsetHeight === 0) return;
+        syncTheme(term, host);
+        try { fit.fit(); } catch { /* ignore */ }
+      };
       const ro = new ResizeObserver(() => {
-        if (host.offsetWidth > 0 && host.offsetHeight > 0) {
-          syncTheme(term, host);
-          try { fit.fit(); } catch { /* ignore */ }
-        }
+        const hidden = host.offsetWidth === 0 || host.offsetHeight === 0;
+        if (hidden) { wasHidden = true; return; }
+        clearTimeout(fitTimer);
+        if (wasHidden) { wasHidden = false; refit(); return; }
+        fitTimer = setTimeout(refit, 150);
       });
       ro.observe(host);
       setGeneration(g => g + 1);
       cleanup = () => {
+        clearTimeout(fitTimer);
         ro.disconnect();
         offTitle.dispose();
+        offBell.dispose();
+        oscs.forEach(o => o.dispose());
         term.dispose();
         termRef.current = null;
       };
@@ -247,12 +293,23 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
   // Shown: fit to the (possibly changed) box and take the keyboard.
   useEffect(() => {
     if (!active) return;
+    if (flaggedRef.current) {
+      flaggedRef.current = false;
+      onAttentionRef.current?.(false);
+    }
+    let cancelled = false;
     const id = requestAnimationFrame(() => {
       syncTheme(termRef.current, hostRef.current);
       try { fitRef.current?.fit(); } catch { /* ignore */ }
       termRef.current?.focus();
+      // A web tab shown just before (a native child webview) can keep the
+      // keyboard even once hidden: take it back natively, then focus xterm
+      // again, so you can type without clicking the terminal first.
+      invoke('terminal_focus')
+        .catch(() => { })
+        .finally(() => { if (!cancelled) termRef.current?.focus(); });
     });
-    return () => cancelAnimationFrame(id);
+    return () => { cancelled = true; cancelAnimationFrame(id); };
   }, [active, generation]);
 
   // Keys typed in the terminal belong to the shell: Ctrl+R/L/F/K/[ and

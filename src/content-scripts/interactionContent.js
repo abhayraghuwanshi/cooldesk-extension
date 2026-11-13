@@ -229,6 +229,19 @@ async function loadAndRenderNotes() {
 }
 
 // Render a sticky note card
+// Note headers, built as nodes (no innerHTML on the page we're injected in).
+function noteLabel(text) {
+  const el = document.createElement('span');
+  el.style.cssText = 'font-weight:600; color:#059669;';
+  el.textContent = text;
+  return el;
+}
+function noteSub(text) {
+  const el = document.createElement('span');
+  el.textContent = text;
+  return el;
+}
+
 function renderStickyCard(note, index) {
   const card = document.createElement('div');
   card.className = 'cooldesk-sticky-rendered';
@@ -270,7 +283,7 @@ function renderStickyCard(note, index) {
   `;
 
   const dateStr = note.createdAt ? new Date(note.createdAt).toLocaleDateString() : '';
-  header.innerHTML = `<span style="font-weight:600; color:#059669;">📝 Note</span><span>${dateStr}</span>`;
+  header.append(noteLabel('📝 Note'), noteSub(dateStr));
 
   // Close button
   const closeBtn = document.createElement('span');
@@ -572,7 +585,9 @@ function handleStickyNote(selectionText, pageUrl) {
     font-size: 13px;
     background: rgba(255,255,255,0.3);
   `;
-  header.innerHTML = `<span style="font-weight:600; color:#059669;">📝 New Note</span><span style="color:#9ca3af; font-size:11px;">${window.location.hostname}</span>`;
+  const host = noteSub(window.location.hostname);
+  host.style.cssText = 'color:#9ca3af; font-size:11px;';
+  header.append(noteLabel('📝 New Note'), host);
 
   const textarea = document.createElement('textarea');
   textarea.value = selectionText || '';

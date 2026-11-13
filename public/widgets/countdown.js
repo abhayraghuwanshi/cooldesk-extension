@@ -10,7 +10,15 @@
     var el = document.createElement("div");
     el.className = "stack center";
     el.style.gap = "4px";
-    el.innerHTML = '<span class="big mono" style="font-size:34px" data-v>0</span><span class="label">' + T(u) + "</span>";
+    var v = document.createElement("span");
+    v.className = "big mono";
+    v.style.fontSize = "34px";
+    v.setAttribute("data-v", "");
+    v.textContent = "0";
+    var label = document.createElement("span");
+    label.className = "label";
+    label.textContent = T(u);
+    el.append(v, label);
     units.appendChild(el);
   });
   var vals = document.querySelectorAll("[data-v]");

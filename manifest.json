@@ -5,18 +5,18 @@
   "version": "2.0.21",
   "default_locale": "en",
   "icons": {
-    "16": "logo-2.png",
-    "32": "logo-2.png",
-    "48": "logo-2.png",
-    "128": "logo-2.png"
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
   },
   "action": {
     "default_title": "__MSG_actionTitle__",
     "default_icon": {
-      "16": "logo-2.png",
-      "32": "logo-2.png",
-      "48": "logo-2.png",
-      "128": "logo-2.png"
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
     }
   },
   "options_page": "pages/extension.html",

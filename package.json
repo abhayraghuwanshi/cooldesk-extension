@@ -10,6 +10,7 @@
     "dev": "vite",
     "dev:tauri": "tauri dev",
     "build": "vite build",
+    "build:firefox": "VITE_FIREFOX=1 vite build --outDir dist-firefox-build --emptyOutDir && node scripts/build-firefox.mjs dist-firefox-build",
     "build:tauri": "tauri build",
     "lint": "eslint .",
     "preview": "vite preview",

@@ -12,10 +12,24 @@
     list.forEach(function (w) {
       var el = document.createElement("div");
       el.className = "ws" + (w.active ? " active" : "");
-      el.innerHTML = '<span class="dot" style="background:' + w.color + '"></span>' +
-        '<div class="stack grow" style="gap:1px"><span style="font-size:13px;font-weight:600">' + w.name + "</span>" +
-        '<span class="muted" style="font-size:10px">' + w.tabs + " tabs · " + w.apps + " apps · " + w.last + "</span></div>" +
-        '<span class="label">Open ›</span>';
+      var dot = document.createElement("span");
+      dot.className = "dot";
+      dot.style.background = w.color;
+      var text = document.createElement("div");
+      text.className = "stack grow";
+      text.style.gap = "1px";
+      var name = document.createElement("span");
+      name.style.cssText = "font-size:13px;font-weight:600";
+      name.textContent = w.name;
+      var meta = document.createElement("span");
+      meta.className = "muted";
+      meta.style.fontSize = "10px";
+      meta.textContent = w.tabs + " tabs · " + w.apps + " apps · " + w.last;
+      text.append(name, meta);
+      var open = document.createElement("span");
+      open.className = "label";
+      open.textContent = "Open ›";
+      el.append(dot, text, open);
       el.onclick = function () {
         if (cooldesk.hosted) cooldesk.call("workspace.open", { id: w.id });
         else { list.forEach(function (x) { x.active = false; }); w.active = true; render(list); }

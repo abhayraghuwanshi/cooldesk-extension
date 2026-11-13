@@ -13,9 +13,20 @@
     s.topDomains.forEach(function (d) {
       var el = document.createElement("div");
       el.className = "row";
-      el.innerHTML = '<span class="muted" style="font-size:11px;width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
-        d[0] + '</span><div class="bar grow"><i style="width:' + (d[1] / max * 100) + '%"></i></div>' +
-        '<span class="mono muted" style="font-size:11px;width:18px;text-align:right">' + d[1] + "</span>";
+      var host = document.createElement("span");
+      host.className = "muted";
+      host.style.cssText = "font-size:11px;width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+      host.textContent = d[0];
+      var bar = document.createElement("div");
+      bar.className = "bar grow";
+      var fill = document.createElement("i");
+      fill.style.width = (d[1] / max * 100) + "%";
+      bar.appendChild(fill);
+      var n = document.createElement("span");
+      n.className = "mono muted";
+      n.style.cssText = "font-size:11px;width:18px;text-align:right";
+      n.textContent = String(d[1]);
+      el.append(host, bar, n);
       box.appendChild(el);
     });
   }

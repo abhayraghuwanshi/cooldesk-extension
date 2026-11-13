@@ -3,6 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { upsertNote } from '../../../db/index.js';
+import { sanitizeHtml } from '../../../utils/sanitizeHtml';
 
 export function ReadNoteModal({ isOpen, onClose, note }) {
     const [saving, setSaving] = useState(false);
@@ -118,7 +119,9 @@ export function ReadNoteModal({ isOpen, onClose, note }) {
                 }}>
                     <div
                         className="read-note-content"
-                        dangerouslySetInnerHTML={{ __html: note.payload?.text || '<p>No content</p>' }}
+                        // A teammate's note: untrusted HTML in a window that can run
+                        // commands — sanitise it (utils/sanitizeHtml.js).
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(note.payload?.text) || '<p>No content</p>' }}
                     />
                 </div>
 

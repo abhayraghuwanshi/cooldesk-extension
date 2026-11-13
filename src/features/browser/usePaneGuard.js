@@ -36,6 +36,17 @@ const BUDGET_MAX = 8 * GB;
 // Below this share of RAM free + reclaimable, the system is under pressure.
 const LOW_AVAILABLE_SHARE = 0.08;
 
+/** RAM the pages may use together before background ones go to sleep. */
+export function pageBudgetOf(totalMemory) {
+  return Math.min(BUDGET_MAX, Math.max(BUDGET_MIN, (totalMemory || 0) * BUDGET_SHARE));
+}
+
+/** The system as a whole is short on memory (free + reclaimable). */
+export function isSystemMemoryLow(stats) {
+  const total = stats?.total_memory || 0;
+  return total > 0 && stats.available_memory < total * LOW_AVAILABLE_SHARE;
+}
+
 /** Bytes used by pages, counting a process shared by several panes once. */
 export function pagesMemoryOf(panes) {
   const seen = new Set();
@@ -55,8 +66,10 @@ export function pagesMemoryOf(panes) {
  * @param enabled      false when no page is open (nothing to watch)
  * @param meterShown   the Page tab's meter is visible (poll faster)
  * @param onScreen     the Browse face is on screen
+ * @param alwaysPoll   keep polling with no page open (the toolbar's usage
+ *                     meter shows CoolDesk's own memory / CPU too)
  */
-export function usePaneGuard({ browseTabs, paneIdOf, shownPaneId, tiledTabIds = null, enabled, meterShown, onScreen }) {
+export function usePaneGuard({ browseTabs, paneIdOf, shownPaneId, tiledTabIds = null, enabled, meterShown, onScreen, alwaysPoll = false }) {
   const [stats, setStats] = useState(null);
   const [heavyPaneId, setHeavyPaneId] = useState(null);
   const hotSince = useRef(new Map());   // paneId -> ms, hidden and over HOT_CPU
@@ -104,8 +117,8 @@ export function usePaneGuard({ browseTabs, paneIdOf, shownPaneId, tiledTabIds = 
 
     const total = next.total_memory || 0;
     const used = pagesMemoryOf(next.panes);
-    const budget = Math.min(BUDGET_MAX, Math.max(BUDGET_MIN, total * BUDGET_SHARE));
-    const low = total > 0 && next.available_memory < total * LOW_AVAILABLE_SHARE;
+    const budget = pageBudgetOf(total);
+    const low = isSystemMemoryLow(next);
     if (used > budget || low) {
       const oldest = candidates
         .filter(({ tab }) => !reasons.has(tab.id))
@@ -128,7 +141,7 @@ export function usePaneGuard({ browseTabs, paneIdOf, shownPaneId, tiledTabIds = 
 
   const rate = meterShown ? METER_POLL_MS : onScreen ? POLL_MS : BACKGROUND_POLL_MS;
   useEffect(() => {
-    if (!enabled && !meterShown) {
+    if (!enabled && !meterShown && !alwaysPoll) {
       setStats(null);
       return undefined;
     }
@@ -146,7 +159,7 @@ export function usePaneGuard({ browseTabs, paneIdOf, shownPaneId, tiledTabIds = 
     load();
     const timer = setInterval(load, rate);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [enabled, meterShown, rate, decide]);
+  }, [enabled, meterShown, alwaysPoll, rate, decide]);
 
   const dismissHeavy = useCallback(() => {
     if (!heavyPaneId) return;
