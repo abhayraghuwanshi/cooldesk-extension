@@ -68,11 +68,15 @@ function themeFor(el) {
  * @param input       { text, n }: typed into the running shell (followed by
  *                    Enter) each time n changes; held until the shell starts
  * @param compact     a very narrow terminal (the docked sidebar): smaller
- *                    text and a short `folder %` prompt (terminal.rs)
+ *                    text and a bare `>` prompt (terminal.rs)
  * @param onExit      (code | null) → the shell ended with `code`; null when a
  *                    (new) shell starts — lets a host show running vs exited
+ * @param onAttention (bool) → true when something in this terminal asks for
+ *                    you while the tab is off screen (a bell, or a desktop-
+ *                    notification escape: Claude Code, Codex… waiting for
+ *                    input); false once the tab is shown again
  */
-export function TerminalTab({ tabId, cwd, run = null, input = null, compact = false, active, onTitle, onOpenUrl, onOpenPath, onOpenShell, onShowInFiles, variant = 'tab', filesPath = null, onPopOut, onHide, onExit, toolbarStart = null, toolbarEnd = null }) {
+export function TerminalTab({ tabId, cwd, run = null, input = null, compact = false, active, onTitle, onOpenUrl, onOpenPath, onOpenShell, onShowInFiles, variant = 'tab', filesPath = null, onPopOut, onHide, onExit, onAttention, toolbarStart = null, toolbarEnd = null }) {
   const hostRef = useRef(null);
   const termRef = useRef(null);
   const fitRef = useRef(null);
@@ -88,6 +92,11 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
   onOpenUrlRef.current = onOpenUrl;
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
+  const onAttentionRef = useRef(onAttention);
+  onAttentionRef.current = onAttention;
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const flaggedRef = useRef(false);
 
   // xterm itself: once per tab.
   useEffect(() => {
@@ -142,6 +151,23 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
         setTitle(t);
         onTitleRef.current?.(t);
       });
+      // "Needs you": an agent waiting on a prompt rings the bell or sends a
+      // desktop-notification escape (OSC 9 iTerm2, OSC 777 urxvt/Ghostty,
+      // OSC 99 kitty). Only a tab you can't see is flagged; a bell while
+      // you're typing (tab completion) is just a bell. Nothing is answered
+      // for you — the flag only points at the tab.
+      const flag = () => {
+        if (activeRef.current || flaggedRef.current) return;
+        flaggedRef.current = true;
+        onAttentionRef.current?.(true);
+      };
+      const offBell = term.onBell(flag);
+      const oscs = [
+        // OSC 9;4;… is a progress bar (ConEmu / Windows Terminal), not a notification.
+        term.parser.registerOscHandler(9, (data) => { if (!data.startsWith('4;')) flag(); return true; }),
+        term.parser.registerOscHandler(777, (data) => { if (data.startsWith('notify')) flag(); return true; }),
+        term.parser.registerOscHandler(99, () => { flag(); return true; }),
+      ];
       termRef.current = term;
       fitRef.current = fit;
       try { fit.fit(); } catch { /* not laid out yet */ }
@@ -179,6 +205,8 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
         clearTimeout(fitTimer);
         ro.disconnect();
         offTitle.dispose();
+        offBell.dispose();
+        oscs.forEach(o => o.dispose());
         term.dispose();
         termRef.current = null;
       };
@@ -265,12 +293,23 @@ export function TerminalTab({ tabId, cwd, run = null, input = null, compact = fa
   // Shown: fit to the (possibly changed) box and take the keyboard.
   useEffect(() => {
     if (!active) return;
+    if (flaggedRef.current) {
+      flaggedRef.current = false;
+      onAttentionRef.current?.(false);
+    }
+    let cancelled = false;
     const id = requestAnimationFrame(() => {
       syncTheme(termRef.current, hostRef.current);
       try { fitRef.current?.fit(); } catch { /* ignore */ }
       termRef.current?.focus();
+      // A web tab shown just before (a native child webview) can keep the
+      // keyboard even once hidden: take it back natively, then focus xterm
+      // again, so you can type without clicking the terminal first.
+      invoke('terminal_focus')
+        .catch(() => { })
+        .finally(() => { if (!cancelled) termRef.current?.focus(); });
     });
-    return () => cancelAnimationFrame(id);
+    return () => { cancelled = true; cancelAnimationFrame(id); };
   }, [active, generation]);
 
   // Keys typed in the terminal belong to the shell: Ctrl+R/L/F/K/[ and

@@ -2620,6 +2620,32 @@ html.browse-focus .browse-view.browse-peek .browse-list {
   font-size: 11px;
 }
 
+/* A terminal that rang for you while off screen (an agent waiting on a
+   prompt): a dot on its tile until the tab is opened. */
+.browse-tile.term-tile.needs-you {
+  position: relative;
+}
+
+.browse-tile.term-tile.needs-you::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f59e0b;
+  animation: term-needs-you 1.6s ease-in-out infinite;
+}
+
+@keyframes term-needs-you {
+  50% { opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .browse-tile.term-tile.needs-you::after { animation: none; }
+}
+
 /* Panel Home: widgets, Popular Folders and dev servers under the lists
    (TabManagement in panel mode). Its section headings are sized for a full
    page; bring them in line with the panel's own small caps headings. */
@@ -3653,4 +3679,60 @@ html.multi-resizing-y * { cursor: row-resize !important; user-select: none !impo
 
 .fp-home-clipboard:empty {
   display: none;
+}
+
+/* ── Usage meter (features/browser/UsageMeter.jsx) ──────────────────
+   CoolDesk's memory / CPU at the end of the toolbar. Quiet until it matters:
+   muted text, a coloured dot that goes amber / red as it gets heavy. */
+.bp-usage {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  margin-right: 2px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--bv-muted, rgba(255, 255, 255, 0.55));
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.bp-usage:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--bv-text, rgba(255, 255, 255, 0.85));
+}
+
+.bp-usage-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+}
+
+.bp-usage-cpu {
+  opacity: 0.7;
+}
+
+.bp-usage--warn {
+  color: #fbbf24;
+}
+
+.bp-usage--warn .bp-usage-dot {
+  background: #fbbf24;
+}
+
+.bp-usage--high {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.bp-usage--high .bp-usage-dot {
+  background: #f87171;
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.2);
 }

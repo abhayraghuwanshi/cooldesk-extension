@@ -21,7 +21,9 @@
       var el = document.createElement("div");
       el.className = "swatch";
       el.style.background = hex;
-      el.innerHTML = "<span>" + hex + "</span>";
+      var hexLabel = document.createElement("span");
+      hexLabel.textContent = hex;
+      el.appendChild(hexLabel);
       el.onclick = function () {
         navigator.clipboard.writeText(hex).then(function () {
           document.getElementById("status").textContent = T("Copied {hex}", { hex: hex });

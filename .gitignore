@@ -14,6 +14,8 @@ release
 dist-tauri
 node_modules
 dist
+dist-firefox
+dist-firefox-build
 dist-ssr
 *.local
 

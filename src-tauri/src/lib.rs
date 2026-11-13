@@ -2915,6 +2915,7 @@ pub fn run() {
         terminal::terminal_open,
         terminal::terminal_write,
         terminal::terminal_resize,
+        terminal::terminal_focus,
         terminal::terminal_close,
         shelf::shelf_list,
         shelf::shelf_add_text,

@@ -55,7 +55,7 @@ fn size(cols: u16, rows: u16) -> PtySize {
 /// stock `user@host dir %`, shorten it to `dir %` — the user@host part ate
 /// half a narrow panel. A prompt the user set themselves is left alone —
 /// except in a compact shell (the docked sidebar's, a few dozen columns
-/// wide), which always gets a bare `%`: a themed prompt's path and git
+/// wide), which always gets a bare `>` (`#` as root): a themed prompt's path and git
 /// segments wrapped every line there, and even one long folder name took a
 /// third of it. The folder goes in the terminal title instead, which the
 /// panel's bar shows. It's re-applied before each prompt so themes that
@@ -71,7 +71,7 @@ fi
 "#;
 const ZSH_RC_TAIL: &str = r#"[[ "$PROMPT" == '%n@%m %1~ %# ' ]] && PROMPT='%1~ %# '
 if [[ -n "$COOLDESK_COMPACT_PROMPT" ]]; then
-  _cooldesk_compact_prompt() { PROMPT='%# '; RPROMPT=''; print -Pn '\e]0;%~\a'; }
+  _cooldesk_compact_prompt() { PROMPT='%(!.#.>) '; RPROMPT=''; print -Pn '\e]0;%~\a'; }
   precmd_functions+=(_cooldesk_compact_prompt)
   _cooldesk_compact_prompt
 fi
@@ -237,6 +237,20 @@ pub fn terminal_resize(webview: tauri::Webview, id: String, cols: u16, rows: u16
     let map = sessions().lock().unwrap();
     let s = map.get(&id).ok_or("No such terminal")?;
     s.master.resize(size(cols, rows)).map_err(|e| e.to_string())
+}
+
+/// Give the keyboard back to the app's own webview when a terminal is shown.
+/// A web tab is a native child webview: switching away hides it, but it can
+/// stay the window's first responder, so xterm's DOM focus() lands while the
+/// keys still go nowhere until you click the terminal. Only while the window
+/// is already focused — this must never pull CoolDesk in front of another app.
+#[tauri::command]
+pub fn terminal_focus(webview: tauri::Webview) -> Result<(), String> {
+    require_main(&webview)?;
+    if !webview.window().is_focused().unwrap_or(false) {
+        return Ok(());
+    }
+    webview.set_focus().map_err(|e| e.to_string())
 }
 
 /// End the shell (tab closed). Dropping the master hangs up the pty, which

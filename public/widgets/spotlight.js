@@ -13,8 +13,16 @@
     list.slice(0, 6).forEach(function (h, i) {
       var el = document.createElement("div");
       el.className = "hit" + (i === 0 ? " sel" : "");
-      el.innerHTML = "<span>" + h[0] + '</span><span class="grow" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
-        h[1] + '</span><span class="kind">' + h[2] + "</span>";
+      var icon = document.createElement("span");
+      icon.textContent = h[0];
+      var title = document.createElement("span");
+      title.className = "grow";
+      title.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+      title.textContent = h[1];
+      var kind = document.createElement("span");
+      kind.className = "kind";
+      kind.textContent = h[2];
+      el.append(icon, title, kind);
       hits.appendChild(el);
     });
   }

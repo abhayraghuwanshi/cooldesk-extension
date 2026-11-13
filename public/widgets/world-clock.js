@@ -9,9 +9,19 @@
   cities.forEach(function (c) {
     var el = document.createElement("div");
     el.className = "row spread";
-    el.innerHTML = '<span class="grow" style="font-size:13px">' + c.name +
-      '</span><span class="mono muted" style="font-size:11px" data-day></span>' +
-      '<span class="big mono" style="font-size:18px" data-time></span>';
+    var name = document.createElement("span");
+    name.className = "grow";
+    name.style.fontSize = "13px";
+    name.textContent = c.name;
+    var day = document.createElement("span");
+    day.className = "mono muted";
+    day.style.fontSize = "11px";
+    day.setAttribute("data-day", "");
+    var time = document.createElement("span");
+    time.className = "big mono";
+    time.style.fontSize = "18px";
+    time.setAttribute("data-time", "");
+    el.append(name, day, time);
     rows.appendChild(el);
     c.timeEl = el.querySelector("[data-time]");
     c.dayEl = el.querySelector("[data-day]");

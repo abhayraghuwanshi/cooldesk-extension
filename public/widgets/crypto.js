@@ -6,9 +6,21 @@
   ids.forEach(function (id) {
     var el = document.createElement("div");
     el.className = "row spread";
-    el.innerHTML = '<span style="font-size:13px;font-weight:600">' + (SYMBOLS[id] || id.toUpperCase()) + "</span>" +
-      '<span class="grow"></span><span class="mono" data-chg style="font-size:11px"></span>' +
-      '<span class="big mono" data-price style="font-size:16px">—</span>';
+    var sym = document.createElement("span");
+    sym.style.cssText = "font-size:13px;font-weight:600";
+    sym.textContent = SYMBOLS[id] || id.toUpperCase();
+    var grow = document.createElement("span");
+    grow.className = "grow";
+    var chg = document.createElement("span");
+    chg.className = "mono";
+    chg.setAttribute("data-chg", "");
+    chg.style.fontSize = "11px";
+    var price = document.createElement("span");
+    price.className = "big mono";
+    price.setAttribute("data-price", "");
+    price.style.fontSize = "16px";
+    price.textContent = "—";
+    el.append(sym, grow, chg, price);
     rows.appendChild(el);
   });
   function render(d, stale) {

@@ -37,7 +37,9 @@ async function applyIfIdle() {
 async function checkStore() {
   try {
     // Throttled / no_update both just mean "nothing yet".
-    await chrome.runtime.requestUpdateCheck();
+    // Firefox updates add-ons itself and has no requestUpdateCheck
+    // (compiled out of the Firefox build).
+    if (!import.meta.env.VITE_FIREFOX) await chrome.runtime.requestUpdateCheck();
   } catch { /* unpacked dev build */ }
 }
 

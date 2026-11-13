@@ -5,6 +5,7 @@ import { BrowserPane } from '../../features/browser/BrowserPane';
 import { normalizeAddress } from '../../features/browser/useNativePane';
 import { engineFor, fetchWebSuggestions, getEngineKey, getWebSuggestEnabled, searchUrl } from '../../shared/searchEngines';
 import { usePaneGuard } from '../../features/browser/usePaneGuard';
+import { UsageMeter } from '../../features/browser/UsageMeter';
 import { FilesView } from './FilesView';
 import { FileIcon, FileTab } from './FileTab';
 import { NoteTab } from './NoteTab';
@@ -148,6 +149,15 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   const [focusAddress, setFocusAddress] = useState(0);
   const [findKey, setFindKey] = useState(0);
   const [filter, setFilter] = useState('');
+  // Terminal tabs that asked for you while off screen (a bell / notification
+  // escape — an agent waiting on a prompt): a dot on the tab's row.
+  const [termAttention, setTermAttention] = useState(() => new Set());
+  const noteAttention = useCallback((id, on) => setTermAttention(prev => {
+    if (prev.has(id) === on) return prev;
+    const next = new Set(prev);
+    if (on) next.add(id); else next.delete(id);
+    return next;
+  }), []);
   // Home's search, like the address bar: search suggestions from the engine
   // picked in Settings (only while Settings → Search suggestions is on), for
   // text that reads as a search rather than an address.
@@ -181,8 +191,13 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
     root.classList.add('browse-focus');
     // Capture on window so this runs before WorkspaceShell's Escape handler
     // (which would otherwise leave the Browse face entirely).
+    // Not from a terminal or a text field: there Esc is the program's
+    // (Claude Code's interrupt, vim, the address bar's revert) — capturing it
+    // here meant it never arrived. ⌘⇧F / the toolbar button leave instead.
     const onKey = (e) => {
       if (e.key !== 'Escape') return;
+      const t = e.target;
+      if (t instanceof Element && t.closest('.term-host, input, textarea, select, [contenteditable=""], [contenteditable="true"]')) return;
       e.stopPropagation();
       setFocusMode(false);
     };
@@ -628,6 +643,8 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
     enabled: browseTabs.tabs.some(t => browseTabs.live.has(t.id) && (t.url || t.req.url)),
     meterShown: pageTabShown,
     onScreen: isActive,
+    // The toolbar's usage meter shows CoolDesk's own cost even with no page open.
+    alwaysPoll: isActive && !!appControls,
   });
 
   const openPages = useMemo(() => {
@@ -818,7 +835,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
     <button
       className={`bp-btn ${focusOn ? 'on' : ''}`}
       onClick={() => setFocusMode(v => !v)}
-      title={focusOn ? `Exit focus mode (Esc)` : `Focus mode — just the page, full screen (${IS_MAC_UI ? '⌘⇧F' : 'Ctrl+Shift+F'})`}
+      title={focusOn ? `Exit focus mode (${IS_MAC_UI ? '⌘⇧F' : 'Ctrl+Shift+F'}, or Esc outside a terminal)` :`Focus mode — just the page, full screen (${IS_MAC_UI ? '⌘⇧F' : 'Ctrl+Shift+F'})`}
       aria-pressed={focusOn}
     >
       <FontAwesomeIcon icon={focusOn ? faCompress : faExpand} />
@@ -848,6 +865,13 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
     {appControls && (
       <>
         <span className="bp-toolbar-sep" aria-hidden="true" />
+        <UsageMeter
+          stats={stats}
+          pagesMemory={pagesMemory}
+          pagesCpu={pagesCpu}
+          pageCount={openPages.filter(p => p.pid != null && !p.shared).length}
+          onOpen={() => { setFilesTab('page'); setFilesOpen(true); }}
+        />
         {appControls}
       </>
     )}
@@ -950,12 +974,12 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
         className={`browse-tab-row is-open ${tab.id === browseTabs.activeId ? 'active' : ''} ${asleep ? 'asleep' : ''}`}
         onClick={() => browseTabs.activate(tab.id)}
         onAuxClick={(e) => { if (e.button === 1) browseTabs.close(tab.id); }}
-        title={tab.file ? tab.file.path : tab.term ? `Shell — ${tab.term.cwd || '~'}` : tab.note ? `Note${tab.note.workspaceName ? ` in ${tab.note.workspaceName}` : ''}` : tab.special ? SPECIAL_TITLES[tab.special] : asleep ? `${tab.url || 'New tab'}\nAsleep (reloads when opened)` : (tab.url || 'New tab')}
+        title={tab.file ? tab.file.path : tab.term ? `Shell — ${tab.term.cwd || '~'}${termAttention.has(tab.id) ? '\nWaiting for you' : ''}` : tab.note ? `Note${tab.note.workspaceName ? ` in ${tab.note.workspaceName}` : ''}` : tab.special ? SPECIAL_TITLES[tab.special] : asleep ? `${tab.url || 'New tab'}\nAsleep (reloads when opened)` : (tab.url || 'New tab')}
       >
         {tab.file
           ? <span className="browse-tile"><FileIcon path={tab.file.path} isDir={tab.file.isDir} /></span>
           : tab.term
-            ? <span className="browse-tile term-tile"><FontAwesomeIcon icon={faTerminal} /></span>
+            ? <span className={`browse-tile term-tile ${termAttention.has(tab.id) ? 'needs-you' : ''}`}><FontAwesomeIcon icon={faTerminal} /></span>
           : tab.note
             ? <span className="browse-tile note-tile"><FontAwesomeIcon icon={faNoteSticky} /></span>
           : tab.special
@@ -1309,6 +1333,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                       onOpenPath={openPath}
                       onOpenShell={openTerminal}
                       onShowInFiles={(dir) => showFolder(dir)}
+                      onAttention={(on) => noteAttention(tab.id, on)}
                       toolbarStart={paneStart}
                       toolbarEnd={paneEnd(tab)}
                     />

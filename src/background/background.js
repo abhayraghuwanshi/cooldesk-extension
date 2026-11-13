@@ -731,10 +731,13 @@ async function main() {
       }
 
       // Initialize side panel settings on install (same as working sample.js)
-      if (chrome?.sidePanel?.setOptions) {
+      // Chrome's side panel. `VITE_FIREFOX` is set for the Firefox build
+      // (npm run build:firefox), where these branches are compiled out —
+      // Firefox has no sidePanel API (its sidebar is sidebar_action).
+      if (!import.meta.env.VITE_FIREFOX && chrome?.sidePanel?.setOptions) {
         try {
           await chrome.sidePanel.setOptions({
-            path: 'index.html',
+            path: 'pages/extension.html',
             enabled: true
           });
           console.log('[Background] Side panel enabled globally on install');
@@ -743,7 +746,7 @@ async function main() {
         }
       }
 
-      if (chrome?.sidePanel?.setPanelBehavior) {
+      if (!import.meta.env.VITE_FIREFOX && chrome?.sidePanel?.setPanelBehavior) {
         try {
           await chrome.sidePanel.setPanelBehavior({
             openPanelOnActionClick: true
@@ -2307,7 +2310,7 @@ async function main() {
 
           // First attempt: Try to open side panel directly (same as working sample.js)
           // 🚨 WORKING CODE - DO NOT ADD setOptions() calls here - they break functionality
-          if (chrome?.sidePanel?.open && windowId) {
+          if (!import.meta.env.VITE_FIREFOX && chrome?.sidePanel?.open && windowId) {
             try {
               console.log('[Background] Attempting to open side panel for window:', windowId);
               console.log('[Background] Side panel path:', chrome.runtime.getURL('sidebar.html'));
@@ -2337,7 +2340,6 @@ async function main() {
             }
           } else {
             console.log('[Background] Side panel API not available or no windowId:', {
-              hasSidePanel: !!chrome?.sidePanel?.open,
               windowId,
               sender: sender?.tab
             });
@@ -2345,7 +2347,7 @@ async function main() {
 
           // Fallback attempt: if no windowId (e.g., invoked from extension page/popup) or first attempt failed,
           // try to recover a valid windowId using the current window.
-          if (chrome?.sidePanel?.open && !windowId) {
+          if (!import.meta.env.VITE_FIREFOX && chrome?.sidePanel?.open && !windowId) {
             try {
               console.log('[Background] Attempting to get current windowId as fallback...');
               const currentWin = await chrome.windows.getCurrent();
@@ -2365,7 +2367,7 @@ async function main() {
 
           // Fallback: Open in tab
           console.log('[Background] Falling back to tab...');
-          const url = chrome.runtime.getURL('index.html');
+          const url = chrome.runtime.getURL('pages/extension.html');
           const existing = await chrome.tabs.query({ url });
           if (existing && existing.length > 0) {
             const existingTab = existing[0];
@@ -2902,16 +2904,24 @@ async function main() {
   if (chrome?.action?.onClicked) {
     chrome.action.onClicked.addListener(async (tab) => {
       console.log('[Background] Extension action clicked, opening side panel...');
+      // Firefox: its sidebar (manifest sidebar_action, Firefox build) instead
+      // of Chrome's side panel. Called first, synchronously — it needs the
+      // click's user gesture, which an await before it would lose.
+      const sidebarAction = globalThis.browser?.sidebarAction || chrome.sidebarAction;
+      if (sidebarAction?.toggle) {
+        sidebarAction.toggle();
+        return;
+      }
       try {
         // Use the windowId from the active tab, not getCurrent() (same as working sample.js)
         const windowId = tab?.windowId;
-        if (chrome?.sidePanel?.open && windowId) {
+        if (!import.meta.env.VITE_FIREFOX && chrome?.sidePanel?.open && windowId) {
           console.log('[Background] Opening side panel for window:', windowId);
           await chrome.sidePanel.open({ windowId: windowId });
           console.log('[Background] Side panel opened from action click!');
         } else {
           console.log('[Background] Side panel API not available or no windowId, using tab fallback');
-          const url = chrome.runtime.getURL('index.html');
+          const url = chrome.runtime.getURL('pages/extension.html');
           await chrome.tabs.create({ url });
         }
       } catch (e) {
@@ -2919,7 +2929,7 @@ async function main() {
         console.log('[Background] Error details:', e.message);
         // Fallback to tab
         try {
-          const url = chrome.runtime.getURL('index.html');
+          const url = chrome.runtime.getURL('pages/extension.html');
           await chrome.tabs.create({ url });
           console.log('[Background] Opened in new tab as fallback');
         } catch (fallbackError) {

@@ -31,8 +31,10 @@ const EXTENSION_URL = 'https://cool-desk.com/api/extension';
 const isTauri = () =>
   typeof window !== 'undefined' && !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
 
+// Not in the Firefox build: Firefox updates add-ons itself and has no
+// requestUpdateCheck (VITE_FIREFOX compiles these paths out).
 const canCheckExtension = () =>
-  typeof chrome !== 'undefined' && !!chrome.runtime?.requestUpdateCheck;
+  !import.meta.env.VITE_FIREFOX && typeof chrome !== 'undefined' && !!chrome.runtime?.requestUpdateCheck;
 
 // info: null when up to date / unknown, otherwise
 // { current, latest, notesUrl, target: 'desktop' | 'extension' }
@@ -102,6 +104,7 @@ function extensionInfo(latest) {
 }
 
 async function checkExtension() {
+  if (import.meta.env.VITE_FIREFOX) return null;
   // The background worker records a downloaded update (background/autoUpdate.js).
   // Ask the store too, but Chrome throttles that hard — after the first hit
   // it answers 'throttled', so the stored flag is what keeps the pill up.
