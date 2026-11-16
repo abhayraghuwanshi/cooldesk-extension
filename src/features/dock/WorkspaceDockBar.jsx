@@ -9,6 +9,7 @@ import { useCooldeskItems } from '../../shared/hooks/useCooldeskItems.js';
 import { fileStack, stackLogo, useFolderIdentity } from '../../shared/hooks/useFolderIdentity.js';
 import { OpenFullAppButton } from './LayoutSwitchButton';
 import { closeLiveItem, useLiveItems } from './useLiveItems';
+import { isMainWindowItem, openMainWindow } from './mainWindowItem.js';
 import '../../styles/dockbar.css';
 import { useT } from '../../shared/i18n';
 
@@ -255,6 +256,7 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
   const { activity, liveApps, liveTabs } = useLiveItems(isActiveMode);
 
   const focusLiveApp = useCallback((app) => {
+    if (isMainWindowItem(app)) { openMainWindow(); return; }
     const api = window.electronAPI;
     if (!api) return;
     itemRankingService.recordLaunch(app);
@@ -306,8 +308,11 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
       ...liveApps.map((item, idx) => ({ item, kind: 'app', idx })),
       ...liveTabs.map((item, idx) => ({ item: { ...item, path: undefined }, kind: 'tab', idx })),
     ];
-    const byItem = new Map(entries.map((e) => [e.item, e]));
-    return itemRankingService.rank(entries.map((e) => e.item)).map((it) => byItem.get(it));
+    // CoolDesk's own window (when listed) stays first instead of being ranked.
+    const pinned = entries.filter((e) => isMainWindowItem(e.item));
+    const rest = entries.filter((e) => !isMainWindowItem(e.item));
+    const byItem = new Map(rest.map((e) => [e.item, e]));
+    return [...pinned, ...itemRankingService.rank(rest.map((e) => e.item)).map((it) => byItem.get(it))];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveApps, liveTabs, rankTick]);
 
@@ -629,7 +634,7 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
   };
 
   const renderLiveApp = (app, idx, order) => {
-                const key = `live-app-${app.pid || idx}`;
+                const key = `live-app-${app.pid || app.id || idx}`;
                 const label = app.name || app.title || app.path;
                 return (
                   <button

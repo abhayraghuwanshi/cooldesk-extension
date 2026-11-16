@@ -3,6 +3,7 @@ import { runningAppsService } from '../../services/runningAppsService';
 import { workspaceActivityService } from '../../services/workspaceActivityService';
 import { enrichRunningAppsWithIcons } from '../../utils/helpers.js';
 import { filterUserApps } from '../../utils/userApps.js';
+import { MAIN_WINDOW_ITEM, hideMainWindow, isDesktopApp, isMainWindowItem } from './mainWindowItem.js';
 
 // Browser chrome that isn't worth a slot.
 export const isBlankTab = (url = '') => {
@@ -40,6 +41,13 @@ export function useLiveItems(enabled = true) {
     });
   }, [enabled]);
 
+  // CoolDesk's own full app leads the running apps in the desktop app (see
+  // mainWindowItem.js) — the scanned list never includes CoolDesk.
+  const apps = useMemo(
+    () => (isDesktopApp ? [MAIN_WINDOW_ITEM, ...liveApps] : liveApps),
+    [liveApps]
+  );
+
   const liveTabs = useMemo(() => {
     const seen = new Set();
     return (activity?.openTabs || []).filter((t) => {
@@ -49,7 +57,7 @@ export function useLiveItems(enabled = true) {
     });
   }, [activity]);
 
-  return { activity, liveApps, liveTabs };
+  return { activity, liveApps: apps, liveTabs };
 }
 
 /**
@@ -58,6 +66,11 @@ export function useLiveItems(enabled = true) {
  * pid / window handle). The lists refresh from their own subscriptions.
  */
 export async function closeLiveItem(kind, item) {
+  if (kind === 'app' && isMainWindowItem(item)) {
+    // "Closing" the full app hides it to the tray, like its own close button.
+    await hideMainWindow().catch((err) => console.warn('[Active] hide main window failed:', err));
+    return;
+  }
   try {
     if (kind === 'tab') {
       const msg = { type: 'CLOSE_TAB', tabId: item.tabId ?? item.id, url: item.url, _deviceId: item._deviceId, browser: item.browser };

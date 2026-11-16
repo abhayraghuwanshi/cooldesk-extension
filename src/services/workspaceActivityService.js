@@ -12,6 +12,7 @@
 
 import { runningAppsService } from './runningAppsService';
 import { itemRankingService } from './itemRankingService.js';
+import { isMainWindowItem, openMainWindow } from '../features/dock/mainWindowItem.js';
 
 const TABS_POLL_MS = 8000;
 
@@ -361,6 +362,8 @@ class WorkspaceActivityService {
      */
     activate(item, { target } = {}) {
         if (!item) return;
+        // CoolDesk's own full app (the running-apps entry, mainWindowItem.js).
+        if (isMainWindowItem(item)) { openMainWindow(); return; }
         // Every surface opens items through here, so this one call feeds the
         // shared activity ranking (itemRankingService) for all of them.
         itemRankingService.recordLaunch(item);

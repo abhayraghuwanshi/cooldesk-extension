@@ -629,7 +629,7 @@ fn attach_main_window_events(window: &tauri::Window) {
         }
         tauri::WindowEvent::CloseRequested { api, .. } => {
             api.prevent_close();
-            let _ = win.hide();
+            hide_main_window(win.app_handle());
         }
         _ => {}
     });
@@ -652,6 +652,19 @@ fn show_main_window(app: &tauri::AppHandle) {
         }
         let _ = win.set_focus();
     }
+}
+
+/// Hide the main window to the tray (the app keeps running).
+fn hide_main_window(app: &tauri::AppHandle) {
+    if let Some(win) = main_window(app) {
+        let _ = win.hide();
+    }
+}
+
+/// The × on CoolDesk's entry in the sidebar/dock running apps.
+#[tauri::command]
+fn main_window_hide(app: tauri::AppHandle) {
+    hide_main_window(&app);
 }
 
 #[derive(serde::Serialize)]
@@ -2826,6 +2839,7 @@ pub fn run() {
     ))
     .invoke_handler(guard_remote_webviews(tauri::generate_handler![
         web_suggest,
+        main_window_hide,
         get_running_apps,
         get_installed_apps,
         categorize_app,
@@ -3149,9 +3163,7 @@ pub fn run() {
                       .and_then(|w| w.is_visible().ok())
                       .unwrap_or(false);
                   if visible {
-                      if let Some(window) = main_window(&app) {
-                          let _ = window.hide();
-                      }
+                      hide_main_window(app);
                   } else {
                       show_main_window(app);
                   }
@@ -3222,8 +3234,14 @@ pub fn run() {
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
     .run(|_app_handle, event| {
-        // macOS dock icon reopen handling would go here if needed
-        // RunEvent::Reopen is macOS-specific and not available on Windows
+        // Clicking CoolDesk's icon in the macOS Dock brings back the full app,
+        // like the tray icon does. Always show it, whatever
+        // `has_visible_windows` says: the sidebar and dock panels are windows
+        // too, so it's true even while the main window is hidden.
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Reopen { .. } = event {
+            show_main_window(_app_handle);
+        }
         if let tauri::RunEvent::Exit = event {
             // Glued --app browser windows aren't our children — close them
             // explicitly so quitting CoolDesk doesn't orphan them.
