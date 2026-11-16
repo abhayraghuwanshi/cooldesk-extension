@@ -89,6 +89,24 @@ export const VALIDATION_SCHEMAS = {
                 maxItems: 100
             }
         },
+        // Saved shells: { id, name, cwd, addedAt } — a terminal that opens
+        // in that folder (Browse → Save on a terminal tab).
+        shells: {
+            [ValidationRules.TYPE]: 'array',
+            [ValidationRules.ARRAY]: {
+                itemType: 'object',
+                maxItems: 50
+            }
+        },
+        // Saved dev servers: { id, name, cwd, command, port, addedAt } — started
+        // on request in a terminal tab (src/shared/savedServers.js).
+        servers: {
+            [ValidationRules.TYPE]: 'array',
+            [ValidationRules.ARRAY]: {
+                itemType: 'object',
+                maxItems: 50
+            }
+        },
         context: {
             [ValidationRules.TYPE]: 'object'
         },

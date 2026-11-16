@@ -8101,15 +8101,141 @@ body.bg-white-cred .wgb-tile.has-accent {
   opacity: 1;
 }
 
-/* Dev Servers Open/Kill row: revealed on card hover. Space stays reserved so
-   the card doesn't resize; inline opacity keeps it shown once a kill is armed. */
-.dev-server-actions {
-  opacity: 0;
-  transition: opacity 0.15s ease;
+/* Dev Servers (faces/tabs/parts/DevServersPanel): compact rows like
+   Browse's Local servers and the dock's folder tiles — the project's stack
+   logo, its name, the port in green mono with a live dot; a stop button
+   joins on hover and asks once more before killing the process. */
+.dev-servers-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 11px;
+  cursor: pointer;
 }
 
-.cooldesk-tab-card:hover .dev-server-actions {
-  opacity: 1;
+.dev-servers-refresh:hover:not(:disabled) {
+  color: var(--text-primary, #e5e7eb);
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.dev-server-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dev-server-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 34px;
+  padding: 4px 6px 4px 6px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.dev-server-row:hover,
+.dev-server-row:focus-visible {
+  background: rgba(148, 163, 184, 0.1);
+  outline: none;
+}
+
+.dev-server-logo {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: rgba(148, 163, 184, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.16);
+  color: var(--text-secondary, #94a3b8);
+  font-size: 11px;
+}
+
+.dev-server-logo img {
+  width: 15px;
+  height: 15px;
+}
+
+.dev-server-logo img.is-inverted {
+  filter: invert(1);
+}
+
+.dev-server-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-sm, 13px);
+  font-weight: 550;
+  color: var(--text-primary, #e5e7eb);
+}
+
+.dev-server-port {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, #22c55e 70%, var(--text-primary, #e5e7eb));
+}
+
+.dev-server-port i {
+  width: 5px;
+  height: 5px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 5px #4ade80;
+}
+
+.dev-server-stop {
+  flex: none;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  margin-left: -4px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.dev-server-row:hover .dev-server-stop,
+.dev-server-row.is-armed .dev-server-stop {
+  display: inline-flex;
+}
+
+.dev-server-stop:hover {
+  color: #f87171;
+}
+
+.dev-server-stop.armed {
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 650;
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.35);
 }
 
 .tab-action-btn {

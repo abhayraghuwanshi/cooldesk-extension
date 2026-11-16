@@ -21,6 +21,8 @@ const SECTIONS = [
             { cmd: '/todo', insert: '/todo ', desc: 'Todos — in Active by default, or pick a workspace' },
             { cmd: '/notes', insert: '/notes ', desc: 'Notes — list on the left, editor on the right' },
             { cmd: '/shell', insert: '/shell', desc: 'A terminal here; shells keep running when Spotlight closes', desktop: true },
+            { cmd: '/dock', insert: '/dock ', desc: 'Turn the dock bar on or off — /dock on · /dock off', desktop: true },
+            { cmd: '/sidebar', insert: '/sidebar ', desc: 'Turn the sidebar on or off — /sidebar on · /sidebar off', desktop: true },
             { cmd: '> cmd', insert: '> ', desc: 'Run a command in a new shell (⌘↵: in a CoolDesk terminal tab)', desktop: true },
             { cmd: '/agent', insert: '/agent ', desc: 'Ask the AI agent to search, add links or set up a workspace', desktop: true },
             { cmd: '/new-workspace', insert: '/new-workspace', desc: 'Guided setup: name, folders, links' },

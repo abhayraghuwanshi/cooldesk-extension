@@ -66,6 +66,14 @@ pub struct Workspace {
     pub urls: Vec<WorkspaceUrl>,
     #[serde(default)]
     pub apps: Vec<WorkspaceApp>,
+    /// Saved shells ({ id, name, cwd, addedAt }): opaque here, only carried
+    /// through sync so they aren't dropped on the way.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shells: Vec<serde_json::Value>,
+    /// Saved dev servers ({ id, name, cwd, command, port, addedAt }): opaque
+    /// here too, carried through sync like `shells`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub servers: Vec<serde_json::Value>,
     pub created_at: Option<i64>,
     pub updated_at: Option<i64>,
 }

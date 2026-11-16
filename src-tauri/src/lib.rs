@@ -2769,7 +2769,13 @@ async fn list_listening_ports() -> Result<Vec<ListeningPort>, String> {
                 Ok(p) => p,
                 Err(_) => continue,
             };
-            let name = cols[cols.len() - 1];
+            // NAME is `127.0.0.1:3000 (LISTEN)` — the state is its own
+            // column, so the address is the last column not in parentheses.
+            // (Taking the very last one read "(LISTEN)" and dropped every row.)
+            let name = match cols.iter().skip(8).rev().find(|c| !c.starts_with('(')) {
+                Some(n) => *n,
+                None => continue,
+            };
             let port = match name.rsplit_once(':').and_then(|(_, p)| p.parse::<u16>().ok()) {
                 Some(p) => p,
                 None => continue,

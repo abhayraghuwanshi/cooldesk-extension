@@ -43,6 +43,12 @@ const LAUNCHERS: &[&str] = &["claude", "codex", "opencode", "aider", "gemini", "
 /// The sidecar's own port and other infrastructure that is never a dev server.
 const IGNORED_PORTS: &[u16] = &[4545];
 
+/// Start of the OS's ephemeral range (IANA / macOS / Windows). Listeners up
+/// here are tools' internal sockets — Claude Code's IDE bridge, opencode,
+/// editor helpers, language servers — not something you open in a browser;
+/// dev servers use fixed low ports (3000, 5173, 8080…).
+const EPHEMERAL_FROM: u16 = 49152;
+
 #[cfg(not(target_os = "windows"))]
 fn listening() -> Vec<(u16, u32, String)> {
     // -F pcn: machine-readable records — `p<pid>`, `c<command>`, then one
@@ -297,7 +303,7 @@ pub fn local_servers() -> Value {
 
     let rows: Vec<_> = listening()
         .into_iter()
-        .filter(|(port, pid, _)| *pid != me && !IGNORED_PORTS.contains(port))
+        .filter(|(port, pid, _)| *pid != me && !IGNORED_PORTS.contains(port) && *port < EPHEMERAL_FROM)
         .collect();
     let pids: Vec<u32> = rows.iter().map(|r| r.1).collect::<HashSet<_>>().into_iter().collect();
     let cwd_map = cwds(&pids);

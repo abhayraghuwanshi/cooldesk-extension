@@ -127,6 +127,12 @@ body.bg-white-cred .bp-root {
   width: auto;
 }
 
+/* No panel header above it here, so the field starts with the same 8px
+   inset on every side. */
+.browse-narrow-body {
+  margin: 8px;
+}
+
 /* ── List header + search ───────────────────────────────────────────── */
 .browse-head {
   display: flex;
@@ -836,6 +842,43 @@ html.browse-focus .browse-drawer {
   justify-content: center;
   gap: 8px;
   margin-top: 22px;
+}
+
+/* New tab: dev servers running locally (BrowseView LocalServerPicks). */
+.browse-hero-servers {
+  margin-top: 26px;
+}
+
+.browse-hero-servers .browse-hero-picks {
+  margin-top: 10px;
+}
+
+.browse-hero-label {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bv-dim);
+}
+
+.browse-server-chip .browse-chip-main {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browse-server-chip .server-port {
+  margin-left: 2px;
+}
+
+.browse-chip-main {
+  font-variant-numeric: tabular-nums;
+}
+
+.browse-chip-sub {
+  font-size: 10.5px;
+  color: var(--bv-dim);
 }
 
 .browse-chip {
@@ -2133,6 +2176,67 @@ html.browse-focus .browse-view.browse-peek .browse-list {
   color: #f87171;
 }
 
+/* Save a web tab to the workspace: shown on hover like close; once saved
+   it stays as a faint pin so you can see which tabs are kept. */
+.bp-btn.browse-tab-save {
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+  opacity: 0;
+}
+
+.browse-tab-row:hover .browse-tab-save,
+.browse-tab-row.active .browse-tab-save {
+  opacity: 0.7;
+}
+
+.bp-btn.browse-tab-save:hover {
+  opacity: 1;
+}
+
+.bp-btn.browse-tab-save.is-saved {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.bp-btn.browse-tab-save.is-saved:hover {
+  opacity: 0.45;
+}
+
+/* Remove a saved link from the workspace: appears on hover, next to the
+   host label (which is also hover-only). */
+.bp-btn.browse-link-remove {
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+  display: none;
+}
+
+.browse-tab-row:hover .browse-link-remove {
+  display: inline-flex;
+  opacity: 0.7;
+}
+
+.bp-btn.browse-link-remove:hover {
+  opacity: 1;
+  color: #f87171;
+}
+
+/* Save this page (tab toolbar): icon + label in single view, icon only on
+   a multi-view tile. Turns into a quiet "Saved" once it's in the workspace. */
+.bp-btn.bp-save {
+  gap: 6px;
+  width: auto;
+  padding: 0 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.bp-btn.bp-save.is-saved {
+  opacity: 0.55;
+  cursor: default;
+}
+
 /* Find in page (BrowserPane): replaces the address pill while open. */
 .bp-find {
   gap: 4px;
@@ -2538,6 +2642,72 @@ html.browse-focus .browse-view.browse-peek .browse-list {
 
 .browse-tab-row:hover .browse-row-sub {
   opacity: 1;
+}
+
+/* Same-name files/folders in a workspace: their parent folder, always shown. */
+.browse-row-sub.is-shown {
+  opacity: 1;
+}
+
+/* Local servers (BrowseView renderServerRow / LocalServerPicks): drawn like
+   the dock's folder tiles (dockbar.css .dockbar-place-parent.is-live) — the
+   project's stack logo, its name, and the port in green mono with a live
+   dot. A stop button joins on hover. */
+.browse-tile.server-tile img {
+  width: 15px;
+  height: 15px;
+}
+
+.browse-tile.server-tile img.is-inverted {
+  filter: invert(1);
+}
+
+.server-port {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--bv-good) 70%, var(--bv-text));
+}
+
+.server-port i {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--bv-good);
+  box-shadow: 0 0 5px var(--bv-good);
+}
+
+.bp-btn.server-stop {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-left: -4px;
+  font-size: 10px;
+  display: none;
+}
+
+.server-row:hover .server-stop,
+.server-row.is-armed .server-stop {
+  display: inline-flex;
+}
+
+.bp-btn.server-stop:hover {
+  color: #f87171;
+}
+
+.bp-btn.server-stop.armed {
+  width: auto;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 650;
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.35);
 }
 
 /* Home: the dashboard in a blank tab (fills the slot, scrolls like a page;
@@ -3818,4 +3988,83 @@ html.multi-dragging * { cursor: grabbing !important; user-select: none !importan
 .bp-usage--high .bp-usage-dot {
   background: #f87171;
   box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.2);
+}
+
+/* Saved servers (BrowseView renderPinnedServer): name over its start
+   command; a dot on the tile shows running (green) or starting (pulsing). */
+.saved-server-row .saved-server-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.saved-server-row .saved-server-main .browse-tab-title {
+  flex: 0 0 auto;
+}
+
+.saved-server-cmd {
+  font-size: 10.5px;
+  color: var(--bv-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-server-cmd-input {
+  font: inherit;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: inherit;
+  background: rgba(127, 127, 127, 0.12);
+  border: 1px solid rgba(127, 127, 127, 0.35);
+  border-radius: 5px;
+  padding: 2px 6px;
+  margin-top: 2px;
+  outline: none;
+  min-width: 0;
+}
+
+.server-dot-tile {
+  position: relative;
+}
+
+.server-dot-tile::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--bv-dim);
+  opacity: 0.6;
+}
+
+.server-dot-tile.is-live::after {
+  background: #22c55e;
+  opacity: 1;
+}
+
+.server-dot-tile.is-starting::after {
+  background: #f59e0b;
+  opacity: 1;
+  animation: saved-server-pulse 1s ease-in-out infinite;
+}
+
+@keyframes saved-server-pulse {
+  50% { opacity: 0.3; }
+}
+
+.bp-btn.saved-server-start {
+  width: 22px;
+  height: 22px;
+  font-size: 9px;
+  opacity: 0.75;
+}
+
+.bp-btn.saved-server-start:hover {
+  opacity: 1;
+  color: #22c55e;
 }
