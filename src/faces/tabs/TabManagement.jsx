@@ -1162,7 +1162,8 @@ export function TabManagement({ onOpenFolder, panel = false, hideOpen = false } 
             )}
 
             {/* 10. Dev Servers panel — port-driven list of listening processes (Tauri only) */}
-            {isTauriApp && (
+            {/* Not in Browse's side panel: it has its own Local servers list. */}
+            {isTauriApp && !panel && (
               <DevServersPanel
                 tabs={partitionedTabs.localhost}
                 onTabClick={handleTabClick}

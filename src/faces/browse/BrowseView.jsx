@@ -1,4 +1,4 @@
-import { faCompass, faDiagramProject, faFolder, faFolderOpen, faGear, faGripVertical, faGlobe, faHouse, faNoteSticky, faThumbtack, faPlus, faTerminal, faExpand, faCompress, faSearch, faServer, faTableCellsLarge, faTableColumns, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faBookmark, faCompass, faPlay, faPen, faTrashCan, faDiagramProject, faFolder, faFolderOpen, faGear, faGripVertical, faGlobe, faHouse, faNoteSticky, faPowerOff, faRotateRight, faThumbtack, faPlus, faTerminal, faExpand, faCompress, faSearch, faServer, faTableCellsLarge, faTableColumns, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserPane } from '../../features/browser/BrowserPane';
@@ -15,11 +15,16 @@ import { TerminalTab } from '../../features/terminal/TerminalTab';
 import { registerTerminalHost, useSpotlightRuns } from '../../features/terminal/runInTerminal';
 import { WorkspaceContextPanel } from '../workspace/WorkspaceList';
 import { clipSummary, saveClipToWorkspace } from '../../features/browser/clipToNote';
+import { addUrlToWorkspace, saveWorkspace } from '../../db/index.js';
 import { useShelf } from '../../features/shelf/useShelf';
 import { SPECIAL_TITLES, tabPaneId, useBrowseTabs } from './useBrowseTabs';
 import { defaultLayout, dockTile, evenSplit, hitDock, layoutRects, reconcile, setSplitSizes, splitSizes } from './multiLayout';
 import { getFaviconUrl } from '../../utils/helpers.js';
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
+import { fetchLocalServers, stopLocalServer } from '../../shared/devServers';
+import { guessStartCommand, runningServerFor } from '../../shared/savedServers';
+import { runInTerminal } from '../../features/terminal/runInTerminal';
+import { stackLogo, useFolderIdentity } from '../../shared/hooks/useFolderIdentity.js';
 import '../../styles/browse.css';
 
 // Browse face: the workspaces' links (plus local dev servers) on the left, the
@@ -51,7 +56,7 @@ const LIST_WS_KEY = 'cooldesk.browse.workspace';
 const MULTI_LAYOUT_KEY = 'cooldesk.browse.multiLayout';
 const WS_CONTEXT_KEY = 'cooldesk.browse.workspaceContext';
 // Home: how many rows a section shows before "+N more".
-const HOME_CAP = { tabs: 8, pinned: 6, folders: 8 };
+const HOME_CAP = { tabs: 8, pinned: 6, folders: 8, servers: 5 };
 // list_listening_ports runs netstat and samples every process's CPU (with a
 // deliberate sleep), so it's refreshed rarely rather than every few seconds.
 const PORTS_POLL_MS = 30000;
@@ -103,6 +108,48 @@ function ItemIcon({ item }) {
         ? <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} />
         : <span className="browse-mono">{letter}</span>}
     </span>
+  );
+}
+
+/**
+ * New tab: the dev servers running on this machine (localhost ports), one
+ * click to open. Asks for a fresh port list when it appears, so a server you
+ * just started shows up without waiting for the background poll.
+ */
+/** A local server's tile: its project's stack logo, else a folder. */
+function ServerIcon({ stack }) {
+  const [failed, setFailed] = useState(false);
+  const logo = failed ? null : stackLogo(stack);
+  return (
+    <span className="browse-tile server-tile">
+      {logo
+        ? <img className={logo.invert ? 'is-inverted' : ''} src={logo.src} alt="" onError={() => setFailed(true)} />
+        : <FontAwesomeIcon icon={faFolderOpen} />}
+    </span>
+  );
+}
+
+/** ":5173" with a live dot, as on the dock's folder tiles. */
+function ServerPort({ port }) {
+  return <span className="server-port"><i />:{port}</span>;
+}
+
+function LocalServerPicks({ servers, onOpen, onRefresh }) {
+  useEffect(() => { onRefresh(); }, [onRefresh]);
+  if (!servers.length) return null;
+  return (
+    <div className="browse-hero-servers">
+      <div className="browse-hero-label">Running on this Mac</div>
+      <div className="browse-hero-picks">
+        {servers.map(item => (
+          <button key={item.url} className="browse-chip browse-server-chip" onClick={() => onOpen(item.url)} title={`${item.title} — ${item.url}${item.dir ? `\n${item.dir}` : ''}`}>
+            <ServerIcon stack={item.stack} />
+            <span className="browse-chip-main">{item.title}</span>
+            <ServerPort port={item.port} />
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -752,23 +799,47 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   // Percent of one core, summed across page processes (so it can pass 100%).
   const pagesCpu = openPages.reduce((n, p) => n + (p.shared ? 0 : p.cpu || 0), 0);
 
-  // Local dev servers, only polled while this face is on screen.
+  // Local dev servers, only polled while this face is on screen. A new
+  // tab's start screen also asks for a fresh list (at most every few
+  // seconds — the scan shells out to lsof and ps). Same source as the
+  // dock's folder tiles and the Local tab (sidecar /local/servers), so they
+  // all agree on what's running.
+  const portsAt = useRef(0);
+  const loadPorts = useCallback(async ({ force = false } = {}) => {
+    if (!force && Date.now() - portsAt.current < 4000) return;
+    portsAt.current = Date.now();
+    try {
+      setPorts(await fetchLocalServers());
+    } catch {
+      setPorts([]);
+    }
+  }, []);
+  const refreshPorts = useCallback(() => { loadPorts(); }, [loadPorts]);
   useEffect(() => {
     if (!isActive) return;
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        const list = await invoke('list_listening_ports');
-        if (!cancelled) setPorts(Array.isArray(list) ? list : []);
-      } catch {
-        if (!cancelled) setPorts([]);
-      }
-    };
-    load();
-    const timer = setInterval(load, PORTS_POLL_MS);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [isActive]);
+    loadPorts({ force: true });
+    const timer = setInterval(() => loadPorts({ force: true }), PORTS_POLL_MS);
+    return () => clearInterval(timer);
+  }, [isActive, loadPorts]);
+
+  // Stopping a server: the first click arms it (for a few seconds), the
+  // second kills whatever listens on that port.
+  const [stopArmed, setStopArmed] = useState(null);
+  const stopServer = async (port) => {
+    if (stopArmed !== port) {
+      setStopArmed(port);
+      setTimeout(() => setStopArmed(p => (p === port ? null : p)), 3000);
+      return;
+    }
+    setStopArmed(null);
+    try {
+      await stopLocalServer(port);
+      setPorts(list => list.filter(p => p.port !== port));
+    } catch (err) {
+      console.warn('[Browse] stopping the server on port', port, 'failed:', err);
+    }
+    loadPorts({ force: true });
+  };
 
   // Groups: local servers, then the active workspace, then the rest.
   // Which workspace's links the list shows: one at a time (follows the
@@ -796,7 +867,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   const wsWithLinks = useMemo(() => savedWorkspaces
     .map(ws => ({
       ws,
-      count: (ws.urls || []).filter(u => isWebUrl(u?.url)).length + (ws.apps || []).filter(isFileItem).length,
+      count: (ws.urls || []).filter(u => isWebUrl(u?.url)).length + (ws.apps || []).filter(isFileItem).length + (ws.shells || []).length + (ws.servers || []).length,
     })), [savedWorkspaces]);
   // One workspace at a time (the rest stay out of the way, one pick away).
   // Every workspace is listed — the current one shows even before it has
@@ -836,12 +907,202 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
     return () => { cancelled = true; off?.(); };
   }, []);
 
+  // Save web tabs as links in the workspace shown in Home (the same one clips
+  // go to), so they come back with the workspace. Already-saved URLs are
+  // skipped. addUrlToWorkspace doesn't broadcast, so announce the change
+  // ourselves — App reloads savedWorkspaces and the Pinned list updates.
+  const savedUrls = new Set((clipWsRef.current?.urls || []).map(u => u?.url).filter(Boolean));
+  const saveTabsToWorkspace = useCallback(async (tabsToSave) => {
+    const ws = clipWsRef.current;
+    if (!ws) {
+      setClipToast({ error: true, text: 'Pick a workspace in Home first: links are saved to it.' });
+      return;
+    }
+    const have = new Set((ws.urls || []).map(u => u?.url).filter(Boolean));
+    const fresh = [];
+    for (const t of tabsToSave) {
+      if (isWebUrl(t.url) && !have.has(t.url)) { have.add(t.url); fresh.push(t); }
+    }
+    if (fresh.length === 0) {
+      setClipToast({ info: true, text: tabsToSave.length === 1 ? `Already saved in ${ws.name}` : `All these tabs are already saved in ${ws.name}` });
+      return;
+    }
+    let saved = 0;
+    let lastError = null;
+    for (const t of fresh) {
+      const res = await addUrlToWorkspace(t.url, ws.id, { title: t.title || hostOf(t.url) });
+      if (res?.success === false) lastError = res.error; else saved += 1;
+    }
+    try {
+      const bc = new BroadcastChannel('ws_db_changes');
+      bc.postMessage({ type: 'workspacesChanged' });
+      bc.close();
+    } catch { /* no BroadcastChannel: the list catches up on the next reload */ }
+    if (saved === 0) {
+      setClipToast({ error: true, text: `Couldn’t save to ${ws.name}: ${lastError?.message || lastError || 'unknown error'}` });
+    } else {
+      const what = saved === 1 ? (fresh[0].title || hostOf(fresh[0].url)) : `${saved} tabs`;
+      setClipToast({ link: true, text: `${what} saved to ${ws.name}${lastError ? ` (${fresh.length - saved} failed)` : ''}` });
+    }
+  }, []);
+
+  // Remove a saved link from the workspace shown in Home — the same
+  // remove_url action the workspace editor uses (saveWorkspace broadcasts,
+  // so App reloads savedWorkspaces and the row disappears). An open tab for
+  // it stays open; it just moves back to the plain Tabs list.
+  const removeLinkFromWorkspace = useCallback(async (url, title) => {
+    const ws = clipWsRef.current;
+    if (!ws || !url) return;
+    try {
+      const { applyActions } = await import('../../services/workspaceActions');
+      const { errors } = await applyActions([{ type: 'remove_url', workspace: ws.name, url }], [ws]);
+      if (errors.length) throw new Error(errors[0]);
+      setClipToast({ info: true, text: `${title || hostOf(url)} removed from ${ws.name}` });
+    } catch (err) {
+      setClipToast({ error: true, text: `Couldn’t remove it: ${err?.message || err}` });
+    }
+  }, []);
+
+  // Files, folders and shells in the workspace (Browse → Save on a file or
+  // terminal tab). Files and folders are the workspace's `apps` entries of
+  // appType file/folder (the same items drag-and-drop adds); shells are
+  // their own `shells` list — in `apps` they'd be launched as programs.
+  // A shell's folder: the live one from the shell's title when it's a full
+  // path (zsh/bash set it), else the folder the tab started in.
+  const termDir = (tab) => (/^(\/|[A-Za-z]:[\\/])/.test(tab.title || '') ? tab.title : tab.term?.cwd) || null;
+  const pathKey = (p) => (p || '').replace(/(.)[\\/]+$/, '$1').toLowerCase();
+  const serverForTab = (tab) => {
+    const m = /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\]):(\d+)/i.exec(tab.url || tab.req?.url || '');
+    return m ? ports.find(p => p.port === Number(m[1]) && p.dir) || null : null;
+  };
+  const isServerSaved = (server) => (clipWsRef.current?.servers || [])
+    .some(sv => pathKey(sv.cwd) === pathKey(server.dir) && (!sv.port || sv.port === server.port));
+  const isTabSaved = (tab) => {
+    const ws = clipWsRef.current;
+    if (!ws) return false;
+    if (!tab.file && !tab.term && serverForTab(tab)) return isServerSaved(serverForTab(tab));
+    if (tab.file) return (ws.apps || []).some(a => isFileItem(a) && pathKey(a.path) === pathKey(tab.file.path));
+    if (tab.term) return (ws.shells || []).some(sh => pathKey(sh.cwd) === pathKey(termDir(tab)));
+    return savedUrls.has(tab.url || tab.req?.url);
+  };
+  const saveItemToWorkspace = useCallback(async (item) => {
+    const ws = clipWsRef.current;
+    if (!ws) {
+      setClipToast({ error: true, text: 'Pick a workspace in Home first: items are saved to it.' });
+      return;
+    }
+    const name = (item.path || '').split(/[/\\]/).filter(Boolean).pop() || item.path;
+    try {
+      if (item.kind === 'shell') {
+        if ((ws.shells || []).some(sh => pathKey(sh.cwd) === pathKey(item.path))) return;
+        const shell = { id: `sh_${Date.now().toString(36)}`, name, cwd: item.path, addedAt: Date.now() };
+        const res = await saveWorkspace({ ...ws, shells: [...(ws.shells || []), shell], updatedAt: Date.now() });
+        if (res?.success === false) throw new Error(res.error?.message || 'save failed');
+      } else {
+        const { applyActions } = await import('../../services/workspaceActions');
+        if ((ws.apps || []).some(a => isFileItem(a) && pathKey(a.path) === pathKey(item.path))) return;
+        const { errors } = await applyActions([{
+          type: 'add_app', workspace: ws.name, path: item.path.replace(/(.)[\\/]+$/, '$1'), name, appType: item.isDir ? 'folder' : 'file',
+        }], [ws]);
+        if (errors.length) throw new Error(errors[0]);
+      }
+      setClipToast({ link: true, text: `${item.kind === 'shell' ? `Shell in ${name}` : name} saved to ${ws.name}` });
+    } catch (err) {
+      setClipToast({ error: true, text: `Couldn’t save to ${ws.name}: ${err?.message || err}` });
+    }
+  }, []);
+  const removeItemFromWorkspace = useCallback(async (item) => {
+    const ws = clipWsRef.current;
+    if (!ws || !item.path) return;
+    const name = (item.path || '').split(/[/\\]/).filter(Boolean).pop() || item.path;
+    try {
+      if (item.kind === 'server') {
+        const res = await saveWorkspace({ ...ws, servers: (ws.servers || []).filter(sv => sv.id !== item.id), updatedAt: Date.now() });
+        if (res?.success === false) throw new Error(res.error?.message || 'save failed');
+      } else if (item.kind === 'shell') {
+        const shells = (ws.shells || []).filter(sh => pathKey(sh.cwd) !== pathKey(item.path));
+        const res = await saveWorkspace({ ...ws, shells, updatedAt: Date.now() });
+        if (res?.success === false) throw new Error(res.error?.message || 'save failed');
+      } else {
+        // Every copy of this path (a trailing slash or different case would
+        // otherwise leave one behind and the row would come back).
+        const apps = (ws.apps || []).filter(a => !(isFileItem(a) && pathKey(a.path) === pathKey(item.path)));
+        const res = await saveWorkspace({ ...ws, apps, updatedAt: Date.now() });
+        if (res?.success === false) throw new Error(res.error?.message || 'save failed');
+      }
+      setClipToast({ info: true, text: `${item.kind === 'server' ? (item.name || name) : item.kind === 'shell' ? `Shell in ${name}` : name} removed from ${ws.name}` });
+    } catch (err) {
+      setClipToast({ error: true, text: `Couldn’t remove it: ${err?.message || err}` });
+    }
+  }, []);
+
+  // ── Saved servers (src/shared/savedServers.js) ─────────────────────
+  // Save a running dev server as its folder + start command (guessed from
+  // package.json, editable on the row). One per folder + port.
+  const saveServerToWorkspace = useCallback(async (server) => {
+    const ws = clipWsRef.current;
+    if (!ws) {
+      setClipToast({ error: true, text: 'Pick a workspace in Home first: servers are saved to it.' });
+      return;
+    }
+    if (!server?.dir) {
+      setClipToast({ error: true, text: 'Can’t tell which folder this server runs in, so it can’t be saved.' });
+      return;
+    }
+    const already = (ws.servers || []).some(sv => pathKey(sv.cwd) === pathKey(server.dir) && (!sv.port || sv.port === server.port));
+    if (already) { setClipToast({ info: true, text: `Already saved in ${ws.name}` }); return; }
+    const command = await guessStartCommand(server.dir);
+    const name = server.label || server.dir.split(/[/\\]/).filter(Boolean).pop();
+    const entry = { id: `sv_${Date.now().toString(36)}`, name, cwd: server.dir, command, port: server.port || null, addedAt: Date.now() };
+    const res = await saveWorkspace({ ...ws, servers: [...(ws.servers || []), entry], updatedAt: Date.now() });
+    if (res?.success === false) {
+      setClipToast({ error: true, text: `Couldn’t save to ${ws.name}: ${res.error?.message || 'save failed'}` });
+      return;
+    }
+    setClipToast({ link: true, text: command ? `${name} saved to ${ws.name} (starts with “${command}”)` : `${name} saved to ${ws.name}. Add its start command on the row.` });
+  }, []);
+  const updateSavedServer = useCallback(async (id, patch) => {
+    const ws = clipWsRef.current;
+    if (!ws) return;
+    const servers = (ws.servers || []).map(sv => (sv.id === id ? { ...sv, ...patch } : sv));
+    await saveWorkspace({ ...ws, servers, updatedAt: Date.now() });
+  }, []);
+  // ▶ on a saved server: run its command in a terminal tab, then open the
+  // page once a server shows up in its folder (checked every 2s, up to 90s).
+  const [startingServers, setStartingServers] = useState(() => new Set());
+  const startSavedServer = useCallback(async (sv) => {
+    if (!sv?.command) return;
+    setStartingServers(prev => new Set(prev).add(sv.id));
+    await runInTerminal({ command: sv.command, cwd: sv.cwd, label: sv.name });
+    const done = () => setStartingServers(prev => { const next = new Set(prev); next.delete(sv.id); return next; });
+    const startedAt = Date.now();
+    const check = async () => {
+      let list = [];
+      try { list = await fetchLocalServers(); } catch { /* sidecar busy: try again */ }
+      const found = runningServerFor(sv, list);
+      if (found) {
+        setPorts(list);
+        done();
+        if (found.port !== sv.port) updateSavedServer(sv.id, { port: found.port });
+        browseTabs.openInNew(`http://localhost:${found.port}`, { position: 'after' });
+        return;
+      }
+      if (Date.now() - startedAt > 90000) {
+        done();
+        setClipToast({ error: true, text: `${sv.name} didn’t start a server yet. Check its terminal tab.` });
+        return;
+      }
+      setTimeout(check, 2000);
+    };
+    setTimeout(check, 1500);
+  }, [browseTabs, updateSavedServer]);
+
   const groups = useMemo(() => {
     const q = filter.trim().toLowerCase();
     const matches = (item) => !q || item.title.toLowerCase().includes(q) || item.url.toLowerCase().includes(q);
 
     const serverItems = ports
-      .map(p => ({ url: `http://localhost:${p.port}`, title: `localhost:${p.port}`, sub: p.process, server: true }))
+      .map(p => ({ url: `http://localhost:${p.port}`, title: p.label, sub: `:${p.port}`, server: true, port: p.port, dir: p.dir }))
       .filter(matches);
 
     // One workspace (flat list) unless 'all' is picked or a filter is typed.
@@ -874,7 +1135,8 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
     ];
   }, [savedWorkspaces, activeWorkspaceId, ports, filter, shownWs]);
 
-  const quickPicks = useMemo(() => groups.filter(g => !g.isFiles).flatMap(g => g.items).slice(0, 8), [groups]);
+  // The servers get their own row on the new tab screen.
+  const quickPicks = useMemo(() => groups.filter(g => !g.isFiles && g.id !== 'servers').flatMap(g => g.items).slice(0, 8), [groups]);
 
 
 
@@ -978,8 +1240,44 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
       <FontAwesomeIcon icon={faGripVertical} />
     </button>
   ) : null) : toolbarStart);
+  // Save this page to the workspace shown in Home — a labelled button in the
+  // tab's own toolbar, so it's there without opening the side panel.
+  const saveButton = (tab) => {
+    if (tab.note || tab.special) return null;
+    const pageUrl = tab.url || tab.req?.url;
+    let save;
+    if (tab.file) save = () => saveItemToWorkspace({ kind: 'file', path: tab.file.path, isDir: tab.file.isDir });
+    else if (tab.term) {
+      const dir = termDir(tab);
+      if (!dir) return null;
+      save = () => saveItemToWorkspace({ kind: 'shell', path: dir });
+    } else if (serverForTab(tab)) save = () => saveServerToWorkspace(serverForTab(tab));
+    else if (isWebUrl(pageUrl)) save = () => saveTabsToWorkspace([{ url: pageUrl, title: tab.title }]);
+    else return null;
+    const what = tab.file ? (tab.file.isDir ? 'this folder' : 'this file') : tab.term ? 'this shell' : serverForTab(tab) ? 'this server' : 'this page';
+    const ws = clipWsRef.current;
+    if (isTabSaved(tab)) {
+      return (
+        <span className="bp-btn bp-save is-saved" title={`Saved in ${ws?.name || 'this workspace'}`}>
+          <FontAwesomeIcon icon={faBookmark} />
+          {!canvasMode && <span>Saved</span>}
+        </span>
+      );
+    }
+    return (
+      <button
+        className="bp-btn bp-save"
+        onClick={save}
+        title={ws ? `Save ${what} to ${ws.name}` : `Save ${what} to a workspace`}
+      >
+        <FontAwesomeIcon icon={faBookmark} />
+        {!canvasMode && <span>Save</span>}
+      </button>
+    );
+  };
   const paneEnd = (tab) => (canvasMode ? (
     <>
+      {saveButton(tab)}
       <button className="bp-btn" onClick={() => { browseTabs.activate(tab.id); setMode('browse'); }} title="Just this tab (single view)">
         <FontAwesomeIcon icon={faExpand} />
       </button>
@@ -987,7 +1285,12 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
         <FontAwesomeIcon icon={faXmark} />
       </button>
     </>
-  ) : toolbarEnd);
+  ) : (
+    <>
+      {saveButton(tab)}
+      {toolbarEnd}
+    </>
+  ));
 
   // ── Tabs tab rows ──────────────────────────────────────────────────
   // Pinned = the workspace's links, files and folders (Arc-style): each shows
@@ -995,12 +1298,37 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   const pinnedLinks = shownWs
     ? (shownWs.ws.urls || []).filter(u => isWebUrl(u?.url)).map(u => ({ url: u.url, ...describeLink(u.url, u.title), favicon: u.favicon }))
     : [];
-  const pinnedFiles = shownWs
-    ? (shownWs.ws.apps || []).filter(isFileItem).map(a => ({ path: a.path, isDir: a.appType === 'folder', title: a.name || a.path.split(/[/\\]/).pop(), sub: a.path }))
+  // One row per file/folder: the same path saved twice (a trailing slash,
+  // different case) shows once. Different folders that share a name show
+  // their parent folder so they can be told apart.
+  const pinnedFiles = (() => {
+    if (!shownWs) return [];
+    const seen = new Set();
+    const items = [];
+    for (const a of shownWs.ws.apps || []) {
+      if (!isFileItem(a) || seen.has(pathKey(a.path))) continue;
+      seen.add(pathKey(a.path));
+      const parts = a.path.split(/[/\\]/).filter(Boolean);
+      items.push({ path: a.path, isDir: a.appType === 'folder', title: a.name || parts[parts.length - 1] || a.path, parent: parts[parts.length - 2] || '', sub: a.path });
+    }
+    const counts = {};
+    items.forEach(i => { counts[i.title.toLowerCase()] = (counts[i.title.toLowerCase()] || 0) + 1; });
+    return items.map(i => ({ ...i, clash: counts[i.title.toLowerCase()] > 1 }));
+  })();
+  const pinnedShells = shownWs
+    ? (shownWs.ws.shells || []).filter(sh => sh?.cwd).map(sh => ({ shell: true, path: sh.cwd, title: sh.name || sh.cwd.split(/[/\\]/).filter(Boolean).pop() }))
     : [];
-  const serverLinks = groups.find(g => g.id === 'servers')?.items || [];
+  const pinnedServers = shownWs
+    ? (shownWs.ws.servers || []).filter(sv => sv?.cwd).map(sv => ({ server: true, sv, path: sv.cwd, title: sv.name }))
+    : [];
+  // Each server as the dock shows it: its project's stack logo (folder
+  // identity of the folder it runs in), the project's name, its port.
+  const serverDirs = useMemo(() => ports.map(p => p.dir).filter(Boolean), [ports]);
+  const folderIdentity = useFolderIdentity(serverDirs);
+  const serverLinks = (groups.find(g => g.id === 'servers')?.items || [])
+    .map(item => ({ ...item, stack: item.dir ? folderIdentity(item.dir).stack : null }));
   const tabForUrl = (url) => browseTabs.tabs.find(t => !t.file && !t.term && !t.note && !t.special && (t.url === url || t.req.url === url));
-  const tabForPath = (path) => browseTabs.tabs.find(t => t.file?.path === path);
+  const tabForPath = (path) => browseTabs.tabs.find(t => t.file && pathKey(t.file.path) === pathKey(path));
 
   const closeButton = (tab) => (
     <button
@@ -1009,6 +1337,16 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
       title="Close tab"
     >
       <FontAwesomeIcon icon={faXmark} />
+    </button>
+  );
+
+  const removeButton = (item) => (
+    <button
+      className="bp-btn browse-link-remove"
+      onClick={(e) => { e.stopPropagation(); removeItemFromWorkspace(item); }}
+      title={`Remove from ${clipWsRef.current?.name || 'this workspace'}`}
+    >
+      <FontAwesomeIcon icon={faTrashCan} />
     </button>
   );
 
@@ -1027,7 +1365,53 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
       >
         <ItemIcon item={item} />
         <span className="browse-tab-title">{tab?.title || item.title}</span>
-        {tab ? closeButton(tab) : <span className="browse-row-sub">{item.sub?.split('/')[0]}</span>}
+        {!tab && <span className="browse-row-sub">{item.sub?.split('/')[0]}</span>}
+        <button
+          className="bp-btn browse-link-remove"
+          onClick={(e) => { e.stopPropagation(); removeLinkFromWorkspace(item.url, item.title); }}
+          title={`Remove from ${clipWsRef.current?.name || 'this workspace'}`}
+        >
+          <FontAwesomeIcon icon={faTrashCan} />
+        </button>
+        {tab && closeButton(tab)}
+      </div>
+    );
+  }
+
+  // A local server: its address, the program serving it, and a stop button
+  // (on hover; asks once more before killing the process).
+  function renderServerRow(item) {
+    const tab = tabForUrl(item.url);
+    const armed = stopArmed === item.port;
+    return (
+      <div
+        key={item.url}
+        role="button"
+        tabIndex={0}
+        className={`browse-tab-row server-row ${tab?.id === browseTabs.activeId ? 'active' : ''} ${tab ? 'is-open' : ''} ${armed ? 'is-armed' : ''}`}
+        onClick={(e) => pickLink(item.url, e.metaKey || e.ctrlKey)}
+        onKeyDown={(e) => { if (e.key === 'Enter') pickLink(item.url); }}
+        title={`${item.title} — ${item.url}${item.dir ? `\n${item.dir}` : ''}\n${tab ? 'Open: click to switch to it' : 'Click to open in a tab'}`}
+      >
+        <ServerIcon stack={item.stack} />
+        <span className="browse-tab-title">{item.title}</span>
+        <ServerPort port={item.port} />
+        {item.dir && !isServerSaved(item) && (
+          <button
+            className="bp-btn browse-tab-save"
+            onClick={(e) => { e.stopPropagation(); saveServerToWorkspace(item); }}
+            title={clipWsRef.current ? `Save this server to ${clipWsRef.current.name}` : 'Save this server to a workspace'}
+          >
+            <FontAwesomeIcon icon={faBookmark} />
+          </button>
+        )}
+        <button
+          className={`bp-btn server-stop ${armed ? 'armed' : ''}`}
+          onClick={(e) => { e.stopPropagation(); stopServer(item.port); }}
+          title={armed ? `Click again to stop the process on port ${item.port}` : `Stop the server on port ${item.port}`}
+        >
+          {armed ? <span>Stop?</span> : <FontAwesomeIcon icon={faPowerOff} />}
+        </button>
       </div>
     );
   }
@@ -1046,6 +1430,111 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
       >
         <span className="browse-tile"><FileIcon path={item.path} isDir={item.isDir} /></span>
         <span className="browse-tab-title">{item.title}</span>
+        {item.clash && item.parent && <span className="browse-row-sub is-shown">in {item.parent}</span>}
+        {removeButton({ kind: 'file', path: item.path })}
+        {tab && closeButton(tab)}
+      </div>
+    );
+  }
+
+  // A saved server: running → dot + port, click opens it; stopped → ▶ runs
+  // its command in a terminal tab and opens the page once it's up. The
+  // command is shown under the name and edited in place (✎).
+  const [editingServer, setEditingServer] = useState(null); // { id, draft }
+  function renderPinnedServer(item) {
+    const { sv } = item;
+    const live = runningServerFor(sv, ports);
+    const tab = live ? tabForUrl(`http://localhost:${live.port}`) : null;
+    const starting = startingServers.has(sv.id);
+    const editing = editingServer?.id === sv.id;
+    const open = () => {
+      if (live) pickLink(`http://localhost:${live.port}`);
+      else if (sv.command && !starting) startSavedServer(sv);
+      else if (!sv.command) setEditingServer({ id: sv.id, draft: '' });
+    };
+    const commitCommand = () => {
+      const command = (editingServer?.draft || '').trim();
+      setEditingServer(null);
+      if (command !== (sv.command || '')) updateSavedServer(sv.id, { command });
+    };
+    return (
+      <div
+        key={`server:${sv.id}`}
+        role="button"
+        tabIndex={0}
+        className={`browse-tab-row saved-server-row ${tab?.id === browseTabs.activeId ? 'active' : ''} ${tab ? 'is-open' : ''}`}
+        onClick={editing ? undefined : open}
+        onKeyDown={(e) => { if (!editing && e.key === 'Enter') open(); }}
+        title={`${sv.name} — ${sv.cwd}\n${live ? `Running on :${live.port}. Click to open` : starting ? 'Starting…' : sv.command ? `Stopped. Click to start: ${sv.command}` : 'No start command yet. Click to add one'}`}
+      >
+        <span className={`browse-tile server-dot-tile ${live ? 'is-live' : ''} ${starting ? 'is-starting' : ''}`}>
+          <FontAwesomeIcon icon={faServer} />
+        </span>
+        <span className="saved-server-main">
+          <span className="browse-tab-title">{sv.name}</span>
+          {editing ? (
+            <input
+              className="saved-server-cmd-input"
+              autoFocus
+              value={editingServer.draft}
+              placeholder="Start command, e.g. npm run dev"
+              spellCheck={false}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setEditingServer({ id: sv.id, draft: e.target.value })}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') commitCommand();
+                else if (e.key === 'Escape') setEditingServer(null);
+              }}
+              onBlur={commitCommand}
+            />
+          ) : (
+            <span className="saved-server-cmd">{sv.command ? `$ ${sv.command}` : 'no start command'}</span>
+          )}
+        </span>
+        {live ? <ServerPort port={live.port} /> : starting ? <span className="browse-row-sub is-shown">starting…</span> : null}
+        {!editing && (
+          <button
+            className="bp-btn browse-link-remove"
+            onClick={(e) => { e.stopPropagation(); setEditingServer({ id: sv.id, draft: sv.command || '' }); }}
+            title="Edit the start command"
+          >
+            <FontAwesomeIcon icon={faPen} />
+          </button>
+        )}
+        {!live && !starting && sv.command && !editing && (
+          <button
+            className="bp-btn saved-server-start"
+            onClick={(e) => { e.stopPropagation(); startSavedServer(sv); }}
+            title={`Start: ${sv.command}`}
+          >
+            <FontAwesomeIcon icon={faPlay} />
+          </button>
+        )}
+        {!editing && removeButton({ kind: 'server', id: sv.id, path: sv.cwd, name: sv.name })}
+      </div>
+    );
+  }
+
+  // A saved shell: opens a terminal in its folder (or switches to one that's
+  // already there). Nothing runs on its own — it's just a shell in that folder.
+  function renderPinnedShell(item) {
+    const tab = browseTabs.tabs.find(t => t.term && pathKey(termDir(t)) === pathKey(item.path));
+    const open = () => (tab ? browseTabs.activate(tab.id) : openTerminal(item.path));
+    return (
+      <div
+        key={`shell:${item.path}`}
+        role="button"
+        tabIndex={0}
+        className={`browse-tab-row ${tab?.id === browseTabs.activeId ? 'active' : ''} ${tab ? 'is-open' : ''}`}
+        onClick={open}
+        onKeyDown={(e) => { if (e.key === 'Enter') open(); }}
+        title={`Shell in ${item.path}\n${tab ? 'Open: click to switch to it' : 'Click to open a terminal here'}`}
+      >
+        <span className="browse-tile term-tile"><FontAwesomeIcon icon={faTerminal} /></span>
+        <span className="browse-tab-title">{item.title}</span>
+        {!tab && <span className="browse-row-sub">shell</span>}
+        {removeButton({ kind: 'shell', path: item.path })}
         {tab && closeButton(tab)}
       </div>
     );
@@ -1076,6 +1565,21 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
             ? <ItemIcon item={{ url: tab.url, title: tab.title, sub: host }} />
             : <span className="browse-tile"><FontAwesomeIcon icon={faPlus} /></span>}
         <span className="browse-tab-title">{tab.title || host || 'New tab'}</span>
+        {isWebUrl(tab.url) && !tab.file && !tab.term && !tab.note && !tab.special && (
+          savedUrls.has(tab.url) ? (
+            <span className="bp-btn browse-tab-save is-saved" title={`Saved in ${clipWsRef.current?.name || 'this workspace'}`}>
+              <FontAwesomeIcon icon={faBookmark} />
+            </span>
+          ) : (
+            <button
+              className="bp-btn browse-tab-save"
+              onClick={(e) => { e.stopPropagation(); saveTabsToWorkspace([tab]); }}
+              title={clipWsRef.current ? `Save to ${clipWsRef.current.name}` : 'Save to a workspace'}
+            >
+              <FontAwesomeIcon icon={faBookmark} />
+            </button>
+          )
+        )}
         {closeButton(tab)}
       </div>
     );
@@ -1168,7 +1672,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
         {groups.map(group => (
           <section key={group.id} className="browse-group">
             <div className="nav-section-head"><span>{group.name}</span><span className="browse-count">{group.items.length}</span></div>
-            {group.items.map(item => (item.path ? renderPinnedFile(item) : renderPinnedLink(item)))}
+            {group.items.map(item => (item.path ? renderPinnedFile(item) : item.server ? renderServerRow(item) : renderPinnedLink(item)))}
           </section>
         ))}
       </>
@@ -1225,31 +1729,38 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                 <button className="bp-btn browse-tabs-new" onClick={browseTabs.openScratchNote} title="New note (a scratch notepad — save it to a workspace when you want to keep it)">
                   <FontAwesomeIcon icon={faNoteSticky} />
                 </button>
+                {openTabs.some(t => isWebUrl(t.url) && !t.file && !t.term && !t.note && !t.special) && (
+                  <button
+                    className="bp-btn browse-tabs-new"
+                    onClick={() => saveTabsToWorkspace(openTabs.filter(t => !t.file && !t.term && !t.note && !t.special))}
+                    title={clipWsRef.current ? `Save all web tabs to ${clipWsRef.current.name}` : 'Save all web tabs to a workspace'}
+                  >
+                    <FontAwesomeIcon icon={faBookmark} />
+                  </button>
+                )}
               </div>
               {capped('tabs', openTabs, renderTabRow)}
             </section>
 
             {/* The workspace's pinned links and files — the workspace is
                 picked right in the header, its notes one button over. */}
-            {(shownWs || serverLinks.length > 0) && (
+            {shownWs && (
               <section className="nav-section">
                 <div className="nav-section-head nav-ws-head">
-                  {shownWs ? (
-                    <ToolbarMenu
-                      icon={faThumbtack}
-                      label={shownWs.ws.name}
-                      title="Switch workspace"
-                      align="left"
-                      className="nav-ws-menu"
-                      items={wsWithLinks.map(({ ws, count }) => ({
-                        key: ws.id,
-                        label: ws.name,
-                        hint: count ? String(count) : null,
-                        checked: shownWs.ws.id === ws.id,
-                        onSelect: () => setListWs(ws.id),
-                      }))}
-                    />
-                  ) : <span>Local servers</span>}
+                  <ToolbarMenu
+                    icon={faThumbtack}
+                    label={shownWs.ws.name}
+                    title="Switch workspace"
+                    align="left"
+                    className="nav-ws-menu"
+                    items={wsWithLinks.map(({ ws, count }) => ({
+                      key: ws.id,
+                      label: ws.name,
+                      hint: count ? String(count) : null,
+                      checked: shownWs.ws.id === ws.id,
+                      onSelect: () => setListWs(ws.id),
+                    }))}
+                  />
                   <span className="nt-grow" />
                   {shownWs && (
                     <button
@@ -1274,10 +1785,25 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                     />
                   </div>
                 )}
-                {shownWs && pinnedLinks.length + pinnedFiles.length === 0 && (
-                  <div className="browse-hint">Links, files and folders you add to {shownWs.ws.name} show up here.</div>
+                {shownWs && pinnedLinks.length + pinnedFiles.length + pinnedShells.length + pinnedServers.length === 0 && (
+                  <div className="browse-hint">Links, files, folders, shells and servers you save to {shownWs.ws.name} show up here. Use Save in a tab’s toolbar.</div>
                 )}
-                {capped('pinned', [...pinnedLinks, ...pinnedFiles, ...serverLinks], item => (item.path ? renderPinnedFile(item) : renderPinnedLink(item)))}
+                {capped('pinned', [...pinnedServers, ...pinnedLinks, ...pinnedFiles, ...pinnedShells], item => (item.server ? renderPinnedServer(item) : item.shell ? renderPinnedShell(item) : item.path ? renderPinnedFile(item) : renderPinnedLink(item)))}
+              </section>
+            )}
+
+            {/* Dev servers running on this machine (localhost ports). */}
+            {serverLinks.length > 0 && (
+              <section className="nav-section">
+                <div className="nav-section-head">
+                  <span>Local servers</span>
+                  <span className="browse-count">{serverLinks.length}</span>
+                  <span className="nt-grow" />
+                  <button className="bp-btn browse-tabs-new" onClick={() => loadPorts({ force: true })} title="Check for running servers now">
+                    <FontAwesomeIcon icon={faRotateRight} />
+                  </button>
+                </div>
+                {capped('servers', serverLinks, renderServerRow)}
               </section>
             )}
 
@@ -1308,7 +1834,14 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   return (
     <div className={`browse-view ${isSidebarWidth ? 'browse-narrow' : ''}`}>
       {/* Docked sidebar width: no room for a page, so the links fill it. */}
-      {isSidebarWidth && <aside className="browse-list">{navContent}</aside>}
+      {/* Same wrapper as the side panel's Home (FilesView .fp-body.nav-body),
+          so the narrow sidebar gets the same spacing, field and one-page
+          scroll instead of an unstyled, clipped column. */}
+      {isSidebarWidth && (
+        <aside className="browse-list">
+          <div className="fp-body nav-body browse-narrow-body">{navContent}</div>
+        </aside>
+      )}
 
       {!isSidebarWidth && (
         <main className="browse-pane">
@@ -1500,6 +2033,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                             <span>Files</span>
                           </button>
                         </div>
+                        <LocalServerPicks servers={serverLinks} onOpen={openUrl} onRefresh={refreshPorts} />
                         {quickPicks.length > 0 && (
                           <div className="browse-hero-picks">
                             {quickPicks.map(item => (
@@ -1540,10 +2074,10 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
       {clipToast && (
         <div className={`clip-toast ${clipToast.error ? 'is-error' : ''}`} role="status">
           <span>{clipToast.text}</span>
-          {!clipToast.error && (
+          {!clipToast.error && !clipToast.info && (
             <button
               className="fm-status-link"
-              onClick={() => { setWsContextOpen(true); goHome(); setClipToast(null); }}
+              onClick={() => { if (!clipToast.link) setWsContextOpen(true); goHome(); setClipToast(null); }}
             >
               Show
             </button>

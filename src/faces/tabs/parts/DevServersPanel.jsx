@@ -1,74 +1,52 @@
-import { faArrowUpRightFromSquare, faCircleNotch, faMemory, faMicrochip, faPowerOff, faSync } from '@fortawesome/free-solid-svg-icons';
+import { faFolderOpen, faPowerOff, faRotateRight } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useT } from '../../../shared/i18n';
+import { fetchLocalServers, stopLocalServer } from '../../../shared/devServers';
+import { stackLogo, useFolderIdentity } from '../../../shared/hooks/useFolderIdentity.js';
+import { SectionHeader } from './SectionHeader';
 
-// Common local dev server ports — used to filter out OS/system listeners by default.
-const DEV_PORTS = new Set([
-  1234, 3000, 3001, 3002, 3003, 3004, 3005, 4000, 4200, 4321, 5000, 5001,
-  5173, 5174, 5175, 6006, 8000, 8001, 8080, 8081, 8888, 9000, 9229, 19000,
-]);
+// The list refreshes on its own this often while it's on screen.
+const POLL_MS = 15000;
 
-// Process names that strongly imply a dev server (matched case-insensitively,
-// `.exe` stripped). A listener owned by one of these is shown regardless of port.
-const DEV_PROCESS_HINTS = [
-  'node', 'deno', 'bun', 'python', 'php', 'ruby', 'java', 'dotnet', 'cargo',
-  'rustc', 'go', 'vite', 'next', 'webpack', 'esbuild', 'ng', 'rails', 'flask',
-  'gunicorn', 'uvicorn', 'code', 'nginx',
-];
-
-function normalizeProcName(name) {
-  return (name || '').toLowerCase().replace(/\.exe$/, '');
-}
-
-// Bytes → compact human string (e.g. "312 MB", "1.4 GB").
-function formatBytes(bytes) {
-  if (!bytes || bytes <= 0) return '—';
-  const mb = bytes / (1024 * 1024);
-  if (mb < 1024) return `${Math.round(mb)} MB`;
-  return `${(mb / 1024).toFixed(1)} GB`;
-}
-
-// Color the CPU figure so a hot process stands out at a glance.
-function cpuColor(cpu) {
-  if (cpu >= 50) return '#F87171';
-  if (cpu >= 15) return '#FBBF24';
-  return 'var(--text-secondary, #94A3B8)';
-}
-
-function looksLikeDevServer(entry) {
-  if (DEV_PORTS.has(entry.port)) return true;
-  const proc = normalizeProcName(entry.process);
-  return DEV_PROCESS_HINTS.some(hint => proc.includes(hint));
+/** A server's project: its stack logo, else a folder. */
+function ServerLogo({ stack }) {
+  const [failed, setFailed] = useState(false);
+  const logo = failed ? null : stackLogo(stack);
+  return (
+    <span className="dev-server-logo">
+      {logo
+        ? <img className={logo.invert ? 'is-inverted' : ''} src={logo.src} alt="" onError={() => setFailed(true)} />
+        : <FontAwesomeIcon icon={faFolderOpen} />}
+    </span>
+  );
 }
 
 /**
- * DevServersPanel — live list of processes listening on a TCP port.
- * Unlike the tab-driven "Local Dev" section, this is port-driven (the OS socket
- * table), so it surfaces orphaned servers that no longer have a tab open.
- * Tauri desktop only — backed by the Rust `list_listening_ports` command.
+ * DevServersPanel — the dev servers running on this machine, drawn like
+ * Browse's Local servers and the dock's folder tiles: the project's stack
+ * logo, its name, the port in green. Click opens it (or its open tab); the
+ * stop button (on hover) asks once more before killing the process.
+ * Same source as those (sidecar /local/servers, shared/devServers.js).
+ * Tauri desktop only.
  *
  * @param {Array} tabs - localhost tabs, used to link a port back to its open tab
  * @param {Function} onTabClick - jump to an existing tab (tab) => void
  */
 export function DevServersPanel({ tabs = [], onTabClick }) {
   const t = useT();
-  const [ports, setPorts] = useState([]);
+  const [servers, setServers] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-  const [showAll, setShowAll] = useState(false);
-  // Port currently armed for confirm, and the one being killed.
-  const [confirmPort, setConfirmPort] = useState(null);
-  const [killingPort, setKillingPort] = useState(null);
+  const [armed, setArmed] = useState(null);
+  const [stopping, setStopping] = useState(null);
 
-  // Map port -> open localhost tab (for the "has tab / open" affordance).
+  // Map port -> open localhost tab.
   const tabByPort = useMemo(() => {
     const map = new Map();
-    for (const t of tabs) {
+    for (const tab of tabs) {
       try {
-        const u = new URL(t.url);
-        const port = u.port || (u.protocol === 'https:' ? '443' : '80');
-        if (port && !map.has(port)) map.set(String(port), t);
+        const u = new URL(tab.url);
+        if (u.port && !map.has(u.port)) map.set(u.port, tab);
       } catch { /* ignore unparseable urls */ }
     }
     return map;
@@ -77,265 +55,88 @@ export function DevServersPanel({ tabs = [], onTabClick }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      const list = await invoke('list_listening_ports');
-      setPorts(Array.isArray(list) ? list : []);
-    } catch (error) {
-      console.error('[DevServersPanel] list_listening_ports failed:', error);
-      setPorts([]);
+      setServers(await fetchLocalServers());
+    } catch {
+      setServers([]);
     } finally {
       setLoading(false);
-      setLoaded(true);
     }
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+    const timer = setInterval(refresh, POLL_MS);
+    return () => clearInterval(timer);
+  }, [refresh]);
 
-  const handleKill = useCallback(async (entry) => {
-    if (confirmPort !== entry.port) {
-      setConfirmPort(entry.port);
-      setTimeout(() => setConfirmPort(p => (p === entry.port ? null : p)), 3000);
-      return;
-    }
-    setConfirmPort(null);
-    setKillingPort(entry.port);
+  const folderIdentity = useFolderIdentity(servers.map(s => s.dir).filter(Boolean));
+
+  const open = useCallback(async (server) => {
+    const tab = tabByPort.get(String(server.port));
+    if (tab && onTabClick) return onTabClick(tab);
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      const result = await invoke('kill_process_on_port', { port: entry.port });
-      console.log('[DevServersPanel] killed:', result);
-      // Drop it optimistically, then re-sync with the OS.
-      setPorts(prev => prev.filter(p => p.port !== entry.port));
-      refresh();
-    } catch (error) {
-      console.error('[DevServersPanel] kill failed for port', entry.port, ':', error);
-    } finally {
-      setKillingPort(null);
-    }
-  }, [confirmPort, refresh]);
-
-  const handleOpen = useCallback(async (entry) => {
-    const tab = tabByPort.get(String(entry.port));
-    if (tab && onTabClick) {
-      onTabClick(tab);
-      return;
-    }
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('open_url', { url: `http://localhost:${entry.port}` });
-    } catch (error) {
-      console.error('[DevServersPanel] open_url failed:', error);
+      await invoke('open_url', { url: `http://localhost:${server.port}` });
+    } catch (err) {
+      console.warn('[DevServersPanel] open failed:', err);
     }
   }, [tabByPort, onTabClick]);
 
-  const visible = useMemo(() => {
-    if (showAll) return ports;
-    // Default view: dev-looking ports, plus any port that has an open tab.
-    return ports.filter(e => looksLikeDevServer(e) || tabByPort.has(String(e.port)));
-  }, [ports, showAll, tabByPort]);
+  const stop = useCallback(async (port) => {
+    if (armed !== port) {
+      setArmed(port);
+      setTimeout(() => setArmed(p => (p === port ? null : p)), 3000);
+      return;
+    }
+    setArmed(null);
+    setStopping(port);
+    try {
+      await stopLocalServer(port);
+      setServers(list => list.filter(s => s.port !== port));
+    } catch (err) {
+      console.warn('[DevServersPanel] stop failed for port', port, err);
+    } finally {
+      setStopping(null);
+      refresh();
+    }
+  }, [armed, refresh]);
 
-  // Hide the whole panel until we know there's something to show (keeps the UI
-  // quiet on machines with no dev servers running).
-  if (loaded && ports.length === 0) return null;
-  if (!loading && loaded && visible.length === 0 && !showAll) return null;
+  // Nothing running: no section at all.
+  if (!servers.length) return null;
 
   return (
-    <div>
-      <h3 style={{
-        fontSize: 'var(--font-2xl, 20px)',
-        fontWeight: 600,
-        color: 'var(--text-secondary, #94A3B8)',
-        marginBottom: '8px',
-        textTransform: 'uppercase',
-        letterSpacing: '0.05em',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px'
-      }}>
-        {t('tm.devServers', { n: visible.length })}
-        <button
-          onClick={refresh}
-          disabled={loading}
-          title={t('tm.refreshPorts')}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--text-secondary, #94A3B8)',
-            cursor: loading ? 'default' : 'pointer',
-            padding: '2px',
-            display: 'inline-flex'
-          }}
-        >
-          <FontAwesomeIcon icon={faSync} spin={loading} style={{ fontSize: '12px' }} />
+    <div className="dev-servers">
+      <SectionHeader>
+        {t('tm.devServers', { n: servers.length })}
+        <button className="dev-servers-refresh" onClick={refresh} disabled={loading} title={t('tm.refreshPorts')}>
+          <FontAwesomeIcon icon={faRotateRight} spin={loading} />
         </button>
-        <button
-          onClick={() => setShowAll(s => !s)}
-          title={showAll ? t('tm.showDevOnly') : t('tm.showAllPorts')}
-          style={{
-            marginLeft: 'auto',
-            background: showAll ? 'rgba(59,130,246,0.15)' : 'rgba(100,116,139,0.12)',
-            border: `1px solid ${showAll ? 'rgba(59,130,246,0.35)' : 'rgba(100,116,139,0.25)'}`,
-            borderRadius: '6px',
-            padding: '3px 10px',
-            color: showAll ? '#60A5FA' : '#94A3B8',
-            cursor: 'pointer',
-            fontSize: 'var(--font-xs, 11px)',
-            fontWeight: 600,
-            textTransform: 'none',
-            letterSpacing: 0
-          }}
-        >
-          {showAll ? t('tm.devOnly') : t('tm.showAll')}
-        </button>
-      </h3>
-
-      <div className="tabs-grid">
-        {visible.map(entry => {
-          const tab = tabByPort.get(String(entry.port));
-          const armed = confirmPort === entry.port;
-          const killing = killingPort === entry.port;
-          // Monochrome to match the other cards: a slightly brighter dot when a
-          // tab is open, dimmer when orphaned — no color tint.
-          const dotColor = tab ? '#94A3B8' : '#475569';
+      </SectionHeader>
+      <div className="dev-server-list">
+        {servers.map(server => {
+          const tab = tabByPort.get(String(server.port));
+          const isArmed = armed === server.port;
           return (
             <div
-              key={`${entry.port}-${entry.pid}`}
-              className="cooldesk-tab-card"
-              style={{
-                gap: '8px',
-                justifyContent: 'flex-start',
-                cursor: 'default',
-                // Red tint only while the kill confirm is armed.
-                ...(armed ? {
-                  background: 'rgba(239, 68, 68, 0.1)',
-                  borderColor: 'rgba(239, 68, 68, 0.4)'
-                } : {})
-              }}
+              key={server.port}
+              role="button"
+              tabIndex={0}
+              className={`dev-server-row${isArmed ? ' is-armed' : ''}`}
+              onClick={() => open(server)}
+              onKeyDown={(e) => { if (e.key === 'Enter') open(server); }}
+              title={`${server.label} — http://localhost:${server.port}${server.dir ? `\n${server.dir}` : ''}${tab ? '\nOpen in a tab: click to switch to it' : ''}`}
             >
-              {/* Row 1: process name (lead) + port chip */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{
-                  flex: 1,
-                  minWidth: 0,
-                  fontSize: 'var(--font-sm, 13px)',
-                  fontWeight: 600,
-                  color: 'var(--text-primary, #E2E8F0)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap'
-                }} title={entry.process}>
-                  {entry.process}
-                </span>
-                <span style={{
-                  flexShrink: 0,
-                  fontFamily: 'var(--font-family-mono, monospace)',
-                  fontSize: 'var(--font-xs, 11px)',
-                  fontWeight: 700,
-                  color: 'var(--text-primary, #E2E8F0)',
-                  background: 'rgba(148, 163, 184, 0.12)',
-                  border: '1px solid rgba(148, 163, 184, 0.2)',
-                  borderRadius: '6px',
-                  padding: '1px 7px'
-                }}>
-                  :{entry.port}
-                </span>
-              </div>
-
-              {/* Row 2: status · pid (left)  ·  CPU / RAM (right) */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '8px',
-                fontSize: 'var(--font-xs, 11px)',
-                color: 'var(--text-secondary, #94A3B8)'
-              }}>
-                <span style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  minWidth: 0,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap'
-                }} title={tab ? tab.title : 'No browser tab is open for this port'}>
-                  <span style={{
-                    width: '6px', height: '6px', borderRadius: '50%',
-                    background: dotColor, flexShrink: 0
-                  }} />
-                  {tab ? (tab.title || 'open tab') : 'orphan'}
-                  <span style={{ color: 'var(--text-secondary, #64748B)', flexShrink: 0 }}>
-                    · pid {entry.pid}
-                  </span>
-                </span>
-
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }} title="CPU usage">
-                    <FontAwesomeIcon icon={faMicrochip} style={{ fontSize: '10px', opacity: 0.7 }} />
-                    <span style={{ color: cpuColor(entry.cpu), fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                      {(entry.cpu ?? 0).toFixed(entry.cpu >= 10 ? 0 : 1)}%
-                    </span>
-                  </span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }} title="Memory (resident)">
-                    <FontAwesomeIcon icon={faMemory} style={{ fontSize: '10px', opacity: 0.7 }} />
-                    <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                      {formatBytes(entry.memory)}
-                    </span>
-                  </span>
-                </span>
-              </div>
-
-              {/* Actions — revealed on card hover (stay visible while a kill is armed) */}
-              <div
-                className="dev-server-actions"
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', opacity: armed ? 1 : undefined }}
+              <ServerLogo stack={server.dir ? folderIdentity(server.dir).stack : null} />
+              <span className="dev-server-name">{server.label}</span>
+              <span className="dev-server-port"><i />:{server.port}</span>
+              <button
+                className={`dev-server-stop${isArmed ? ' armed' : ''}`}
+                onClick={(e) => { e.stopPropagation(); stop(server.port); }}
+                disabled={stopping === server.port}
+                title={isArmed ? t('tm.killArmed', { port: server.port }) : t('tm.killTitle', { port: server.port })}
               >
-                <button
-                  onClick={() => handleOpen(entry)}
-                  title={tab ? 'Jump to tab' : `Open http://localhost:${entry.port}`}
-                  style={{
-                    flex: 1,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    background: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(148, 163, 184, 0.18)',
-                    borderRadius: '7px',
-                    color: 'var(--text-secondary, #CBD5E1)',
-                    cursor: 'pointer',
-                    padding: '5px 8px',
-                    fontSize: 'var(--font-xs, 11px)',
-                    fontWeight: 500
-                  }}
-                >
-                  <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ fontSize: '10px' }} />
-                  {t('tm.open')}
-                </button>
-                <button
-                  onClick={() => handleKill(entry)}
-                  disabled={killing}
-                  title={armed ? t('tm.killArmed', { port: entry.port }) : t('tm.killTitle', { port: entry.port })}
-                  style={{
-                    flex: armed ? 1.4 : 1,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    background: armed ? 'rgba(239, 68, 68, 0.18)' : 'rgba(255,255,255,0.04)',
-                    border: `1px solid ${armed ? 'rgba(239, 68, 68, 0.45)' : 'rgba(148, 163, 184, 0.18)'}`,
-                    borderRadius: '7px',
-                    color: armed ? '#F87171' : '#FB923C',
-                    cursor: killing ? 'default' : 'pointer',
-                    padding: '5px 8px',
-                    fontSize: 'var(--font-xs, 11px)',
-                    fontWeight: 600,
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <FontAwesomeIcon icon={killing ? faCircleNotch : faPowerOff} spin={killing} style={{ fontSize: '10px' }} />
-                  {armed ? t('tm.killQ', { port: entry.port }) : t('tm.kill')}
-                </button>
-              </div>
+                {isArmed ? t('tm.killQ', { port: server.port }) : <FontAwesomeIcon icon={faPowerOff} />}
+              </button>
             </div>
           );
         })}

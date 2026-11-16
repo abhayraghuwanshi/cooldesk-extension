@@ -2,6 +2,8 @@ import { useCallback, useMemo, useRef } from 'react';
 import { TEAM_FEATURE_ENABLED } from '../../config/features.js';
 import { CommandExecutor } from '../../services/commandExecutor.js';
 import { CommandParser, COMMANDS } from '../../services/commandParser.js';
+import { disableSurface, enableSurface } from '../dock/surfaceControls.js';
+import { useDockState } from '../dock/useDockState.js';
 
 // Slash (/nav) + bang (!action) command palette extracted from the old
 // CoolSearch so any search surface can opt in. The host surface owns rendering:
@@ -14,11 +16,22 @@ import { CommandParser, COMMANDS } from '../../services/commandParser.js';
 // Queries this hook must leave alone (handled by the spotlight itself)
 const RESERVED_RE = /^\/(u|a|f)(\s|$)|^\/(ai|model)\b/i;
 
+// "/dock", "/dock on", "/sidebar off"… → turn the dock bar / sidebar window
+// on or off (desktop only). Bare "/dock" toggles. The backend calls the dock
+// surface 'bar'.
+const SURFACE_RE = /^\/(dock|sidebar)(?:\s+(on|off))?$/i;
+const SURFACES = { dock: { surface: 'bar', label: 'Dock' }, sidebar: { surface: 'sidebar', label: 'Sidebar' } };
+
 export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavigate, showFeedback }) {
     const showFeedbackRef = useRef(showFeedback);
     showFeedbackRef.current = showFeedback;
     const onNavigateRef = useRef(onNavigate);
     onNavigateRef.current = onNavigate;
+
+    // Live on/off state of the dock & sidebar (null outside the desktop app)
+    const dockState = useDockState();
+    const dockStateRef = useRef(dockState);
+    dockStateRef.current = dockState;
 
     const executorRef = useRef(null);
     const getExecutor = useCallback(() => {
@@ -63,8 +76,11 @@ export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavi
     // suggestion). Only *known* command words qualify — partial input like
     // "!ju" still goes to the highlighted "!jump <tab>" template instead.
     const isDirectCommand = useCallback((rawQuery) => {
-        if (!enabled) return false;
         const q = (rawQuery || '').trim();
+        // Dock/sidebar commands work even where the rest of the palette is
+        // off (the overlay spotlight window doesn't enable it).
+        if (isDesktopApp && SURFACE_RE.test(q)) return true;
+        if (!enabled) return false;
         if (!q || RESERVED_RE.test(q)) return false;
         if (navMaps.full[q] || navMaps.alias[q]) return true;
         if (q.startsWith('!') || q.startsWith('/')) {
@@ -74,11 +90,26 @@ export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavi
                 && CommandParser.validate(parsed);
         }
         return false;
-    }, [enabled, navMaps]);
+    }, [enabled, navMaps, isDesktopApp]);
 
     const execute = useCallback(async (rawQuery) => {
-        if (!enabled) return false;
         const q = (rawQuery || '').trim();
+        const surfaceMatch = isDesktopApp && q.match(SURFACE_RE);
+        if (surfaceMatch) {
+            const { surface, label } = SURFACES[surfaceMatch[1].toLowerCase()];
+            const wanted = surfaceMatch[2]?.toLowerCase();
+            const turnOn = wanted ? wanted === 'on' : !dockStateRef.current?.[surface]?.enabled;
+            try {
+                await (turnOn ? enableSurface(surface) : disableSurface(surface));
+                showFeedbackRef.current?.(`${label} ${turnOn ? 'on' : 'off'}`, 'success');
+            } catch (error) {
+                console.error(`[SlashCommands] ${label} toggle failed:`, error);
+                showFeedbackRef.current?.(`Couldn't turn ${label.toLowerCase()} ${turnOn ? 'on' : 'off'}`, 'error');
+            }
+            return true;
+        }
+
+        if (!enabled) return false;
         if (!q || RESERVED_RE.test(q)) return false;
 
         const navTarget = navMaps.full[q] || navMaps.alias[q];
@@ -105,14 +136,40 @@ export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavi
             }
         }
         return false;
-    }, [enabled, navMaps, getExecutor]);
+    }, [enabled, navMaps, isDesktopApp, getExecutor]);
 
     // Map a typed "/..." or "!..." query to command palette rows shaped like
     // spotlight result items ({ type: 'command', command | insert }).
     // Returns null when the query isn't command-like (host runs normal search).
     const getSuggestions = useCallback((rawQuery) => {
-        if (!enabled) return null;
         const q = (rawQuery || '').trim();
+
+        // Executable rows (no insert): selecting one flips that surface; the
+        // title says what selecting it will do.
+        const surfaceEntries = isDesktopApp ? Object.entries(SURFACES).map(([word, { surface, label }]) => {
+            const on = !!dockState?.[surface]?.enabled;
+            return {
+                command: `/${word} ${on ? 'off' : 'on'}`,
+                title: `${on ? 'Turn off' : 'Turn on'} ${label}`,
+                description: `${label} is ${on ? 'on' : 'off'} — /${word} on · /${word} off`,
+                category: 'Layout',
+            };
+        }) : [];
+
+        if (!enabled) {
+            // Palette off: still offer the dock/sidebar rows once the typed
+            // text is the start of one ("/do", "/sidebar o"…).
+            const typed = q.toLowerCase();
+            if (typed.length < 2 || !typed.startsWith('/')) return null;
+            const rows = surfaceEntries.filter(e => {
+                const word = e.command.split(' ')[0];
+                return word.startsWith(typed) || typed.startsWith(word + ' ') || typed === word;
+            });
+            return rows.length ? rows.map(e => ({
+                id: `cmd:${e.command}`, type: 'command', title: e.title, description: e.description,
+                category: e.category, command: e.command, insert: null, commandId: e.command.split(' ')[0],
+            })) : null;
+        }
         if (!q || RESERVED_RE.test(q)) return null;
 
         const toItem = ({ command, title, description, category, insert }) => ({
@@ -144,6 +201,7 @@ export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavi
                 { command: '/help', title: 'Help', description: 'What Spotlight can do, and what’s running right now', category: 'Help', insert: '/help' },
                 { command: '/todo', title: 'Todos', description: 'Todos in Active (or pick a workspace) — type to add', category: 'Workspace', insert: '/todo ' },
                 { command: '/notes', title: 'Notes', description: 'Notes in Active (or pick a workspace) — type to jot one', category: 'Workspace', insert: '/notes ' },
+                ...surfaceEntries,
                 ...(isDesktopApp ? [{ command: '/shell', title: 'Shell', description: 'A terminal right here — keeps running when Spotlight closes', category: 'Terminal', insert: '/shell' }] : []),
                 { command: '/u', title: 'Search URLs', description: 'Scope search to tabs, history, bookmarks', category: 'Scope', insert: '/u ' },
                 { command: '/a', title: 'Search Apps', description: 'Scope search to applications', category: 'Scope', insert: '/a ' },
@@ -178,7 +236,7 @@ export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavi
         }
 
         return null;
-    }, [enabled, navMaps, isDesktopApp]);
+    }, [enabled, navMaps, isDesktopApp, dockState]);
 
     // Stable identity so hosts can use the hook result as an effect dependency
     return useMemo(
