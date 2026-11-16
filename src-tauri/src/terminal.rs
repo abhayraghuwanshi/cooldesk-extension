@@ -36,10 +36,31 @@ fn sessions() -> &'static Mutex<HashMap<String, Session>> {
 const TERMINAL_WINDOWS: &[&str] = &["main", "sidebar", "bar", "spotlight"];
 
 fn require_main(webview: &tauri::Webview) -> Result<(), String> {
-    if TERMINAL_WINDOWS.contains(&webview.label()) {
+    if TERMINAL_WINDOWS.contains(&webview.label()) || crate::is_app_window(webview.label()) {
         Ok(())
     } else {
         Err("Terminal is only available in CoolDesk's own windows".into())
+    }
+}
+
+/// Session key: the page's terminal id, scoped to the webview that owns it.
+/// Ids are only unique within one page (the Browse drawer is always
+/// `drawer-<n>`), so with several app windows open ("New Window") an unscoped
+/// id let one window's drawer replace — and kill — another window's shell.
+fn scoped(webview: &tauri::Webview, id: &str) -> String {
+    format!("{}:{id}", webview.label())
+}
+
+/// A window closed: end the shells its page started.
+pub fn close_window(label: &str) {
+    let prefix = format!("{label}:");
+    if let Ok(mut map) = sessions().lock() {
+        let gone: Vec<String> = map.keys().filter(|k| k.starts_with(&prefix)).cloned().collect();
+        for k in gone {
+            if let Some(mut s) = map.remove(&k) {
+                let _ = s.killer.kill();
+            }
+        }
     }
 }
 
@@ -170,6 +191,7 @@ pub fn terminal_open(
     output: Channel<InvokeResponseBody>,
 ) -> Result<(), String> {
     require_main(&webview)?;
+    let id = scoped(&webview, &id);
     let pair = native_pty_system()
         .openpty(size(cols, rows))
         .map_err(|e| format!("openpty: {e}"))?;
@@ -225,6 +247,7 @@ pub fn terminal_open(
 #[tauri::command]
 pub fn terminal_write(webview: tauri::Webview, id: String, data: String) -> Result<(), String> {
     require_main(&webview)?;
+    let id = scoped(&webview, &id);
     let mut map = sessions().lock().unwrap();
     let s = map.get_mut(&id).ok_or("No such terminal")?;
     s.writer.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
@@ -234,6 +257,7 @@ pub fn terminal_write(webview: tauri::Webview, id: String, data: String) -> Resu
 #[tauri::command]
 pub fn terminal_resize(webview: tauri::Webview, id: String, cols: u16, rows: u16) -> Result<(), String> {
     require_main(&webview)?;
+    let id = scoped(&webview, &id);
     let map = sessions().lock().unwrap();
     let s = map.get(&id).ok_or("No such terminal")?;
     s.master.resize(size(cols, rows)).map_err(|e| e.to_string())
@@ -258,6 +282,7 @@ pub fn terminal_focus(webview: tauri::Webview) -> Result<(), String> {
 #[tauri::command]
 pub fn terminal_close(webview: tauri::Webview, id: String) -> Result<(), String> {
     require_main(&webview)?;
+    let id = scoped(&webview, &id);
     if let Some(mut s) = sessions().lock().unwrap().remove(&id) {
         let _ = s.killer.kill();
     }

@@ -1,10 +1,13 @@
-import { faGauge, faHouse, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faGauge, faHouse, faWindowRestore, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useRef } from 'react';
 import { ShelfView } from '../../features/shelf/ShelfView';
 import { NotesView } from '../../features/browser/NotesView';
 import { PageView } from '../../features/browser/PageView';
 import { ClipboardSection } from '../../features/clipboard/ClipboardSection';
+import { openNewAppWindow } from '../../features/dock/surface';
+
+const isDesktopApp = typeof window !== 'undefined' && !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
 
 // Browse's side panel: two tabs.
 //   Home — one scroll: tabs, the workspace's links, folders (BrowseView's
@@ -65,6 +68,18 @@ export function FilesView({ onOpen, active, onClose, tab = 'tabs', onTab, shelf,
           ))}
         </div>
         <span className="fp-spacer" />
+        {/* Another full CoolDesk window, on the screen you're on — its own
+            tabs, terminals and space (like a second Explorer / Finder window). */}
+        {isDesktopApp && (
+          <button
+            className="bp-btn"
+            onClick={() => openNewAppWindow().catch((e) => console.error('[CoolDesk] New window failed:', e))}
+            title="New window (Ctrl/Cmd+Shift+N)"
+            aria-label="New window"
+          >
+            <FontAwesomeIcon icon={faWindowRestore} />
+          </button>
+        )}
         <button className="bp-btn" onClick={onClose} title="Hide the side panel">
           <FontAwesomeIcon icon={faXmark} />
         </button>

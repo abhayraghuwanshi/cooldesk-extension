@@ -363,7 +363,7 @@ class WorkspaceActivityService {
     activate(item, { target } = {}) {
         if (!item) return;
         // CoolDesk's own full app (the running-apps entry, mainWindowItem.js).
-        if (isMainWindowItem(item)) { openMainWindow(); return; }
+        if (isMainWindowItem(item)) { openMainWindow(item); return; }
         // Every surface opens items through here, so this one call feeds the
         // shared activity ranking (itemRankingService) for all of them.
         itemRankingService.recordLaunch(item);

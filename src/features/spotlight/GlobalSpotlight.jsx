@@ -10,6 +10,7 @@ import { recordAgentOutcome, recordSearchSelection, watchAgentPlacements } from 
 import { recordFeature, recordSpotlightOpen } from '../../services/analytics';
 import * as LocalAI from '../../services/localAIService';
 import { runningAppsService } from '../../services/runningAppsService';
+import { hideMainWindow, isMainWindowItem, openMainWindow, windowItems } from '../dock/mainWindowItem.js';
 import { browseApps, browseUrls, findOpenTab, isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../../services/searchService';
 import { searchWindowsSettings } from '../../data/windowsSettings';
 import { searchWindowsTools } from '../../data/windowsTools';
@@ -1117,8 +1118,20 @@ export function GlobalSpotlight({
             });
         }).catch(e => console.warn('[Spotlight] Could not subscribe to workspace changes', e));
 
+        // CoolDesk's own windows opening / closing / switching space.
+        let unsubscribeAppWindows = null;
+        let appWindowsDisposed = false;
+        if (window.__TAURI_INTERNALS__) {
+            import('@tauri-apps/api/event')
+                .then(({ listen }) => listen('app-windows-changed', () => loadContextItems()))
+                .then((fn) => { if (appWindowsDisposed) fn(); else unsubscribeAppWindows = fn; })
+                .catch(() => { });
+        }
+
         return () => {
             window.removeEventListener('focus', handleFocus);
+            appWindowsDisposed = true;
+            if (unsubscribeAppWindows) unsubscribeAppWindows();
             if (unsubscribeTabs) unsubscribeTabs();
             if (chromeTabsCleanup) chromeTabsCleanup();
             if (unsubTauriTabs) unsubTauriTabs?.();
@@ -1338,7 +1351,28 @@ export function GlobalSpotlight({
                 });
 
             console.log('[Spotlight] Apps after filter:', activeApps.length, activeApps.map(a => `${a.name}(running:${a.isRunning},title:${a.title || ''})`));
-            recommendations.push(...activeApps);
+            // CoolDesk's own full-app windows (main + any New Window) lead the
+            // row, to jump between them. Only those: the spotlight, sidebar
+            // and dock windows aren't listed (app_windows_list leaves them out).
+            let coolDeskWindows = [];
+            if (window.__TAURI_INTERNALS__) {
+                try {
+                    const { invoke } = await import('@tauri-apps/api/core');
+                    const list = await invoke('app_windows_list');
+                    coolDeskWindows = windowItems(list).map((w) => {
+                        const info = (list || []).find(l => l.label === w.windowLabel);
+                        return {
+                            ...w,
+                            type: 'app',
+                            isRunning: true,
+                            description: info?.space ? `Window · ${info.space}` : (info?.visible === false ? 'In the tray' : 'Window'),
+                        };
+                    });
+                } catch (e) {
+                    console.warn('[Spotlight] app_windows_list failed:', e);
+                }
+            }
+            recommendations.push(...coolDeskWindows, ...activeApps);
 
             // 3. Active Tabs (unique by domain)
             console.log('[Spotlight] Processing tabs, raw count:', safeTabs.length);
@@ -2973,6 +3007,12 @@ export function GlobalSpotlight({
         }
 
         // For apps, focus running app or launch installed app
+        // One of CoolDesk's own windows: bring that window forward.
+        if (item.type === 'app' && isMainWindowItem(item)) {
+            openMainWindow(item);
+            return;
+        }
+
         if (item.type === 'app') {
             console.log('[Spotlight] App selected:', item.name, 'isRunning:', item.isRunning, 'pid:', item.pid, 'path:', item.path, 'electronAPI:', !!window.electronAPI);
 
@@ -3159,6 +3199,9 @@ export function GlobalSpotlight({
                 } else if (window.electronAPI?.sendMessage) {
                     window.electronAPI.sendMessage(closeMsg);
                 }
+            } else if (item.type === 'app' && isMainWindowItem(item)) {
+                // × on a CoolDesk window: main hides to the tray, an extra closes.
+                await hideMainWindow(item);
             } else if (item.type === 'app') {
                 // Only running apps can be closed; need a pid (or hwnd) to target them
                 if (item.isRunning && (item.pid || item.hwnd) && window.electronAPI?.closeApp) {

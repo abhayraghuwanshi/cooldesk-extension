@@ -445,6 +445,20 @@ fn main_window(app: &tauri::AppHandle) -> Option<tauri::Window> {
     app.get_window("main")
 }
 
+/// Label prefix of the extra full-app windows ("New Window"): `main-2`,
+/// `main-3`, … Each is a complete CoolDesk page with its own tabs, terminals
+/// and active space, so different screens / Spaces can each work on their own
+/// project. Only "main" itself hides to the tray; the extras really close.
+pub(crate) const EXTRA_WINDOW_PREFIX: &str = "main-";
+
+/// A full-app window: "main" or one of the extra `main-N` windows.
+pub(crate) fn is_app_window(label: &str) -> bool {
+    label == "main"
+        || label
+            .strip_prefix(EXTRA_WINDOW_PREFIX)
+            .is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+}
+
 /// Background color of a window *and* its own page webview (the webview
 /// labelled like the window). A `Window`'s own `set_background_color` only
 /// reaches the NSWindow, so on its own the WKWebView kept drawing its opaque
@@ -473,7 +487,7 @@ fn set_page_background(window: &tauri::Window, color: Option<tauri::window::Colo
 /// content view — the facts behind "dark / wrong-size panel" reports.
 #[cfg(target_os = "macos")]
 fn log_main_page_geometry(window: &tauri::Window, when: &'static str) {
-    let Some(page) = window.get_webview("main") else {
+    let Some(page) = window.get_webview(window.label()) else {
         log::warn!("[Window] {when}: no main page webview");
         return;
     };
@@ -539,8 +553,13 @@ fn ensure_main_window(app: &tauri::AppHandle) -> Option<tauri::Window> {
     if let Some(win) = main_window(app) {
         return Some(win);
     }
+    build_app_window(app, "main", "pages/index.html")
+}
 
-    let built = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("pages/index.html".into()))
+/// Build a hidden full-app window (`main` or an extra `main-N`) with the page
+/// setup every app window needs.
+fn build_app_window(app: &tauri::AppHandle, label: &str, page: &str) -> Option<tauri::Window> {
+    let built = tauri::WebviewWindowBuilder::new(app, label, tauri::WebviewUrl::App(page.into()))
         .title("CoolDesk")
         .inner_size(1400.0, 900.0)
         .resizable(true)
@@ -583,7 +602,7 @@ fn ensure_main_window(app: &tauri::AppHandle) -> Option<tauri::Window> {
             Some(win)
         }
         Err(e) => {
-            log::error!("[Window] Failed to create main window: {}", e);
+            log::error!("[Window] Failed to create window {label}: {}", e);
             None
         }
     }
@@ -627,9 +646,21 @@ fn attach_main_window_events(window: &tauri::Window) {
             log::info!("[Window] resized to {}x{} (fullscreen={})", size.width, size.height, win.is_fullscreen().unwrap_or(false));
             log_main_page_geometry(&win, "after resize");
         }
-        tauri::WindowEvent::CloseRequested { api, .. } => {
+        // Only "main" lives in the tray; an extra window closes for real,
+        // taking its browser panes with it.
+        tauri::WindowEvent::CloseRequested { api, .. } if win.label() == "main" => {
             api.prevent_close();
             hide_main_window(win.app_handle());
+        }
+        tauri::WindowEvent::Destroyed => {
+            #[cfg(target_os = "macos")]
+            browser_pane::forget_page_webview(win.label());
+            terminal::close_window(win.label());
+            if let Some(m) = WINDOW_SPACES.lock().unwrap().as_mut() {
+                m.remove(win.label());
+            }
+            app_windows_changed(win.app_handle());
+            log::info!("[Window] closed {}", win.label());
         }
         _ => {}
     });
@@ -652,6 +683,136 @@ fn show_main_window(app: &tauri::AppHandle) {
         }
         let _ = win.set_focus();
     }
+}
+
+/// Open another full-app window on the screen under the cursor. Unlike the
+/// sidebar and dock (one window each, moved to whichever screen you're on),
+/// this leaves the existing windows where they are, so each screen or Space
+/// can keep its own CoolDesk with its own tabs and space.
+fn open_new_app_window(app: &tauri::AppHandle) -> Option<tauri::Window> {
+    let n = (2u32..).find(|n| app.get_window(&format!("{EXTRA_WINDOW_PREFIX}{n}")).is_none())?;
+    let label = format!("{EXTRA_WINDOW_PREFIX}{n}");
+    // `newWindow=1` tells the page to start with fresh tabs instead of
+    // whatever an earlier window with this label left behind.
+    let win = build_app_window(app, &label, "pages/index.html?newWindow=1")?;
+    if let Some(m) = surfaces::cursor_monitor(app) {
+        // Logical coordinates from the monitor's own scale (see
+        // `toggle_spotlight` for why physical ones land on the wrong screen
+        // on a mixed-DPI Mac).
+        let scale = m.scale_factor();
+        let (px, py) = (m.position().x as f64 / scale, m.position().y as f64 / scale);
+        let (pw, ph) = (m.size().width as f64 / scale, m.size().height as f64 / scale);
+        let (w, h) = ((pw - 80.0).clamp(400.0, 1400.0), (ph - 80.0).clamp(300.0, 900.0));
+        let _ = win.set_size(tauri::LogicalSize::new(w, h));
+        let _ = win.set_position(tauri::LogicalPosition::new(px + (pw - w) / 2.0, py + (ph - h) / 2.0));
+    }
+    let _ = win.show();
+    let _ = win.maximize();
+    let _ = win.set_focus();
+    log::info!("[Window] opened {label}");
+    app_windows_changed(app);
+    Some(win)
+}
+
+/// Each app window's current space name (set by its page), for the
+/// running-apps lists in the dock bar and sidebar.
+static WINDOW_SPACES: std::sync::Mutex<Option<std::collections::HashMap<String, String>>> = std::sync::Mutex::new(None);
+
+/// Tell the dock / sidebar lists the set of app windows (or a name) changed.
+fn app_windows_changed(app: &tauri::AppHandle) {
+    let _ = app.emit("app-windows-changed", ());
+}
+
+#[derive(serde::Serialize)]
+struct AppWindowInfo {
+    label: String,
+    space: Option<String>,
+    visible: bool,
+}
+
+/// The full-app windows: "main" (always listed, even before it's built or
+/// while it's hidden in the tray) and any extra `main-N`, in order.
+#[tauri::command]
+fn app_windows_list(app: tauri::AppHandle) -> Vec<AppWindowInfo> {
+    let spaces = WINDOW_SPACES.lock().unwrap().clone().unwrap_or_default();
+    let mut extras: Vec<(u32, tauri::Window)> = app
+        .windows()
+        .into_iter()
+        .filter_map(|(label, w)| {
+            let n = label.strip_prefix(EXTRA_WINDOW_PREFIX)?.parse::<u32>().ok()?;
+            Some((n, w))
+        })
+        .collect();
+    extras.sort_by_key(|(n, _)| *n);
+    let main_visible = main_window(&app).and_then(|w| w.is_visible().ok()).unwrap_or(false);
+    let mut out = vec![AppWindowInfo { label: "main".into(), space: spaces.get("main").cloned(), visible: main_visible }];
+    out.extend(extras.into_iter().map(|(_, w)| AppWindowInfo {
+        label: w.label().to_string(),
+        space: spaces.get(w.label()).cloned(),
+        visible: w.is_visible().unwrap_or(false),
+    }));
+    out
+}
+
+/// The calling app window's current space, shown next to its entry.
+#[tauri::command]
+fn app_window_set_space(app: tauri::AppHandle, window: tauri::Window, name: String) {
+    if !is_app_window(window.label()) {
+        return;
+    }
+    let changed = WINDOW_SPACES
+        .lock()
+        .unwrap()
+        .get_or_insert_with(Default::default)
+        .insert(window.label().to_string(), name.clone())
+        .as_deref()
+        != Some(name.as_str());
+    if changed {
+        app_windows_changed(&app);
+    }
+}
+
+/// Bring an app window forward (from its dock / sidebar entry).
+#[tauri::command]
+fn app_window_focus(app: tauri::AppHandle, label: String) -> Result<(), String> {
+    if label == "main" {
+        show_main_window(&app);
+        return Ok(());
+    }
+    if !is_app_window(&label) {
+        return Err("Not a CoolDesk window".into());
+    }
+    let win = app.get_window(&label).ok_or("Window is closed")?;
+    let _ = win.unminimize();
+    let _ = win.show();
+    win.set_focus().map_err(|e| e.to_string())
+}
+
+/// × on an entry: main hides to the tray, an extra window closes.
+#[tauri::command]
+fn app_window_close(app: tauri::AppHandle, label: String) -> Result<(), String> {
+    if label == "main" {
+        hide_main_window(&app);
+        return Ok(());
+    }
+    if !is_app_window(&label) {
+        return Err("Not a CoolDesk window".into());
+    }
+    if let Some(win) = app.get_window(&label) {
+        win.close().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn open_new_window(app: tauri::AppHandle) -> Result<(), String> {
+    // Window creation must happen off the IPC thread on Windows (WebView2
+    // deadlocks otherwise); the main thread is safe everywhere.
+    let handle = app.clone();
+    app.run_on_main_thread(move || {
+        open_new_app_window(&handle);
+    })
+    .map_err(|e| e.to_string())
 }
 
 /// Hide the main window to the tray (the app keeps running).
@@ -2846,6 +3007,11 @@ pub fn run() {
     .invoke_handler(guard_remote_webviews(tauri::generate_handler![
         web_suggest,
         main_window_hide,
+        open_new_window,
+        app_windows_list,
+        app_window_set_space,
+        app_window_focus,
+        app_window_close,
         get_running_apps,
         get_installed_apps,
         categorize_app,
@@ -3139,13 +3305,14 @@ pub fn run() {
       // items double as the always-reachable recovery path for a panel that
       // ends up stuck or off-screen (its own controls would be too).
       let show_item = MenuItem::with_id(app, "show", "Show CoolDesk", true, None::<&str>)?;
+      let new_window_item = MenuItem::with_id(app, "new_window", "New Window", true, None::<&str>)?;
       let (sidebar_item, bar_item) = surfaces::tray_items(app)?;
       let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
       let sep1 = tauri::menu::PredefinedMenuItem::separator(app)?;
       let sep2 = tauri::menu::PredefinedMenuItem::separator(app)?;
       let tray_menu = Menu::with_items(
           app,
-          &[&show_item, &sep1, &sidebar_item, &bar_item, &sep2, &quit_item],
+          &[&show_item, &new_window_item, &sep1, &sidebar_item, &bar_item, &sep2, &quit_item],
       )?;
 
       TrayIconBuilder::new()
@@ -3154,6 +3321,9 @@ pub fn run() {
           .tooltip("CoolDesk")
           .on_menu_event(|app, event| match event.id.as_ref() {
               "show" => show_main_window(app),
+              "new_window" => {
+                  open_new_app_window(app);
+              }
               "quit" => app.exit(0),
               id => {
                   surfaces::handle_tray_menu(app, id);

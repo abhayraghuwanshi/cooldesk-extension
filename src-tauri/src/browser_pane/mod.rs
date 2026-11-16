@@ -90,6 +90,7 @@ struct PaneState {
 #[tauri::command]
 pub async fn browser_pane_open(
     app: tauri::AppHandle,
+    window: tauri::Window,
     id: String,
     url: String,
     x: f64,
@@ -99,7 +100,10 @@ pub async fn browser_pane_open(
     adblock: Option<bool>,
 ) -> Result<(), String> {
     let started = std::time::Instant::now();
-    let result = open_pane(app, id.clone(), url, x, y, width, height, adblock).await;
+    // The pane goes in whichever app window asked for it (main or an extra
+    // `main-N`); anything else falls back to main.
+    let host = if crate::is_app_window(window.label()) { window.label().to_string() } else { "main".to_string() };
+    let result = open_pane(app, host, id.clone(), url, x, y, width, height, adblock).await;
     match &result {
         Ok(()) => log::info!("[BrowserPane] opened {id} in {}ms", started.elapsed().as_millis()),
         Err(e) => log::warn!("[BrowserPane] open {id} failed: {e}"),
@@ -124,6 +128,7 @@ fn take_early_close(label: &str) -> bool {
 
 async fn open_pane(
     app: tauri::AppHandle,
+    host: String,
     id: String,
     url: String,
     x: f64,
@@ -147,9 +152,9 @@ async fn open_pane(
     // pane is added the main window holds two webviews and Tauri no longer
     // counts it as a webview window — that lookup returned None and every
     // pane after the first failed with "Main window is not open".
-    let window = app.get_window("main").ok_or("Main window is not open")?;
+    let window = app.get_window(&host).ok_or("Main window is not open")?;
     #[cfg(target_os = "macos")]
-    if let Some(main_page) = app.get_webview("main") {
+    if let Some(main_page) = app.get_webview(&host) {
         remember_main_webview(&main_page);
     }
 
@@ -314,9 +319,10 @@ fn safari_user_agent() -> &'static str {
 fn place(wv: &tauri::Webview, x: f64, y: f64, width: f64, height: f64) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        if MAIN_WEBVIEW.load(std::sync::atomic::Ordering::Relaxed) != 0 {
+        let main = page_webview_ptr(wv.window().label());
+        if main != 0 {
             return wv
-                .with_webview(move |pw| unsafe { mac_place(pw.inner() as usize, x, y, width, height) })
+                .with_webview(move |pw| unsafe { mac_place(pw.inner() as usize, main, x, y, width, height) })
                 .map_err(|e| e.to_string());
         }
     }
@@ -324,20 +330,40 @@ fn place(wv: &tauri::Webview, x: f64, y: f64, width: f64, height: f64) -> Result
     wv.set_size(LogicalSize::new(width, height)).map_err(|e| e.to_string())
 }
 
-/// The main window's WKWebView (as an address), the reference frame for panes.
+/// Each app window's own CoolDesk page WKWebView (as an address), keyed by
+/// window label: the reference frame for that window's panes. Several app
+/// windows can be open ("New Window"), each with its own panes.
 #[cfg(target_os = "macos")]
-static MAIN_WEBVIEW: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static PAGE_WEBVIEWS: std::sync::Mutex<Option<std::collections::HashMap<String, usize>>> = std::sync::Mutex::new(None);
 
-/// Address of the main CoolDesk page's WKWebView (0 until a pane opens).
+/// Address of window `label`'s CoolDesk page WKWebView (0 until a pane opens there).
 #[cfg(target_os = "macos")]
-pub fn main_webview_ptr() -> usize {
-    MAIN_WEBVIEW.load(std::sync::atomic::Ordering::Relaxed)
+fn page_webview_ptr(label: &str) -> usize {
+    PAGE_WEBVIEWS.lock().unwrap().as_ref().and_then(|m| m.get(label).copied()).unwrap_or(0)
 }
 
+/// Is this WKWebView one of CoolDesk's own pages (not a browser pane)?
+#[cfg(target_os = "macos")]
+pub fn is_page_webview(ptr: usize) -> bool {
+    PAGE_WEBVIEWS.lock().unwrap().as_ref().is_some_and(|m| m.values().any(|&p| p == ptr))
+}
+
+/// Drop a closed window's entry, so a freed address can't be mistaken for
+/// one of our pages later.
+#[cfg(target_os = "macos")]
+pub fn forget_page_webview(label: &str) {
+    if let Some(m) = PAGE_WEBVIEWS.lock().unwrap().as_mut() {
+        m.remove(label);
+    }
+}
+
+/// Remember a window's page webview. Also called when a window is rebuilt
+/// under a reused label, so the address is always the live one.
 #[cfg(target_os = "macos")]
 fn remember_main_webview(main: &tauri::Webview) {
-    let _ = main.with_webview(|pw| {
-        MAIN_WEBVIEW.store(pw.inner() as usize, std::sync::atomic::Ordering::Relaxed);
+    let label = main.label().to_string();
+    let _ = main.with_webview(move |pw| {
+        PAGE_WEBVIEWS.lock().unwrap().get_or_insert_with(Default::default).insert(label, pw.inner() as usize);
     });
 }
 
@@ -356,16 +382,16 @@ fn log_inset_change(top: f64, left: f64) {
 
 /// Main thread only (runs inside with_webview).
 #[cfg(target_os = "macos")]
-unsafe fn mac_place(child: usize, x: f64, y: f64, width: f64, height: f64) {
+unsafe fn mac_place(child: usize, main: usize, x: f64, y: f64, width: f64, height: f64) {
     use objc2::msg_send;
     use objc2::runtime::AnyObject;
     use objc2_foundation::{NSPoint, NSRect, NSSize};
 
     let child = child as *mut AnyObject;
-    if in_fullscreen(child) {
+    if in_fullscreen(child, main) {
         return;
     }
-    let main = MAIN_WEBVIEW.load(std::sync::atomic::Ordering::Relaxed) as *mut AnyObject;
+    let main = main as *mut AnyObject;
     let parent: *mut AnyObject = msg_send![child, superview];
     if parent.is_null() || main.is_null() {
         return;
@@ -489,7 +515,8 @@ pub fn browser_pane_set_bounds(
     let visible = visible && width >= 1.0 && height >= 1.0;
     #[cfg(target_os = "macos")]
     {
-        if MAIN_WEBVIEW.load(std::sync::atomic::Ordering::Relaxed) != 0 {
+        let main = page_webview_ptr(wv.window().label());
+        if main != 0 {
             // One main-thread pass, so the fullscreen check and the frame /
             // visibility change can't interleave with WebKit's own moves.
             return wv
@@ -497,14 +524,14 @@ pub fn browser_pane_set_bounds(
                     use objc2::msg_send;
                     use objc2::runtime::AnyObject;
                     let view = pw.inner() as *mut AnyObject;
-                    if in_fullscreen(view) {
+                    if in_fullscreen(view, main) {
                         return;
                     }
                     if !visible {
                         let _: () = msg_send![view, setHidden: true];
                         return;
                     }
-                    mac_place(view as usize, x, y, width, height);
+                    mac_place(view as usize, main, x, y, width, height);
                     let _: () = msg_send![view, setHidden: false];
                 })
                 .map_err(|e| e.to_string());
@@ -523,7 +550,7 @@ pub fn browser_pane_set_bounds(
 /// hidden — and hiding or re-framing the view then blanked the video. Leave it
 /// alone until WebKit hands it back.
 #[cfg(target_os = "macos")]
-unsafe fn in_fullscreen(view: *mut objc2::runtime::AnyObject) -> bool {
+unsafe fn in_fullscreen(view: *mut objc2::runtime::AnyObject, main: usize) -> bool {
     use objc2::msg_send;
     use objc2::runtime::AnyObject;
     let has_state: bool = msg_send![view, respondsToSelector: objc2::sel!(fullscreenState)];
@@ -535,7 +562,7 @@ unsafe fn in_fullscreen(view: *mut objc2::runtime::AnyObject) -> bool {
     }
     // Any macOS: in fullscreen the view lives in a different window than the
     // main page.
-    let main = MAIN_WEBVIEW.load(std::sync::atomic::Ordering::Relaxed) as *mut AnyObject;
+    let main = main as *mut AnyObject;
     if main.is_null() {
         return false;
     }

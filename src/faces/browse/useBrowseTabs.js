@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { recordRecentFile, recordRecentShell } from '../../features/browser/recentHistory';
+import { OPENED_AS_NEW_WINDOW, windowKey } from '../../features/dock/surface';
 
 // Tabs for Browse mode. A tab is a web page (its own native page, BrowserPane
 // with paneId `bt-<id>`), a file / folder from disk (`file: { path, isDir }`,
@@ -16,7 +17,9 @@ import { recordRecentFile, recordRecentShell } from '../../features/browser/rece
 // idle, burning CPU in the background, or over the memory budget — via
 // `sleep`.
 
-const TABS_KEY = 'cooldesk.browse.tabs';
+// Each full-app window keeps its own tabs: the main window under the
+// original key, an extra New Window under one suffixed with its label.
+const TABS_KEY = windowKey('cooldesk.browse.tabs');
 const MAX_LIVE = 6;
 const MAX_TABS = 40;
 // A scratch note's title + text, per note id, while it belongs to no workspace.
@@ -76,6 +79,12 @@ function cleanEntries(list) {
 }
 
 function load(fallbackUrl) {
+  // A brand-new window starts with one empty tab.
+  if (OPENED_AS_NEW_WINDOW) {
+    try { localStorage.removeItem(TABS_KEY); } catch { /* ignore */ }
+    const id = newId();
+    return { tabs: [{ id, url: null, title: '', req: { url: null, key: 0 } }], activeId: id };
+  }
   try {
     const saved = JSON.parse(localStorage.getItem(TABS_KEY) || 'null');
     if (saved && Array.isArray(saved.tabs) && saved.tabs.length) {

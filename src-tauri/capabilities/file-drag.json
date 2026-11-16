@@ -4,6 +4,7 @@
   "description": "Native file drag-out from the in-app file manager (copy into Finder / Explorer / upload fields). CoolDesk's own app pages only — main, sidebar and dock (webview-scoped, so browser panes in the main window are excluded): the webapp-* windows host remote sites, which must not be able to start drags of local files.",
   "webviews": [
     "main",
+    "main-*",
     "sidebar",
     "bar"
   ],

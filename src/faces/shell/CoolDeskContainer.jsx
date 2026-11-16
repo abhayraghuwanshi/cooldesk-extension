@@ -21,7 +21,7 @@ import { WorkspaceDockBar } from '../../features/dock/WorkspaceDockBar';
 import { WorkspaceFileDrop } from '../../features/workspace-drop/WorkspaceFileDrop.jsx';
 import { useDockState } from '../../features/dock/useDockState';
 import { OpenFullAppButton, SidebarToggleButton } from '../../features/dock/LayoutSwitchButton';
-import { getWindowSurface } from '../../features/dock/surface';
+import { getWindowSurface, isPrimaryWindow, openNewAppWindow, readWindowValue, windowKey } from '../../features/dock/surface';
 import { SidebarResizeHandle } from '../../features/dock/SidebarResizeHandle';
 import { AppMenu } from '../../features/dock/AppMenu';
 import { enableSurface, openFullApp, toggleSurface } from '../../features/dock/surfaceControls';
@@ -211,7 +211,9 @@ export function CoolDeskContainer({
   // first). Never the sidebar window: `spotlight_run_in_terminal` brings up
   // the main window, and two windows racing for the same command would run
   // it wherever happened to ask first.
-  useSpotlightRuns(isDesktopApp && isSidebarWidth && surface === 'main');
+  // Primary window only: Rust shows "main" for these, and an extra window
+  // would race it for the same command.
+  useSpotlightRuns(isDesktopApp && isSidebarWidth && surface === 'main' && isPrimaryWindow());
 
   // The desktop app has no header search (Browse's own address bar and the
   // Alt+K spotlight window cover it), so the edit goes to the standalone
@@ -330,11 +332,15 @@ export function CoolDeskContainer({
       } else if (key === 'd' && isDesktopApp) {
         e.preventDefault();
         handleSurfaceShortcut();
+      } else if (key === 'n' && isDesktopApp && surface === 'main') {
+        // Ctrl/Cmd+Shift+N: another full CoolDesk window, on this screen.
+        e.preventDefault();
+        openNewAppWindow().catch((err) => console.error('[CoolDesk] New window failed:', err));
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDesktopApp, handleSurfaceShortcut, graphOpen, openActivity]);
+  }, [isDesktopApp, surface, handleSurfaceShortcut, graphOpen, openActivity]);
 
   // Onboarding navigation via custom event (face names: workspace, tabs, team, overview)
   useEffect(() => {
@@ -369,13 +375,22 @@ export function CoolDeskContainer({
   useEffect(() => {
     if (savedWorkspaces.length > 0 && !currentWorkspace) {
       let lastId = null;
-      try { lastId = localStorage.getItem(CURRENT_WS_KEY); } catch { /* none */ }
+      lastId = readWindowValue(CURRENT_WS_KEY);
       setCurrentWorkspace(savedWorkspaces.find(w => w.id === lastId) || savedWorkspaces[0]);
     }
   }, [savedWorkspaces, currentWorkspace]);
+  // Each full-app window's space names its entry in the dock / sidebar
+  // running-apps lists ("CoolDesk · <space>").
+  useEffect(() => {
+    if (!isDesktopApp || surface !== 'main' || !currentWorkspace?.name) return;
+    import('@tauri-apps/api/core')
+      .then(({ invoke }) => invoke('app_window_set_space', { name: currentWorkspace.name }))
+      .catch(() => { });
+  }, [isDesktopApp, surface, currentWorkspace?.name]);
   useEffect(() => {
     if (!currentWorkspace?.id) return;
-    try { localStorage.setItem(CURRENT_WS_KEY, currentWorkspace.id); } catch { /* per session then */ }
+    // Per window: each New Window keeps its own space.
+    try { localStorage.setItem(windowKey(CURRENT_WS_KEY), currentWorkspace.id); } catch { /* per session then */ }
   }, [currentWorkspace?.id]);
 
   const WORKSPACES_PER_PAGE = 2; // Show 3 workspaces in overview
