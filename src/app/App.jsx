@@ -20,7 +20,7 @@ config.autoAddCss = false; // Disable JS-based CSS injection — we import it ab
 import { faBroom, faClone, faGear, faGlobe, faHistory, faPlus, faRotateRight, faThumbtack, faTrash, faTriangleExclamation, faUndo } from '@fortawesome/free-solid-svg-icons';
 import { CoolDeskContainer } from '../faces/shell/CoolDeskContainer';
 import { useDockState } from '../features/dock/useDockState';
-import { getWindowSurface } from '../features/dock/surface';
+import { getWindowSurface, isPrimaryWindow } from '../features/dock/surface';
 import { isElectronApp } from '../services/environmentDetector';
 import { UpdateBanner } from '../features/updates/UpdateBanner';
 import { FeedbackPrompt } from '../features/updates/FeedbackPrompt';
@@ -152,6 +152,9 @@ export default function App() {
   // `surface`: which window this page is — the full app, or the separate
   // sidebar / dock window (src/features/dock/surface.js).
   const surface = isElectronApp() ? getWindowSurface() : 'main';
+  // The original full-app window; an extra New Window is also surface 'main'
+  // but leaves one-per-app jobs to this one.
+  const isPrimary = surface === 'main' && isPrimaryWindow();
   const dockState = useDockState();
   const wallpaperSuppressedByDock = surface !== 'main'
     && !/Mac/.test(navigator.platform)
@@ -322,7 +325,7 @@ export default function App() {
   // whether or not Settings is open; no-ops outside the desktop app.
   // Main window only: the sidebar / dock windows run this same App, and two
   // schedulers would back up twice.
-  useEffect(() => (surface === 'main' ? startBackupScheduler() : undefined), [surface]);
+  useEffect(() => (isPrimary ? startBackupScheduler() : undefined), [isPrimary]);
 
   // Window resize handler for responsive behavior
   useEffect(() => {
@@ -653,7 +656,7 @@ export default function App() {
 
     // Main window only: the sidebar / dock windows load the same data, and
     // running this in each would race to create the same workspaces twice.
-    if (surface !== 'main') return undefined;
+    if (!isPrimary) return undefined;
 
     // Run on mount and when data changes
     const defer = window.requestIdleCallback || ((cb) => setTimeout(cb, 5000));
@@ -665,7 +668,7 @@ export default function App() {
       if (window.cancelIdleCallback) window.cancelIdleCallback(handle);
       else clearTimeout(handle);
     };
-  }, [data, surface]);
+  }, [data, isPrimary]);
 
 
   // Side panel visibility control via runtime messages (default: open)
@@ -1461,8 +1464,8 @@ export default function App() {
       position: 'relative'
     }}>
       {/* Full-app chrome only — not in the narrow sidebar / dock windows. */}
-      {surface === 'main' && <UpdateBanner />}
-      {surface === 'main' && <FeedbackPrompt />}
+      {isPrimary && <UpdateBanner />}
+      {isPrimary && <FeedbackPrompt />}
       {/* Cooldesk UI */}
       <CoolDeskContainer
         savedWorkspaces={savedWorkspaces}
@@ -1609,7 +1612,7 @@ export default function App() {
       )}
 
       {/* Onboarding Tour */}
-      {shouldShowOnboarding && surface === 'main' && (
+      {shouldShowOnboarding && isPrimary && (
         <React.Suspense fallback={null}>
           <OnboardingTour
             onComplete={completeOnboarding}

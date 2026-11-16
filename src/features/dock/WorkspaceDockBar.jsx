@@ -256,7 +256,7 @@ export function WorkspaceDockBar({ workspaces = [], activeWorkspace, onSelectWor
   const { activity, liveApps, liveTabs } = useLiveItems(isActiveMode);
 
   const focusLiveApp = useCallback((app) => {
-    if (isMainWindowItem(app)) { openMainWindow(); return; }
+    if (isMainWindowItem(app)) { openMainWindow(app); return; }
     const api = window.electronAPI;
     if (!api) return;
     itemRankingService.recordLaunch(app);

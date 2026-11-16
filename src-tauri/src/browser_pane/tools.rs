@@ -384,8 +384,13 @@ unsafe fn clip(app: &tauri::AppHandle, label: &str, view: &WKWebView, mut msg: s
     let with_image = matches!(kind, "image" | "chart") || msg.get("withImage").and_then(|v| v.as_bool()) == Some(true);
     let num = |k: &str| msg.pointer(&format!("/rect/{k}")).and_then(|v| v.as_f64()).unwrap_or(0.0);
     let (x, y, w, h) = (num("x"), num("y"), num("width"), num("height"));
-    let emit = |app: &tauri::AppHandle, msg: serde_json::Value| {
-        let _ = app.emit_to("main", "browser-pane-clip", msg);
+    // To the window this pane lives in (main or an extra `main-N`).
+    let target = app
+        .get_webview(label)
+        .map(|wv| wv.window().label().to_string())
+        .unwrap_or_else(|| "main".to_string());
+    let emit = move |app: &tauri::AppHandle, msg: serde_json::Value| {
+        let _ = app.emit_to(target.as_str(), "browser-pane-clip", msg);
     };
     if !with_image || w < 4.0 || h < 4.0 {
         emit(app, msg);

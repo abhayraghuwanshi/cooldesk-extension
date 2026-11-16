@@ -18,6 +18,7 @@ import { clipSummary, saveClipToWorkspace } from '../../features/browser/clipToN
 import { addUrlToWorkspace, saveWorkspace } from '../../db/index.js';
 import { useShelf } from '../../features/shelf/useShelf';
 import { SPECIAL_TITLES, tabPaneId, useBrowseTabs } from './useBrowseTabs';
+import { isPrimaryWindow, readWindowValue, windowKey } from '../../features/dock/surface';
 import { defaultLayout, dockTile, evenSplit, hitDock, layoutRects, reconcile, setSplitSizes, splitSizes } from './multiLayout';
 import { getFaviconUrl } from '../../utils/helpers.js';
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
@@ -194,6 +195,10 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   // Tabs (useBrowseTabs): each is its own live page; the single page Browse
   // used to show becomes the first tab.
   const browseTabs = useBrowseTabs(localStorage.getItem(LAST_URL_KEY));
+  // Pane events (pop-ups, shortcuts, clips) reach every CoolDesk window; with
+  // several full-app windows open, each acts only on its own tabs' panes.
+  const ownPanes = useRef(new Set());
+  ownPanes.current = new Set(browseTabs.tabs.map(t => `browser-pane-${tabPaneId(t.id)}`));
   // For the 'cooldesk-browse' listener, which is registered once.
   const openSpecialTabRef = useRef(browseTabs.openSpecialTab);
   openSpecialTabRef.current = browseTabs.openSpecialTab;
@@ -344,7 +349,9 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
     const dir = cwd || (here ? (at.file ? (at.file.isDir ? at.file.path : parentDir(at.file.path)) : at.term?.cwd) : null) || null;
     browseTabs.openTerminalTab(dir, false, { run: command, title: label || command, fresh });
   }), [browseTabs, mode, setMode]);
-  useSpotlightRuns(true);
+  // Primary window only: Rust shows "main" for a spotlight run, and an extra
+  // New Window would race it for the same command.
+  useSpotlightRuns(isPrimaryWindow());
 
   // Browser shortcuts. Keys typed while the page itself has focus never reach
   // this document; the page tools (tools.js, isolated world) forward these
@@ -397,7 +404,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
     let cancelled = false;
     import('@tauri-apps/api/event')
       .then(({ listen }) => listen('browser-pane-shortcut', ({ payload }) => {
-        if (payload?.label?.includes('browser-pane-bt-')) shortcutRef.current(payload.key);
+        if (payload?.label?.includes('browser-pane-bt-') && ownPanes.current.has(payload.label)) shortcutRef.current(payload.key);
       }))
       .then(fn => { if (cancelled) fn(); else off = fn; });
     return () => {
@@ -414,6 +421,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
     let cancelled = false;
     import('@tauri-apps/api/event')
       .then(({ listen }) => listen('browser-pane-popup', ({ payload }) => {
+        if (!ownPanes.current.has(payload?.label)) return;
         if (payload?.url && /^https?:/i.test(payload.url)) browseTabs.openInNew(payload.url, { position: 'after' });
       }))
       .then(fn => { if (cancelled) fn(); else off = fn; });
@@ -845,7 +853,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   // Which workspace's links the list shows: one at a time (follows the
   // workspace opened elsewhere in CoolDesk, else the last pick), or 'all'.
   // Typing in the filter always searches every workspace.
-  const [listWs, setListWsState] = useState(() => localStorage.getItem(LIST_WS_KEY) || activeWorkspaceId || '');
+  const [listWs, setListWsState] = useState(() => readWindowValue(LIST_WS_KEY) || activeWorkspaceId || '');
   // Notes, to-dos & commands: folded behind the Notes button in Home's
   // header until asked for (the panel is tall).
   const [wsContextOpen, setWsContextOpenState] = useState(() => localStorage.getItem(WS_CONTEXT_KEY) === 'true');
@@ -857,7 +865,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   };
   const setListWs = (id) => {
     setListWsState(id);
-    persist(LIST_WS_KEY, id);
+    persist(windowKey(LIST_WS_KEY), id);
     // The panel's pick is the app's current workspace too — otherwise the
     // next launch (which restores that one) would switch the panel back.
     onSelectWorkspace?.(id);
@@ -891,7 +899,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
     import('@tauri-apps/api/event')
       .then(({ listen }) => listen('browser-pane-clip', async ({ payload }) => {
         const ws = clipWsRef.current;
-        if (!payload) return;
+        if (!payload || !ownPanes.current.has(payload.label)) return;
         if (!ws) {
           setClipToast({ error: true, text: 'Pick a workspace in Home first — clips are saved to its notes.' });
           return;

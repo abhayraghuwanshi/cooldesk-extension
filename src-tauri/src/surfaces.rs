@@ -356,6 +356,18 @@ fn primary_geom(app: &tauri::AppHandle) -> Option<(i32, i32, i32, i32)> {
 /// location instead. Only the monitor's identity matters on macOS; actual
 /// placement is done in points by `mac_frame`.
 fn cursor_geom(app: &tauri::AppHandle) -> Option<(i32, i32, i32, i32)> {
+    match cursor_monitor(app) {
+        Some(m) => {
+            let p = m.position();
+            let s = m.size();
+            Some((p.x, p.y, s.width as i32, s.height as i32))
+        }
+        None => primary_geom(app),
+    }
+}
+
+/// The monitor under the cursor (see `cursor_geom` for the macOS caveat).
+pub(crate) fn cursor_monitor(app: &tauri::AppHandle) -> Option<tauri::Monitor> {
     #[cfg(target_os = "macos")]
     let cursor = {
         use core_graphics::event::CGEvent;
@@ -368,15 +380,7 @@ fn cursor_geom(app: &tauri::AppHandle) -> Option<(i32, i32, i32, i32)> {
     };
     #[cfg(not(target_os = "macos"))]
     let cursor = app.cursor_position().ok().map(|pos| (pos.x, pos.y));
-    let monitor = cursor.and_then(|(x, y)| app.monitor_from_point(x, y).ok().flatten());
-    match monitor {
-        Some(m) => {
-            let p = m.position();
-            let s = m.size();
-            Some((p.x, p.y, s.width as i32, s.height as i32))
-        }
-        None => primary_geom(app),
-    }
+    cursor.and_then(|(x, y)| app.monitor_from_point(x, y).ok().flatten())
 }
 
 /// Geometry a surface lays out against. The bar uses the monitor *work area*

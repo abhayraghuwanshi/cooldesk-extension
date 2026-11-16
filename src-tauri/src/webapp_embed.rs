@@ -154,6 +154,7 @@ pub async fn webapp_embed_open(id: String, url: String) -> Result<i64, String> {
 #[allow(clippy::too_many_arguments)]
 pub fn webapp_embed_set_bounds(
     app: tauri::AppHandle,
+    window: tauri::Window,
     id: String,
     x: i32,
     y: i32,
@@ -168,7 +169,7 @@ pub fn webapp_embed_set_bounds(
     #[cfg(not(target_os = "windows"))]
     {
         let _ = (
-            app, id, x, y, width, height, visible, clip_top, clip_right, clip_bottom, clip_left,
+            app, window, id, x, y, width, height, visible, clip_top, clip_right, clip_bottom, clip_left,
         );
         Err("Embedded web apps are only supported on Windows".to_string())
     }
@@ -188,8 +189,10 @@ pub fn webapp_embed_set_bounds(
             windows::hide(hwnd);
             return Ok(());
         }
+        // The app window whose page asked (main or an extra New Window).
+        let host = if crate::is_app_window(window.label()) { window.label().to_string() } else { "main".to_string() };
         let main_hwnd = app
-            .get_window("main") // not get_webview_window: see main_window() in lib.rs
+            .get_window(&host) // not get_webview_window: see main_window() in lib.rs
             .and_then(|w| w.hwnd().ok())
             .map(|h| h.0 as isize)
             .ok_or_else(|| "main window unavailable".to_string())?;

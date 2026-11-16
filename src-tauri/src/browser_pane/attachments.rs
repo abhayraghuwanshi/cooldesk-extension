@@ -80,7 +80,7 @@ unsafe extern "C-unwind" fn decide(
     navigation_response: *mut AnyObject,
     handler: *mut Block<dyn Fn(isize)>,
 ) {
-    let is_pane = !webview.is_null() && webview as usize != super::main_webview_ptr();
+    let is_pane = !webview.is_null() && !super::is_page_webview(webview as usize);
     if is_pane && !navigation_response.is_null() {
         let response: *mut AnyObject = msg_send![navigation_response, response];
         if let Some(value) = disposition(response) {
