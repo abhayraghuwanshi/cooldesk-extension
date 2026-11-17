@@ -2,6 +2,27 @@
 
 All notable changes to CoolDesk (desktop app + Chrome extension) are documented here.
 
+## [2.0.22] — 2026-11-17
+
+### Added
+- **More than one CoolDesk window.** New Window (Ctrl/Cmd+Shift+N, the tray, or the button in Browse's side panel) opens another full app window on the screen under your cursor. Each window keeps its own tabs, terminals and current space; your saved data stays shared.
+- **Save anything to a space.** Every tab's toolbar has a Save button — web pages, files, folders and terminals — plus Save all in the Tabs header. Saved shells open a terminal in that folder, and saved dev servers remember their start command: press play to run it and open the page once it's up.
+- **Rearrange multi view by dragging.** Drag a tile by its grip onto another tile's edge to put it on that side, onto its middle to swap, or onto the view's edge for a full column or row. Your layout is kept until you choose Auto-arrange, and moving a tile never reloads its page or restarts its shell.
+- **Clipboard history, reorganised** — category chips on one line, rows shaped by kind (code, links, colors, images), and an Images grid with a full-window viewer you can page through with the arrow keys.
+- **A usage meter** in Browse's toolbar shows CoolDesk's own memory and CPU.
+- **Terminal tabs that ring while off screen get a dot.**
+
+### Changed
+- **On macOS, clicking CoolDesk in the Dock reopens the full app** after you've closed it to the tray, and CoolDesk leads the running apps list in the dock bar and sidebar.
+- **Removing pinned items** — links, files, folders, shells and servers each have a remove button, and the same folder no longer shows up twice.
+
+### Fixed
+- **Claude Code and other full-screen terminal programs left stacked prompt fragments** after the terminal resized (focus mode, full screen, side panel). The terminal now resizes once it settles.
+- **Esc no longer drops you out of focus mode** while you're typing in a terminal or text field.
+
+### Security
+- **Tighter webview.** No inline scripts, no file access to credential and browser-profile folders (.ssh, .aws, Keychains, browser profiles and so on), links only open http(s), mailto and system settings, shared team notes are sanitised, and release builds no longer ship the web inspector.
+
 ## [2.0.21] — 2026-11-11
 
 Includes everything from 2.0.20, which was out for a few hours and never reached winget.
