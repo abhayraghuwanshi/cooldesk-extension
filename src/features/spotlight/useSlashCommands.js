@@ -4,6 +4,7 @@ import { CommandExecutor } from '../../services/commandExecutor.js';
 import { CommandParser, COMMANDS } from '../../services/commandParser.js';
 import { disableSurface, enableSurface } from '../dock/surfaceControls.js';
 import { useDockState } from '../dock/useDockState.js';
+import { parseSettingsCommand, runSettingsCommand, settingsSuggestions } from './settingsCommands.js';
 
 // Slash (/nav) + bang (!action) command palette extracted from the old
 // CoolSearch so any search surface can opt in. The host surface owns rendering:
@@ -80,6 +81,8 @@ export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavi
         // Dock/sidebar commands work even where the rest of the palette is
         // off (the overlay spotlight window doesn't enable it).
         if (isDesktopApp && SURFACE_RE.test(q)) return true;
+        // Settings shortcuts (/language, /settings, /theme…) likewise.
+        if (isDesktopApp && parseSettingsCommand(q)) return true;
         if (!enabled) return false;
         if (!q || RESERVED_RE.test(q)) return false;
         if (navMaps.full[q] || navMaps.alias[q]) return true;
@@ -106,6 +109,12 @@ export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavi
                 console.error(`[SlashCommands] ${label} toggle failed:`, error);
                 showFeedbackRef.current?.(`Couldn't turn ${label.toLowerCase()} ${turnOn ? 'on' : 'off'}`, 'error');
             }
+            return true;
+        }
+
+        const settingsCmd = isDesktopApp && parseSettingsCommand(q);
+        if (settingsCmd) {
+            await runSettingsCommand(settingsCmd, (msg, type) => showFeedbackRef.current?.(msg, type));
             return true;
         }
 
@@ -156,18 +165,27 @@ export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavi
             };
         }) : [];
 
+        // Settings shortcuts (desktop): /language …, /search-engine …, /theme…
+        const settingsRows = isDesktopApp ? settingsSuggestions(q) : null;
+        // In a command's argument ("/language esp") they're the whole list.
+        // (The query arrives trimmed, so "/language " is just "/language".)
+        const inSettingsArg = !!settingsRows
+            && (/^\/[a-z-]+\s/i.test(q) || /^\/(language|lang|search-engine|engine|web-suggestions)$/i.test(q));
+
         if (!enabled) {
             // Palette off: still offer the dock/sidebar rows once the typed
             // text is the start of one ("/do", "/sidebar o"…).
             const typed = q.toLowerCase();
             if (typed.length < 2 || !typed.startsWith('/')) return null;
-            const rows = surfaceEntries.filter(e => {
+            const rows = inSettingsArg ? [] : surfaceEntries.filter(e => {
                 const word = e.command.split(' ')[0];
                 return word.startsWith(typed) || typed.startsWith(word + ' ') || typed === word;
             });
-            return rows.length ? rows.map(e => ({
+            const all = [...rows, ...(settingsRows || [])];
+            return all.length ? all.map(e => ({
                 id: `cmd:${e.command}`, type: 'command', title: e.title, description: e.description,
-                category: e.category, command: e.command, insert: null, commandId: e.command.split(' ')[0],
+                category: e.category, command: e.insert ? null : e.command, insert: e.insert || null,
+                commandId: e.command.split(' ')[0],
             })) : null;
         }
         if (!q || RESERVED_RE.test(q)) return null;
@@ -187,6 +205,8 @@ export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavi
             commandId: command,
         });
 
+        if (inSettingsArg) return settingsRows.map(toItem);
+
         if (q.startsWith('/')) {
             const filter = q.slice(1).toLowerCase();
             // Just the leader commands worth recommending: create a
@@ -203,6 +223,10 @@ export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavi
                 { command: '/notes', title: 'Notes', description: 'Notes in Active (or pick a workspace) — type to jot one', category: 'Workspace', insert: '/notes ' },
                 ...surfaceEntries,
                 ...(isDesktopApp ? [{ command: '/shell', title: 'Shell', description: 'A terminal right here — keeps running when Spotlight closes', category: 'Terminal', insert: '/shell' }] : []),
+                ...(isDesktopApp ? [
+                    { command: '/settings', title: 'Settings', description: 'Open Settings — /theme, /hotkey, /backup… jump to a section', category: 'Settings', insert: '/settings ' },
+                    { command: '/language', title: 'Language', description: 'Change the language CoolDesk speaks', category: 'Settings', insert: '/language ' },
+                ] : []),
                 { command: '/u', title: 'Search URLs', description: 'Scope search to tabs, history, bookmarks', category: 'Scope', insert: '/u ' },
                 { command: '/a', title: 'Search Apps', description: 'Scope search to applications', category: 'Scope', insert: '/a ' },
                 { command: '/f', title: 'Search Files', description: 'Scope search to files and folders', category: 'Scope', insert: '/f ' },
@@ -210,6 +234,10 @@ export function useSlashCommands({ enabled = false, isDesktopApp = false, onNavi
             const matches = entries.filter(e =>
                 !filter || `${e.command} ${e.title} ${e.description}`.toLowerCase().includes(filter)
             );
+            // The rest of the settings shortcuts, once a word is typed
+            for (const r of settingsRows || []) {
+                if (!matches.some(e => e.command === r.command)) matches.push(r);
+            }
             // Exact/prefix command matches first
             matches.sort((a, b) => {
                 const rank = (e) => e.command === `/${filter}` ? 0 : e.command.startsWith(`/${filter}`) ? 1 : 2;

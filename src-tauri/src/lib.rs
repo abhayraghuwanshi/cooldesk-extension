@@ -1650,6 +1650,26 @@ fn take_terminal_run() -> Option<String> {
     PENDING_TERMINAL_RUN.lock().unwrap().take()
 }
 
+// Settings section ("general", "appearance", …) the spotlight's `/settings`
+// commands asked the main window to open — same pending-slot handoff as
+// PENDING_TERMINAL_RUN (see `useSpotlightSettings` in settingsNav.js).
+static PENDING_SETTINGS_OPEN: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+#[tauri::command]
+fn spotlight_open_settings(app: tauri::AppHandle, section: Option<String>) {
+    *PENDING_SETTINGS_OPEN.lock().unwrap() = Some(section.unwrap_or_else(|| "general".into()));
+    if let Some(window) = app.get_webview_window("spotlight") {
+        let _ = window.hide();
+    }
+    show_main_window(&app);
+    let _ = app.emit("spotlight-open-settings", ());
+}
+
+#[tauri::command]
+fn take_settings_open() -> Option<String> {
+    PENDING_SETTINGS_OPEN.lock().unwrap().take()
+}
+
 #[tauri::command]
 fn hide_spotlight(app: tauri::AppHandle) {
     // Grant any process foreground permission BEFORE hiding our window.
@@ -3026,6 +3046,8 @@ pub fn run() {
         take_spotlight_edit,
         spotlight_run_in_terminal,
         take_terminal_run,
+        spotlight_open_settings,
+        take_settings_open,
         hide_spotlight,
         set_spotlight_shortcut,
         launch_app,

@@ -84,6 +84,29 @@ export function setLanguage(pref) {
     current = resolve(next);
     applyToDocument();
     window.dispatchEvent(new CustomEvent(EVENT, { detail: { language: current, preference: next } }));
+    // Desktop app: the other windows (main, sidebar, dock, spotlight) are
+    // separate webviews — tell them too (the spotlight's /language sets it).
+    if (window.__TAURI_INTERNALS__) {
+        import('@tauri-apps/api/event')
+            .then(({ emit }) => emit(TAURI_EVENT, { preference: next }))
+            .catch(() => { });
+    }
+}
+
+const TAURI_EVENT = 'cooldesk-language-changed';
+
+function followPreference(pref) {
+    const next = pref === 'auto' || SUPPORTED.has(pref) ? pref : 'auto';
+    if (resolve(next) === current) return;
+    current = resolve(next);
+    applyToDocument();
+    window.dispatchEvent(new CustomEvent(EVENT, { detail: { language: current, preference: next } }));
+}
+
+if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
+    import('@tauri-apps/api/event')
+        .then(({ listen }) => listen(TAURI_EVENT, (e) => followPreference(e.payload?.preference)))
+        .catch(() => { });
 }
 
 // Another tab/page changed it: follow along.
