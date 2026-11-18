@@ -249,7 +249,13 @@ export function useNativePane({ paneId, url, requestKey = 0, active, clipRef = n
     // hidden by the dock) without changing its CSS rect, so always re-place.
     const onWindowResize = () => { lastBoundsRef.current = ''; syncSoon(); };
     sync();
-    const timer = setInterval(sync, SYNC_MS);
+    // The poll is for overlays covering a page on screen. A background tab's
+    // page (inactive) or a hidden window's stays hidden — its key never
+    // changes, so every tick was a forced layout for nothing, ×120ms per
+    // open tab. They're re-synced when they become active (this effect
+    // re-runs: `sync` depends on `active`) or the window shows
+    // (visibilitychange below).
+    const timer = active ? setInterval(() => { if (!document.hidden) sync(); }, SYNC_MS) : 0;
     const ro = new ResizeObserver(syncSoon);
     if (slotRef.current) ro.observe(slotRef.current);
     window.addEventListener('resize', onWindowResize);
@@ -263,7 +269,7 @@ export function useNativePane({ paneId, url, requestKey = 0, active, clipRef = n
       document.removeEventListener('scroll', syncSoon, { capture: true });
       document.removeEventListener('visibilitychange', sync);
     };
-  }, [sync]);
+  }, [sync, active]);
 
   // In-page navigation / title updates from the Rust side.
   useEffect(() => {

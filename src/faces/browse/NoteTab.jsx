@@ -40,6 +40,28 @@ const dropScratch = (id) => {
 };
 
 /**
+ * Store a scratch note (as it stands in localStorage — the tab writes every
+ * change there at once) as a note of `ws`. The caller then points the tab
+ * at it (useBrowseTabs.noteToWorkspace), and NoteTab reloads it from there.
+ * Also used by dragging a note tab onto Home's workspace section.
+ */
+export async function saveScratchNote(noteId, ws, current = readScratch(noteId)) {
+  const now = Date.now();
+  await saveWorkspaceNote({
+    id: noteId,
+    workspaceId: ws.id,
+    title: (current.title || '').trim() || 'Untitled',
+    text: current.text || '',
+    folder: ws.name,
+    type: 'richtext',
+    createdAt: now,
+    updatedAt: now,
+  });
+  dropScratch(noteId);
+  announce(ws.id);
+}
+
+/**
  * @param note     { id, workspaceId, workspaceName } from the tab
  * @param onTitle  the tab's title follows the note's
  * @param onClose  close the tab (after Delete)
@@ -133,19 +155,7 @@ export function NoteTab({ note, onTitle, onClose, onOpenUrl, onOpenPath, onOpenS
     clearTimeout(saveTimer.current);
     saveTimer.current = null;
     const { title: t, text: body } = latest.current;
-    const now = Date.now();
-    await saveWorkspaceNote({
-      id: note.id,
-      workspaceId: ws.id,
-      title: t.trim() || 'Untitled',
-      text: body,
-      folder: ws.name,
-      type: 'richtext',
-      createdAt: now,
-      updatedAt: now,
-    });
-    dropScratch(note.id);
-    announce(ws.id);
+    await saveScratchNote(note.id, ws, { title: t, text: body });
     onSaveToWorkspace?.(ws);
   };
   const saveItems = [...workspaces]

@@ -676,6 +676,7 @@ static MAIN_SHOWN_ONCE: std::sync::atomic::AtomicBool = std::sync::atomic::Atomi
 /// windows (surfaces.rs).
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(win) = ensure_main_window(app) {
+        MAIN_SHOW_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let _ = win.unminimize();
         let _ = win.show();
         if !MAIN_SHOWN_ONCE.swap(true, std::sync::atomic::Ordering::Relaxed) && !win.is_fullscreen().unwrap_or(false) {
@@ -816,11 +817,51 @@ fn open_new_window(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 /// Hide the main window to the tray (the app keeps running).
+///
+/// macOS: a window hidden while in native fullscreen leaves its fullscreen
+/// Space behind — an empty black screen, with the dock and sidebar (which
+/// join fullscreen Spaces) still sitting on it — and showing it again has to
+/// switch back into that Space. So leave fullscreen first and hide once
+/// macOS has finished the transition back to the desktop.
 fn hide_main_window(app: &tauri::AppHandle) {
-    if let Some(win) = main_window(app) {
-        let _ = win.hide();
+    let Some(win) = main_window(app) else { return };
+    #[cfg(target_os = "macos")]
+    if win.is_fullscreen().unwrap_or(false) {
+        // A second close while still leaving fullscreen: already on its way.
+        if HIDING_AFTER_FULLSCREEN.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
+        let _ = win.set_fullscreen(false);
+        let shown_at = MAIN_SHOW_COUNT.load(std::sync::atomic::Ordering::SeqCst);
+        std::thread::spawn(move || {
+            let started = std::time::Instant::now();
+            // Off fullscreen, and no display still on a fullscreen Space (the
+            // switch back is animated). Capped: another app's fullscreen
+            // Space on a second display would keep the second check true.
+            while started.elapsed() < std::time::Duration::from_millis(1500)
+                && (win.is_fullscreen().unwrap_or(false) || dock::any_fullscreen_space())
+            {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            // Reopened (dock, tray…) in the meantime: leave it showing.
+            if MAIN_SHOW_COUNT.load(std::sync::atomic::Ordering::SeqCst) == shown_at {
+                let _ = win.hide();
+            }
+            HIDING_AFTER_FULLSCREEN.store(false, std::sync::atomic::Ordering::SeqCst);
+        });
+        return;
     }
+    let _ = win.hide();
 }
+
+/// Bumped by every show_main_window, so a deferred hide can tell it was
+/// reopened meanwhile.
+static MAIN_SHOW_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Set while hide_main_window waits for fullscreen to end.
+#[cfg(target_os = "macos")]
+static HIDING_AFTER_FULLSCREEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// The × on CoolDesk's entry in the sidebar/dock running apps.
 #[tauri::command]
@@ -1648,6 +1689,26 @@ fn spotlight_run_in_terminal(app: tauri::AppHandle, command: String) -> Result<(
 #[tauri::command]
 fn take_terminal_run() -> Option<String> {
     PENDING_TERMINAL_RUN.lock().unwrap().take()
+}
+
+// Settings section ("general", "appearance", …) the spotlight's `/settings`
+// commands asked the main window to open — same pending-slot handoff as
+// PENDING_TERMINAL_RUN (see `useSpotlightSettings` in settingsNav.js).
+static PENDING_SETTINGS_OPEN: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+#[tauri::command]
+fn spotlight_open_settings(app: tauri::AppHandle, section: Option<String>) {
+    *PENDING_SETTINGS_OPEN.lock().unwrap() = Some(section.unwrap_or_else(|| "general".into()));
+    if let Some(window) = app.get_webview_window("spotlight") {
+        let _ = window.hide();
+    }
+    show_main_window(&app);
+    let _ = app.emit("spotlight-open-settings", ());
+}
+
+#[tauri::command]
+fn take_settings_open() -> Option<String> {
+    PENDING_SETTINGS_OPEN.lock().unwrap().take()
 }
 
 #[tauri::command]
@@ -3026,6 +3087,8 @@ pub fn run() {
         take_spotlight_edit,
         spotlight_run_in_terminal,
         take_terminal_run,
+        spotlight_open_settings,
+        take_settings_open,
         hide_spotlight,
         set_spotlight_shortcut,
         launch_app,
@@ -3144,7 +3207,10 @@ pub fn run() {
         browser_pane::tools::browser_pane_screenshot,
         browser_pane::tools::browser_pane_clip,
         browser_pane::browser_pane_adblock_supported,
-        browser_pane::browser_pane_close
+        browser_pane::browser_pane_close,
+        browser_pane::uploads::browser_pane_file_ack,
+        browser_pane::uploads::browser_pane_file_choose,
+        browser_pane::uploads::browser_pane_file_system
     ]))
     .setup(|app| {
       browser_pane::adblock::prepare(app.handle());

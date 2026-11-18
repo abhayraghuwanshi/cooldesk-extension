@@ -1372,62 +1372,150 @@
 .fm-sidebar.fm-sidebar--row {
   display: flex !important;
   position: static !important;
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
   width: auto;
   flex: 0 0 auto;
+  /* One labelled row per section (Projects / Pinned / Places), chips
+     wrapping onto more lines rather than scrolling sideways out of view.
+     A long list scrolls down inside this cap. */
   padding: 6px 8px;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: hidden;
   border-right: none;
   border-bottom: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.06));
   background: transparent;
   box-shadow: none;
-  scrollbar-width: none;
-}
-
-.fm-sidebar--row::-webkit-scrollbar {
-  display: none;
+  scrollbar-width: thin;
 }
 
 .fm-sidebar--row .fm-side-section {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
 }
 
-/* Sections are separated by a hairline instead of a heading. */
 .fm-sidebar--row .fm-side-section + .fm-side-section {
   margin-top: 0;
-  padding-left: 6px;
+}
+
+/* Projects get their own row; Pinned, Places (and Popular) share the next
+   one side by side — each sized to its chips, the last taking the rest,
+   split by a hairline. */
+.fm-sidebar.fm-sidebar--row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  column-gap: 0;
+  row-gap: 4px;
+}
+
+.fm-sidebar--row .fm-side-section {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.fm-sidebar--row .fm-side-section.fm-side-linked { flex: 1 1 100%; }
+.fm-sidebar--row .fm-side-section:last-child { flex: 1 1 0; }
+
+.fm-sidebar--row .fm-side-section:not(.fm-side-linked) + .fm-side-section {
+  margin-left: 10px;
+  padding-left: 10px;
   border-left: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.08));
 }
 
-.fm-sidebar--row .fm-side-title {
-  display: none;
+/* Only a row's first label is a fixed column; the ones after a hairline
+   are as wide as their word. */
+.fm-sidebar--row .fm-side-section:not(.fm-side-linked) + .fm-side-section .fm-side-title {
+  flex: 0 0 auto;
 }
 
+/* The section's name leads its row, a fixed width so the rows line up. */
+.fm-sidebar--row .fm-side-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 64px;
+  height: 24px;
+  margin: 0;
+  padding: 0 2px;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted, #6b7280);
+}
+
+.fm-sidebar--row .fm-side-title-icon { display: none; }
+
+/* One chip tall: chips that don't fit wrap out of sight, and the "+N"
+   after the row lists them (FileManager measures which). */
+.fm-sidebar--row .fm-side-chips {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.fm-sidebar--row .fm-side-more {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Plain text chips: no outline, a soft hover, the accent only for where
+   you are. */
 .fm-sidebar--row .fm-side-item {
   width: auto;
+  height: 24px;
   flex-shrink: 0;
   gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--surface-1, rgba(255, 255, 255, 0.04));
-  border: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.06));
+  padding: 0 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary, #9ca3af);
   font-size: 12px;
   white-space: nowrap;
 }
 
+.fm-sidebar--row .fm-side-item:hover {
+  background: var(--interactive-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text, #e5e7eb);
+}
+
 .fm-sidebar--row .fm-side-item.active {
-  border-color: color-mix(in srgb, var(--accent-primary, #8b5cf6) 55%, transparent);
-  background: color-mix(in srgb, var(--accent-primary, #8b5cf6) 18%, transparent);
+  border: none;
+  background: color-mix(in srgb, var(--accent-primary, #8b5cf6) 16%, transparent);
+  color: var(--text, #e5e7eb);
+}
+
+.fm-sidebar--row .fm-side-icon,
+.fm-sidebar--row .fm-side-linked .fm-side-icon {
+  font-size: 10.5px;
+  color: var(--text-muted, #6b7280);
+}
+
+.fm-sidebar--row .fm-side-item.active .fm-side-icon {
+  color: var(--accent-primary, #8b5cf6);
+}
+
+.fm-sidebar--row .fm-side-linked .fm-side-title {
+  color: var(--text-muted, #6b7280);
+}
+
+.fm-sidebar--row .fm-side-linked .fm-side-label {
+  color: inherit;
 }
 
 .fm-sidebar--row .fm-side-label {
-  max-width: 120px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .fm-sidebar--row .fm-side-unpin {
@@ -1460,4 +1548,38 @@
 
 .fm-status-op.is-error {
   color: #f87171;
+}
+
+/* Chosen for an upload (the upload picker's `picked`). */
+.fm-row.is-picked,
+.fm-tile.is-picked {
+  background: color-mix(in srgb, var(--accent-primary, #60a5fa) 16%, transparent);
+}
+
+.fm-row.is-picked {
+  box-shadow: inset 2px 0 0 var(--accent-primary, #60a5fa);
+}
+
+.fm-tile.is-picked {
+  position: relative;
+  border-color: color-mix(in srgb, var(--accent-primary, #60a5fa) 55%, transparent);
+}
+
+.fm-picked-mark {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--accent-primary, #60a5fa);
+}
+
+.fm-picked-tile {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+/* In place of the breadcrumbs when the host shows the path (Browse tab). */
+.fm-crumbs-spacer {
+  flex: 1;
+  min-width: 0;
 }

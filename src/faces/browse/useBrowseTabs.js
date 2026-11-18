@@ -25,9 +25,12 @@ const MAX_TABS = 40;
 // A scratch note's title + text, per note id, while it belongs to no workspace.
 export const SCRATCH_KEY = (id) => `cooldesk.scratch.${id}`;
 
-// CoolDesk's own pages that open as tabs (`special`).
-export const SPECIAL_TITLES = { activity: 'Cool Activity', settings: 'Settings' };
-const specialOf = (t) => (SPECIAL_TITLES[t.special] ? t.special : t.activity === true ? 'activity' : undefined);
+// CoolDesk's own pages that open as tabs (`special`). 'upload' is the file
+// picker a page's upload button opens beside it (`upload`: the request from
+// src-tauri/src/browser_pane/uploads.rs); it lives only as long as that
+// request, so it's never saved.
+export const SPECIAL_TITLES = { activity: 'Cool Activity', settings: 'Settings', upload: 'Upload' };
+const specialOf = (t) => (t.special === 'upload' ? undefined : SPECIAL_TITLES[t.special] ? t.special : t.activity === true ? 'activity' : undefined);
 
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 const isWebUrl = (url) => typeof url === 'string' && /^https?:\/\//i.test(url);
@@ -135,7 +138,7 @@ export function useBrowseTabs(initialUrl) {
           activeId,
           // A terminal's start command isn't saved: after a restart the tab
           // is a plain shell, so a dev server doesn't start on its own.
-          tabs: tabs.map(({ id, url, title, file, term, note, special, back, fwd }) => ({ id, url, title, file, term: term ? { cwd: term.cwd } : term, note, special, back, fwd })),
+          tabs: tabs.filter(t => !t.upload).map(({ id, url, title, file, term, note, special, back, fwd }) => ({ id, url, title, file, term: term ? { cwd: term.cwd } : term, note, special, back, fwd })),
         }));
       } catch { /* keep in memory */ }
     }, 300);
@@ -311,6 +314,52 @@ export function useBrowseTabs(initialUrl) {
     }));
   }, [tabs, activeId]);
 
+  /** A folder tab's file manager went to another folder: the tab follows
+   *  (its address, title and Back list), like a link followed in a page.
+   *  Unlike openFileTab it never jumps to another tab that has the folder. */
+  const folderTo = useCallback((tabId, rawPath) => {
+    if (!rawPath) return;
+    const path = normalizePath(rawPath);
+    const title = path.split(/[/\\]/).filter(Boolean).pop() || path;
+    setState(s => ({
+      ...s,
+      tabs: s.tabs.map(t => (t.id === tabId && t.file?.isDir && t.file.path !== path
+        ? goTo(t, { url: null, file: { path, isDir: true }, title })
+        : t)),
+    }));
+  }, []);
+
+  /** ← in a folder tab: up to the parent folder, as a step *back* — the
+   *  folder you leave goes on Forward, so → takes you back into it. At the
+   *  top of the disk (no parent) it's the tab's ordinary Back. Returns
+   *  false when there's nowhere to go. */
+  const folderUp = useCallback((tabId) => {
+    const here = tabs.find(t => t.id === tabId);
+    if (!here?.file?.isDir) return false;
+    const path = here.file.path;
+    const cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+    const parent = cut > 0 ? path.slice(0, cut) : (cut === 0 && path.length > 1 ? path.slice(0, 1) : null);
+    if (!parent) return false;
+    const title = parent.split(/[/\\]/).filter(Boolean).pop() || parent;
+    touch(tabId);
+    setState(s => ({
+      ...s,
+      tabs: s.tabs.map(t => {
+        if (t.id !== tabId) return t;
+        const back = t.back || [];
+        const top = back[back.length - 1];
+        return {
+          ...t,
+          ...restore(t, { url: null, file: { path: parent, isDir: true }, title }),
+          // Came down from the parent: going up is just Back.
+          back: top?.file?.path === parent ? back.slice(0, -1) : back,
+          fwd: [...(t.fwd || []), entryOf(t)].slice(-HISTORY),
+        };
+      }),
+    }));
+    return true;
+  }, [tabs]);
+
   /** A terminal in `cwd` (home when empty), as a new tab — or in place of
    *  the blank Home tab it was opened from. `run`: a command it starts with
    *  (a project's dev server, build…); running the same one again switches
@@ -427,6 +476,25 @@ export function useBrowseTabs(initialUrl) {
     }));
   }, [tabs, activeId]);
 
+  /** The upload picker for a page's file request, as a tab right after
+   *  that page (`afterId`). A page that asks again reuses its tile. */
+  const openUploadTab = useCallback((upload, afterId = null) => {
+    const existing = tabs.find(t => t.upload && t.upload.label === upload.label);
+    const id = existing ? existing.id : newId();
+    touch(id);
+    setState(s => {
+      if (existing) {
+        return { tabs: s.tabs.map(t => (t.id === id ? { ...t, upload } : t)), activeId: id };
+      }
+      if (s.tabs.length >= MAX_TABS) return s;
+      const after = s.tabs.findIndex(t => t.id === afterId);
+      const at = after === -1 ? s.tabs.length : after + 1;
+      const tab = { id, url: null, title: SPECIAL_TITLES.upload, req: { url: null, key: 0 }, special: 'upload', upload };
+      return { tabs: [...s.tabs.slice(0, at), tab, ...s.tabs.slice(at)], activeId: id };
+    });
+    return id;
+  }, [tabs]);
+
   /** Back / Forward across what the tab showed (files, and the page before
    *  a file). Returns false when there's nothing to go to. */
   const step = useCallback((dir) => {
@@ -451,5 +519,5 @@ export function useBrowseTabs(initialUrl) {
   }, [tabs, activeId]);
 
   const active = tabs.find(t => t.id === activeId) || tabs[0];
-  return { tabs, active, activeId: active.id, live, sleep, idleFor, activate, openInActive, openInNew, openFileTab, openTerminalTab, openNoteTab, openScratchNote, noteToWorkspace, openSpecialTab, step, close, cycle, noteUrl, noteTitle, move, findByUrl };
+  return { tabs, active, activeId: active.id, live, sleep, idleFor, activate, openInActive, openInNew, openFileTab, folderTo, folderUp, openTerminalTab, openNoteTab, openScratchNote, noteToWorkspace, openSpecialTab, openUploadTab, step, close, cycle, noteUrl, noteTitle, move, findByUrl };
 }

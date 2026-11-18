@@ -8,6 +8,10 @@ import '../../styles/browse.css';
 // the Browse pane (page tools — src-tauri/src/browser_pane/tools.js). Lists
 // them, jumps to one, edits notes and colours, exports everything.
 
+// Home shows this many highlights, then "+N more" (a long article can have
+// dozens, which pushed the clipboard and Shelf far down).
+const CAP = 3;
+
 const COLORS = { yellow: '#fde047', green: '#86efac', blue: '#93c5fd', pink: '#f9a8d4', purple: '#c4b5fd' };
 
 function toMarkdown(page) {
@@ -83,6 +87,8 @@ function HighlightCard({ item, onFocus, onUpdate, onDelete }) {
 export function NotesView({ url, paneId = 'browse', shelf }) {
   const [page, setPage] = useState({ url: '', title: '', items: [] });
   const [copied, setCopied] = useState(null);
+  const [showAll, setShowAll] = useState(false);
+  useEffect(() => { setShowAll(false); }, [url]);
 
   const load = useCallback(() => {
     if (!url || !/^https?:/i.test(url)) { setPage({ url: '', title: '', items: [] }); return; }
@@ -107,9 +113,9 @@ export function NotesView({ url, paneId = 'browse', shelf }) {
 
   return (
     <div className="nt-root">
+      {items.length > 0 && (
       <div className="nt-bar">
-        <span className="nt-title" title={page.url}>{page.title || (items.length ? page.url : 'This page')}</span>
-        {items.length > 0 && (
+        <span className="nt-title" title={page.url}>{items.length === 1 ? '1 highlight' : `${items.length} highlights`}</span>
           <>
             <button className="bp-btn nt-act" onClick={() => navigator.clipboard.writeText(toMarkdown({ ...page, items })).then(() => flash('md'))} title="Copy all as Markdown">
               <FontAwesomeIcon icon={copied === 'md' ? faCheck : faCopy} />
@@ -124,16 +130,15 @@ export function NotesView({ url, paneId = 'browse', shelf }) {
               </button>
             )}
           </>
-        )}
       </div>
+      )}
       <div className="nt-list">
         {items.length === 0 ? (
-          <div className="sh-empty">
+          <div className="nt-empty">
             <FontAwesomeIcon icon={faHighlighter} />
-            <strong>No highlights on this page</strong>
-            <span>Select text on the page and pick a colour. Click a highlight to add a note. They come back whenever you open this page.</span>
+            <span>Select text on the page to highlight it. Highlights come back when you reopen the page.</span>
           </div>
-        ) : items.map(item => (
+        ) : (showAll || items.length <= CAP + 1 ? items : items.slice(0, CAP)).map(item => (
           <HighlightCard
             key={item.id}
             item={item}
@@ -142,6 +147,11 @@ export function NotesView({ url, paneId = 'browse', shelf }) {
             onDelete={() => remove(item.id)}
           />
         ))}
+        {items.length > CAP + 1 && (
+          <button className="nav-more nt-more" onClick={() => setShowAll(v => !v)}>
+            {showAll ? 'Show fewer' : `+${items.length - CAP} more`}
+          </button>
+        )}
       </div>
     </div>
   );

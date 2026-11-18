@@ -6,7 +6,7 @@ import {
   faLinkSlash, faPlus, faSpinner, faPowerOff, faSync, faEllipsis, faBoxArchive, faBoxOpen
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { IS_TAURI, startNativeDrag } from '../../utils/nativeDrag.js';
 import { fetchCooldesk, linkCooldeskProject } from '../../services/cooldeskService.js';
@@ -253,10 +253,18 @@ function loadJSON(key, fallback) {
  * @param {boolean} [embedded] in place like `inline`, but with the full
  *   toolbar and filling its container — the Browse view's Files mode, which
  *   has a whole pane's width rather than a sidebar's.
+ * @param {function} [onNavigate] (path) — the host owns the location: going
+ *   to a folder asks it to, and it comes back as `initialPath` (a Browse tab,
+ *   whose own address bar and Back / Forward then stand in for these)
+ * @param {Element} [toolbarSlot] an element in the host's toolbar: the
+ *   manager draws no toolbar of its own and puts places / up / filter / ⋯
+ *   there instead (a Browse folder tab — one bar, not two)
  * @param {boolean} [compact] with `embedded`, keep the two-row sidebar toolbar
  *   (Files mode docks the manager to the side once file tabs are open).
- * @param {(path: string) => void} [onOpenFile] open files here instead of
- *   handing them to the OS default app (Files mode shows them as tabs).
+ * @param {(path: string, entry: object) => void} [onOpenFile] open files here
+ *   instead of handing them to the OS default app (Files mode shows them as
+ *   tabs; the upload picker selects them). `entry` has size / date.
+ * @param {Set<string>} [picked] paths to mark as chosen (the upload picker).
  * @param {boolean} [projectBar] show the .cooldesk project bar / setup offer
  *   (off in Browse's narrow Files panel, where it crowds out the file list).
  * @param {boolean} [placesRow] Places / Pinned / linked projects as a chip row
@@ -264,7 +272,7 @@ function loadJSON(key, fallback) {
  * @param {boolean} [quickLook] the hover-preview column beside the list (off
  *   where the host shows opened files itself).
  */
-export function FileManager({ isOpen, keyboard = true, initialPath, places = [], onClose, inline: inlineProp = false, embedded = false, compact = false, onOpenFile, projectBar = true, placesRow = false, quickLook = true }) {
+export function FileManager({ isOpen, keyboard = true, initialPath, places = [], onClose, inline: inlineProp = false, embedded = false, compact = false, onOpenFile, onNavigate = null, toolbarSlot = null, picked = null, projectBar = true, placesRow = false, quickLook = true }) {
   const inline = inlineProp || embedded;
   const windowRef = useRef(null);
   const [path, setPath] = useState(initialPath || '');
@@ -295,6 +303,11 @@ export function FileManager({ isOpen, keyboard = true, initialPath, places = [],
   const [placesOpen, setPlacesOpen] = useState(false);
   // Inline (sidebar) compact toolbar: which of its dropdowns is open.
   const [compactMenu, setCompactMenu] = useState(null); // 'more' | 'ancestors' | null
+  // Chip rows (placesRow): which chips are tucked under "+N", and its menu.
+  const chipRowRefs = useRef({});
+  const [rowHidden, setRowHidden] = useState({}); // section title → [paths]
+  const [rowMore, setRowMore] = useState(null); // { title, left, top }
+  const [, setRowTick] = useState(0);
   // Right-click on an item: { entry, left, top }. opStatus: the last
   // extract / compress, shown in the status bar for a few seconds.
   const [entryMenu, setEntryMenu] = useState(null);
@@ -556,6 +569,13 @@ export function FileManager({ isOpen, keyboard = true, initialPath, places = [],
 
   const navigate = useCallback((next) => {
     if (!next) return;
+    if (onNavigate) {
+      // The host moves; the new folder arrives as initialPath, and the
+      // re-anchor effect above shows it.
+      setCrumbMenu(null); setShowRecent(false); setPlacesOpen(false); setEditingPath(null); setInitRan(false);
+      onNavigate(next);
+      return;
+    }
     setHistory(prev => [...prev.slice(0, histIndex + 1), next]);
     setHistIndex(i => i + 1);
     setPath(next);
@@ -566,7 +586,7 @@ export function FileManager({ isOpen, keyboard = true, initialPath, places = [],
     setPlacesOpen(false);
     setEditingPath(null);
     setInitRan(false);
-  }, [histIndex]);
+  }, [histIndex, onNavigate]);
 
   const goBack = useCallback(() => {
     if (histIndex <= 0) return;
@@ -673,7 +693,7 @@ export function FileManager({ isOpen, keyboard = true, initialPath, places = [],
   const openEntry = useCallback((entry) => {
     if (!entry) return;
     if (entry.is_dir) navigate(entry.path);
-    else if (onOpenFile) onOpenFile(entry.path);
+    else if (onOpenFile) onOpenFile(entry.path, entry);
     else openWithSystem(entry.path).catch(err => console.error('[FileManager] open failed:', err));
   }, [navigate, onOpenFile]);
 
@@ -901,8 +921,8 @@ export function FileManager({ isOpen, keyboard = true, initialPath, places = [],
       };
       if (e.key === 'Escape') {
         take();
-        if (crumbMenu || showRecent || showLinkMenu || compactMenu || entryMenu) {
-          setCrumbMenu(null); setShowRecent(false); setShowLinkMenu(false); setCompactMenu(null); setEntryMenu(null); return;
+        if (crumbMenu || showRecent || showLinkMenu || compactMenu || entryMenu || rowMore) {
+          setCrumbMenu(null); setShowRecent(false); setShowLinkMenu(false); setCompactMenu(null); setEntryMenu(null); setRowMore(null); return;
         }
         if (editingPath !== null) { setEditingPath(null); return; }
         if (filter) { setFilter(''); return; }
@@ -955,7 +975,7 @@ export function FileManager({ isOpen, keyboard = true, initialPath, places = [],
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [isOpen, keyboard, filter, visible, cursor, view, editingPath, crumbMenu, showRecent, showLinkMenu,
-      path, onClose, goBack, goForward, goUp, openEntry, inline, compactMenu, entryMenu]);
+      path, onClose, goBack, goForward, goUp, openEntry, inline, compactMenu, entryMenu, rowMore]);
 
   // Inline has no backdrop, and its menus are portaled outside the window —
   // so close them on any press that lands in neither the window nor a menu
@@ -988,6 +1008,41 @@ export function FileManager({ isOpen, keyboard = true, initialPath, places = [],
 
   useEffect(() => () => clearTimeout(hoverTimer.current), []);
 
+  // Chip rows (placesRow) stay one line each: chips that don't fit wrap
+  // out of sight (the row is one chip tall, overflow hidden) and a "+N"
+  // button lists them. Measured after every render and on resize.
+  useLayoutEffect(() => {
+    if (!placesRow) return;
+    const next = {};
+    for (const [title, el] of Object.entries(chipRowRefs.current)) {
+      if (!el) continue;
+      const kids = [...el.children];
+      const top = kids[0]?.offsetTop ?? 0;
+      const gone = kids.filter(k => k.offsetTop > top).map(k => k.dataset.path);
+      if (gone.length) next[title] = gone;
+    }
+    if (JSON.stringify(next) !== JSON.stringify(rowHidden)) setRowHidden(next);
+  });
+  useEffect(() => {
+    const el = windowRef.current;
+    if (!placesRow || !el || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(() => setRowTick(t => t + 1));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [placesRow, isOpen]);
+
+  // Hosted toolbar: the places sidebar hides below 720px (fileManager.css,
+  // measured on the manager), so the ☰ that brings it back is only offered
+  // then — the container query can't reach a button in the host's bar.
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const el = windowRef.current;
+    if (!toolbarSlot || placesRow || !el || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(([entry]) => setNarrow(entry.contentRect.width <= 720));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [toolbarSlot, placesRow, isOpen]);
+
   if (!isOpen) return null;
 
   const crumbs = crumbsOf(path);
@@ -996,11 +1051,73 @@ export function FileManager({ isOpen, keyboard = true, initialPath, places = [],
   const looksLikeProjectRoot = !project && entries.some(e =>
     PROJECT_MARKERS.has(baseName(e.path).toLowerCase()));
   const sidebar = [
-    { title: project?.group?.name || 'Projects', items: linked, kind: 'linked' },
+    // As chips, a project that isn't on this machine is just noise (it
+    // can't be opened); the column keeps it, struck through.
+    // As chips the row label is just "Projects" (a group's name is long).
+    { title: placesRow ? 'Projects' : (project?.group?.name || 'Projects'), items: placesRow ? linked.filter(i => i.exists !== false) : linked, kind: 'linked' },
     { title: 'Pinned', items: pinned },
     { title: 'Places', items: sysPlaces },
     { title: 'Popular', items: places },
-  ].filter(s => s.items?.length);
+  ].filter(s => s.items?.length)
+    // One line per row: the folder you're in leads its row, so it's never
+    // the one tucked under "+N".
+    .map(sec => (placesRow
+      ? { ...sec, items: [...sec.items].sort((a, b) => (b.path.toLowerCase() === path.toLowerCase()) - (a.path.toLowerCase() === path.toLowerCase())) }
+      : sec));
+  // A chip's label is just the name; two with the same name ("CoolDesk"
+  // twice) are told apart by the path in their tooltip.
+  const sideLabel = (section, item) => item.name || baseName(item.path);
+
+  // One section's places, as column rows or chips.
+  const renderSideItems = (section) => section.items.map(item => {
+    const isDrive = /^[A-Za-z]:\\?$/.test(item.path);
+    const active = item.path.toLowerCase() === path.toLowerCase();
+    // A linked project that isn't cloned on this machine stays
+    // listed but inert — the link is real, the folder isn't.
+    const missing = section.kind === 'linked' && item.exists === false;
+    return (
+      <button
+        key={`${section.title}-${item.path}`}
+        data-path={item.path}
+        className={`fm-side-item ${active ? 'active' : ''} ${missing ? 'missing' : ''}`}
+        onClick={() => { if (!missing) { navigate(item.path); setPlacesOpen(false); } }}
+        onMouseEnter={() => !missing && prefetch({ is_dir: true, path: item.path })}
+        title={missing ? `${item.path}\n(not on this machine)` : item.path}
+      >
+        <FontAwesomeIcon
+          icon={section.kind === 'linked'
+            ? faDiagramProject
+            : (isDrive ? faHardDrive : (item.name === 'Home' ? faHouse : faFolder))}
+          className="fm-side-icon"
+        />
+        <span className="fm-side-label">{sideLabel(section, item)}</span>
+        {/* Only real group members can be unlinked, and never
+            the hub's own entry — that would orphan the group. */}
+        {section.kind === 'linked' && item.member
+          && item.path.toLowerCase() !== (project?.path || '').toLowerCase() && (
+          <span
+            className="fm-side-unpin"
+            onClick={(e) => { e.stopPropagation(); toggleLink(item.path, true); }}
+            title={`Unlink ${item.name} from this group`}
+          >
+            <FontAwesomeIcon
+              icon={linking === item.path ? faSpinner : faLinkSlash}
+              spin={linking === item.path}
+            />
+          </span>
+        )}
+        {section.title === 'Pinned' && (
+          <span
+            className="fm-side-unpin"
+            onClick={(e) => { e.stopPropagation(); togglePin(item); }}
+            title="Unpin"
+          >
+            <FontAwesomeIcon icon={faTimes} />
+          </span>
+        )}
+      </button>
+    );
+  });
 
   const SortHeader = ({ label, k, className }) => (
     <button
@@ -1061,6 +1178,89 @@ export function FileManager({ isOpen, keyboard = true, initialPath, places = [],
   };
   const fromMenu = (fn) => () => { setCompactMenu(null); fn(); };
   const editPath = () => { setEditingPath(path); setTimeout(() => pathInputRef.current?.select(), 0); };
+
+  // The "⋯" menu: everything past back / up / the path / filter. The
+  // compact toolbar has no Forward button, so it's in here; embedded in a
+  // Browse tab (whose own toolbar has close and Open-with) the full
+  // toolbar's pin / hidden / view / copy / open buttons fold in here too.
+  const moreMenu = (withForward) => compactMenu === 'more' && floatMenu(
+    <div className="fm-menu" style={menuPos} onClick={(e) => e.stopPropagation()}>
+      {withForward && (
+        <button className="fm-menu-item" onClick={fromMenu(goForward)} disabled={histIndex >= history.length - 1}>
+          <FontAwesomeIcon icon={faArrowRight} className="fm-menu-icon" />
+          <span className="fm-menu-label">Forward</span>
+        </button>
+      )}
+      {!toolbarSlot && (
+        <button className="fm-menu-item" onClick={fromMenu(editPath)}>
+          <FontAwesomeIcon icon={faSearch} className="fm-menu-icon" />
+          <span className="fm-menu-label">Go to path…</span>
+        </button>
+      )}
+      {embedded && (
+        <button className="fm-menu-item" onClick={fromMenu(() => togglePin({ name: baseName(path), path }))}>
+          <FontAwesomeIcon icon={faThumbtack} className="fm-menu-icon" />
+          <span className="fm-menu-label">{isPinned ? 'Unpin from the sidebar' : 'Pin to the sidebar'}</span>
+        </button>
+      )}
+      <button className="fm-menu-item" onClick={fromMenu(() => setShowHidden(v => !v))}>
+        <FontAwesomeIcon icon={showHidden ? faEyeSlash : faEye} className="fm-menu-icon" />
+        <span className="fm-menu-label">{showHidden ? 'Hide hidden items' : `Show hidden items (${hiddenCount})`}</span>
+      </button>
+      <button className="fm-menu-item" onClick={fromMenu(() => setView(v => (v === 'list' ? 'grid' : 'list')))}>
+        <FontAwesomeIcon icon={view === 'list' ? faTableCellsLarge : faList} className="fm-menu-icon" />
+        <span className="fm-menu-label">{view === 'list' ? 'Grid view' : 'List view'}</span>
+      </button>
+      <button className="fm-menu-item" onClick={fromMenu(copyPath)}>
+        <FontAwesomeIcon icon={faCopy} className="fm-menu-icon" />
+        <span className="fm-menu-label">Copy path</span>
+      </button>
+      <button className="fm-menu-item" onClick={fromMenu(() => openWithSystem(path))}>
+        <FontAwesomeIcon icon={faExternalLinkAlt} className="fm-menu-icon" />
+        <span className="fm-menu-label">Open in system file manager</span>
+      </button>
+      {recentPaths.length > 1 && (
+        <>
+          <div className="fm-menu-heading">
+            <FontAwesomeIcon icon={faClockRotateLeft} /> Recent
+          </div>
+          {recentPaths.filter(p => p !== path).slice(0, 8).map(p => (
+            <button key={p} className="fm-menu-item" onClick={fromMenu(() => navigate(p))} title={p}>
+              <FontAwesomeIcon icon={faFolder} className="fm-menu-icon" />
+              <span className="fm-menu-label">{baseName(p)}</span>
+              <span className="fm-menu-sub">{p}</span>
+            </button>
+          ))}
+        </>
+      )}
+    </div>
+  );
+
+  // Hosted toolbar (toolbarSlot): see `narrow` above.
+  const hostedToolbar = toolbarSlot && createPortal(
+    <>
+      {narrow && !placesRow && (
+        <button
+          className={`bp-btn ${placesOpen ? 'on' : ''}`}
+          onClick={(e) => { e.stopPropagation(); setPlacesOpen(v => !v); setCompactMenu(null); }}
+          title="Places"
+        >
+          <FontAwesomeIcon icon={faBars} />
+        </button>
+      )}
+      {/* No ↑: the host's ← goes up (Backspace still does too). */}
+      {searchBox}
+      <button
+        className={`bp-btn ${compactMenu === 'more' ? 'on' : ''}`}
+        onClick={(e) => { e.stopPropagation(); toggleCompactMenu('more', e); }}
+        title="More: pin, hidden items, view, copy path, recent"
+      >
+        <FontAwesomeIcon icon={faEllipsis} />
+      </button>
+      {moreMenu(false)}
+    </>,
+    toolbarSlot,
+  );
 
   // No Places drawer here: in the narrow sidebar it only covered the file
   // list, and its Popular section repeated the folder chips right above. Up,
@@ -1143,49 +1343,230 @@ export function FileManager({ isOpen, keyboard = true, initialPath, places = [],
         </div>
       )}
 
-      {compactMenu === 'more' && floatMenu(
-        <div className="fm-menu" style={menuPos} onClick={(e) => e.stopPropagation()}>
-          <button className="fm-menu-item" onClick={fromMenu(goForward)} disabled={histIndex >= history.length - 1}>
-            <FontAwesomeIcon icon={faArrowRight} className="fm-menu-icon" />
-            <span className="fm-menu-label">Forward</span>
-          </button>
-          <button className="fm-menu-item" onClick={fromMenu(editPath)}>
-            <FontAwesomeIcon icon={faSearch} className="fm-menu-icon" />
-            <span className="fm-menu-label">Go to path…</span>
-          </button>
-          <button className="fm-menu-item" onClick={fromMenu(() => setShowHidden(v => !v))}>
-            <FontAwesomeIcon icon={showHidden ? faEyeSlash : faEye} className="fm-menu-icon" />
-            <span className="fm-menu-label">{showHidden ? 'Hide hidden items' : `Show hidden items (${hiddenCount})`}</span>
-          </button>
-          <button className="fm-menu-item" onClick={fromMenu(() => setView(v => (v === 'list' ? 'grid' : 'list')))}>
-            <FontAwesomeIcon icon={view === 'list' ? faTableCellsLarge : faList} className="fm-menu-icon" />
-            <span className="fm-menu-label">{view === 'list' ? 'Grid view' : 'List view'}</span>
-          </button>
-          <button className="fm-menu-item" onClick={fromMenu(copyPath)}>
-            <FontAwesomeIcon icon={faCopy} className="fm-menu-icon" />
-            <span className="fm-menu-label">Copy path</span>
-          </button>
-          <button className="fm-menu-item" onClick={fromMenu(() => openWithSystem(path))}>
-            <FontAwesomeIcon icon={faExternalLinkAlt} className="fm-menu-icon" />
-            <span className="fm-menu-label">Open in system file manager</span>
-          </button>
-          {recentPaths.length > 1 && (
-            <>
-              <div className="fm-menu-heading">
-                <FontAwesomeIcon icon={faClockRotateLeft} /> Recent
-              </div>
-              {recentPaths.filter(p => p !== path).slice(0, 8).map(p => (
-                <button key={p} className="fm-menu-item" onClick={fromMenu(() => navigate(p))} title={p}>
-                  <FontAwesomeIcon icon={faFolder} className="fm-menu-icon" />
-                  <span className="fm-menu-label">{baseName(p)}</span>
-                  <span className="fm-menu-sub">{p}</span>
-                </button>
-              ))}
-            </>
-          )}
-        </div>
-      )}
+      {moreMenu(true)}
     </div>
+  );
+
+  // The owning project's bars (setup offer / commands, folders, services).
+  const projectBars = (
+    <>
+          {/* Project bar — the owning .cooldesk/ workspace: its commands, resource
+              folders and open todo count, available from anywhere inside it. */}
+          {/* No workspace here yet, but this looks like a project root — offer to
+              run the plugin's /cd-init in this folder. */}
+          {projectBar && looksLikeProjectRoot && (
+            <div className="fm-project-bar fm-project-bar--setup">
+              <span className="fm-setup-text">
+                No CoolDesk workspace in <strong>{baseName(path)}</strong>
+              </span>
+              <button
+                className="fm-setup-btn"
+                onClick={runInit}
+                title={`Runs ${localStorage.getItem(INIT_CMD_KEY) || DEFAULT_INIT_CMD} in ${path}`}
+              >
+                <FontAwesomeIcon icon={faPlay} />
+                <span>Set up with /cd-init</span>
+              </button>
+              {initRan && (
+                <>
+                  <span className="fm-setup-hint">
+                    Finish the setup in the console, then
+                  </span>
+                  <button className="fm-setup-btn ghost" onClick={recheckProject}>
+                    <FontAwesomeIcon icon={faSync} />
+                    <span>Re-check</span>
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {projectBar && project && (
+            <div className="fm-project-bar">
+              {/* As chips, the Projects row already shows (and highlights)
+                  this project: the bar is just its commands. */}
+              {!placesRow && <button
+                className="fm-project-name"
+                onClick={() => project.path !== path && navigate(project.path)}
+                title={project.path === path ? project.path : `Go to project root — ${project.path}`}
+              >
+                <FontAwesomeIcon icon={faDiagramProject} />
+                <span>{project.project?.name || baseName(project.path)}</span>
+              </button>}
+
+              {/* Member side of the star: one way home to the hub. */}
+              {project.hub?.path && (
+                <button
+                  className={`fm-hub-chip ${project.hub.exists === false ? 'missing' : ''}`}
+                  onClick={() => project.hub.exists !== false && navigate(project.hub.path)}
+                  title={project.hub.exists === false
+                    ? `${project.hub.path}
+(hub not on this machine)`
+                    : `Back to the hub of "${project.hub.name}" — ${project.hub.path}`}
+                >
+                  <FontAwesomeIcon icon={faLink} />
+                  <span>{project.hub.name || 'Hub'}</span>
+                </button>
+              )}
+
+              {project.commands.length > 0 && (
+                <div className="fm-project-group">
+                  {project.commands.map(cmd => {
+                    const key = cmd.id || cmd.run;
+                    const justRan = ranCommand === key;
+                    return (
+                      <button
+                        key={key}
+                        className={`fm-cmd-chip ${justRan ? 'ran' : ''}`}
+                        onClick={() => runCommand(cmd)}
+                        title={`${cmd.run}  ·  runs in ${project.path}`}
+                      >
+                        <FontAwesomeIcon icon={justRan ? faCheck : faPlay} />
+                        <span>{cmd.label || cmd.id}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Resource folders declared in cooldesk.json jump straight there. */}
+              {project.resources.filter(r => r.type === 'folder' && r.path).length > 0 && (
+                <div className="fm-project-group fm-project-resources">
+                  {project.resources.filter(r => r.type === 'folder' && r.path).map(r => {
+                    // Manifest paths are POSIX-relative; rewrite to the host separator.
+                    const sep = project.path.includes('\\') ? '\\' : '/';
+                    const target = `${project.path}${sep}${r.path.replace(/[\\/]/g, sep)}`;
+                    return (
+                      <button
+                        key={r.name || r.path}
+                        className={`fm-res-chip ${target.toLowerCase() === path.toLowerCase() ? 'current' : ''}`}
+                        onClick={() => navigate(target)}
+                        onMouseEnter={() => prefetch({ is_dir: true, path: target })}
+                        title={target}
+                      >
+                        <FontAwesomeIcon icon={faFolder} />
+                        <span>{r.name || r.path}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Declared services, crossed with the OS's actual listeners: green
+                  means it's really up, and you can open or kill it from here. */}
+              {project.services.length > 0 && (
+                <div className="fm-project-group fm-project-services">
+                  {project.services.map(svc => {
+                    const live = svc.port
+                      ? listeningPorts.find(p => p.port === Number(svc.port))
+                      : null;
+                    const armed = confirmKillPort === Number(svc.port);
+                    const busy = killingPort === Number(svc.port);
+                    const label = svc.label || svc.id || `:${svc.port}`;
+                    return (
+                      <span
+                        key={svc.id || svc.port}
+                        className={`fm-svc-chip ${live ? 'live' : 'down'}`}
+                        title={live
+                          ? `${label} — listening on ${svc.port} (${live.process}, pid ${live.pid})`
+                          : `${label} — not running${svc.port ? ` (port ${svc.port} free)` : ''}`}
+                      >
+                        <button
+                          className="fm-svc-open"
+                          onClick={() => live && openService(svc)}
+                          disabled={!live}
+                        >
+                          <span className="fm-svc-dot" />
+                          <span className="fm-svc-label">{label}</span>
+                          {svc.port && <span className="fm-svc-port">:{svc.port}</span>}
+                        </button>
+                        {live && (
+                          <button
+                            className={`fm-svc-kill ${armed ? 'armed' : ''}`}
+                            onClick={() => killService(Number(svc.port))}
+                            title={armed ? 'Click again to kill' : `Kill ${live.process} (pid ${live.pid})`}
+                          >
+                            <FontAwesomeIcon icon={busy ? faSpinner : faPowerOff} spin={busy} />
+                            {armed && <span>Kill?</span>}
+                          </button>
+                        )}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Link another project into this one's group. Candidates are the
+                  projects we already know about that aren't members yet. */}
+              <div className="fm-project-group fm-menu-anchor">
+                <button
+                  className={`fm-link-chip ${showLinkMenu ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    anchorTo(e.currentTarget);
+                    setLinkError(null);
+                    setShowLinkMenu(v => !v);
+                    setCrumbMenu(null);
+                    setShowRecent(false);
+                  }}
+                  title="Link another project into this group"
+                >
+                  <FontAwesomeIcon icon={faPlus} />
+                  <span>Link</span>
+                </button>
+                {showLinkMenu && floatMenu(
+                  <div className="fm-menu" style={menuPos} onClick={(e) => e.stopPropagation()}>
+                    {linkError && <div className="fm-menu-empty fm-menu-error">{linkError}</div>}
+                    {linkCandidates.length === 0 && !linkError && (
+                      <div className="fm-menu-empty">
+                        Everything known is already linked. Browse into another project to link it.
+                      </div>
+                    )}
+                    {linkCandidates.map(c => {
+                      // If they already own a group, join it rather than starting
+                      // a rival one with this project as hub.
+                      const theirGroup = candidateHubs[c.path];
+                      const join = !!theirGroup;
+                      return (
+                        <button
+                          key={c.path}
+                          className="fm-menu-item"
+                          onClick={() => toggleLink(c.path, false, join)}
+                          disabled={linking === c.path}
+                          title={join
+                            ? `Join "${theirGroup}" — ${c.name} stays the hub
+${c.path}`
+                            : `Add ${c.name} to this project's group
+${c.path}`}
+                        >
+                          <FontAwesomeIcon
+                            icon={linking === c.path ? faSpinner : faLink}
+                            spin={linking === c.path}
+                            className="fm-menu-icon"
+                          />
+                          <span className="fm-menu-label">{c.name}</span>
+                          <span className="fm-menu-sub">
+                            {join ? `join ${theirGroup}` : 'add to this group'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {project.todos.filter(t => t.status !== 'done').length > 0 && (
+                <span
+                  className="fm-todo-count"
+                  title={project.todos.filter(t => t.status !== 'done').map(t => `• ${t.title || t.text}`).join('\n')}
+                >
+                  <FontAwesomeIcon icon={faCheckDouble} />
+                  {project.todos.filter(t => t.status !== 'done').length} open
+                </span>
+              )}
+            </div>
+          )}
+    </>
   );
 
   const windowEl = (
@@ -1195,10 +1576,10 @@ export function FileManager({ isOpen, keyboard = true, initialPath, places = [],
         // Inline has no backdrop to give focus to, so make the window itself
         // focusable — clicking anywhere in it then routes keys to it.
         tabIndex={inline ? -1 : undefined}
-        onClick={(e) => { e.stopPropagation(); setCrumbMenu(null); setShowRecent(false); setPlacesOpen(false); setCompactMenu(null); }}
+        onClick={(e) => { e.stopPropagation(); setCrumbMenu(null); setShowRecent(false); setPlacesOpen(false); setCompactMenu(null); setRowMore(null); }}
       >
         {/* Toolbar: history + address bar + filter */}
-        {inline && (!embedded || compact) ? compactToolbar : (
+        {toolbarSlot ? hostedToolbar : inline && (!embedded || compact) ? compactToolbar : (
         <div className="fm-toolbar">
           <div className="fm-nav">
             {/* Only visible below the 720px breakpoint (see fileManager.css) —
@@ -1211,16 +1592,20 @@ export function FileManager({ isOpen, keyboard = true, initialPath, places = [],
             >
               <FontAwesomeIcon icon={faBars} />
             </button>
-            <button className="fm-icon-btn" onClick={goBack} disabled={histIndex <= 0} title="Back (Alt+←)">
-              <FontAwesomeIcon icon={faArrowLeft} />
-            </button>
-            <button className="fm-icon-btn" onClick={goForward} disabled={histIndex >= history.length - 1} title="Forward (Alt+→)">
-              <FontAwesomeIcon icon={faArrowRight} />
-            </button>
+            {!onNavigate && (
+              <>
+                <button className="fm-icon-btn" onClick={goBack} disabled={histIndex <= 0} title="Back (Alt+←)">
+                  <FontAwesomeIcon icon={faArrowLeft} />
+                </button>
+                <button className="fm-icon-btn" onClick={goForward} disabled={histIndex >= history.length - 1} title="Forward (Alt+→)">
+                  <FontAwesomeIcon icon={faArrowRight} />
+                </button>
+              </>
+            )}
             <button className="fm-icon-btn" onClick={goUp} disabled={!parentOf(path)} title="Up one folder (Backspace)">
               <FontAwesomeIcon icon={faArrowUp} />
             </button>
-            <div className="fm-menu-anchor">
+            {!embedded && <div className="fm-menu-anchor">
               <button
                 className={`fm-icon-btn ${showRecent ? 'active' : ''}`}
                 onClick={(e) => {
@@ -1245,7 +1630,7 @@ export function FileManager({ isOpen, keyboard = true, initialPath, places = [],
                   ))}
                 </div>
               )}
-            </div>
+            </div>}
           </div>
 
           {/* Address bar — breadcrumbs by default, a text field on click/Ctrl+L */}
@@ -1263,6 +1648,9 @@ export function FileManager({ isOpen, keyboard = true, initialPath, places = [],
                 if (e.key === 'Escape') { e.preventDefault(); setEditingPath(null); }
               }}
             />
+          ) : onNavigate ? (
+            // The host's address bar shows where this is.
+            <span className="fm-crumbs-spacer" />
           ) : (
             <div
               ref={crumbsRef}
@@ -1312,268 +1700,63 @@ export function FileManager({ isOpen, keyboard = true, initialPath, places = [],
 
           {searchBox}
 
-          <div className="fm-toolbar-actions">
-            <button
-              className={`fm-icon-btn ${isPinned ? 'pinned' : ''}`}
-              onClick={() => togglePin({ name: baseName(path), path })}
-              title={isPinned ? 'Unpin this folder' : 'Pin this folder to the sidebar'}
-            >
-              <FontAwesomeIcon icon={faThumbtack} />
-            </button>
-            <button
-              className={`fm-icon-btn ${showHidden ? 'active' : ''}`}
-              onClick={() => setShowHidden(v => !v)}
-              title={showHidden
-                ? `Hiding nothing — ${hiddenCount} hidden item${hiddenCount === 1 ? '' : 's'} shown`
-                : `Show hidden items (${hiddenCount} here)`}
-            >
-              <FontAwesomeIcon icon={showHidden ? faEye : faEyeSlash} />
-            </button>
-            <button
-              className="fm-icon-btn"
-              onClick={() => setView(v => (v === 'list' ? 'grid' : 'list'))}
-              title={view === 'list' ? 'Switch to grid view' : 'Switch to list view'}
-            >
-              <FontAwesomeIcon icon={view === 'list' ? faTableCellsLarge : faList} />
-            </button>
-            <button className="fm-icon-btn" onClick={copyPath} title="Copy path">
-              <FontAwesomeIcon icon={copied ? faCheck : faCopy} />
-            </button>
-            <button className="fm-icon-btn" onClick={() => openWithSystem(path)} title="Open in system file manager">
-              <FontAwesomeIcon icon={faExternalLinkAlt} />
-            </button>
-            <button className="fm-icon-btn fm-close" onClick={onClose} title="Close (Esc)">
-              <FontAwesomeIcon icon={faTimes} />
-            </button>
-          </div>
+          {embedded ? (
+            <div className="fm-toolbar-actions">
+              <button
+                className={`fm-icon-btn ${compactMenu === 'more' ? 'active' : ''}`}
+                onClick={(e) => toggleCompactMenu('more', e)}
+                title="More: pin, hidden items, view, copy path, recent"
+              >
+                <FontAwesomeIcon icon={faEllipsis} />
+              </button>
+              {moreMenu(false)}
+            </div>
+          ) : (
+            <div className="fm-toolbar-actions">
+              <button
+                className={`fm-icon-btn ${isPinned ? 'pinned' : ''}`}
+                onClick={() => togglePin({ name: baseName(path), path })}
+                title={isPinned ? 'Unpin this folder' : 'Pin this folder to the sidebar'}
+              >
+                <FontAwesomeIcon icon={faThumbtack} />
+              </button>
+              <button
+                className={`fm-icon-btn ${showHidden ? 'active' : ''}`}
+                onClick={() => setShowHidden(v => !v)}
+                title={showHidden
+                  ? `Hiding nothing — ${hiddenCount} hidden item${hiddenCount === 1 ? '' : 's'} shown`
+                  : `Show hidden items (${hiddenCount} here)`}
+              >
+                <FontAwesomeIcon icon={showHidden ? faEye : faEyeSlash} />
+              </button>
+              <button
+                className="fm-icon-btn"
+                onClick={() => setView(v => (v === 'list' ? 'grid' : 'list'))}
+                title={view === 'list' ? 'Switch to grid view' : 'Switch to list view'}
+              >
+                <FontAwesomeIcon icon={view === 'list' ? faTableCellsLarge : faList} />
+              </button>
+              <button className="fm-icon-btn" onClick={copyPath} title="Copy path">
+                <FontAwesomeIcon icon={copied ? faCheck : faCopy} />
+              </button>
+              <button className="fm-icon-btn" onClick={() => openWithSystem(path)} title="Open in system file manager">
+                <FontAwesomeIcon icon={faExternalLinkAlt} />
+              </button>
+              <button className="fm-icon-btn fm-close" onClick={onClose} title="Close (Esc)">
+                <FontAwesomeIcon icon={faTimes} />
+              </button>
+            </div>
+          )}
         </div>
         )}
 
-        {/* Project bar — the owning .cooldesk/ workspace: its commands, resource
-            folders and open todo count, available from anywhere inside it. */}
-        {/* No workspace here yet, but this looks like a project root — offer to
-            run the plugin's /cd-init in this folder. */}
-        {projectBar && looksLikeProjectRoot && (
-          <div className="fm-project-bar fm-project-bar--setup">
-            <span className="fm-setup-text">
-              No CoolDesk workspace in <strong>{baseName(path)}</strong>
-            </span>
-            <button
-              className="fm-setup-btn"
-              onClick={runInit}
-              title={`Runs ${localStorage.getItem(INIT_CMD_KEY) || DEFAULT_INIT_CMD} in ${path}`}
-            >
-              <FontAwesomeIcon icon={faPlay} />
-              <span>Set up with /cd-init</span>
-            </button>
-            {initRan && (
-              <>
-                <span className="fm-setup-hint">
-                  Finish the setup in the console, then
-                </span>
-                <button className="fm-setup-btn ghost" onClick={recheckProject}>
-                  <FontAwesomeIcon icon={faSync} />
-                  <span>Re-check</span>
-                </button>
-              </>
-            )}
-          </div>
-        )}
-
-        {projectBar && project && (
-          <div className="fm-project-bar">
-            <button
-              className="fm-project-name"
-              onClick={() => project.path !== path && navigate(project.path)}
-              title={project.path === path ? project.path : `Go to project root — ${project.path}`}
-            >
-              <FontAwesomeIcon icon={faDiagramProject} />
-              <span>{project.project?.name || baseName(project.path)}</span>
-            </button>
-
-            {/* Member side of the star: one way home to the hub. */}
-            {project.hub?.path && (
-              <button
-                className={`fm-hub-chip ${project.hub.exists === false ? 'missing' : ''}`}
-                onClick={() => project.hub.exists !== false && navigate(project.hub.path)}
-                title={project.hub.exists === false
-                  ? `${project.hub.path}
-(hub not on this machine)`
-                  : `Back to the hub of "${project.hub.name}" — ${project.hub.path}`}
-              >
-                <FontAwesomeIcon icon={faLink} />
-                <span>{project.hub.name || 'Hub'}</span>
-              </button>
-            )}
-
-            {project.commands.length > 0 && (
-              <div className="fm-project-group">
-                {project.commands.map(cmd => {
-                  const key = cmd.id || cmd.run;
-                  const justRan = ranCommand === key;
-                  return (
-                    <button
-                      key={key}
-                      className={`fm-cmd-chip ${justRan ? 'ran' : ''}`}
-                      onClick={() => runCommand(cmd)}
-                      title={`${cmd.run}  ·  runs in ${project.path}`}
-                    >
-                      <FontAwesomeIcon icon={justRan ? faCheck : faPlay} />
-                      <span>{cmd.label || cmd.id}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Resource folders declared in cooldesk.json jump straight there. */}
-            {project.resources.filter(r => r.type === 'folder' && r.path).length > 0 && (
-              <div className="fm-project-group fm-project-resources">
-                {project.resources.filter(r => r.type === 'folder' && r.path).map(r => {
-                  // Manifest paths are POSIX-relative; rewrite to the host separator.
-                  const sep = project.path.includes('\\') ? '\\' : '/';
-                  const target = `${project.path}${sep}${r.path.replace(/[\\/]/g, sep)}`;
-                  return (
-                    <button
-                      key={r.name || r.path}
-                      className={`fm-res-chip ${target.toLowerCase() === path.toLowerCase() ? 'current' : ''}`}
-                      onClick={() => navigate(target)}
-                      onMouseEnter={() => prefetch({ is_dir: true, path: target })}
-                      title={target}
-                    >
-                      <FontAwesomeIcon icon={faFolder} />
-                      <span>{r.name || r.path}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Declared services, crossed with the OS's actual listeners: green
-                means it's really up, and you can open or kill it from here. */}
-            {project.services.length > 0 && (
-              <div className="fm-project-group fm-project-services">
-                {project.services.map(svc => {
-                  const live = svc.port
-                    ? listeningPorts.find(p => p.port === Number(svc.port))
-                    : null;
-                  const armed = confirmKillPort === Number(svc.port);
-                  const busy = killingPort === Number(svc.port);
-                  const label = svc.label || svc.id || `:${svc.port}`;
-                  return (
-                    <span
-                      key={svc.id || svc.port}
-                      className={`fm-svc-chip ${live ? 'live' : 'down'}`}
-                      title={live
-                        ? `${label} — listening on ${svc.port} (${live.process}, pid ${live.pid})`
-                        : `${label} — not running${svc.port ? ` (port ${svc.port} free)` : ''}`}
-                    >
-                      <button
-                        className="fm-svc-open"
-                        onClick={() => live && openService(svc)}
-                        disabled={!live}
-                      >
-                        <span className="fm-svc-dot" />
-                        <span className="fm-svc-label">{label}</span>
-                        {svc.port && <span className="fm-svc-port">:{svc.port}</span>}
-                      </button>
-                      {live && (
-                        <button
-                          className={`fm-svc-kill ${armed ? 'armed' : ''}`}
-                          onClick={() => killService(Number(svc.port))}
-                          title={armed ? 'Click again to kill' : `Kill ${live.process} (pid ${live.pid})`}
-                        >
-                          <FontAwesomeIcon icon={busy ? faSpinner : faPowerOff} spin={busy} />
-                          {armed && <span>Kill?</span>}
-                        </button>
-                      )}
-                    </span>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Link another project into this one's group. Candidates are the
-                projects we already know about that aren't members yet. */}
-            <div className="fm-project-group fm-menu-anchor">
-              <button
-                className={`fm-link-chip ${showLinkMenu ? 'active' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  anchorTo(e.currentTarget);
-                  setLinkError(null);
-                  setShowLinkMenu(v => !v);
-                  setCrumbMenu(null);
-                  setShowRecent(false);
-                }}
-                title="Link another project into this group"
-              >
-                <FontAwesomeIcon icon={faPlus} />
-                <span>Link</span>
-              </button>
-              {showLinkMenu && floatMenu(
-                <div className="fm-menu" style={menuPos} onClick={(e) => e.stopPropagation()}>
-                  {linkError && <div className="fm-menu-empty fm-menu-error">{linkError}</div>}
-                  {linkCandidates.length === 0 && !linkError && (
-                    <div className="fm-menu-empty">
-                      Everything known is already linked. Browse into another project to link it.
-                    </div>
-                  )}
-                  {linkCandidates.map(c => {
-                    // If they already own a group, join it rather than starting
-                    // a rival one with this project as hub.
-                    const theirGroup = candidateHubs[c.path];
-                    const join = !!theirGroup;
-                    return (
-                      <button
-                        key={c.path}
-                        className="fm-menu-item"
-                        onClick={() => toggleLink(c.path, false, join)}
-                        disabled={linking === c.path}
-                        title={join
-                          ? `Join "${theirGroup}" — ${c.name} stays the hub
-${c.path}`
-                          : `Add ${c.name} to this project's group
-${c.path}`}
-                      >
-                        <FontAwesomeIcon
-                          icon={linking === c.path ? faSpinner : faLink}
-                          spin={linking === c.path}
-                          className="fm-menu-icon"
-                        />
-                        <span className="fm-menu-label">{c.name}</span>
-                        <span className="fm-menu-sub">
-                          {join ? `join ${theirGroup}` : 'add to this group'}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {project.todos.filter(t => t.status !== 'done').length > 0 && (
-              <span
-                className="fm-todo-count"
-                title={project.todos.filter(t => t.status !== 'done').map(t => `• ${t.title || t.text}`).join('\n')}
-              >
-                <FontAwesomeIcon icon={faCheckDouble} />
-                {project.todos.filter(t => t.status !== 'done').length} open
-              </span>
-            )}
-          </div>
-        )}
+        {!placesRow && projectBars}
 
         <div className="fm-body">
           {sidebar.length > 0 && (
             <div
               className={`fm-sidebar ${placesOpen ? 'fm-sidebar--open' : ''} ${placesRow ? 'fm-sidebar--row' : ''}`}
               onClick={(e) => e.stopPropagation()}
-              // The chip row only scrolls sideways; let a plain (vertical)
-              // mouse wheel drive it too. Trackpad sideways swipes already do.
-              onWheel={placesRow ? (e) => {
-                if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) e.currentTarget.scrollLeft += e.deltaY;
-              } : undefined}
             >
               {sidebar.map(section => (
                 <div key={section.title} className={`fm-side-section ${section.kind === 'linked' ? 'fm-side-linked' : ''}`}>
@@ -1581,58 +1764,50 @@ ${c.path}`}
                     {section.kind === 'linked' && <FontAwesomeIcon icon={faLink} className="fm-side-title-icon" />}
                     {section.title}
                   </div>
-                  {section.items.map(item => {
-                    const isDrive = /^[A-Za-z]:\\?$/.test(item.path);
-                    const active = item.path.toLowerCase() === path.toLowerCase();
-                    // A linked project that isn't cloned on this machine stays
-                    // listed but inert — the link is real, the folder isn't.
-                    const missing = section.kind === 'linked' && item.exists === false;
-                    return (
-                      <button
-                        key={`${section.title}-${item.path}`}
-                        className={`fm-side-item ${active ? 'active' : ''} ${missing ? 'missing' : ''}`}
-                        onClick={() => { if (!missing) { navigate(item.path); setPlacesOpen(false); } }}
-                        onMouseEnter={() => !missing && prefetch({ is_dir: true, path: item.path })}
-                        title={missing ? `${item.path}\n(not on this machine)` : item.path}
-                      >
-                        <FontAwesomeIcon
-                          icon={section.kind === 'linked'
-                            ? faDiagramProject
-                            : (isDrive ? faHardDrive : (item.name === 'Home' ? faHouse : faFolder))}
-                          className="fm-side-icon"
-                        />
-                        <span className="fm-side-label">{item.name || baseName(item.path)}</span>
-                        {/* Only real group members can be unlinked, and never
-                            the hub's own entry — that would orphan the group. */}
-                        {section.kind === 'linked' && item.member
-                          && item.path.toLowerCase() !== (project?.path || '').toLowerCase() && (
-                          <span
-                            className="fm-side-unpin"
-                            onClick={(e) => { e.stopPropagation(); toggleLink(item.path, true); }}
-                            title={`Unlink ${item.name} from this group`}
-                          >
-                            <FontAwesomeIcon
-                              icon={linking === item.path ? faSpinner : faLinkSlash}
-                              spin={linking === item.path}
-                            />
-                          </span>
-                        )}
-                        {section.title === 'Pinned' && (
-                          <span
-                            className="fm-side-unpin"
-                            onClick={(e) => { e.stopPropagation(); togglePin(item); }}
-                            title="Unpin"
-                          >
-                            <FontAwesomeIcon icon={faTimes} />
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
+                  {placesRow ? (
+                    <>
+                      <div className="fm-side-chips" ref={el => { chipRowRefs.current[section.title] = el; }}>
+                        {renderSideItems(section)}
+                      </div>
+                      {rowHidden[section.title]?.length > 0 && (
+                        <button
+                          className={`fm-side-item fm-side-more ${rowMore?.title === section.title ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const r = e.currentTarget.getBoundingClientRect();
+                            setRowMore(m => (m?.title === section.title ? null : { title: section.title, left: Math.max(8, Math.min(r.right - 260, window.innerWidth - 268)), top: r.bottom + 4 }));
+                          }}
+                          title={`${rowHidden[section.title].length} more`}
+                        >
+                          +{rowHidden[section.title].length}
+                        </button>
+                      )}
+                    </>
+                  ) : renderSideItems(section)}
                 </div>
               ))}
             </div>
           )}
+          {rowMore && floatMenu(
+            <div className="fm-menu" style={{ position: 'fixed', left: rowMore.left, top: rowMore.top, width: 260 }} onClick={(e) => e.stopPropagation()}>
+              {(sidebar.find(sec => sec.title === rowMore.title)?.items || [])
+                .filter(item => rowHidden[rowMore.title]?.includes(item.path))
+                .map(item => (
+                  <button
+                    key={item.path}
+                    className="fm-menu-item"
+                    onClick={() => { setRowMore(null); navigate(item.path); }}
+                    title={item.path}
+                  >
+                    <FontAwesomeIcon icon={rowMore.title === 'Projects' ? faDiagramProject : faFolder} className="fm-menu-icon" />
+                    <span className="fm-menu-label">{sideLabel(sidebar.find(sec => sec.title === rowMore.title), item)}</span>
+                  </button>
+                ))}
+            </div>
+          )}
+          {/* Chips layout: places and pins first, then the project's own bar
+              (its commands and folders) right above the files. */}
+          {placesRow && projectBars}
 
           <div className="fm-main">
             {view === 'list' && (
@@ -1654,8 +1829,9 @@ ${c.path}`}
                 const name = baseName(entry.path);
                 const count = childCounts[entry.path];
                 const active = i === safeCursor;
+                const isPicked = !!picked?.has(entry.path);
                 const common = {
-                  className: `fm-item ${view === 'grid' ? 'fm-tile' : 'fm-row'} ${active ? 'active' : ''} ${entry.hidden ? 'hidden-entry' : ''}`,
+                  className: `fm-item ${view === 'grid' ? 'fm-tile' : 'fm-row'} ${active ? 'active' : ''} ${isPicked ? 'is-picked' : ''} ${entry.hidden ? 'hidden-entry' : ''}`,
                   onClick: () => { setCursor(i); openEntry(entry); },
                   onContextMenu: (e) => {
                     e.preventDefault();
@@ -1677,6 +1853,7 @@ ${c.path}`}
                     <div key={entry.path} {...common}>
                       <FontAwesomeIcon icon={icon} style={{ color }} className="fm-tile-icon" />
                       <div className="fm-tile-name">{name}</div>
+                      {isPicked && <FontAwesomeIcon icon={faCheck} className="fm-picked-mark fm-picked-tile" />}
                       <div className="fm-tile-sub">
                         {entry.is_dir ? (count !== undefined ? `${count} items` : 'Folder') : formatSize(entry.size)}
                       </div>
@@ -1689,6 +1866,7 @@ ${c.path}`}
                       <FontAwesomeIcon icon={icon} style={{ color }} className="fm-row-icon" />
                       <span className="fm-row-name">{name}</span>
                       {entry.is_dir && count !== undefined && <span className="fm-row-count">{count}</span>}
+                      {isPicked && <FontAwesomeIcon icon={faCheck} className="fm-picked-mark" />}
                     </div>
                     <div className="fm-col-date">{entry.date}</div>
                     <div className="fm-col-size">{entry.is_dir ? '' : formatSize(entry.size)}</div>

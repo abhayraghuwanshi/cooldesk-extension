@@ -33,6 +33,7 @@ import ThemesTab from './parts/ThemesTab';
 import WorkspaceCleanupSettings from './parts/WorkspaceCleanupSettings';
 import { getLocale, useT } from '../../shared/i18n';
 import { LanguageSelect } from '../../shared/i18n/LanguageSelect';
+import { takeSettingsSection, useSettingsSectionRequests } from './settingsNav';
 import { availableEngines, getEngineKey, getWebSuggestEnabled, setEngineKey, setWebSuggestEnabled } from '../../shared/searchEngines';
 
 export function SettingsModal({
@@ -59,7 +60,9 @@ export function SettingsModal({
   const { syncStatus: globalSyncStatus, triggerSync, lastSyncTime: globalLastSyncTime } = useSync();
 
   const [localSettings, setLocalSettings] = useState(settings || {});
-  const [activeTabId, setActiveTabId] = useState('general');
+  // A section asked for by a spotlight command (/theme, /backup…) — see settingsNav.js
+  const [activeTabId, setActiveTabId] = useState(() => takeSettingsSection() || 'general');
+  useSettingsSectionRequests(setActiveTabId);
   const [suggesting, setSuggesting] = useState(false);
   const [error, setError] = useState('');
   const [workspaces, setWorkspaces] = useState([]);

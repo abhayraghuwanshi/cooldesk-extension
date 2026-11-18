@@ -31,6 +31,23 @@ const SECTIONS = [
         ],
     },
     {
+        // Shortcuts into Settings (settingsCommands.js) — desktop app only.
+        title: 'Settings',
+        desktop: true,
+        rows: [
+            { cmd: '/settings', insert: '/settings ', desc: 'Open Settings — or a section: /settings appearance, /settings data…' },
+            { cmd: '/language', insert: '/language ', desc: 'Change the language — /language español, /language auto' },
+            { cmd: '/search-engine', insert: '/search-engine ', desc: 'Engine for web search and suggestions — /search-engine ddg' },
+            { cmd: '/web-suggestions', insert: '/web-suggestions ', desc: 'Suggestions as you type — /web-suggestions on · off' },
+            { cmd: '/theme', insert: '/theme', desc: 'Themes, fonts and wallpaper' },
+            { cmd: '/hotkey', insert: '/hotkey', desc: 'Change the key that opens Spotlight' },
+            { cmd: '/windows', insert: '/windows', desc: 'Dock bar and sidebar settings' },
+            { cmd: '/ai-models', insert: '/ai-models', desc: 'Local AI models and API keys' },
+            { cmd: '/folder-index', insert: '/folder-index', desc: 'Folders that file search covers' },
+            { cmd: '/backup', insert: '/backup', desc: 'Backups and restore — also /sync, /updates' },
+        ],
+    },
+    {
         title: 'Keys',
         rows: [
             { cmd: '↑ ↓', desc: 'Move through results' },
@@ -75,7 +92,7 @@ export function HelpPanel({ isDesktopApp, shells, currentWorkspaceName, onPick }
                     )}
                 </div>
             </section>
-            {SECTIONS.map(sec => (
+            {SECTIONS.filter(sec => isDesktopApp || !sec.desktop).map(sec => (
                 <section key={sec.title} className="sp-help-section">
                     <h4 className="sp-help-title">{sec.title}</h4>
                     {sec.rows.filter(r => isDesktopApp || !r.desktop).map(r => (

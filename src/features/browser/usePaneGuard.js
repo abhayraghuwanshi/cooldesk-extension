@@ -41,8 +41,12 @@ export function pageBudgetOf(totalMemory) {
   return Math.min(BUDGET_MAX, Math.max(BUDGET_MIN, (totalMemory || 0) * BUDGET_SHARE));
 }
 
-/** The system as a whole is short on memory (free + reclaimable). */
+/** The system as a whole is short on memory. macOS: the kernel's own memory
+ *  pressure (warning or worse) — a Mac runs with little "free" memory and a
+ *  lot compressed as a matter of course, so free + reclaimable alone cried
+ *  wolf. Elsewhere: free + reclaimable under a share of RAM. */
 export function isSystemMemoryLow(stats) {
+  if (stats?.memory_pressure != null) return stats.memory_pressure >= 2;
   const total = stats?.total_memory || 0;
   return total > 0 && stats.available_memory < total * LOW_AVAILABLE_SHARE;
 }

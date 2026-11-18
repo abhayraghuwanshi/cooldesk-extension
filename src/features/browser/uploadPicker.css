@@ -1,0 +1,493 @@
+/* Upload tile (UploadPicker.jsx): the file picker a page's upload button
+   opens beside it in multi view. A Browse tab like any other (.bp-root
+   .ft-root), so it has the Browse tokens (--bv-*) and the tile chrome.
+
+   Layout, top to bottom:
+     toolbar  — "Upload to reddit.com · accepts images"
+     .up-main — Shelf strip (recent downloads / screenshots) + file manager
+     .up-tray — the selection as a thumbnail strip, then the actions
+   Clicking a thumbnail opens .up-sheet (a large preview) over .up-main. */
+
+.up-tab {
+  container-type: inline-size;
+}
+
+/* ── Sources ─────────────────────────────────────────────────────────── */
+
+.up-main {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 8px;
+}
+
+.up-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--bv-text);
+}
+
+.up-section-head em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: normal;
+  font-weight: 400;
+  color: var(--bv-dim);
+}
+
+.up-shelf {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 10px 8px;
+  border-radius: 12px;
+  background: var(--bv-field);
+}
+
+.up-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+}
+
+.up-card {
+  position: relative;
+  flex: 0 0 104px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 4px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--bv-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  scroll-snap-align: start;
+  box-shadow: inset 0 0 0 1px transparent;
+  transition: background 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+}
+
+.up-card:hover { background: var(--bv-hover); }
+
+.up-card.on {
+  background: var(--bv-tint);
+  box-shadow: inset 0 0 0 2px var(--bv-accent);
+}
+
+.up-card.is-off { opacity: 0.4; }
+
+.up-card:focus-visible {
+  outline: 2px solid var(--bv-accent);
+  outline-offset: 1px;
+}
+
+.up-card .up-thumb {
+  width: 100%;
+  height: 68px;
+}
+
+.up-card-name {
+  padding: 0 2px;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.up-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 9px;
+  color: #fff;
+  background: var(--bv-accent);
+  box-shadow: 0 0 0 2px var(--bv-popover);
+}
+
+.up-files {
+  flex: 1;
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bv-field);
+}
+
+.up-files > .fm-window {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Thumbnails ──────────────────────────────────────────────────────── */
+
+.up-thumb {
+  flex: 0 0 auto;
+  display: block;
+  border-radius: 7px;
+  object-fit: cover;
+  background: var(--bv-line);
+}
+
+.up-thumb-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 18px;
+  color: var(--bv-dim);
+}
+
+.up-thumb-icon em {
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ── Selection tray ──────────────────────────────────────────────────── */
+
+.up-tray {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--bv-field);
+  box-shadow: inset 0 0 0 1px var(--bv-line);
+}
+
+.up-tray.has-files {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bv-accent) 35%, transparent);
+}
+
+/* What's picked: a strip of thumbnails. */
+.up-picks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.up-pick-strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 2px 4px;
+  scrollbar-width: thin;
+}
+
+.up-pick {
+  position: relative;
+  flex: 0 0 auto;
+  animation: up-pop 160ms var(--bv-ease) both;
+}
+
+.up-pick-open {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  cursor: zoom-in;
+  box-shadow: 0 0 0 1px var(--bv-line);
+  transition: box-shadow 120ms ease, transform 120ms ease;
+}
+
+.up-pick-open:hover { transform: translateY(-1px); }
+
+.up-pick-open:focus-visible {
+  outline: 2px solid var(--bv-accent);
+  outline-offset: 2px;
+}
+
+.up-pick.is-open .up-pick-open {
+  box-shadow: 0 0 0 2px var(--bv-accent);
+}
+
+.up-pick.is-off .up-pick-open {
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.7);
+}
+
+.up-pick .up-thumb {
+  width: 52px;
+  height: 52px;
+  border-radius: 9px;
+  font-size: 15px;
+}
+
+.up-pick .up-thumb-icon em { font-size: 8px; }
+
+/* Eye on hover: "click to look". */
+.up-pick-eye {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  font-size: 14px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.up-pick-open:hover .up-pick-eye,
+.up-pick-open:focus-visible .up-pick-eye { opacity: 1; }
+
+.up-pick-x {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  font-size: 9px;
+  color: var(--bv-text);
+  background: var(--bv-popover);
+  box-shadow: 0 0 0 1px var(--bv-line), 0 2px 6px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.up-pick:hover .up-pick-x,
+.up-pick-x:focus-visible { opacity: 1; }
+
+.up-pick-x:hover {
+  color: #fff;
+  background: #ef4444;
+}
+
+/* Large preview over the browser. */
+.up-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--bv-popover);
+  box-shadow: inset 0 0 0 1px var(--bv-line);
+  animation: up-sheet-in 160ms var(--bv-ease) both;
+}
+
+.up-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.up-sheet-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.up-sheet-title strong,
+.up-sheet-title em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.up-sheet-title strong {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.up-sheet-title em {
+  font-size: 11px;
+  font-style: normal;
+  color: var(--bv-dim);
+}
+
+.up-sheet-nav {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--bv-dim);
+}
+
+.up-sheet-nav .bp-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.up-danger:hover {
+  color: #f87171;
+}
+
+.up-preview {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+body.bg-white-cred .up-preview { background: rgba(15, 23, 42, 0.06); }
+
+/* PreviewPane brings its own header and hides itself in narrow windows;
+   here the sheet names the file and the tile decides the size. */
+.up-preview .preview-pane {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+}
+
+.up-preview .preview-pane-header { display: none; }
+
+.up-preview .preview-pane-image-wrap { padding: 12px; }
+
+.up-preview .preview-pane-image { box-shadow: none; }
+
+.up-preview-wait,
+.up-preview-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--bv-dim);
+}
+
+.up-thumb.is-large {
+  width: 72px;
+  height: 72px;
+  font-size: 28px;
+}
+
+.up-warn {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  color: #fde68a;
+  background: rgba(120, 53, 15, 0.85);
+}
+
+@keyframes up-pop { from { opacity: 0; transform: scale(0.85); } }
+@keyframes up-sheet-in { from { opacity: 0; transform: translateY(6px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .up-pick, .up-sheet { animation: none; }
+}
+
+/* Actions */
+.up-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.up-hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--bv-dim);
+}
+
+.up-hint.is-error { color: #f87171; }
+
+.up-link {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--bv-dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.up-link:hover {
+  color: var(--bv-text);
+  background: var(--bv-hover);
+}
+
+.up-btn {
+  flex: 0 0 auto;
+  gap: 7px;
+  padding: 7px 14px;
+}
+
+.up-go:not(:disabled) {
+  border-color: transparent;
+  color: #fff;
+  background: var(--bv-accent);
+}
+
+.up-go:not(:disabled):hover { filter: brightness(1.08); }
+
+.up-go:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Narrow tiles ────────────────────────────────────────────────────── */
+
+@container (max-width: 520px) {
+  .up-actions { flex-wrap: wrap; }
+  .up-hint { flex-basis: 100%; }
+  .up-actions .up-link { margin-right: auto; }
+  .up-sheet-nav > span { display: none; }
+}

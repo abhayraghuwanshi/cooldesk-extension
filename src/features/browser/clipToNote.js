@@ -59,3 +59,28 @@ export async function saveClipToWorkspace(clip, workspace) {
   window.dispatchEvent(new CustomEvent('cooldesk-notes-changed', { detail: { workspaceId: workspace.id } }));
   return note;
 }
+
+// Recent clips, newest first, so the toolbox can list them (the notes
+// themselves live in their workspace). Per device, a short list.
+const RECENT_KEY = 'cooldesk.recentClips';
+const RECENT_MAX = 8;
+export const CLIPS_CHANGED = 'cooldesk-clips-changed';
+
+/** [{ id, workspaceId, workspaceName, title, at }] */
+export function recentClips() {
+  try {
+    const list = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+    return Array.isArray(list) ? list.filter(c => c?.id && c.workspaceId) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Remember a saved clip note (from saveClipToWorkspace) for the toolbox. */
+export function rememberClip(note, workspace) {
+  const entry = { id: note.id, workspaceId: workspace.id, workspaceName: workspace.name, title: note.title, at: note.createdAt };
+  const next = [entry, ...recentClips().filter(c => c.id !== note.id)].slice(0, RECENT_MAX);
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch { /* keep going */ }
+  window.dispatchEvent(new Event(CLIPS_CHANGED));
+  return entry;
+}

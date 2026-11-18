@@ -31,6 +31,7 @@ import { ShellSection } from '../../features/terminal/ShellSection';
 import { useCooldeskAutoWorkspace, useCooldeskDiscovery } from '../../shared/hooks/useCooldeskProjects.js';
 import { useIsSidebarWidth } from '../../shared/hooks/useIsSidebarWidth.js';
 import { useSpotlightRuns } from '../../features/terminal/runInTerminal';
+import { registerSettingsOpener, useSpotlightSettings } from '../../features/settings/settingsNav';
 import { recordFeature } from '../../services/analytics';
 // Lazy load WorkspaceList (Face 2)
 const WorkspaceList = lazy(() => import('../workspace/WorkspaceList').then(m => ({ default: m.WorkspaceList })));
@@ -240,6 +241,12 @@ export function CoolDeskContainer({
       onOpenSettings?.();
     }
   }, [isDesktopApp, isSidebarWidth, onOpenSettings]);
+  // Spotlight's /settings, /language… commands open Settings through this
+  // (settingsNav.js). Desktop only — the extension has no such commands.
+  useEffect(() => (isDesktopApp ? registerSettingsOpener(openSettings) : undefined), [isDesktopApp, openSettings]);
+  // …and from the spotlight overlay window, via the backend: primary main
+  // window only, like useSpotlightRuns.
+  useSpotlightSettings(isDesktopApp && surface === 'main' && isPrimaryWindow());
   const openActivity = useCallback(() => {
     if (isDesktopApp && !isSidebarWidth) {
       window.dispatchEvent(new CustomEvent('cooldesk-browse', { detail: { to: 'activity' } }));

@@ -1,9 +1,10 @@
-import { faArrowLeft, faArrowRight, faChevronDown, faChevronUp, faGlobe, faLock, faMagnifyingGlass, faRotateRight, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faArrowLeft, faArrowRight, faCheck, faChevronDown, faChevronUp, faGlobe, faLock, faMagnifyingGlass, faRotateRight, faTriangleExclamation, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getFaviconUrl } from '../../utils/helpers.js';
 import '../../styles/browse.css';
 import { AddressSuggestions } from './AddressSuggestions';
+import { ToolStrip } from './PageToolbox';
 import { useAddressSuggestions } from './useAddressSuggestions';
 import { AUTO_FIT_KEY, hostOf, invoke, useNativePane } from './useNativePane';
 
@@ -38,13 +39,20 @@ export function PageLoader({ url, compact = false }) {
  * `onOpenPath(path, isDir)` receives a file/folder picked from the address
  * bar's suggestions (the host shows it in its Files view). `onTitle` reports
  * the page title (tab names); bumping `focusAddressKey` focuses the address
- * bar (⌘T / ⌘L), bumping `findKey` opens find in page (⌘F). `onTools`
- * receives the visible tab's page controls (zoom, ad blocking, dark mode,
- * screenshot, find, open externally) for the side panel's Page tab.
+ * bar (⌘T / ⌘L), bumping `findKey` opens find in page (⌘F).
+ * Page tools (ToolStrip: ad blocking, dark mode, clip, screenshot, find, site
+ * permissions) show in the header's tools mode: `showTools` swaps this
+ * toolbar's navigation and address for them (single view); `onTools` gets
+ * this page's controls while `reportTools` is set, for the multi view bar.
+ * `live` is this page's stats from the pane guard (camera / mic / sound in
+ * use), for its permissions. `notice`
+ * ({ text, error?, note? }) is a result to show in this toolbar — a clip
+ * saved, with Open for its note (`onOpenNote`); the toolbar is the one place
+ * over a page that's always visible.
  * `heavy` (from usePaneGuard) shows a notice offering to stop a page that's
  * been spinning a core; a page whose process died shows a Reload screen.
  */
-export function BrowserPane({ paneId, url, requestKey = 0, active, heavy = false, onDismissHeavy, onNavigate, onOpenPath, onOpenShell, onTitle, onTools, focusAddressKey = 0, findKey = 0, emptyState = null, toolbarStart = null, toolbarEnd = null }) {
+export function BrowserPane({ paneId, url, requestKey = 0, active, heavy = false, onDismissHeavy, onNavigate, onOpenPath, onOpenShell, onTitle, live = null, showTools = false, reportTools = false, onTools, notice = null, onDismissNotice, onOpenNote, focusAddressKey = 0, findKey = 0, emptyState = null, toolbarStart = null, toolbarEnd = null }) {
   const [autoFit, setAutoFit] = useState(() => localStorage.getItem(AUTO_FIT_KEY) !== 'false');
   const onNavigateRef = useRef(onNavigate);
   useEffect(() => { onNavigateRef.current = onNavigate; }, [onNavigate]);
@@ -148,9 +156,8 @@ export function BrowserPane({ paneId, url, requestKey = 0, active, heavy = false
     else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeFind(); }
   };
 
-  // ── Quick tools: screenshot to the Shelf, dark mode per site ────────
-  // Their buttons live in the side panel's Page tab (via onTools), keeping
-  // the toolbar to navigation and the address.
+  // ── Page tools: screenshot to the Shelf, dark mode per site … ───────
+  // Shown in the header's tools mode (ToolStrip).
   const screenshot = () => invoke('browser_pane_screenshot', { id: paneId });
   // Pick a table / chart / block on the page; it arrives as browser-pane-clip.
   const clip = () => invoke('browser_pane_clip', { id: paneId });
@@ -168,11 +175,12 @@ export function BrowserPane({ paneId, url, requestKey = 0, active, heavy = false
     }))
     .catch(err => console.warn('[BrowserPane] dark mode failed:', err));
 
-  // Report this tab's page controls (only while it's the visible tab) so the
-  // host can show them in the side panel. Actions go through a ref so the
-  // object only changes when the state shown changes.
-  const onToolsRef = useRef(onTools);
-  useEffect(() => { onToolsRef.current = onTools; }, [onTools]);
+  const openFind = () => {
+    setFindOpen(true);
+    setTimeout(() => { findRef.current?.focus(); findRef.current?.select(); }, 0);
+  };
+  // This page's controls for the tool strip. Actions go through a ref, so
+  // the object only changes when what it shows changes.
   const actionsRef = useRef(null);
   actionsRef.current = {
     toggleAutoFit,
@@ -180,30 +188,27 @@ export function BrowserPane({ paneId, url, requestKey = 0, active, heavy = false
     toggleDark,
     screenshot,
     clip,
-    find: () => {
-      setFindOpen(true);
-      setTimeout(() => { findRef.current?.focus(); findRef.current?.select(); }, 0);
-    },
+    find: openFind,
     openExternal: () => (pageUrl || url) && invoke('open_url', { url: pageUrl || url }),
   };
   const actions = useMemo(() => Object.fromEntries(
     ['toggleAutoFit', 'toggleAdblock', 'toggleDark', 'screenshot', 'clip', 'find', 'openExternal']
       .map(name => [name, (...args) => actionsRef.current[name](...args)]),
   ), []);
-  useEffect(() => {
-    if (!active) return;
-    onToolsRef.current?.({
-      paneId,
-      url: pageUrl || url || null,
-      host: darkHost,
-      zoom,
-      autoFit,
-      adblockSupported,
-      blocking,
-      darkOn,
-      ...actions,
-    });
-  }, [active, paneId, pageUrl, url, darkHost, zoom, autoFit, adblockSupported, blocking, darkOn, actions]);
+  const tools = useMemo(() => ({
+    paneId,
+    url: pageUrl || url || null,
+    host: darkHost,
+    zoom,
+    autoFit,
+    adblockSupported,
+    blocking,
+    darkOn,
+    ...actions,
+  }), [paneId, pageUrl, url, darkHost, zoom, autoFit, adblockSupported, blocking, darkOn, actions]);
+  const onToolsRef = useRef(onTools);
+  onToolsRef.current = onTools;
+  useEffect(() => { if (reportTools) onToolsRef.current?.(tools); }, [reportTools, tools]);
 
   // Resting address shows like a site, not a URL: lock + bold host + dim path.
   let display = null;
@@ -214,8 +219,12 @@ export function BrowserPane({ paneId, url, requestKey = 0, active, heavy = false
 
   return (
     <div className={`bp-root ${loading ? 'is-loading' : ''}`}>
-      <div className="bp-toolbar">
+      <div className={`bp-toolbar ${showTools ? 'is-tools' : ''}`}>
         {toolbarStart}
+        {showTools && !findOpen ? (
+          <ToolStrip tools={tools} live={live} />
+        ) : (
+        <>
         <div className="bp-capsule">
           <button className="bp-btn" onClick={() => nav('back')} title="Back" disabled={!url}>
             <FontAwesomeIcon icon={faArrowLeft} />
@@ -277,6 +286,20 @@ export function BrowserPane({ paneId, url, requestKey = 0, active, heavy = false
             </span>
           )}
         </form>
+        )}
+        </>
+        )}
+        {notice && (
+          <div key={notice.key} className={`bp-pill ${notice.error ? 'is-error' : ''}`} role="status">
+            <FontAwesomeIcon icon={notice.error ? faTriangleExclamation : faCheck} />
+            <span title={notice.text}>{notice.text}</span>
+            {notice.note && onOpenNote && (
+              <button className="bp-pill-go" onClick={() => onOpenNote(notice.note)}>Open</button>
+            )}
+            <button className="bp-pill-x" onClick={onDismissNotice} aria-label="Dismiss">
+              <FontAwesomeIcon icon={faXmark} />
+            </button>
+          </div>
         )}
         {toolbarEnd}
         <span className="bp-progress" />

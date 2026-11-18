@@ -1,20 +1,22 @@
-import { faBookmark, faCompass, faPlay, faPen, faTrashCan, faDiagramProject, faFolder, faFolderOpen, faGear, faGripVertical, faGlobe, faHouse, faNoteSticky, faPowerOff, faRotateRight, faThumbtack, faPlus, faTerminal, faExpand, faCompress, faSearch, faServer, faTableCellsLarge, faTableColumns, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faArrowUpFromBracket, faBookmark, faCompass, faPlay, faPen, faTrashCan, faDiagramProject, faFolder, faFolderOpen, faGear, faGripVertical, faGlobe, faNoteSticky, faPowerOff, faRotateRight, faThumbtack, faPlus, faTerminal, faExpand, faCompress, faSearch, faServer, faTableCellsLarge, faTableColumns, faToolbox, faWindowMaximize, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserPane } from '../../features/browser/BrowserPane';
-import { normalizeAddress } from '../../features/browser/useNativePane';
+import { invoke, normalizeAddress } from '../../features/browser/useNativePane';
+import { ToolStrip } from '../../features/browser/PageToolbox';
+import { useUpdateAvailable } from '../../features/updates/useUpdateAvailable';
 import { engineFor, fetchWebSuggestions, getEngineKey, getWebSuggestEnabled, searchUrl } from '../../shared/searchEngines';
 import { usePaneGuard } from '../../features/browser/usePaneGuard';
 import { UsageMeter } from '../../features/browser/UsageMeter';
 import { FilesView } from './FilesView';
 import { FileIcon, FileTab } from './FileTab';
-import { NoteTab } from './NoteTab';
+import { NoteTab, saveScratchNote } from './NoteTab';
 import { SpecialTab } from './SpecialTab';
 import { ToolbarMenu } from './ToolbarMenu';
 import { TerminalTab } from '../../features/terminal/TerminalTab';
 import { registerTerminalHost, useSpotlightRuns } from '../../features/terminal/runInTerminal';
 import { WorkspaceContextPanel } from '../workspace/WorkspaceList';
-import { clipSummary, saveClipToWorkspace } from '../../features/browser/clipToNote';
+import { clipSummary, rememberClip, saveClipToWorkspace } from '../../features/browser/clipToNote';
 import { addUrlToWorkspace, saveWorkspace } from '../../db/index.js';
 import { useShelf } from '../../features/shelf/useShelf';
 import { SPECIAL_TITLES, tabPaneId, useBrowseTabs } from './useBrowseTabs';
@@ -26,6 +28,7 @@ import { fetchLocalServers, stopLocalServer } from '../../shared/devServers';
 import { guessStartCommand, runningServerFor } from '../../shared/savedServers';
 import { runInTerminal } from '../../features/terminal/runInTerminal';
 import { stackLogo, useFolderIdentity } from '../../shared/hooks/useFolderIdentity.js';
+import { UploadTab } from '../../features/browser/UploadPicker';
 import '../../styles/browse.css';
 
 // Browse face: the workspaces' links (plus local dev servers) on the left, the
@@ -33,6 +36,7 @@ import '../../styles/browse.css';
 
 const LAST_URL_KEY = 'cooldesk.browse.lastUrl';
 const MODE_KEY = 'cooldesk.browse.mode';
+const TOOLS_MODE_KEY = 'cooldesk.browse.toolsMode';
 const FILES_PATH_KEY = 'cooldesk.browse.filesPath';
 const MODES = ['browse', 'canvas'];
 const FILES_OPEN_KEY = 'cooldesk.browse.filesOpen';
@@ -170,6 +174,9 @@ const MULTI_MAX = 6;
 const isWebUrl = (url) => typeof url === 'string' && /^https?:\/\//i.test(url);
 // A blank tab: a new tab's start screen (not a page, file or terminal).
 const isBlank = (t) => !t.url && !t.file && !t.term && !t.note && !t.special;
+// Cancel a page's upload request (its file input gets nothing). Ignored by
+// Rust if it was already answered.
+const cancelUpload = (request) => invoke('browser_pane_file_choose', { request, paths: null }).catch(() => { });
 // A tile's name while it's being moved.
 const tileLabel = (t) => t.title
   || (t.special && SPECIAL_TITLES[t.special])
@@ -327,7 +334,6 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
     persist(MODE_KEY, next);
   }, []);
   const canvasMode = mode === 'canvas' && !isSidebarWidth;
-  const browseMode = !canvasMode;
 
 
   // A terminal in the folder you're looking at (a folder tab, or a file
@@ -368,7 +374,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
       case 'mod+l': setFocusAddress(k => k + 1); return true;
       // A file tab steps through the tab's own Back / Forward; a page
       // through its own history.
-      case 'mod+[': if (!browseTabs.active.file || !browseTabs.step(-1)) nav('back'); return true;
+      case 'mod+[': if (!browseTabs.active.file || !(browseTabs.folderUp(browseTabs.activeId) || browseTabs.step(-1))) nav('back'); return true;
       case 'mod+]': if (!browseTabs.active.file || !browseTabs.step(1)) nav('forward'); return true;
       case 'mod+r': nav('reload'); return true;
       case 'mod+f': setFindKey(k => k + 1); return true;
@@ -428,6 +434,68 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
     return () => { cancelled = true; off?.(); };
   }, [browseTabs]);
 
+  // File uploads (<input type=file> on a page): the picker opens as a tile
+  // beside that page in multi view (UploadTab), not a dialog — ignore it,
+  // close it, or pick. src-tauri/src/browser_pane/uploads.rs holds the
+  // request until it's answered, and reports `browser-pane-file-done` however
+  // it ends. If we switched to multi view for it, single view comes back
+  // once no upload tile is left.
+  const uploadReturn = useRef(null); // { pageId } when multi view was turned on for an upload
+  const uploadInputs = useRef(null);
+  uploadInputs.current = { browseTabs, canvasMode, isSidebarWidth, setMode };
+  useEffect(() => {
+    const offs = [];
+    let cancelled = false;
+    const keep = (p) => p.then(fn => { if (cancelled) fn(); else offs.push(fn); }).catch(() => { });
+    import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
+      const win = getCurrentWindow();
+      keep(win.listen('browser-pane-file-request', ({ payload }) => {
+        if (!payload?.request) return;
+        const { browseTabs: bt, canvasMode: multi, isSidebarWidth: narrow, setMode: toMode } = uploadInputs.current;
+        const page = bt.tabs.find(t => `browser-pane-${tabPaneId(t.id)}` === payload.label);
+        // Not one of this view's tabs: leave it to Rust's fallback (Finder).
+        if (!page) return;
+        invoke('browser_pane_file_ack', { request: payload.request }).catch(() => { });
+        // Folder uploads: the file manager picks files only.
+        if (payload.directories) {
+          invoke('browser_pane_file_system', { request: payload.request }).catch(() => { });
+          return;
+        }
+        if (!multi && !narrow) {
+          if (!uploadReturn.current) uploadReturn.current = { pageId: page.id };
+          toMode('canvas');
+        }
+        bt.openUploadTab(payload, page.id);
+      }));
+      keep(win.listen('browser-pane-file-done', ({ payload }) => {
+        const { browseTabs: bt } = uploadInputs.current;
+        const tab = bt.tabs.find(t => t.upload?.request === payload?.request);
+        if (tab) bt.close(tab.id);
+      }));
+    }).catch(() => { });
+    return () => { cancelled = true; offs.forEach(off => off()); };
+  }, []);
+
+  // An upload tile that goes away (closed, or its request done) cancels its
+  // request if it's still open — Rust ignores ones already answered. With
+  // the last one gone, back to single view on the page if we left it.
+  const uploadRequests = useRef(new Set());
+  useEffect(() => {
+    const now = new Set(browseTabs.tabs.filter(t => t.upload).map(t => t.upload.request));
+    for (const request of uploadRequests.current) {
+      if (!now.has(request)) cancelUpload(request);
+    }
+    uploadRequests.current = now;
+    const back = uploadReturn.current;
+    if (!now.size && back) {
+      uploadReturn.current = null;
+      if (browseTabs.tabs.some(t => t.id === back.pageId)) browseTabs.activate(back.pageId);
+      setMode('browse');
+    }
+  }, [browseTabs, setMode]);
+  // Leaving Browse with requests open: don't leave those pages waiting.
+  useEffect(() => () => { uploadRequests.current.forEach(cancelUpload); }, []);
+
   // Files: a side panel next to the page in either mode (was a separate
   // mode) — read a file, copy from it, or drag it onto the page beside it.
   // A stored 'files' mode from before migrates to Browse with the panel open.
@@ -445,7 +513,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   const shelf = useShelf();
   const [filesTab, setFilesTabState] = useState(() => {
     const stored = localStorage.getItem(FILES_TAB_KEY);
-    return ['files', 'shelf', 'notes', 'page'].includes(stored) ? stored : 'tabs';
+    return ['files', 'shelf', 'notes'].includes(stored) ? stored : 'tabs';
   });
   const setFilesTab = useCallback((tab) => {
     setFilesTabState(tab);
@@ -460,7 +528,6 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   }, [setFilesTab, setFilesOpen]);
   const goHomeRef = useRef(goHome);
   goHomeRef.current = goHome;
-  const homeShown = filesShown && filesTab === 'tabs';
 
 
   const [filesWidth, setFilesWidth] = useState(() => {
@@ -762,12 +829,13 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
     height: `calc(${r.h * 100}% - 10px)`,
   });
 
-  // Live memory/CPU of every in-app page (browser_pane/stats.rs), shown in
-  // the side panel's Page tab; the same poll lets the pane guard put
-  // background tabs to sleep before they slow the Mac down. Each page is its
-  // own WebKit process.
-  const [pageTools, setPageTools] = useState(null);
-  const pageTabShown = isActive && filesShown && filesTab === 'page';
+  // Live memory/CPU of every in-app page (browser_pane/stats.rs), listed
+  // from the toolbar's usage meter; the same poll lets the pane guard put
+  // background tabs to sleep before they slow the Mac down, and tells each
+  // page's site permissions whether its camera / mic / sound are in use.
+  // Each page is its own WebKit process.
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  const pageTabShown = isActive && memoryOpen;
   const activeIsPage = !activeTab.file && !activeTab.term && !activeTab.note && !activeTab.special;
   const { stats, heavyPaneId, dismissHeavy } = usePaneGuard({
     browseTabs,
@@ -883,37 +951,56 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   const shownWs = wsWithLinks.find(x => x.ws.id === listWs)
     || wsWithLinks.find(x => x.count > 0) || wsWithLinks[0] || null;
 
-  // Clips from a page (Page → Clip): saved as a note in the workspace shown
-  // here, with a toast that leads to it.
+  // Clips from a page (its toolbar's Clip tool): saved as a note in the
+  // workspace shown here. The result shows in that page's own toolbar
+  // (clipNotice → BrowserPane), never as a toast over the page — a web page
+  // is a native layer drawn above the HTML, so a toast there was invisible.
+  // "Open" opens the note as a tab; the toolbox lists recent clips too.
   const clipWsRef = useRef(null);
   clipWsRef.current = shownWs?.ws || savedWorkspaces.find(w => w.id === activeWorkspaceId) || null;
-  const [clipToast, setClipToast] = useState(null); // { text, error? }
+  const [clipToast, setClipToast] = useState(null); // { text, error? } — saving tabs as links
   useEffect(() => {
     if (!clipToast) return undefined;
     const t = setTimeout(() => setClipToast(null), 5000);
     return () => clearTimeout(t);
   }, [clipToast]);
+  const [clipNotice, setClipNotice] = useState(null); // { tabId, text, error?, note?, key }
+  useEffect(() => {
+    if (!clipNotice) return undefined;
+    const t = setTimeout(() => setClipNotice(null), clipNotice.error ? 9000 : 12000);
+    return () => clearTimeout(t);
+  }, [clipNotice]);
+  const clipTabsRef = useRef(null);
+  clipTabsRef.current = browseTabs.tabs;
   useEffect(() => {
     let off = null;
     let cancelled = false;
     import('@tauri-apps/api/event')
       .then(({ listen }) => listen('browser-pane-clip', async ({ payload }) => {
-        const ws = clipWsRef.current;
         if (!payload || !ownPanes.current.has(payload.label)) return;
+        const tab = clipTabsRef.current.find(t => `browser-pane-${tabPaneId(t.id)}` === payload.label);
+        const notice = (fields) => setClipNotice({ tabId: tab?.id || null, key: Date.now(), ...fields });
+        const ws = clipWsRef.current;
         if (!ws) {
-          setClipToast({ error: true, text: 'Pick a workspace in Home first — clips are saved to its notes.' });
+          notice({ error: true, text: 'Pick a workspace in Home first: clips are saved to its notes.' });
           return;
         }
         try {
-          await saveClipToWorkspace(payload, ws);
-          setClipToast({ text: `${clipSummary(payload)} saved to ${ws.name} › Notes` });
+          const note = await saveClipToWorkspace(payload, ws);
+          rememberClip(note, ws);
+          notice({ text: `${clipSummary(payload)} saved to ${ws.name} › Notes`, note: { id: note.id, workspaceId: ws.id, workspaceName: ws.name, title: note.title } });
         } catch (err) {
-          setClipToast({ error: true, text: `Couldn’t save the clip — ${err?.message || err}` });
+          notice({ error: true, text: `Couldn’t save the clip: ${err?.message || err}` });
         }
       }))
       .then(fn => { if (cancelled) fn(); else off = fn; });
     return () => { cancelled = true; off?.(); };
   }, []);
+  // A clip note as a tab, beside the page in multi view.
+  const openClipNote = useCallback((note) => {
+    setClipNotice(null);
+    browseTabs.openNoteTab(note);
+  }, [browseTabs]);
 
   // Save web tabs as links in the workspace shown in Home (the same one clips
   // go to), so they come back with the workspace. Already-saved URLs are
@@ -953,6 +1040,31 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
       setClipToast({ link: true, text: `${what} saved to ${ws.name}${lastError ? ` (${fresh.length - saved} failed)` : ''}` });
     }
   }, []);
+
+  // Drag a tab row (page, file, folder, shell, server, scratch note) onto
+  // the workspace section to save it there, as its Save button does. The tab being dragged is kept in a ref:
+  // dataTransfer can't be read during dragover.
+  const draggedTabRef = useRef(null);
+  const [wsDropOver, setWsDropOver] = useState(false);
+  const wsDropProps = {
+    onDragOver: (e) => {
+      if (!draggedTabRef.current) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      if (!wsDropOver) setWsDropOver(true);
+    },
+    onDragLeave: (e) => {
+      if (!e.currentTarget.contains(e.relatedTarget)) setWsDropOver(false);
+    },
+    onDrop: (e) => {
+      const t = draggedTabRef.current;
+      draggedTabRef.current = null;
+      setWsDropOver(false);
+      if (!t) return;
+      e.preventDefault();
+      saveActionFor(t)?.();
+    },
+  };
 
   // Remove a saved link from the workspace shown in Home — the same
   // remove_url action the workspace editor uses (saveWorkspace broadcasts,
@@ -1148,17 +1260,67 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
 
 
 
-  // The toolbar keeps navigation only (and Home): everything else lives in
-  // the side panel on the right, opened by the button at the toolbar's end.
-  const toolbarStart = (
-    <button className={`bp-btn ${homeShown ? 'on' : ''}`} onClick={goHome} title="Home: workspace, tabs, apps and folders (in the side panel)">
-      <FontAwesomeIcon icon={faHouse} />
+  // One button for Home, the side panel and the app menu: it opens and
+  // closes the side panel (Home), whose header holds the app menu (Settings,
+  // Cool Activity, Sidebar / Dock, updates). It carries the Shelf's badge
+  // (new downloads open straight onto the Shelf) and a dot for an update.
+  const { info: updateInfo } = useUpdateAvailable();
+  const panelButton = (
+    <button
+      className={`bp-btn bp-panel-btn ${filesShown ? 'on' : ''} ${downloading || shelf.unseen ? 'files-badge' : ''} ${downloading ? 'downloading' : ''} ${updateInfo && !filesShown && !(downloading || shelf.unseen) ? 'tbm-dot' : ''}`}
+      data-count={shelf.unseen || ''}
+      onClick={() => {
+        // New downloads waiting: open straight onto the Shelf.
+        if (downloading || shelf.unseen) {
+          setFilesTab('shelf');
+          setFilesOpen(true);
+          return;
+        }
+        if (filesShown) setFilesOpen(false);
+        else goHome();
+      }}
+      title={downloading ? 'Downloading to the Shelf…'
+        : shelf.unseen ? `${shelf.unseen} new on the Shelf`
+          : filesShown ? 'Hide Home'
+            : updateInfo ? 'Home: tabs, links, files, notes, Shelf, settings (update available)'
+              : 'Home: tabs, links, files, notes, Shelf and settings'}
+      aria-pressed={filesShown}
+    >
+      <SidePanelIcon />
     </button>
   );
-  const toolbarEnd = (
-    <>
-    {/* Layout: Single | Multi as a labelled switch, and focus mode as its
-        own button (the page alone, Esc to leave). */}
+  // Tools mode: the header's Tools toggle swaps the header's contents for
+  // every page tool (ToolStrip) — the multi view bar, or the page's own
+  // toolbar in single view. The header sits above the pages, so the tools
+  // never cover one (anything over a page hides it). The selected tile's
+  // page reports its controls (onTools) for the multi view bar.
+  const [toolsMode, setToolsModeState] = useState(() => localStorage.getItem(TOOLS_MODE_KEY) === 'true');
+  const setToolsMode = useCallback((on) => {
+    setToolsModeState(on);
+    persist(TOOLS_MODE_KEY, String(on));
+  }, []);
+  const [currentTools, setCurrentTools] = useState(null);
+  // Single view swaps only a web page's toolbar for the tools, so on a
+  // terminal / file / note tab the toggle has nothing to show: disabled
+  // there (the setting is kept for the next page). Multi view's bar always
+  // can — it says when the selected tile isn't a page.
+  const toolsAvailable = canvasMode || activeIsPage;
+  const toolsToggle = (
+    <button
+      className={`bp-btn bp-tools-toggle ${toolsMode && toolsAvailable ? 'on' : ''}`}
+      onClick={() => setToolsMode(!toolsMode)}
+      disabled={!toolsAvailable}
+      title={!toolsAvailable ? 'Page tools work on web pages: open a page, or use Multi view'
+        : toolsMode ? 'Back to the header' : 'Page tools: ad blocking, dark mode, clip, screenshot, find, site permissions'}
+      aria-pressed={toolsMode && toolsAvailable}
+    >
+      <FontAwesomeIcon icon={faToolbox} />
+      <span>Tools</span>
+    </button>
+  );
+  // Layout: Single | Multi as a labelled switch (focus mode is its own
+  // button, the page alone, Esc to leave). Kept in tools mode too.
+  const layoutSwitch = (
     <div className="bp-capsule bp-modes bp-layout" role="tablist" aria-label="Layout">
       <button
         className={`bp-btn bp-layout-btn ${!canvasMode ? 'on' : ''}`}
@@ -1181,6 +1343,23 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
         <span>Multi</span>
       </button>
     </div>
+  );
+  // In tools mode the header keeps the layout switch and the toggle.
+  const toolsEnd = (
+    <>
+      <span className="bp-toolbar-sep" aria-hidden="true" />
+      {layoutSwitch}
+      {toolsToggle}
+      {panelButton}
+    </>
+  );
+
+  // Nothing at the start any more: Home is the panel button at the end.
+  const toolbarStart = null;
+  const toolbarEnd = (
+    <>
+    {toolsToggle}
+    {layoutSwitch}
     <button
       className={`bp-btn ${focusOn ? 'on' : ''}`}
       onClick={() => setFocusMode(v => !v)}
@@ -1189,28 +1368,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
     >
       <FontAwesomeIcon icon={focusOn ? faCompress : faExpand} />
     </button>
-    <button
-      className={`bp-btn ${filesShown ? 'on' : ''} ${downloading || shelf.unseen ? 'files-badge' : ''} ${downloading ? 'downloading' : ''}`}
-      data-count={shelf.unseen || ''}
-      onClick={() => {
-        // New downloads waiting: open straight onto the Shelf.
-        if (downloading || shelf.unseen) {
-          setFilesTab('shelf');
-          setFilesOpen(true);
-          return;
-        }
-        setFilesOpen(!filesOpen);
-      }}
-      title={downloading ? 'Downloading to the Shelf…'
-        : shelf.unseen ? `${shelf.unseen} new on the Shelf`
-          : filesShown ? 'Hide the side panel' : 'Side panel: tabs, links, files, shelf, notes, page tools'}
-      aria-pressed={filesShown}
-    >
-      <SidePanelIcon />
-    </button>
-    {/* App-wide controls (sidebar, Cool Activity, Settings, a pending
-        update) — the desktop app has no header bar above Browse, so they
-        end every tab's toolbar, set apart from the page controls. */}
+    {/* CoolDesk's own cost, then Home / side panel (app menu inside). */}
     {appControls && (
       <>
         <span className="bp-toolbar-sep" aria-hidden="true" />
@@ -1219,11 +1377,13 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
           pagesMemory={pagesMemory}
           pagesCpu={pagesCpu}
           pageCount={openPages.filter(p => p.pid != null && !p.shared).length}
-          onOpen={() => { setFilesTab('page'); setFilesOpen(true); }}
+          pages={openPages}
+          onClosePage={(p) => { if (p.tabId) browseTabs.close(p.tabId); }}
+          onOpenChange={setMemoryOpen}
         />
-        {appControls}
       </>
     )}
+    {panelButton}
     </>
   );
 
@@ -1250,18 +1410,41 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   ) : null) : toolbarStart);
   // Save this page to the workspace shown in Home — a labelled button in the
   // tab's own toolbar, so it's there without opening the side panel.
-  const saveButton = (tab) => {
-    if (tab.note || tab.special) return null;
+  // How a tab is saved to the workspace shown in Home, or null if it can't
+  // be: the toolbar's Save and dragging the tab onto the workspace section.
+  const saveActionFor = (tab) => {
+    if (tab.special) return null;
+    if (tab.note) {
+      // A scratch note becomes one of the workspace's notes; a note already
+      // in a workspace stays where it is.
+      if (tab.note.workspaceId) return null;
+      return async () => {
+        const ws = clipWsRef.current;
+        if (!ws) { setClipToast({ error: true, text: 'Pick a workspace in Home first: items are saved to it.' }); return; }
+        try {
+          await saveScratchNote(tab.note.id, ws);
+          browseTabs.noteToWorkspace(tab.id, ws);
+          setClipToast({ link: true, text: `${tab.title || 'Note'} saved to ${ws.name} › Notes` });
+        } catch (err) {
+          setClipToast({ error: true, text: `Couldn’t save the note: ${err?.message || err}` });
+        }
+      };
+    }
     const pageUrl = tab.url || tab.req?.url;
-    let save;
-    if (tab.file) save = () => saveItemToWorkspace({ kind: 'file', path: tab.file.path, isDir: tab.file.isDir });
-    else if (tab.term) {
+    if (tab.file) return () => saveItemToWorkspace({ kind: 'file', path: tab.file.path, isDir: tab.file.isDir });
+    if (tab.term) {
       const dir = termDir(tab);
-      if (!dir) return null;
-      save = () => saveItemToWorkspace({ kind: 'shell', path: dir });
-    } else if (serverForTab(tab)) save = () => saveServerToWorkspace(serverForTab(tab));
-    else if (isWebUrl(pageUrl)) save = () => saveTabsToWorkspace([{ url: pageUrl, title: tab.title }]);
-    else return null;
+      return dir ? () => saveItemToWorkspace({ kind: 'shell', path: dir }) : null;
+    }
+    if (serverForTab(tab)) return () => saveServerToWorkspace(serverForTab(tab));
+    if (isWebUrl(pageUrl)) return () => saveTabsToWorkspace([{ url: pageUrl, title: tab.title }]);
+    return null;
+  };
+  const saveButton = (tab) => {
+    // Notes have their own Save (to any workspace) in NoteTab's toolbar.
+    if (tab.note) return null;
+    const save = saveActionFor(tab);
+    if (!save) return null;
     const what = tab.file ? (tab.file.isDir ? 'this folder' : 'this file') : tab.term ? 'this shell' : serverForTab(tab) ? 'this server' : 'this page';
     const ws = clipWsRef.current;
     if (isTabSaved(tab)) {
@@ -1559,6 +1742,13 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
         className={`browse-tab-row is-open ${tab.id === browseTabs.activeId ? 'active' : ''} ${asleep ? 'asleep' : ''}`}
         onClick={() => browseTabs.activate(tab.id)}
         onAuxClick={(e) => { if (e.button === 1) browseTabs.close(tab.id); }}
+        draggable={!!shownWs && !!saveActionFor(tab)}
+        onDragStart={(e) => {
+          draggedTabRef.current = tab;
+          e.dataTransfer.effectAllowed = 'copy';
+          try { e.dataTransfer.setData('text/plain', tab.url || tab.file?.path || termDir(tab) || tab.title || ''); } catch { /* ignore */ }
+        }}
+        onDragEnd={() => { draggedTabRef.current = null; setWsDropOver(false); }}
         title={tab.file ? tab.file.path : tab.term ? `Shell — ${tab.term.cwd || '~'}${termAttention.has(tab.id) ? '\nWaiting for you' : ''}` : tab.note ? `Note${tab.note.workspaceName ? ` in ${tab.note.workspaceName}` : ''}` : tab.special ? SPECIAL_TITLES[tab.special] : asleep ? `${tab.url || 'New tab'}\nAsleep (reloads when opened)` : (tab.url || 'New tab')}
       >
         {tab.file
@@ -1568,7 +1758,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
           : tab.note
             ? <span className="browse-tile note-tile"><FontAwesomeIcon icon={faNoteSticky} /></span>
           : tab.special
-            ? <span className="browse-tile"><FontAwesomeIcon icon={tab.special === 'settings' ? faGear : faDiagramProject} /></span>
+            ? <span className="browse-tile"><FontAwesomeIcon icon={tab.special === 'settings' ? faGear : tab.special === 'upload' ? faArrowUpFromBracket : faDiagramProject} /></span>
           : tab.url
             ? <ItemIcon item={{ url: tab.url, title: tab.title, sub: host }} />
             : <span className="browse-tile"><FontAwesomeIcon icon={faPlus} /></span>}
@@ -1705,19 +1895,42 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
   };
   const openTabs = browseTabs.tabs.filter(t => !isBlank(t) || t.id === browseTabs.activeId);
 
+  // Everything that opens something new, behind one + in Home's header
+  // (or the Tabs row, at docked sidebar width).
+  const createMenu = (
+    <ToolbarMenu
+      icon={faPlus}
+      title="New tab, note, shell or file manager"
+      className="nav-create-menu"
+      items={[
+        { key: 'tab', icon: faGlobe, label: 'New tab', hint: '⌘T', onSelect: newTab },
+        { key: 'note', icon: faNoteSticky, label: 'New note', onSelect: browseTabs.openScratchNote },
+        { key: 'shell', icon: faTerminal, label: 'New shell', onSelect: () => openTerminal() },
+        null,
+        { key: 'files', icon: faFolderOpen, label: 'File manager', onSelect: () => showFolder(filesPath) },
+      ]}
+    />
+  );
+
+  // Jump search: in Home's header beside the + menu; at docked sidebar
+  // width (no header) it heads the list instead.
+  const searchBox = (
+    <div className="browse-search nav-jump">
+      <FontAwesomeIcon icon={faSearch} />
+      <input
+        value={filter}
+        onChange={e => setFilter(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Escape' && filter) { e.stopPropagation(); setFilter(''); } }}
+        placeholder="Search tabs, links, folders"
+        spellCheck={false}
+      />
+      {filter && <button className="browse-search-clear" onClick={() => setFilter('')} title="Clear">×</button>}
+    </div>
+  );
+
   const navContent = (
     <>
-      <div className="browse-search nav-jump">
-        <FontAwesomeIcon icon={faSearch} />
-        <input
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Escape' && filter) { e.stopPropagation(); setFilter(''); } }}
-          placeholder="Jump to a tab, link or folder"
-          spellCheck={false}
-        />
-        {filter && <button className="browse-search-clear" onClick={() => setFilter('')} title="Clear">×</button>}
-      </div>
+      {isSidebarWidth && searchBox}
 
       <div className="browse-groups">
         {filter ? searchBody() : (
@@ -1728,15 +1941,9 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                 <span>Tabs</span>
                 <span className="browse-count">{openTabs.length}</span>
                 <span className="nt-grow" />
-                <button className="bp-btn browse-tabs-new" onClick={newTab} title="New tab (⌘T)">
-                  <FontAwesomeIcon icon={faPlus} />
-                </button>
-                <button className="bp-btn browse-tabs-new" onClick={() => openTerminal()} title="New shell tab">
-                  <FontAwesomeIcon icon={faTerminal} />
-                </button>
-                <button className="bp-btn browse-tabs-new" onClick={browseTabs.openScratchNote} title="New note (a scratch notepad — save it to a workspace when you want to keep it)">
-                  <FontAwesomeIcon icon={faNoteSticky} />
-                </button>
+                {/* The docked sidebar has no Home header, so its + menu
+                    sits here instead. */}
+                {isSidebarWidth && createMenu}
                 {openTabs.some(t => isWebUrl(t.url) && !t.file && !t.term && !t.note && !t.special) && (
                   <button
                     className="bp-btn browse-tabs-new"
@@ -1753,7 +1960,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
             {/* The workspace's pinned links and files — the workspace is
                 picked right in the header, its notes one button over. */}
             {shownWs && (
-              <section className="nav-section">
+              <section className={`nav-section nav-ws-section ${wsDropOver ? 'is-drop-target' : ''}`} {...wsDropProps}>
                 <div className="nav-section-head nav-ws-head">
                   <ToolbarMenu
                     icon={faThumbtack}
@@ -1820,10 +2027,6 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
             <section className="nav-section">
               <div className="nav-section-head">
                 <span>Folders</span>
-                <span className="nt-grow" />
-                <button className="bp-btn browse-tabs-new" onClick={() => showFolder(filesPath)} title="Files: browse your folders in a tab">
-                  <FontAwesomeIcon icon={faFolderOpen} />
-                </button>
               </div>
               {frequentFolders.length > 0 && (
                 <div className="nav-chips">{capped('folders', frequentFolders, renderFolderChip)}</div>
@@ -1856,28 +2059,46 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
           {/* Multi view: one bar for the whole grid; each tile keeps only
               its address bar plus expand / close. */}
           {canvasMode && (
-            <div className="bp-toolbar multi-bar">
+            <div className={`bp-toolbar multi-bar ${toolsMode ? 'is-tools' : ''}`}>
               {toolbarStart}
-              <span className="multi-title">
-                <FontAwesomeIcon icon={faTableCellsLarge} />
-                {multiTabs.length === 1 ? '1 tab' : `${multiTabs.length} tabs side by side`}
-              </span>
+              {toolsMode ? (
+                <>
+                  <ToolStrip
+                    tools={activeIsPage ? currentTools : null}
+                    live={activeIsPage ? stats?.panes.find(p => p.id === tabPaneId(browseTabs.activeId)) || null : null}
+                  />
+                  {toolsEnd}
+                </>
+              ) : (
+              <>
               <span className="multi-grow" />
               {savedLayout.custom && multiTabs.length > 1 && (
                 <button className="bp-btn" onClick={autoArrange} title="Auto-arrange — back to the automatic grid">
                   <FontAwesomeIcon icon={faTableColumns} />
                 </button>
               )}
-              <button className="bp-btn" onClick={() => openTerminal()} title="New terminal tile">
-                <FontAwesomeIcon icon={faTerminal} />
-              </button>
-              <button className="bp-btn" onClick={browseTabs.openScratchNote} title="New note tile">
-                <FontAwesomeIcon icon={faNoteSticky} />
-              </button>
-              <button className="bp-btn" onClick={() => browseTabs.openInNew(null)} title="New tab tile (⌘T)">
-                <FontAwesomeIcon icon={faPlus} />
-              </button>
+              {/* Adding tiles: one capsule, labelled like the Tools strip. */}
+              <div className="bp-capsule ts-group" role="group" aria-label="Add a tile">
+                <button className="bp-btn ts-btn" onClick={() => browseTabs.openInNew(null)} title="New tab tile (⌘T)">
+                  <FontAwesomeIcon icon={faPlus} />
+                  <span>Tab</span>
+                </button>
+                <button className="bp-btn ts-btn" onClick={browseTabs.openScratchNote} title="New note tile (a scratch notepad — save it to a workspace to keep it)">
+                  <FontAwesomeIcon icon={faNoteSticky} />
+                  <span>Note</span>
+                </button>
+                <button className="bp-btn ts-btn" onClick={() => openTerminal()} title="New terminal tile">
+                  <FontAwesomeIcon icon={faTerminal} />
+                  <span>Shell</span>
+                </button>
+                <button className="bp-btn ts-btn" onClick={() => showFolder(filesPath)} title="File manager tile: browse your folders">
+                  <FontAwesomeIcon icon={faFolderOpen} />
+                  <span>Files</span>
+                </button>
+              </div>
               {toolbarEnd}
+              </>
+              )}
             </div>
           )}
           <div
@@ -1927,6 +2148,23 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                 hidden. Multi view un-hides the tiled ones in the grid. */}
             {browseTabs.tabs.filter(tab => tab.file || tab.term || tab.note || tab.special || browseTabs.live.has(tab.id)).map(tab => {
               const isCurrent = tab.id === browseTabs.activeId;
+              if (tab.upload) {
+                return (
+                  <div key={tab.id} {...paneProps(tab, isCurrent)}>
+                    <UploadTab
+                      upload={tab.upload}
+                      active={isActive && isCurrent && onScreen(tab)}
+                      visible={isActive && onScreen(tab)}
+                      onClose={() => browseTabs.close(tab.id)}
+                      onOpenUrl={(url) => browseTabs.openInNew(url, { position: 'after' })}
+                      onOpenPath={openPath}
+                      onOpenShell={openTerminal}
+                      toolbarStart={paneStart(tab)}
+                      toolbarEnd={paneEnd(tab)}
+                    />
+                  </div>
+                );
+              }
               if (tab.special) {
                 return (
                   <div key={tab.id} {...paneProps(tab, isCurrent)}>
@@ -1992,7 +2230,9 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                       onOpenFile={(path) => browseTabs.openFileTab(path, false, true)}
                       onOpenUrl={(url) => browseTabs.openInNew(url, { position: 'after' })}
                       onShowFolder={(dir) => showFolder(dir, true)}
+                      onFolderChange={(dir) => browseTabs.folderTo(tab.id, dir)}
                       onBack={tab.back?.length ? () => browseTabs.step(-1) : null}
+                      onUp={tab.file.isDir ? () => browseTabs.folderUp(tab.id) : null}
                       onForward={tab.fwd?.length ? () => browseTabs.step(1) : null}
                       onShowInFiles={showInFiles}
                       onOpenTerminal={openTerminal}
@@ -2011,7 +2251,13 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                     active={isActive && onScreen(tab)}
                     onNavigate={(url, opts) => handleNavigate(tab.id, url, opts)}
                     onTitle={(title) => browseTabs.noteTitle(tab.id, title)}
-                    onTools={setPageTools}
+                    live={stats?.panes.find(p => p.id === tabPaneId(tab.id)) || null}
+                    showTools={toolsMode && !canvasMode && isCurrent}
+                    reportTools={canvasMode && isCurrent}
+                    onTools={setCurrentTools}
+                    notice={clipNotice?.tabId === tab.id ? clipNotice : null}
+                    onDismissNotice={() => setClipNotice(null)}
+                    onOpenNote={openClipNote}
                     heavy={heavyPaneId === tabPaneId(tab.id)}
                     onDismissHeavy={dismissHeavy}
                     onOpenPath={openPath}
@@ -2019,7 +2265,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
                     focusAddressKey={isCurrent ? focusAddress : 0}
                     findKey={isCurrent ? findKey : 0}
                     toolbarStart={paneStart(tab)}
-                    toolbarEnd={paneEnd(tab)}
+                    toolbarEnd={toolsMode && !canvasMode && isCurrent ? toolsEnd : paneEnd(tab)}
                     emptyState={(
                       <div className="browse-hero">
                         <div className="browse-hero-orb"><FontAwesomeIcon icon={faCompass} /></div>
@@ -2085,7 +2331,7 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
           {!clipToast.error && !clipToast.info && (
             <button
               className="fm-status-link"
-              onClick={() => { if (!clipToast.link) setWsContextOpen(true); goHome(); setClipToast(null); }}
+              onClick={() => { goHome(); setClipToast(null); }}
             >
               Show
             </button>
@@ -2097,22 +2343,17 @@ export function BrowseView({ savedWorkspaces = [], activeWorkspaceId, onSelectWo
           {filesShown && <div className="browse-divider files-divider" onPointerDown={startFilesResize} />}
           <aside className={`browse-files ${filesShown ? '' : 'is-hidden'}`} style={{ width: filesWidth }}>
             <FilesView
+              menu={appControls}
               active={filesShown && isActive}
               onClose={() => setFilesOpen(false)}
               tab={filesTab}
-              onTab={setFilesTab}
               shelf={shelf}
               nav={navContent}
+              create={createMenu}
+              search={searchBox}
               notesUrl={pageUrl}
               notesPaneId={tabPaneId(browseTabs.activeId)}
               onOpen={openPath}
-              page={{
-                tools: browseMode && !activeTab.file && !activeTab.term && !activeTab.note && !activeTab.special ? pageTools : null,
-                pages: openPages,
-                totals: { memory: pagesMemory, cpu: pagesCpu, app: stats?.app_memory, appCpu: stats?.app_cpu },
-                live: stats?.panes.find(p => p.id === pageTools?.paneId) || null,
-                onClosePage: (p) => { if (p.tabId) browseTabs.close(p.tabId); },
-              }}
             />
           </aside>
         </>

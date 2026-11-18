@@ -1013,21 +1013,6 @@ html.browse-focus .browse-drawer {
   flex: 0 0 auto;
 }
 
-.multi-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 6px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--bv-dim);
-  white-space: nowrap;
-}
-
-.multi-title svg {
-  color: var(--bv-accent);
-}
-
 .multi-grow {
   flex: 1;
 }
@@ -1899,15 +1884,13 @@ html.browse-focus .browse-view.browse-peek .browse-list {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-radius: 12px;
-  background: var(--bv-field);
 }
 
 .nt-bar {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 8px 8px 6px 12px;
+  padding: 0 4px 4px 8px;
 }
 
 .nt-title {
@@ -1916,31 +1899,59 @@ html.browse-focus .browse-view.browse-peek .browse-list {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--bv-dim);
 }
 
 .nt-list {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  padding: 2px 8px 10px;
+  padding: 0 4px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  scrollbar-width: thin;
+  gap: 4px;
 }
+
+.nt-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 2px 8px 4px;
+  color: var(--bv-dim);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.nt-empty svg {
+  flex: none;
+  margin-top: 2px;
+  font-size: 11px;
+}
+
+.nt-more { margin-top: 0; }
 
 .nt-card {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 10px 8px 14px;
-  border-radius: 11px;
-  background: var(--bv-panel);
-  border: 1px solid var(--bv-line);
+  gap: 4px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 9px;
+  background: transparent;
   animation: bv-fade 200ms var(--bv-ease) both;
+}
+
+.nt-card:hover,
+.nt-card:focus-within {
+  background: var(--bv-hover);
+}
+
+/* Colours, jump and delete — and an empty "Add a note…" — only on the
+   highlight you're on, so a long list stays one quote per row. */
+.nt-card:not(:hover):not(:focus-within) .nt-actions,
+.nt-card:not(:hover):not(:focus-within) .nt-note.empty {
+  display: none;
 }
 
 /* Colour stripe on the left, in the highlight's colour. */
@@ -1948,8 +1959,8 @@ html.browse-focus .browse-view.browse-peek .browse-list {
   content: '';
   position: absolute;
   left: 0;
-  top: 10px;
-  bottom: 10px;
+  top: 7px;
+  bottom: 7px;
   width: 3px;
   border-radius: 0 3px 3px 0;
   background: var(--hl);
@@ -1961,12 +1972,12 @@ html.browse-focus .browse-view.browse-peek .browse-list {
   padding: 0;
   color: var(--bv-text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.45;
   text-align: left;
   cursor: pointer;
   display: -webkit-box;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -1979,15 +1990,19 @@ html.browse-focus .browse-view.browse-peek .browse-list {
 
 .nt-note {
   border: none;
-  background: var(--bv-hover);
-  border-radius: 8px;
-  padding: 6px 8px;
+  background: var(--bv-field);
+  border-radius: 7px;
+  padding: 4px 8px;
   color: var(--bv-text);
   font: inherit;
-  font-size: 12px;
+  font-size: 11.5px;
   text-align: left;
   white-space: pre-wrap;
   cursor: text;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .nt-note.empty {
@@ -2568,6 +2583,181 @@ html.browse-focus .browse-view.browse-peek .browse-list {
   min-height: 0;
 }
 
+/* The file manager in Browse (file tabs, the side panel's Files) in Browse's
+   own colours: it's themed by the app's --surface / --accent-purple vars,
+   which read bluish-purple next to the flat --bv look around it. Remap
+   those vars here instead of touching fileManager.css (the standalone
+   manager keeps its look). Surfaces go flat, separated by hairlines;
+   floating bits (menus, the narrow places overlay) stay opaque. */
+.ft-body .fm-window,
+.fp-manager .fm-window {
+  --surface-1: transparent;
+  --surface-2: transparent;
+  --surface-3: var(--bv-hover);
+  --border-primary: var(--bv-line);
+  --border-secondary: var(--bv-line);
+  --interactive-hover: var(--bv-hover);
+  --accent-primary: var(--bv-accent);
+  --accent-purple: var(--bv-accent);
+  --accent-purple-soft: var(--bv-tint);
+  --accent-purple-border: color-mix(in srgb, var(--bv-accent) 40%, transparent);
+  --text: var(--bv-text);
+  --text-secondary: var(--bv-dim);
+  --text-muted: var(--bv-dim);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.ft-body .fm-menu,
+.fp-manager .fm-menu,
+.ft-body .fm-sidebar.fm-sidebar--open,
+.fp-manager .fm-sidebar.fm-sidebar--open {
+  background: var(--bv-popover);
+}
+
+/* Project bar: flat, like the chip rows under it — the project's name in
+   plain text, its commands as quiet buttons. */
+.ft-body .fm-project-bar,
+.fp-manager .fm-project-bar {
+  gap: 4px;
+  padding: 6px 8px;
+  background: none;
+}
+
+.ft-body .fm-project-name,
+.fp-manager .fm-project-name {
+  padding: 0 8px 0 2px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: var(--bv-text);
+  font-size: 12px;
+}
+
+.ft-body .fm-project-name svg,
+.fp-manager .fm-project-name svg {
+  color: var(--bv-accent);
+}
+
+.ft-body .fm-cmd-chip,
+.fp-manager .fm-cmd-chip,
+.ft-body .fm-res-chip,
+.fp-manager .fm-res-chip,
+.ft-body .fm-svc-chip,
+.fp-manager .fm-svc-chip {
+  height: 24px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--bv-dim);
+  font-size: 12px;
+}
+
+.ft-body .fm-svc-chip,
+.fp-manager .fm-svc-chip { padding: 0; }
+
+.ft-body .fm-cmd-chip:hover,
+.fp-manager .fm-cmd-chip:hover,
+.ft-body .fm-res-chip:hover,
+.fp-manager .fm-res-chip:hover {
+  background: var(--bv-hover);
+  border: none;
+  color: var(--bv-text);
+}
+
+.ft-body .fm-cmd-chip.ran,
+.fp-manager .fm-cmd-chip.ran {
+  border: none;
+  background: color-mix(in srgb, var(--bv-good) 14%, transparent);
+  color: var(--bv-good);
+}
+
+.ft-body .fm-setup-btn,
+.fp-manager .fm-setup-btn {
+  background: var(--bv-tint);
+}
+
+.ft-body .fm-project-name:hover,
+.fp-manager .fm-project-name:hover {
+  background: var(--bv-hover);
+}
+
+.ft-body .fm-setup-btn:hover,
+.fp-manager .fm-setup-btn:hover {
+  background: color-mix(in srgb, var(--bv-accent) 22%, transparent);
+}
+
+.ft-body .fm-setup-btn.ghost,
+.fp-manager .fm-setup-btn.ghost {
+  background: none;
+}
+
+/* A row's highlight is just the hover / keyboard cursor (a click opens), so
+   it's the plain hover of Home's rows: the accent tint plus an inset bar
+   read as "selected" and the bar bent around the rounded corners. */
+/* A folder tab's file manager controls, in the tab's own toolbar. The
+   filter is a small field inside the capsule. */
+.ft-fm-slot:empty { display: none; }
+
+.ft-fm-slot .fm-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: clamp(90px, 14vw, 180px);
+  height: 26px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 8px;
+  background: var(--bv-field);
+  color: var(--bv-dim);
+  font-size: 12px;
+}
+
+.ft-fm-slot .fm-search:focus-within {
+  box-shadow: 0 0 0 2px var(--bv-tint);
+  color: var(--bv-text);
+}
+
+.ft-fm-slot .fm-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  color: var(--bv-text);
+  font: inherit;
+}
+
+.ft-fm-slot .fm-search-clear {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--bv-dim);
+  cursor: pointer;
+}
+
+.ft-body .fm-row,
+.fp-manager .fm-row {
+  border-radius: 9px;
+}
+
+.ft-body .fm-row.active,
+.fp-manager .fm-row.active,
+.ft-body .fm-tile.active,
+.fp-manager .fm-tile.active {
+  background: var(--bv-hover);
+  border-color: var(--bv-line);
+  box-shadow: none;
+}
+
+.ft-body .fm-row-count,
+.fp-manager .fm-row-count {
+  background: var(--bv-hover);
+  color: var(--bv-dim);
+}
+
 .ft-body .preview-pane {
   flex: 1;
   min-height: 0;
@@ -2578,6 +2768,23 @@ html.browse-focus .browse-view.browse-peek .browse-list {
 /* The tab's toolbar already names the file. */
 .ft-body .preview-pane-header {
   display: none;
+}
+
+/* Source view: the line numbers stay put while the code scrolls sideways —
+   so their column needs a solid background (PreviewPane.css's is nearly
+   clear, and the code showed through it), and the view the same colour so
+   the column doesn't read as a stripe. */
+.ft-body .preview-pane-code-wrap {
+  background: var(--bv-popover);
+}
+
+.ft-body .preview-pane-gutter {
+  z-index: 1;
+  min-height: 100%;
+  box-sizing: border-box;
+  background: var(--bv-popover);
+  border-right-color: var(--bv-line);
+  color: var(--bv-dim);
 }
 
 .browse-tile svg {
@@ -2996,7 +3203,12 @@ html.browse-focus .browse-view.browse-peek .browse-list {
 }
 
 /* JSON tree */
+/* As wide as its longest line (at least the view), so rows and their hover
+   reach the end when you scroll sideways instead of stopping at the edge. */
 .js-tree {
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 100%;
   padding: 8px 0 24px;
   font: 12.5px/1.6 "SF Mono", Menlo, Consolas, monospace;
   color: var(--bv-text);
@@ -3327,10 +3539,12 @@ body.bg-white-cred .js-null { color: #8250df; }
   border: 1px solid var(--bv-line);
 }
 
+/* Fills the pane: a fixed reading column left wide empty margins on
+   either side that you couldn't write in. */
 .note-tab-page {
-  max-width: 820px;
-  margin: 0 auto;
-  padding: 36px 40px 64px;
+  min-height: 100%;
+  box-sizing: border-box;
+  padding: 32px clamp(20px, 3vw, 44px) 64px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -3576,8 +3790,12 @@ body.bg-white-cred .js-null { color: #8250df; }
   font-weight: 600;
 }
 
-/* Badge dot (a pending update). */
-.tbm-btn.tbm-dot::after {
+/* Badge dot (a pending update) — on the app menu, and on the Home / side
+   panel button while the panel (where the menu now lives) is closed. */
+.bp-panel-btn { position: relative; }
+
+.tbm-btn.tbm-dot::after,
+.bp-panel-btn.tbm-dot::after {
   content: '';
   position: absolute;
   top: 5px;
@@ -3704,6 +3922,27 @@ body.bg-white-cred .js-null { color: #8250df; }
    browser tabs. No switches. */
 .nav-jump {
   margin-top: 4px;
+}
+
+/* In Home's header: fills the space before the buttons. */
+.fp-head .nav-jump {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  height: 32px;
+}
+
+/* A web tab dragged over the workspace section: drop to save it there. */
+.nav-ws-section {
+  border-radius: 12px;
+  outline: 1.5px dashed transparent;
+  outline-offset: 2px;
+  transition: outline-color 140ms ease, background 140ms ease;
+}
+
+.nav-ws-section.is-drop-target {
+  outline-color: var(--bv-accent);
+  background: color-mix(in srgb, var(--bv-accent) 8%, transparent);
 }
 
 /* Pinned's header: the workspace name is the picker. */
@@ -3934,6 +4173,143 @@ html.multi-dragging * { cursor: grabbing !important; user-select: none !importan
   display: none;
 }
 
+/* The clipboard card in Home, in Home's look: clipboard.css is the dock's
+   dark card with fixed greys and a purple accent (and doesn't follow the
+   light theme). Here it's a plain section — no card, rows like the tab
+   rows, the filter like the search field, the accent from the theme. */
+.fp-home-clipboard .cb-card {
+  padding: 0;
+  gap: 2px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.fp-home-clipboard .cb-filter {
+  height: 30px;
+  margin: 0 4px 2px;
+  border-radius: 10px;
+  border-color: var(--bv-line);
+  background: var(--bv-field);
+  color: var(--bv-text);
+  font-size: 12px;
+}
+
+.fp-home-clipboard .cb-filter::placeholder { color: var(--bv-dim); }
+.fp-home-clipboard .cb-filter:hover { border-color: var(--bv-line); }
+
+.fp-home-clipboard .cb-filter:focus {
+  border-color: color-mix(in srgb, var(--bv-accent) 60%, transparent);
+  background: var(--bv-field);
+  box-shadow: 0 0 0 3px var(--bv-tint);
+}
+
+.fp-home-clipboard .cb-chips { margin: 0 2px 2px; }
+.fp-home-clipboard .cb-chip { color: var(--bv-dim); }
+
+.fp-home-clipboard .cb-chip:hover {
+  color: var(--bv-text);
+  background: var(--bv-hover);
+}
+
+.fp-home-clipboard .cb-chip.is-active {
+  color: var(--bv-text);
+  background: var(--bv-tint);
+  box-shadow: none;
+}
+
+.fp-home-clipboard .cb-row,
+.fp-home-clipboard .cb-row-main { border-radius: 10px; }
+
+.fp-home-clipboard .cb-row-main {
+  min-height: 0;
+  padding: 5px 6px 5px 8px;
+}
+
+.fp-home-clipboard .cb-row-main:hover,
+.fp-home-clipboard .cb-row-main:focus-visible,
+.fp-home-clipboard .cb-row.is-previewing {
+  background: var(--bv-hover);
+}
+
+.fp-home-clipboard .cb-row-main:focus-visible {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bv-accent) 60%, transparent);
+}
+
+/* Same tile as the tab rows' icons. */
+.fp-home-clipboard .cb-thumb {
+  border-radius: 9px;
+  box-shadow: inset 0 0 0 1px var(--bv-line);
+}
+
+.fp-home-clipboard .cb-row-title,
+.fp-home-clipboard .cb-kind-text .cb-row-title,
+.fp-home-clipboard .cb-kind-link .cb-row-title,
+.fp-home-clipboard .cb-kind-files .cb-row-title {
+  color: var(--bv-text);
+  font-size: 12.5px;
+  font-weight: 550;
+}
+
+.fp-home-clipboard .cb-kind-code .cb-row-title,
+.fp-home-clipboard .cb-kind-color .cb-row-title,
+.fp-home-clipboard .cb-kind-image .cb-row-title {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.fp-home-clipboard .cb-kind-code .cb-row-title { color: var(--bv-text); }
+
+.fp-home-clipboard .cb-row-meta,
+.fp-home-clipboard .cb-row-time,
+.fp-home-clipboard .cb-title-dim,
+.fp-home-clipboard .cb-kind-image .cb-row-title {
+  color: var(--bv-dim);
+}
+
+/* Actions sit at the row's end instead of over a fade: the fade needs a
+   solid colour, and Home's background is see-through. */
+.fp-home-clipboard .cb-row-actions,
+.fp-home-clipboard .cb-row.is-previewing:not(:hover) .cb-row-actions {
+  position: static;
+  padding: 0;
+  background: none;
+}
+
+.fp-home-clipboard .cb-icon-btn { color: var(--bv-dim); }
+
+.fp-home-clipboard .cb-icon-btn:hover {
+  color: var(--bv-text);
+  background: var(--bv-hover);
+}
+
+.fp-home-clipboard .cb-icon-btn.is-active,
+.fp-home-clipboard .cb-pin-mark {
+  color: var(--bv-accent);
+}
+
+.fp-home-clipboard .cb-icon-btn.is-active { background: var(--bv-tint); }
+
+.fp-home-clipboard .cb-tile { background: var(--bv-hover); }
+
+.fp-home-clipboard .cb-preview-text {
+  border-color: var(--bv-line);
+  background: var(--bv-field);
+  color: var(--bv-text);
+}
+
+/* The dock's big card title (clipboard.css) → a Home section head, like
+   Tabs and Folders above it. */
+.fp-home-clipboard .cb-title {
+  margin: 0;
+  padding: 4px 4px 6px 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--bv-dim);
+}
+
 /* ── Usage meter (features/browser/UsageMeter.jsx) ──────────────────
    CoolDesk's memory / CPU at the end of the toolbar. Quiet until it matters:
    muted text, a coloured dot that goes amber / red as it gets heavy. */
@@ -4067,4 +4443,319 @@ html.multi-dragging * { cursor: grabbing !important; user-select: none !importan
 .bp-btn.saved-server-start:hover {
   opacity: 1;
   color: #22c55e;
+}
+
+/* Popover from the toolbar: the memory list (UsageMeter). */
+.pt-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 45;
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(78vh, 640px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 14px;
+  color: var(--bv-text);
+  background: color-mix(in srgb, var(--bv-popover) 92%, transparent);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: blur(28px) saturate(170%);
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.5), 0 18px 48px -10px rgba(0, 0, 0, 0.6);
+  animation: bv-fade 120ms var(--bv-ease) both;
+  container-type: inline-size;
+}
+
+body.bg-white-cred .pt-pop {
+  border-color: rgba(15, 23, 42, 0.1);
+  box-shadow: 0 18px 48px -12px rgba(15, 23, 42, 0.3);
+}
+
+.pt-pop-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 4px 0;
+  min-width: 0;
+}
+
+.pt-pop-head strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.pt-pop-head span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--bv-dim);
+}
+
+.pt-pop-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 2px;
+  font-size: 11px;
+  color: var(--bv-dim);
+}
+
+.pt-pop-foot strong { color: var(--bv-text); font-weight: 600; }
+
+.pt-pop .pg-section { padding: 6px; }
+
+/* The memory list from the usage meter. */
+.bp-usage-root {
+  position: relative;
+  flex: none;
+}
+
+.bp-usage.on {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--bv-text, rgba(255, 255, 255, 0.85));
+}
+
+.bp-usage-pop { width: min(400px, calc(100vw - 32px)); }
+
+.bp-usage-why {
+  padding: 7px 10px;
+  border-radius: 9px;
+  font-size: 11.5px;
+}
+
+.bp-usage-why--warn { color: #fbbf24; background: rgba(251, 191, 36, 0.1); }
+.bp-usage-why--high { color: #f87171; background: rgba(248, 113, 113, 0.1); }
+
+.bp-usage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--bv-field);
+}
+
+/* Side panel: one panel now (Home), so a title instead of tabs. */
+.fp-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--bv-text);
+}
+
+.fp-title > svg { color: var(--bv-dim); font-size: 12px; }
+
+/* A result in a page's toolbar (a clip saved): toolbar, not a toast, since
+   anything drawn over the page area sits under the native page. */
+.bp-pill {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 360px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 4px 0 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: var(--bv-text);
+  background: color-mix(in srgb, var(--bv-good) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bv-good) 35%, transparent);
+  animation: bp-pill-in 200ms var(--bv-ease) both;
+}
+
+.bp-pill > svg { flex: none; font-size: 11px; color: var(--bv-good); }
+
+.bp-pill > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bp-pill.is-error {
+  background: rgba(248, 113, 113, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.35);
+}
+
+.bp-pill.is-error > svg { color: #f87171; }
+
+.bp-pill-go {
+  flex: none;
+  height: 22px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--bv-accent);
+  cursor: pointer;
+}
+
+.bp-pill-go:hover { filter: brightness(1.08); }
+
+.bp-pill-x {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  font-size: 10px;
+  color: var(--bv-dim);
+  background: transparent;
+  cursor: pointer;
+}
+
+.bp-pill-x:hover { color: var(--bv-text); background: var(--bv-hover); }
+
+/* Narrow tiles: just the check, the Open button and ×. */
+@container bp-toolbar (max-width: 560px) {
+  .bp-pill > span { display: none; }
+}
+
+@keyframes bp-pill-in { from { opacity: 0; transform: translateY(-3px) scale(0.97); } }
+
+/* ── Tools mode (ToolStrip) ───────────────────────────────────────────
+   The header's Tools toggle swaps its contents for every page tool, as
+   labelled chips in each tool's colour (lit while on), then the site's
+   camera / mic / sound. Scrolls sideways if the header is too narrow. */
+.bp-tools-toggle {
+  width: auto;
+  gap: 6px;
+  padding: 0 10px;
+}
+
+.bp-tools-toggle span { font-size: 12px; font-weight: 600; }
+
+.bp-tools-toggle.on {
+  color: var(--bv-accent);
+  background: var(--bv-tint);
+}
+
+@container bp-toolbar (max-width: 720px) {
+  .bp-toolbar:not(.is-tools) .bp-tools-toggle span { display: none; }
+  .bp-toolbar:not(.is-tools) .bp-tools-toggle { padding: 0; width: 30px; }
+}
+
+.ts-root {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  animation: ts-in 180ms var(--bv-ease) both;
+}
+
+.ts-root::-webkit-scrollbar { display: none; }
+
+.ts-empty {
+  font-size: 12px;
+  color: var(--bv-dim);
+}
+
+.ts-host {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 180px;
+  padding: 0 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--bv-text);
+}
+
+.ts-group { flex: none; }
+
+/* Same build as the Single | Multi buttons: flat, icon + label. */
+.ts-btn {
+  --tool: var(--bv-accent);
+  width: auto;
+  height: 26px;
+  gap: 6px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.ts-btn > svg { font-size: 11.5px; }
+
+/* On: the tool's colour, softly. */
+.ts-btn.on {
+  color: var(--tool);
+  background: color-mix(in srgb, var(--tool) 16%, transparent);
+  font-weight: 600;
+}
+
+.ts-btn.done,
+.ts-btn.done:hover:not(:disabled) {
+  color: var(--bv-good);
+}
+
+.ts-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Site permissions: the state is the label; colour only when it's not the
+   default (Allow green, Block / muted red, camera in use red). */
+.ts-perm.is-allow,
+.ts-perm.is-playing { color: var(--bv-good); }
+
+.ts-perm.is-block { color: #f87171; }
+
+.ts-perm.is-live {
+  color: #fff;
+  background: #ef4444;
+  font-weight: 600;
+}
+
+.ts-perm.is-live:hover:not(:disabled) {
+  color: #fff;
+  background: #dc2626;
+}
+
+/* Narrower headers: actions and site go icon-only first, then everything. */
+@container bp-toolbar (max-width: 1100px) {
+  .ts-site .ts-btn span { display: none; }
+  .ts-site .ts-btn { width: 30px; padding: 0; }
+}
+
+@container bp-toolbar (max-width: 900px) {
+  .ts-btn span { display: none; }
+  .ts-btn { width: 30px; padding: 0; }
+  .ts-host { max-width: 120px; }
+}
+
+@keyframes ts-in { from { opacity: 0; transform: translateY(-2px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ts-root { animation: none; }
+}
+
+.bp-tools-toggle:disabled {
+  opacity: 0.35;
+  cursor: default;
 }

@@ -50,6 +50,7 @@ pub mod tools {
 pub mod attachments;
 #[cfg(target_os = "macos")]
 pub mod permissions;
+pub mod uploads;
 #[cfg(target_os = "macos")]
 pub mod webcrypto;
 pub mod stats;
@@ -260,6 +261,7 @@ async fn open_pane(
                 permissions::install(&wv);
                 webcrypto::install(&wv);
                 attachments::install(&wv);
+                uploads::install(&wv);
                 round_corners(&wv, SLOT_RADIUS);
                 enable_element_fullscreen(&wv);
             }
@@ -642,6 +644,9 @@ pub fn browser_pane_adblock_supported() -> bool {
 #[tauri::command]
 pub fn browser_pane_close(app: tauri::AppHandle, id: String) -> Result<(), String> {
     adblock::forget(&label_for(&id));
+    // A file picker it opened has nothing to upload to any more.
+    #[cfg(target_os = "macos")]
+    uploads::forget(&app, label_for(&id));
     match app.get_webview(&label_for(&id)) {
         Some(wv) => wv.close().map_err(|e| e.to_string()),
         // Possibly still being created: close it once it exists (`EARLY_CLOSE`).

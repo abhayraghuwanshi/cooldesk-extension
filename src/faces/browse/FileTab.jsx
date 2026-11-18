@@ -20,6 +20,7 @@ const parentDir = (p) => {
   const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
   return i > 0 ? p.slice(0, i) : p;
 };
+const hasParent = (p) => Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\')) >= 0 && p.length > 1;
 
 // Files with a rendered view next to their source: the bar on top switches.
 // name: the bar's label; alt: the second view's name; start: the view a
@@ -61,10 +62,14 @@ export function FileIcon({ path, isDir, className = '' }) {
  * @param onShowInFiles(path) → reveal in the side panel's Files tab
  * @param onOpenTerminal(dir) → a terminal tab in this folder (or the file's)
  * @param onBack / onForward  the tab's history (null when there's nowhere to go)
+ * @param onUp        folder tabs: ← goes up to the parent (→ comes back
+ *                    down); returns false at the top, then ← is Back
  * @param onOpenUrl   (url) → a web link clicked in a Markdown / HTML preview
  * @param onShowFolder (dir) → a folder in the Files panel (after Extract)
+ * @param onFolderChange (dir) → the folder view moved: the tab follows, so
+ *                    its address and Back / Forward are the only ones
  */
-export function FileTab({ file, active, visible = active, onOpenFile, onOpenUrl, onShowFolder, onBack, onForward, onShowInFiles, onOpenTerminal, toolbarStart = null, toolbarEnd = null }) {
+export function FileTab({ file, active, visible = active, onOpenFile, onOpenUrl, onShowFolder, onFolderChange, onBack, onUp, onForward, onShowInFiles, onOpenTerminal, toolbarStart = null, toolbarEnd = null }) {
   const preview = file.isDir ? null : getPreviewItem(file.path);
   const isText = preview?.previewKind === 'code';
   const renderKind = file.isDir ? null : RENDERABLE[(file.path.split('.').pop() || '').toLowerCase()] || null;
@@ -78,12 +83,22 @@ export function FileTab({ file, active, visible = active, onOpenFile, onOpenUrl,
     if (renderKind) setViewState(storedView(renderKind));
   }, [renderKind]);
 
+  // A folder's file manager puts its controls (places, up, filter, ⋯) in
+  // this tab's toolbar instead of a second bar of its own. No hover preview
+  // column: clicking a file opens it full size in the tab anyway.
+  const [fmSlot, setFmSlot] = useState(null);
+
   return (
     <div className="bp-root ft-root">
       <div className="bp-toolbar">
         {toolbarStart}
         <div className="bp-capsule">
-          <button className="bp-btn" onClick={() => onBack?.()} disabled={!onBack} title="Back (⌘[)">
+          <button
+            className="bp-btn"
+            onClick={() => { if (!onUp?.()) onBack?.(); }}
+            disabled={!onBack && !(onUp && hasParent(file.path))}
+            title={onUp && hasParent(file.path) ? `Up to ${baseName(parentDir(file.path))} (⌘[)` : 'Back (⌘[)'}
+          >
             <FontAwesomeIcon icon={faArrowLeft} />
           </button>
           <button className="bp-btn" onClick={() => onForward?.()} disabled={!onForward} title="Forward (⌘])">
@@ -99,14 +114,10 @@ export function FileTab({ file, active, visible = active, onOpenFile, onOpenUrl,
           onOpenPath={(path, isDir) => (isDir ? onShowFolder?.(path) : onOpenFile?.(path))}
           onOpenShell={onOpenTerminal}
         />
-        {/* The one action used all the time stays a button; the rest are
-            under "⋯" so the toolbar stays short. */}
+        {file.isDir && <div className="bp-capsule ft-fm-slot" ref={setFmSlot} />}
+        {/* Actions under "⋯" (Open a shell here among them) so the toolbar
+            stays short. */}
         <div className="bp-capsule">
-          {onOpenTerminal && (
-            <button className="bp-btn" onClick={() => onOpenTerminal(file.isDir ? file.path : parentDir(file.path))} title="Open a shell here">
-              <FontAwesomeIcon icon={faTerminal} />
-            </button>
-          )}
           <ToolbarMenu
             icon={faEllipsis}
             title="More"
@@ -120,6 +131,7 @@ export function FileTab({ file, active, visible = active, onOpenFile, onOpenUrl,
               },
               { key: 'copy-path', icon: faLink, label: 'Copy path', doneLabel: 'Copied', keepOpen: true, onSelect: () => navigator.clipboard.writeText(file.path) },
               null,
+              onOpenTerminal && { key: 'shell', icon: faTerminal, label: 'Open a shell here', onSelect: () => onOpenTerminal(file.isDir ? file.path : parentDir(file.path)) },
               onShowInFiles && { key: 'files', icon: faFolderOpen, label: 'Show in the Files panel', onSelect: () => onShowInFiles(file.path) },
               { key: 'open', icon: faArrowUpRightFromSquare, label: 'Open with default app', onSelect: () => invoke('open_folder', { path: file.path }).catch(() => { }) },
             ]}
@@ -153,7 +165,7 @@ export function FileTab({ file, active, visible = active, onOpenFile, onOpenUrl,
         ) : !file.isDir && AUDIO_RE.test(file.path) ? (
           <AudioView key={file.path} path={file.path} />
         ) : file.isDir ? (
-          <FileManager embedded isOpen={visible} keyboard={active} initialPath={file.path} onOpenFile={onOpenFile} />
+          <FileManager embedded isOpen={visible} keyboard={active} initialPath={file.path} onOpenFile={onOpenFile} onNavigate={onFolderChange} toolbarSlot={fmSlot} placesRow quickLook={false} />
         ) : preview ? (
           <Suspense fallback={<div className="bp-empty">Opening…</div>}>
             <PreviewPane key={file.path} item={preview} markdownSource />

@@ -41,6 +41,8 @@ lazy_static::lazy_static! {
     static ref SYS: Mutex<System> = Mutex::new(System::new());
     /// label -> last pid seen alive; 0 once its process died (until reloaded).
     static ref LAST_PID: Mutex<HashMap<String, u32>> = Mutex::new(HashMap::new());
+    /// pid -> whether CoolDesk is responsible for it (macOS, see own_pids).
+    static ref RESPONSIBLE: Mutex<HashMap<u32, bool>> = Mutex::new(HashMap::new());
 }
 
 #[derive(Serialize)]
@@ -74,6 +76,9 @@ pub struct BrowserStats {
     total_memory: u64,
     /// Free + reclaimable memory, bytes (low means the system is under pressure).
     available_memory: u64,
+    /// macOS: the kernel's memory pressure level — 1 normal, 2 warning,
+    /// 4 critical (what Activity Monitor's pressure graph shows). None elsewhere.
+    memory_pressure: Option<u32>,
 }
 
 #[derive(Default)]
@@ -147,6 +152,33 @@ mod darwin {
         let r = unsafe { responsibility_get_pid_responsible_for_pid(pid as i32) };
         (r > 0).then_some(r as u32)
     }
+
+    extern "C" {
+        fn sysctlbyname(name: *const std::os::raw::c_char, oldp: *mut std::ffi::c_void, oldlenp: *mut usize,
+            newp: *mut std::ffi::c_void, newlen: usize) -> i32;
+    }
+
+    fn sysctl_u32(name: &std::ffi::CStr) -> Option<u32> {
+        let mut v: u32 = 0;
+        let mut len = std::mem::size_of::<u32>();
+        let ok = unsafe { sysctlbyname(name.as_ptr(), &mut v as *mut u32 as *mut _, &mut len, std::ptr::null_mut(), 0) } == 0;
+        ok.then_some(v)
+    }
+
+    /// Percent of memory the kernel counts as available — the "System-wide
+    /// memory free percentage" of `memory_pressure`. sysinfo's
+    /// `available_memory` subtracts the compressor's pages from free +
+    /// inactive, which on a Mac (which compresses as a matter of course) reads
+    /// ~10% while the kernel says 60%+ — so CoolDesk said the Mac was low on
+    /// memory, and slept tabs, when it wasn't.
+    pub fn memory_free_percent() -> Option<u32> {
+        sysctl_u32(c"kern.memorystatus_level").filter(|&p| p <= 100)
+    }
+
+    /// 1 normal, 2 warning, 4 critical.
+    pub fn memory_pressure() -> Option<u32> {
+        sysctl_u32(c"kern.memorystatus_vm_pressure_level").filter(|&l| l > 0)
+    }
 }
 
 /// Memory (physical footprint on macOS, RSS elsewhere) and CPU% of `pid`.
@@ -163,10 +195,19 @@ fn sample(sys: &System, pid: u32) -> Option<(u64, f32)> {
 #[cfg(target_os = "macos")]
 fn own_pids(sys: &System, _main_pid: Option<u32>, pane_pids: &[u32]) -> Vec<u32> {
     let me = std::process::id();
+    // Whether each pid works for us, remembered: a process's responsible app
+    // doesn't change, and asking for every process on the system (hundreds)
+    // on every poll was most of the poll's cost. Pids that exited are dropped.
+    let mut known = RESPONSIBLE.lock().unwrap();
+    known.retain(|pid, _| sys.process(Pid::from_u32(*pid)).is_some());
     sys.processes()
         .keys()
         .map(|pid| pid.as_u32())
-        .filter(|&pid| pid == me || (darwin::responsible_for(pid) == Some(me) && !pane_pids.contains(&pid)))
+        .filter(|&pid| {
+            pid == me
+                || (*known.entry(pid).or_insert_with(|| darwin::responsible_for(pid) == Some(me))
+                    && !pane_pids.contains(&pid))
+        })
         .collect()
 }
 
@@ -207,6 +248,11 @@ pub async fn browser_pane_stats(app: tauri::AppHandle) -> BrowserStats {
             Some((label, id, probe(&wv)))
         })
         .collect();
+    // Only needed off macOS (own_pids finds the app's web processes itself
+    // there) — and each probe is a main-thread round trip.
+    #[cfg(target_os = "macos")]
+    let main_pid: Option<u32> = None;
+    #[cfg(not(target_os = "macos"))]
     let main_pid = app.get_webview("main").and_then(|wv| probe(&wv).pid);
 
     let mut crashed = Vec::with_capacity(probes.len());
@@ -248,5 +294,13 @@ pub async fn browser_pane_stats(app: tauri::AppHandle) -> BrowserStats {
     } else {
         (Some(own.iter().map(|s| s.0).sum()), Some(own.iter().map(|s| s.1).sum()))
     };
-    BrowserStats { panes, app_memory, app_cpu, total_memory: sys.total_memory(), available_memory: sys.available_memory() }
+    let total_memory = sys.total_memory();
+    #[cfg(target_os = "macos")]
+    let (available_memory, memory_pressure) = (
+        darwin::memory_free_percent().map_or_else(|| sys.available_memory(), |p| total_memory / 100 * p as u64),
+        darwin::memory_pressure(),
+    );
+    #[cfg(not(target_os = "macos"))]
+    let (available_memory, memory_pressure) = (sys.available_memory(), None);
+    BrowserStats { panes, app_memory, app_cpu, total_memory, available_memory, memory_pressure }
 }
